@@ -9,11 +9,19 @@ import (
 
 	"github.com/data.haus/nospeak/cmd"
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/tui"
 )
 
 func main() {
 	debug := flag.Bool("debug", false, "Enable debug mode to print generated events")
+	cli := flag.Bool("cli", false, "Use CLI mode instead of TUI")
 	flag.Parse()
+
+	// If no arguments provided, start TUI mode by default
+	if len(flag.Args()) == 0 && !*cli {
+		startTUI(*debug)
+		return
+	}
 
 	if len(flag.Args()) < 1 {
 		printUsage()
@@ -29,7 +37,11 @@ func main() {
 	case "receive":
 		cmd.Receive(*debug)
 	case "chat":
-		cmd.Chat(*debug)
+		if *cli {
+			cmd.Chat(*debug)
+		} else {
+			startTUI(*debug)
+		}
 	case "set-name":
 		cmd.SetName(args, *debug)
 	case "set-messaging-relays":
@@ -45,20 +57,42 @@ func main() {
 	}
 }
 
+func startTUI(debug bool) {
+	app, err := tui.NewApp()
+	if err != nil {
+		log.Fatalf("Failed to create TUI app: %v", err)
+	}
+
+	if err := app.Start(debug); err != nil {
+		log.Fatalf("Failed to start TUI: %v", err)
+	}
+}
+
 func printUsage() {
-	fmt.Println("Nostr CLI Chat Application")
+	fmt.Println("Nostr Chat Application")
 	fmt.Println("")
 	fmt.Println("Usage:")
-	fmt.Println("  nospeak init                    - Initialize configuration file")
-	fmt.Println("  nospeak send <npub> <message>   - Send a message")
-	fmt.Println("  nospeak receive                 - Listen for messages")
-	fmt.Println("  nospeak chat                    - Interactive chat mode")
-	fmt.Println("  nospeak set-name <name>         - Set your profile name")
-	fmt.Println("  nospeak set-messaging-relays   - Set your messaging relays from config")
-	fmt.Println("  nospeak help                    - Show this help")
+	fmt.Println("  nospeak                           - Start TUI mode (default)")
+	fmt.Println("  nospeak chat                      - Start TUI mode")
+	fmt.Println("  nospeak chat --cli                - Start CLI chat mode")
+	fmt.Println("  nospeak init                      - Initialize configuration file")
+	fmt.Println("  nospeak send <npub> <message>     - Send a message")
+	fmt.Println("  nospeak receive                   - Listen for messages")
+	fmt.Println("  nospeak set-name <name>           - Set your profile name")
+	fmt.Println("  nospeak set-messaging-relays     - Set your messaging relays from config")
+	fmt.Println("  nospeak help                      - Show this help")
 	fmt.Println("")
 	fmt.Println("Global flags:")
-	fmt.Println("  --debug                         - Enable debug mode to print generated events")
+	fmt.Println("  --debug                          - Enable debug mode to print generated events")
+	fmt.Println("  --cli                            - Use CLI mode instead of TUI")
+	fmt.Println("")
+	fmt.Println("TUI Keyboard Shortcuts:")
+	fmt.Println("  Ctrl+C/Ctrl+Q                    - Quit application")
+	fmt.Println("  Tab                              - Switch between contact list and input")
+	fmt.Println("  Enter                            - Send message (when in input field)")
+	fmt.Println("  F1                               - Show help")
+	fmt.Println("  F2                               - Show settings")
+	fmt.Println("  ↑/↓                              - Navigate contact list")
 	fmt.Println("")
 	fmt.Println("Configuration file location: ~/.config/nospeak/config.toml")
 	fmt.Println("Example configuration is available at: config/example.toml")
