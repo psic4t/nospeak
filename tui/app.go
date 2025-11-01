@@ -348,7 +348,6 @@ func (a *App) loadChatHistory() {
 	messages := a.client.GetMessageHistoryEnhanced(partner, a.loadedSentCount, a.loadedReceivedCount)
 
 	a.messageView.Clear()
-	a.messageView.SetText(fmt.Sprintf("[::b]Chat with %s[::-]\n\n", a.displayNames[partner]))
 
 	for _, msg := range messages {
 		timestamp := msg.SentAt.Format("15:04:05")
@@ -400,7 +399,6 @@ func (a *App) loadOlderMessages() {
 
 	// Rebuild the entire message view
 	a.messageView.Clear()
-	a.messageView.SetText(fmt.Sprintf("[::b]Chat with %s[::-]\n\n", a.displayNames[partner]))
 
 	for _, msg := range messages {
 		timestamp := msg.SentAt.Format("15:04:05")
