@@ -30,6 +30,8 @@ func main() {
 		cmd.Receive(*debug)
 	case "chat":
 		cmd.Chat(*debug)
+	case "set-name":
+		cmd.SetName(args, *debug)
 	case "init":
 		initConfig()
 	case "help":
@@ -49,6 +51,7 @@ func printUsage() {
 	fmt.Println("  nospeak send <npub> <message>   - Send a message")
 	fmt.Println("  nospeak receive                 - Listen for messages")
 	fmt.Println("  nospeak chat                    - Interactive chat mode")
+	fmt.Println("  nospeak set-name <name>         - Set your profile name")
 	fmt.Println("  nospeak help                    - Show this help")
 	fmt.Println("")
 	fmt.Println("Global flags:")

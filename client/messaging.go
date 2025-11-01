@@ -146,6 +146,37 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string) (
 	return relays, nil
 }
 
+func (c *Client) SetProfileName(ctx context.Context, name string, debug bool) error {
+	event := nostr.Event{
+		PubKey:    c.publicKey,
+		CreatedAt: nostr.Now(),
+		Kind:      0,
+		Content:   fmt.Sprintf(`{"name":"%s"}`, name),
+	}
+
+	if err := event.Sign(c.secretKey); err != nil {
+		return fmt.Errorf("failed to sign event: %w", err)
+	}
+
+	if debug {
+		fmt.Printf("=== DEBUG: Profile Metadata Event ===\n")
+		fmt.Printf("ID: %s\n", event.ID)
+		fmt.Printf("Kind: %d\n", event.Kind)
+		fmt.Printf("CreatedAt: %d\n", event.CreatedAt)
+		fmt.Printf("PubKey: %s\n", event.PubKey)
+		fmt.Printf("Content: %s\n", event.Content)
+		fmt.Printf("Sig: %s\n", event.Sig)
+		fmt.Printf("===================================\n\n")
+	}
+
+	if err := c.PublishEvent(ctx, event, debug); err != nil {
+		return fmt.Errorf("failed to publish profile metadata: %w", err)
+	}
+
+	log.Printf("Profile name updated to: %s", name)
+	return nil
+}
+
 func (c *Client) GetPartnerNpubs() []string {
 	return c.config.Partners
 }
