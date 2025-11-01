@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/data.haus/nospeak/config"
 	"github.com/nbd-wtf/go-nostr"
@@ -145,4 +146,74 @@ func (c *Client) GetSecretKey() string {
 
 func (c *Client) GetPublicKey() string {
 	return c.publicKey
+}
+
+func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters) ([]nostr.Event, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var wg sync.WaitGroup
+	eventsChan := make(chan []nostr.Event, len(c.relays))
+	errChan := make(chan error, len(c.relays))
+
+	for _, relay := range c.relays {
+		wg.Add(1)
+		go func(r *nostr.Relay) {
+			defer wg.Done()
+
+			sub, err := r.Subscribe(ctx, filters)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to subscribe to relay %s: %w", r.URL, err)
+				return
+			}
+
+			var events []nostr.Event
+			timeout := time.After(5 * time.Second)
+
+			for {
+				select {
+				case event, ok := <-sub.Events:
+					if !ok {
+						goto done
+					}
+					events = append(events, *event)
+				case <-timeout:
+					goto done
+				case <-ctx.Done():
+					goto done
+				}
+			}
+
+		done:
+			eventsChan <- events
+		}(relay)
+	}
+
+	go func() {
+		wg.Wait()
+		close(eventsChan)
+		close(errChan)
+	}()
+
+	var allEvents []nostr.Event
+	var errors []error
+
+	// Collect results
+	for i := 0; i < len(c.relays); i++ {
+		select {
+		case events := <-eventsChan:
+			allEvents = append(allEvents, events...)
+		case err := <-errChan:
+			errors = append(errors, err)
+		case <-ctx.Done():
+			return allEvents, ctx.Err()
+		}
+	}
+
+	// Return events even if some relays failed
+	if len(errors) > 0 {
+		log.Printf("Some relays failed during query: %v", errors)
+	}
+
+	return allEvents, nil
 }

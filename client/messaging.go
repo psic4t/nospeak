@@ -17,12 +17,19 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 
 	recipientHex := recipientPubKey.(string)
 
+	// Discover recipient's preferred DM relays
+	recipientRelays, err := c.GetRecipientRelays(ctx, recipientNpub)
+	if err != nil {
+		log.Printf("Failed to discover recipient relays, using fallback: %v", err)
+		recipientRelays = []string{"wss://nostr.data.haus"}
+	}
+
 	rumor := nostr.Event{
 		PubKey:    c.publicKey,
 		CreatedAt: nostr.Now(),
 		Kind:      14,
 		Tags: nostr.Tags{
-			nostr.Tag{"p", recipientHex, "wss://nostr.data.haus"},
+			nostr.Tag{"p", recipientHex, recipientRelays[0]},
 		},
 		Content: message,
 	}
@@ -72,7 +79,11 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 		},
 	}}
 
+	log.Printf("Listening for gift-wrapped messages for pubkey: %s", c.publicKey)
+
 	return c.Subscribe(ctx, filters, func(event nostr.Event) {
+		log.Printf("Received gift-wrapped event (kind: %d, id: %s, from: %s)", event.Kind, event.ID, event.PubKey)
+
 		rumor, err := c.UnwrapGiftWrap(event)
 		if err != nil {
 			log.Printf("Failed to unwrap gift wrap: %v", err)
@@ -80,6 +91,7 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 		}
 
 		if rumor.Kind != 14 {
+			log.Printf("Ignoring rumor with kind %d (expected kind 14)", rumor.Kind)
 			return
 		}
 
@@ -89,8 +101,49 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 			return
 		}
 
+		log.Printf("Successfully decrypted message from %s: %q", senderNpub, rumor.Content)
 		messageHandler(senderNpub, rumor.Content)
 	})
+}
+
+func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string) ([]string, error) {
+	_, recipientPubKey, err := nip19.Decode(recipientNpub)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode recipient npub: %w", err)
+	}
+
+	recipientHex := recipientPubKey.(string)
+
+	// Query for recipient's kind 10050 event (DM relays)
+	filters := nostr.Filters{{
+		Kinds:   []int{10050},
+		Authors: []string{recipientHex},
+		Limit:   1,
+	}}
+
+	events, err := c.QueryEvents(ctx, filters)
+	if err != nil {
+		log.Printf("Failed to query for recipient's DM relays: %v", err)
+	}
+
+	var relays []string
+	for _, event := range events {
+		for _, tag := range event.Tags {
+			if len(tag) >= 2 && tag[0] == "relay" {
+				relays = append(relays, tag[1])
+			}
+		}
+	}
+
+	// Fallback to default relays if none found
+	if len(relays) == 0 {
+		relays = []string{"wss://nostr.data.haus"}
+		log.Printf("No DM relays found for recipient, using fallback: %v", relays)
+	} else {
+		log.Printf("Found DM relays for recipient: %v", relays)
+	}
+
+	return relays, nil
 }
 
 func (c *Client) GetPartnerNpubs() []string {
