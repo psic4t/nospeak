@@ -47,6 +47,10 @@ type App struct {
 	// UI state
 	contactsVisible bool
 
+	// Status message
+	statusMessage string
+	statusMu      sync.RWMutex
+
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -474,13 +478,39 @@ func (a *App) sendMessage() {
 	a.messageView.ScrollToEnd()
 	a.inputField.SetText("")
 
+	// Show sending status
+	a.setStatusMessage("sending message...")
+
 	// Send message in background
 	go func() {
-		if err := a.client.SendChatMessage(a.ctx, partner, message, false); err != nil {
+		err := a.client.SendChatMessage(a.ctx, partner, message, false)
+
+		if err != nil {
 			a.app.QueueUpdate(func() {
+				a.statusMessage = "sending failed"
+				a.updateStatusBar()
+				a.app.ForceDraw()
+			})
+			// Clear status after 3 seconds
+			time.Sleep(3 * time.Second)
+			a.app.QueueUpdate(func() {
+				a.clearStatusMessage()
 				a.showMessage(fmt.Sprintf("Failed to send message: %v", err))
 				// Remove the failed message from display by reloading
 				a.loadChatHistory()
+			})
+		} else {
+			a.app.QueueUpdate(func() {
+				a.statusMessage = "sent"
+				a.updateStatusBar()
+				a.app.ForceDraw()
+			})
+			// Clear status after 2 seconds
+			time.Sleep(2 * time.Second)
+			a.app.QueueUpdate(func() {
+				a.statusMessage = ""
+				a.updateStatusBar()
+				a.app.ForceDraw()
 			})
 		}
 	}()
@@ -521,9 +551,10 @@ func (a *App) updateStatusBar() {
 	connected := a.connected
 	a.mu.RUnlock()
 
-	status := "[red]Disconnected[white]"
-	if connected {
-		status = "[green]Connected[white]"
+	relayCount := a.client.GetRelayCount()
+	status := fmt.Sprintf("[red]%d relays[white]", relayCount)
+	if connected && relayCount > 0 {
+		status = fmt.Sprintf("[green]%d relays[white]", relayCount)
 	}
 
 	partnerName := "None"
@@ -531,8 +562,27 @@ func (a *App) updateStatusBar() {
 		partnerName = a.displayNames[partner]
 	}
 
-	timeStr := time.Now().Format("15:04:05")
-	a.statusBar.SetText(fmt.Sprintf("%s | Partner: %s | %s", status, partnerName, timeStr))
+	a.statusMu.RLock()
+	statusMsg := a.statusMessage
+	a.statusMu.RUnlock()
+
+	statusText := fmt.Sprintf("%s | Partner: %s", status, partnerName)
+	if statusMsg != "" {
+		statusText = fmt.Sprintf("%s | %s", statusText, statusMsg)
+	}
+
+	a.statusBar.SetText(statusText)
+}
+
+func (a *App) setStatusMessage(message string) {
+	a.statusMu.Lock()
+	a.statusMessage = message
+	a.statusMu.Unlock()
+	a.updateStatusBar()
+}
+
+func (a *App) clearStatusMessage() {
+	a.setStatusMessage("")
 }
 
 func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {

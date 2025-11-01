@@ -188,6 +188,12 @@ func (c *Client) GetPublicKey() string {
 	return c.publicKey
 }
 
+func (c *Client) GetRelayCount() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.relays)
+}
+
 func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug bool) ([]nostr.Event, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
