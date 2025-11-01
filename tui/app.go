@@ -203,8 +203,8 @@ func (a *App) setupUI() error {
 	grid.AddItem(a.messageView, 0, 0, 1, 1, 0, 0, false) // messages - row 0, col 0
 
 	if a.contactsVisible {
-		grid.AddItem(a.contactList, 0, 1, 1, 1, 0, 0, true) // contacts - row 0, col 1
-		grid.AddItem(a.inputArea, 1, 0, 1, 2, 0, 0, true)   // input - row 1, span 2 cols
+		grid.AddItem(a.contactList, 0, 1, 1, 1, 0, 0, false) // contacts - row 0, col 1
+		grid.AddItem(a.inputArea, 1, 0, 1, 2, 0, 0, true)    // input - row 1, span 2 cols
 	} else {
 		grid.AddItem(a.inputArea, 1, 0, 1, 1, 0, 0, true) // input - row 1, span 1 col
 	}
@@ -223,6 +223,9 @@ func (a *App) setupUI() error {
 	if err := a.loadContactsBasic(); err != nil {
 		return fmt.Errorf("failed to load contacts: %w", err)
 	}
+
+	// Set initial focus to input field
+	a.app.SetFocus(a.inputField)
 
 	return nil
 }
@@ -580,12 +583,8 @@ func (a *App) toggleContactsPane() {
 		grid.AddItem(a.inputArea, 1, 0, 1, 1, 0, 0, true) // input - row 1, span 1 col
 	}
 
-	// Set focus appropriately based on contacts visibility
-	if a.contactsVisible {
-		a.app.SetFocus(a.contactList)
-	} else {
-		a.app.SetFocus(a.inputField)
-	}
+	// Always focus on message input
+	a.app.SetFocus(a.inputField)
 }
 
 func (a *App) showHelp() {
@@ -667,7 +666,7 @@ func (a *App) Start(debug bool) error {
 	// Start status bar updates
 	go a.updateStatusBarPeriodically()
 
-	// Set initial focus
+	// Set initial focus to message input
 	a.app.SetFocus(a.inputField)
 
 	// Run the application
