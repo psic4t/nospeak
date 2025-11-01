@@ -19,3 +19,6 @@ partners = [
 
 # Enable debug mode to print generated events when sending messages
 debug = false
+
+# Cache type: "sqlite" (default) or "memory"
+cache = "sqlite"

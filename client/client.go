@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/data.haus/nospeak/cache"
 	"github.com/data.haus/nospeak/config"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
@@ -33,6 +34,15 @@ func NewClient(cfg *config.Config) (*Client, error) {
 
 	secretKey := sk.(string)
 	publicKey := pk.(string)
+
+	// Initialize cache
+	cacheType := cfg.Cache
+	if cacheType == "" {
+		cacheType = "sqlite" // default
+	}
+	if err := cache.InitializeCache(cacheType); err != nil {
+		return nil, fmt.Errorf("failed to initialize cache: %w", err)
+	}
 
 	return &Client{
 		config:    cfg,

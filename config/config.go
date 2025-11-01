@@ -15,6 +15,7 @@ type Config struct {
 	Nsec     string   `toml:"nsec"`
 	Partners []string `toml:"partners"`
 	Debug    bool     `toml:"debug"`
+	Cache    string   `toml:"cache"`
 }
 
 func Load() (*Config, error) {

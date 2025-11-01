@@ -4,12 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/data.haus/nospeak/cache"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
 func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message string, debug bool) error {
+	if debug {
+		log.Printf("SendChatMessage: recipient=%s, message=%q", recipientNpub[:8]+"...", message)
+	}
+
 	_, recipientPubKey, err := nip19.Decode(recipientNpub)
 	if err != nil {
 		return fmt.Errorf("failed to decode recipient npub: %w", err)
@@ -69,8 +75,13 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		return fmt.Errorf("failed to publish gift wrap: %w", err)
 	}
 
-	if debug {
-		log.Printf("Message sent to %s", recipientNpub)
+	messageCache := cache.GetCache()
+	if err := messageCache.AddMessage(recipientNpub, message, giftWrap.ID, "sent"); err != nil {
+		if debug {
+			log.Printf("Failed to cache sent message: %v", err)
+		}
+	} else if debug {
+		log.Printf("Message cached for %s with event ID: %s", recipientNpub[:8]+"...", giftWrap.ID)
 	}
 	return nil
 }
@@ -90,6 +101,15 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 	return c.Subscribe(ctx, filters, func(event nostr.Event) {
 		if debug {
 			log.Printf("Received gift-wrapped event (kind: %d, id: %s, from: %s)", event.Kind, event.ID, event.PubKey)
+		}
+
+		// Check if message is already in cache
+		messageCache := cache.GetCache()
+		if messageCache.HasMessage(event.ID) {
+			if debug {
+				log.Printf("Message %s already in cache, skipping", event.ID)
+			}
+			return
 		}
 
 		rumor, err := c.UnwrapGiftWrap(event, debug)
@@ -118,6 +138,15 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 		if debug {
 			log.Printf("Successfully decrypted message from %s: %q", senderNpub, rumor.Content)
 		}
+
+		if err := messageCache.AddMessageWithTimestamp(senderNpub, rumor.Content, event.ID, "received", time.Unix(int64(rumor.CreatedAt), 0)); err != nil {
+			if debug {
+				log.Printf("Failed to cache received message: %v", err)
+			}
+		} else if debug {
+			log.Printf("Cached received message from %s: %q", senderNpub[:8]+"...", rumor.Content)
+		}
+
 		messageHandler(senderNpub, rumor.Content)
 	})
 }
@@ -244,4 +273,14 @@ func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
 
 func (c *Client) GetPartnerNpubs() []string {
 	return c.config.Partners
+}
+
+func (c *Client) GetMessageHistory(recipientNpub string, limit int) []cache.MessageEntry {
+	messageCache := cache.GetCache()
+	return messageCache.GetMessages(recipientNpub, limit)
+}
+
+func (c *Client) GetMessageHistoryEnhanced(recipientNpub string, sentLimit, receivedLimit int) []cache.MessageEntry {
+	messageCache := cache.GetCache()
+	return messageCache.GetRecentMessages(recipientNpub, sentLimit, receivedLimit)
 }

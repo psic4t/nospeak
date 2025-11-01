@@ -70,6 +70,25 @@ func Chat(debug bool) {
 
 	selectedDisplayName := displayNames[selectedPartner]
 	fmt.Printf("Chatting with \x1b[36m%s\x1b[0m\n", selectedDisplayName)
+
+	messages := nostrClient.GetMessageHistoryEnhanced(selectedPartner, 5, 5)
+	if len(messages) > 0 {
+		fmt.Println("--- Recent Messages ---")
+		for _, msg := range messages {
+			timestamp := msg.SentAt.Format("15:04:05")
+			if msg.Direction == "sent" {
+				fmt.Printf("\x1b[33m[%s] You:\x1b[0m %s\n", timestamp, msg.Message)
+			} else {
+				username, _ := nostrClient.ResolveUsername(ctx, msg.RecipientNpub, debug)
+				if username == "" {
+					username = msg.RecipientNpub[:8] + "..."
+				}
+				fmt.Printf("\x1b[32m[%s] %s:\x1b[0m %s\n", timestamp, username, msg.Message)
+			}
+		}
+		fmt.Println("------------------------")
+	}
+
 	fmt.Println("Type messages and press Enter. Type '/quit' to exit.")
 
 	sigChan := make(chan os.Signal, 1)
