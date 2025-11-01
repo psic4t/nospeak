@@ -44,6 +44,9 @@ type App struct {
 	loadedReceivedCount int
 	hasMoreMessages     bool
 
+	// UI state
+	contactsVisible bool
+
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -63,13 +66,14 @@ func NewApp() (*App, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &App{
-		app:          tview.NewApplication(),
-		client:       nostrClient,
-		config:       cfg,
-		displayNames: make(map[string]string),
-		messageCache: cache.GetCache(),
-		ctx:          ctx,
-		cancel:       cancel,
+		app:             tview.NewApplication(),
+		client:          nostrClient,
+		config:          cfg,
+		displayNames:    make(map[string]string),
+		messageCache:    cache.GetCache(),
+		contactsVisible: cfg.ShowContacts,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 
 	if err := app.setupUI(); err != nil {
@@ -104,8 +108,14 @@ func (a *App) setupUI() error {
 	// Create main content area using grid for better control
 	grid := tview.NewGrid()
 	grid.SetBackgroundColor(tcell.ColorDefault)
-	grid.SetRows(0, 1)     // 0 for main content, 1 for input
-	grid.SetColumns(0, 25) // 0 for messages, 25 for contacts
+	grid.SetRows(0, 1) // 0 for main content, 1 for input
+
+	// Set columns based on config
+	if a.contactsVisible {
+		grid.SetColumns(0, 25) // 0 for messages, 25 for contacts
+	} else {
+		grid.SetColumns(0) // only messages
+	}
 
 	// Create sidebar with contact list
 	a.sidebar = tview.NewFlex().SetDirection(tview.FlexRow)
@@ -117,6 +127,34 @@ func (a *App) setupUI() error {
 	a.contactList.SetBackgroundColor(tcell.ColorDefault)
 	a.contactList.SetSelectedFunc(func(index int, mainText string, secondaryText string, rune rune) {
 		a.onContactSelected(index, mainText, secondaryText)
+	})
+
+	// Handle arrow key navigation to switch contacts immediately
+	a.contactList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp, tcell.KeyDown:
+			// Let the list handle the navigation first
+			return event
+		case tcell.KeyTab:
+			a.app.SetFocus(a.inputField)
+			return nil
+		default:
+			return event
+		}
+	})
+
+	// Add a callback for when the selection changes
+	a.contactList.SetChangedFunc(func(index int, mainText string, secondaryText string, shortcut rune) {
+		a.onContactSelected(index, mainText, secondaryText)
+	})
+
+	// Handle Tab key directly in contact list
+	a.contactList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			a.app.SetFocus(a.inputField)
+			return nil // Consume the event
+		}
+		return event
 	})
 
 	// Create chat area
@@ -152,6 +190,10 @@ func (a *App) setupUI() error {
 	a.inputField.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			a.sendMessage()
+		} else if key == tcell.KeyTab {
+			if a.contactsVisible {
+				a.app.SetFocus(a.contactList)
+			}
 		}
 	})
 
@@ -159,8 +201,13 @@ func (a *App) setupUI() error {
 
 	// Assemble grid layout
 	grid.AddItem(a.messageView, 0, 0, 1, 1, 0, 0, false) // messages - row 0, col 0
-	grid.AddItem(a.contactList, 0, 1, 1, 1, 0, 0, false) // contacts - row 0, col 1
-	grid.AddItem(a.inputArea, 1, 0, 1, 2, 0, 0, true)    // input - row 1, span 2 cols
+
+	if a.contactsVisible {
+		grid.AddItem(a.contactList, 0, 1, 1, 1, 0, 0, true) // contacts - row 0, col 1
+		grid.AddItem(a.inputArea, 1, 0, 1, 2, 0, 0, true)   // input - row 1, span 2 cols
+	} else {
+		grid.AddItem(a.inputArea, 1, 0, 1, 1, 0, 0, true) // input - row 1, span 1 col
+	}
 
 	// Assemble main layout
 	a.mainFlex.AddItem(a.statusBar, 1, 0, false)
@@ -172,21 +219,53 @@ func (a *App) setupUI() error {
 	// Set root
 	a.app.SetRoot(a.mainFlex, true)
 
-	// Load contacts
-	if err := a.loadContacts(); err != nil {
+	// Load contacts (basic list without name resolution)
+	if err := a.loadContactsBasic(); err != nil {
 		return fmt.Errorf("failed to load contacts: %w", err)
 	}
 
 	return nil
 }
 
-func (a *App) loadContacts() error {
+func (a *App) loadContactsBasic() error {
 	a.partners = a.client.GetPartnerNpubs()
 	if len(a.partners) == 0 {
 		return fmt.Errorf("no chat partners configured")
 	}
 
-	// Get display names
+	// Initialize display names with cached values first, then fallback
+	a.displayNames = make(map[string]string)
+	messageCache := cache.GetCache()
+
+	for _, partner := range a.partners {
+		// Try to get cached username first
+		if cachedName, found := messageCache.GetUsername(partner); found {
+			a.displayNames[partner] = cachedName
+		} else {
+			a.displayNames[partner] = partner[:8] + "..."
+		}
+	}
+
+	// Populate contact list with cached/fallback names
+	a.contactList.Clear()
+	for i, partner := range a.partners {
+		displayName := a.displayNames[partner]
+		a.contactList.AddItem(displayName, partner, 0, nil)
+		if i == 0 {
+			a.currentPartner = partner
+			a.contactList.SetCurrentItem(0)
+			a.loadChatHistory()
+		}
+	}
+
+	// Highlight current selection
+	a.updateContactListHighlight()
+
+	return nil
+}
+
+func (a *App) loadContacts() error {
+	// Get display names (now with relay connections established)
 	displayNames, err := a.client.GetPartnerDisplayNames(a.ctx, false)
 	if err != nil {
 		log.Printf("Failed to resolve usernames: %v", err)
@@ -196,31 +275,53 @@ func (a *App) loadContacts() error {
 		}
 	}
 
+	a.mu.Lock()
 	a.displayNames = displayNames
+	a.mu.Unlock()
 
-	// Populate contact list
-	a.contactList.Clear()
-	for i, partner := range a.partners {
-		displayName := displayNames[partner]
-		a.contactList.AddItem(displayName, partner, 0, nil)
-		if i == 0 {
-			a.currentPartner = partner
-			a.contactList.SetCurrentItem(0)
-			a.loadChatHistory()
-		}
-	}
-
+	// Don't update UI here - let the async caller handle UI updates
 	return nil
 }
 
 func (a *App) onContactSelected(index int, mainText, secondaryText string) {
-	if index < len(a.partners) {
+	a.mu.RLock()
+	partnersLen := len(a.partners)
+	a.mu.RUnlock()
+
+	if index >= 0 && index < partnersLen {
 		a.mu.Lock()
 		a.currentPartner = a.partners[index]
 		a.mu.Unlock()
 		a.loadChatHistory()
 		a.updateStatusBar()
+		a.updateContactListHighlight()
 	}
+}
+
+func (a *App) updateContactListWithNames() {
+	a.mu.RLock()
+	currentPartner := a.currentPartner
+	partners := a.partners
+	displayNames := a.displayNames
+	a.mu.RUnlock()
+
+	// Update contact list with resolved names
+	for i, partner := range partners {
+		if i < a.contactList.GetItemCount() {
+			displayName := displayNames[partner]
+			if partner == currentPartner {
+				// Show current contact with a marker
+				a.contactList.SetItemText(i, "▶ "+displayName, partner)
+			} else {
+				// Show other contacts without marker
+				a.contactList.SetItemText(i, "  "+displayName, partner)
+			}
+		}
+	}
+}
+
+func (a *App) updateContactListHighlight() {
+	a.updateContactListWithNames()
 }
 
 func (a *App) loadChatHistory() {
@@ -453,16 +554,38 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyF2:
 		a.showSettings()
 		return nil
-	case tcell.KeyTab:
-		// Cycle between input field and contact list
-		if a.app.GetFocus() == a.inputField {
-			a.app.SetFocus(a.contactList)
-		} else {
-			a.app.SetFocus(a.inputField)
-		}
+	case tcell.KeyF3:
+		a.toggleContactsPane()
 		return nil
+
 	}
 	return event
+}
+
+func (a *App) toggleContactsPane() {
+	a.contactsVisible = !a.contactsVisible
+
+	// Find the grid in the main layout
+	grid := a.mainFlex.GetItem(1).(*tview.Grid)
+
+	if a.contactsVisible {
+		// Show contacts pane
+		grid.SetColumns(0, 25)                              // messages, contacts
+		grid.AddItem(a.contactList, 0, 1, 1, 1, 0, 0, true) // contacts - row 0, col 1
+		grid.AddItem(a.inputArea, 1, 0, 1, 2, 0, 0, true)   // input - row 1, span 2 cols
+	} else {
+		// Hide contacts pane
+		grid.SetColumns(0) // only messages
+		grid.RemoveItem(a.contactList)
+		grid.AddItem(a.inputArea, 1, 0, 1, 1, 0, 0, true) // input - row 1, span 1 col
+	}
+
+	// Set focus appropriately based on contacts visibility
+	if a.contactsVisible {
+		a.app.SetFocus(a.contactList)
+	} else {
+		a.app.SetFocus(a.inputField)
+	}
 }
 
 func (a *App) showHelp() {
@@ -475,6 +598,9 @@ Keyboard Shortcuts:
   Ctrl+J/K       - Scroll message pane up/down
   F1             - Show this help
   F2             - Show settings
+  F3             - Toggle contacts pane
+
+Note: Contacts pane visibility can be set in config.toml with "show_contacts" option
 
 Navigation:
   ↑/↓            - Navigate contact list
@@ -516,6 +642,22 @@ func (a *App) Start(debug bool) error {
 	a.mu.Lock()
 	a.connected = true
 	a.mu.Unlock()
+
+	// Resolve contact names after a short delay to allow UI to start
+	go func() {
+		time.Sleep(1 * time.Second) // Allow UI to start fully
+
+		if err := a.loadContacts(); err != nil {
+			log.Printf("Failed to resolve contact names: %v", err)
+		}
+
+		// Update UI
+		a.app.QueueUpdate(func() {
+			a.updateContactListWithNames()
+			a.updateStatusBar()
+			a.app.ForceDraw() // Force entire app to redraw
+		})
+	}()
 
 	a.updateStatusBar()
 

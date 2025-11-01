@@ -22,3 +22,6 @@ debug = false
 
 # Cache type: "sqlite" (default) or "memory"
 cache = "sqlite"
+
+# Show contacts pane on startup (default: true)
+show_contacts = true

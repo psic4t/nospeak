@@ -10,12 +10,13 @@ import (
 )
 
 type Config struct {
-	Relays   []string `toml:"relays"`
-	Npub     string   `toml:"npub"`
-	Nsec     string   `toml:"nsec"`
-	Partners []string `toml:"partners"`
-	Debug    bool     `toml:"debug"`
-	Cache    string   `toml:"cache"`
+	Relays       []string `toml:"relays"`
+	Npub         string   `toml:"npub"`
+	Nsec         string   `toml:"nsec"`
+	Partners     []string `toml:"partners"`
+	Debug        bool     `toml:"debug"`
+	Cache        string   `toml:"cache"`
+	ShowContacts bool     `toml:"show_contacts"`
 }
 
 func Load() (*Config, error) {
