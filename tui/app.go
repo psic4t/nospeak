@@ -51,6 +51,10 @@ type App struct {
 	statusMessage string
 	statusMu      sync.RWMutex
 
+	// Unread messages tracking
+	unreadMessages map[string]bool
+	unreadMu       sync.RWMutex
+
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -76,6 +80,7 @@ func NewApp() (*App, error) {
 		displayNames:    make(map[string]string),
 		messageCache:    cache.GetCache(),
 		contactsVisible: cfg.ShowContacts,
+		unreadMessages:  make(map[string]bool),
 		ctx:             ctx,
 		cancel:          cancel,
 	}
@@ -298,7 +303,14 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 	if index >= 0 && index < partnersLen {
 		a.mu.Lock()
 		a.currentPartner = a.partners[index]
+		selectedPartner := a.partners[index]
 		a.mu.Unlock()
+
+		// Clear unread status for selected contact
+		a.unreadMu.Lock()
+		delete(a.unreadMessages, selectedPartner)
+		a.unreadMu.Unlock()
+
 		a.loadChatHistory()
 		a.updateStatusBar()
 		a.updateContactListHighlight()
@@ -316,13 +328,26 @@ func (a *App) updateContactListWithNames() {
 	for i, partner := range partners {
 		if i < a.contactList.GetItemCount() {
 			displayName := displayNames[partner]
+
+			a.unreadMu.RLock()
+			hasUnread := a.unreadMessages[partner]
+			a.unreadMu.RUnlock()
+
+			var prefix string
 			if partner == currentPartner {
 				// Show current contact with a marker
-				a.contactList.SetItemText(i, "▶ "+displayName, partner)
+				prefix = "▶ "
 			} else {
 				// Show other contacts without marker
-				a.contactList.SetItemText(i, "  "+displayName, partner)
+				prefix = "  "
 			}
+
+			// Add green dot for unread messages
+			if hasUnread {
+				displayName = displayName + " [green]●[white]"
+			}
+
+			a.contactList.SetItemText(i, prefix+displayName, partner)
 		}
 	}
 }
@@ -352,7 +377,7 @@ func (a *App) loadChatHistory() {
 	for _, msg := range messages {
 		timestamp := msg.SentAt.Format("15:04:05")
 		if msg.Direction == "sent" {
-			a.messageView.Write([]byte(fmt.Sprintf("[%s] [yellow]You:[white] %s\n", timestamp, msg.Message)))
+			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, msg.Message)))
 		} else {
 			// For received messages, RecipientNpub contains the sender's npub
 			senderNpub := msg.RecipientNpub
@@ -360,7 +385,7 @@ func (a *App) loadChatHistory() {
 			if username == "" {
 				username = senderNpub[:8] + "..."
 			}
-			a.messageView.Write([]byte(fmt.Sprintf("[%s] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
+			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
 		}
 	}
 
@@ -403,7 +428,7 @@ func (a *App) loadOlderMessages() {
 	for _, msg := range messages {
 		timestamp := msg.SentAt.Format("15:04:05")
 		if msg.Direction == "sent" {
-			a.messageView.Write([]byte(fmt.Sprintf("[%s] [yellow]You:[white] %s\n", timestamp, msg.Message)))
+			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, msg.Message)))
 		} else {
 			// For received messages, RecipientNpub contains the sender's npub
 			senderNpub := msg.RecipientNpub
@@ -411,7 +436,7 @@ func (a *App) loadOlderMessages() {
 			if username == "" {
 				username = senderNpub[:8] + "..."
 			}
-			a.messageView.Write([]byte(fmt.Sprintf("[%s] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
+			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
 		}
 	}
 
@@ -497,7 +522,7 @@ func (a *App) sendMessage() {
 
 	// Display message immediately
 	timestamp := time.Now().Format("15:04:05")
-	a.messageView.Write([]byte(fmt.Sprintf("[%s] [yellow]You:[white] %s\n", timestamp, message)))
+	a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, message)))
 	a.messageView.ScrollToEnd()
 	a.inputField.SetText("")
 
@@ -589,7 +614,7 @@ func (a *App) updateStatusBar() {
 	statusMsg := a.statusMessage
 	a.statusMu.RUnlock()
 
-	statusText := fmt.Sprintf("%s | Partner: %s", status, partnerName)
+	statusText := fmt.Sprintf("%s | [violet]Chat with %s[white]", status, partnerName)
 	if statusMsg != "" {
 		statusText = fmt.Sprintf("%s | %s", statusText, statusMsg)
 	}
@@ -769,10 +794,39 @@ func (a *App) listenForMessages(debug bool) {
 				if username == "" {
 					username = senderNpub[:8] + "..."
 				}
-				a.messageView.Write([]byte(fmt.Sprintf("[%s] [green]%s:[white] %s\n", timestamp, username, message)))
+				a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, message)))
 				a.messageView.ScrollToEnd()
 				// Force the UI to redraw
 				a.app.ForceDraw()
+			})
+		} else {
+			// Message from other contact - mark as unread and show status
+			a.unreadMu.Lock()
+			a.unreadMessages[senderNpub] = true
+			a.unreadMu.Unlock()
+
+			a.app.QueueUpdate(func() {
+				// Show status message
+				username := a.displayNames[senderNpub]
+				if username == "" {
+					username = senderNpub[:8] + "..."
+				}
+				a.statusMessage = fmt.Sprintf("New message from %s", username)
+				a.updateStatusBar()
+				a.app.ForceDraw()
+
+				// Update contact list to show green dot
+				a.updateContactListWithNames()
+
+				// Clear status message after 3 seconds
+				go func() {
+					time.Sleep(3 * time.Second)
+					a.app.QueueUpdate(func() {
+						a.statusMessage = ""
+						a.updateStatusBar()
+						a.app.ForceDraw()
+					})
+				}()
 			})
 		}
 	}

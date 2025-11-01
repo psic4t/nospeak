@@ -6,11 +6,12 @@ import (
 )
 
 var (
-	MessageSentColor        = tcell.ColorYellow
+	MessageSentColor        = tcell.ColorOrange
 	MessageReceivedColor    = tcell.ColorGreen
 	StatusConnectedColor    = tcell.ColorGreen
 	StatusDisconnectedColor = tcell.ColorRed
 	StatusConnectingColor   = tcell.ColorYellow
+	TimeColor               = tcell.ColorBlue
 )
 
 func GetTheme() tview.Theme {
