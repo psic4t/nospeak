@@ -39,6 +39,11 @@ type App struct {
 	connected      bool
 	mu             sync.RWMutex
 
+	// Message loading state
+	loadedSentCount     int
+	loadedReceivedCount int
+	hasMoreMessages     bool
+
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -227,7 +232,12 @@ func (a *App) loadChatHistory() {
 		return
 	}
 
-	messages := a.client.GetMessageHistoryEnhanced(partner, 10, 10)
+	// Reset loading state for new contact
+	a.loadedSentCount = 10
+	a.loadedReceivedCount = 10
+	a.hasMoreMessages = true
+
+	messages := a.client.GetMessageHistoryEnhanced(partner, a.loadedSentCount, a.loadedReceivedCount)
 
 	a.messageView.Clear()
 	a.messageView.SetText(fmt.Sprintf("[::b]Chat with %s[::-]\n\n", a.displayNames[partner]))
@@ -248,6 +258,82 @@ func (a *App) loadChatHistory() {
 	}
 
 	a.messageView.ScrollToEnd()
+}
+
+func (a *App) loadOlderMessages() {
+	a.mu.RLock()
+	partner := a.currentPartner
+	a.mu.RUnlock()
+
+	if partner == "" || !a.hasMoreMessages {
+		return
+	}
+
+	// Store current content and scroll position
+	currentContent := a.messageView.GetText(false)
+	row, col := a.messageView.GetScrollOffset()
+
+	// Load more messages
+	newSentCount := a.loadedSentCount + 10
+	newReceivedCount := a.loadedReceivedCount + 10
+
+	messages := a.client.GetMessageHistoryEnhanced(partner, newSentCount, newReceivedCount)
+
+	// Check if we got more messages
+	if len(messages) <= (a.loadedSentCount + a.loadedReceivedCount) {
+		a.hasMoreMessages = false
+	}
+
+	a.loadedSentCount = newSentCount
+	a.loadedReceivedCount = newReceivedCount
+
+	// Count how many new lines we're adding
+	oldLineCount := len(strings.Split(currentContent, "\n"))
+
+	// Rebuild the entire message view
+	a.messageView.Clear()
+	a.messageView.SetText(fmt.Sprintf("[::b]Chat with %s[::-]\n\n", a.displayNames[partner]))
+
+	for _, msg := range messages {
+		timestamp := msg.SentAt.Format("15:04:05")
+		if msg.Direction == "sent" {
+			a.messageView.Write([]byte(fmt.Sprintf("[%s] [yellow]You:[white] %s\n", timestamp, msg.Message)))
+		} else {
+			// For received messages, RecipientNpub contains the sender's npub
+			senderNpub := msg.RecipientNpub
+			username := a.displayNames[senderNpub]
+			if username == "" {
+				username = senderNpub[:8] + "..."
+			}
+			a.messageView.Write([]byte(fmt.Sprintf("[%s] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
+		}
+	}
+
+	// Calculate new scroll position
+	newLineCount := len(strings.Split(a.messageView.GetText(false), "\n"))
+	lineDifference := newLineCount - oldLineCount
+
+	// Restore scroll position, adjusted for new content
+	newScrollRow := row + lineDifference
+	if newScrollRow < 0 {
+		newScrollRow = 0
+	}
+	a.messageView.ScrollTo(newScrollRow, col)
+}
+
+func (a *App) scrollMessageUp() {
+	row, col := a.messageView.GetScrollOffset()
+	if row > 0 {
+		a.messageView.ScrollTo(row-1, col)
+	} else if row == 0 && a.hasMoreMessages {
+		// At the top and there are more messages to load
+		a.loadOlderMessages()
+	}
+}
+
+func (a *App) scrollMessageDown() {
+	row, col := a.messageView.GetScrollOffset()
+	a.messageView.ScrollTo(row+1, col)
 }
 
 func (a *App) refreshChatHistory() {
@@ -328,6 +414,14 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyCtrlQ:
 		a.Stop()
 		return nil
+	case tcell.KeyCtrlJ:
+		// Scroll up in message view
+		a.scrollMessageUp()
+		return nil
+	case tcell.KeyCtrlK:
+		// Scroll down in message view
+		a.scrollMessageDown()
+		return nil
 	case tcell.KeyF1:
 		a.showHelp()
 		return nil
@@ -353,6 +447,7 @@ Keyboard Shortcuts:
   Ctrl+C/Ctrl+Q  - Quit application
   Tab            - Switch between contact list and input
   Enter          - Send message (when in input field)
+  Ctrl+J/K       - Scroll message pane up/down
   F1             - Show this help
   F2             - Show settings
 
