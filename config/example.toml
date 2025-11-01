@@ -1,0 +1,21 @@
+# Nostr Chat Configuration
+
+# List of relays to connect to
+relays = [
+    "wss://relay.damus.io",
+    "wss://relay.nostr.band",
+    "wss://nos.lol"
+]
+
+# Your Nostr keys (generate with: nsec1... and npub1...)
+npub = "npub1..."
+nsec = "nsec1..."
+
+# Chat partners (their npub keys)
+partners = [
+    "npub1...",
+    "npub1..."
+]
+
+# Enable debug mode to print generated events when sending messages
+debug = false
