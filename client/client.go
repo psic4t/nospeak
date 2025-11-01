@@ -221,3 +221,14 @@ func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug b
 
 	return allEvents, nil
 }
+
+func (c *Client) GetPartnerDisplayNames(ctx context.Context, debug bool) (map[string]string, error) {
+	displayNames := make(map[string]string)
+
+	for _, npub := range c.config.Partners {
+		displayName := c.ResolveUsernameWithFallback(ctx, npub, debug)
+		displayNames[npub] = displayName
+	}
+
+	return displayNames, nil
+}

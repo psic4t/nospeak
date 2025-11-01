@@ -39,9 +39,15 @@ func Chat(debug bool) {
 		return
 	}
 
+	displayNames, err := nostrClient.GetPartnerDisplayNames(ctx, debug)
+	if err != nil && debug {
+		log.Printf("Failed to resolve usernames: %v", err)
+	}
+
 	fmt.Println("Available partners:")
 	for i, partner := range partners {
-		fmt.Printf("%d: %s\n", i+1, partner)
+		displayName := displayNames[partner]
+		fmt.Printf("%d: \x1b[36m%s\x1b[0m\n", i+1, displayName)
 	}
 
 	fmt.Print("Select partner (number): ")
@@ -62,7 +68,8 @@ func Chat(debug bool) {
 		selectedPartner = partners[selection-1]
 	}
 
-	fmt.Printf("Chatting with %s\n", selectedPartner)
+	selectedDisplayName := displayNames[selectedPartner]
+	fmt.Printf("Chatting with \x1b[36m%s\x1b[0m\n", selectedDisplayName)
 	fmt.Println("Type messages and press Enter. Type '/quit' to exit.")
 
 	sigChan := make(chan os.Signal, 1)
@@ -70,7 +77,11 @@ func Chat(debug bool) {
 
 	messageHandler := func(senderNpub, message string) {
 		if senderNpub == selectedPartner {
-			fmt.Printf("\n[%s]: %s\n> ", senderNpub, message)
+			username, _ := nostrClient.ResolveUsername(ctx, senderNpub, debug)
+			if username == "" {
+				username = senderNpub
+			}
+			fmt.Printf("\n\x1b[32m[%s]:\x1b[0m %s\n> ", username, message)
 		}
 	}
 
