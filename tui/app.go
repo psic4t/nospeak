@@ -348,6 +348,13 @@ func (a *App) sendMessage() {
 		return
 	}
 
+	// Check for IRC-style commands
+	if strings.HasPrefix(message, "/") {
+		a.handleCommand(message)
+		a.inputField.SetText("")
+		return
+	}
+
 	a.mu.RLock()
 	partner := a.currentPartner
 	a.mu.RUnlock()
@@ -373,6 +380,24 @@ func (a *App) sendMessage() {
 			})
 		}
 	}()
+}
+
+func (a *App) handleCommand(command string) {
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return
+	}
+
+	switch strings.ToLower(parts[0]) {
+	case "/quit":
+		a.Stop()
+	case "/help":
+		a.showHelp()
+	default:
+		timestamp := time.Now().Format("15:04:05")
+		a.messageView.Write([]byte(fmt.Sprintf("[%s] [red]Unknown command:[white] %s\n", timestamp, command)))
+		a.messageView.ScrollToEnd()
+	}
 }
 
 func (a *App) showMessage(text string) {
@@ -455,9 +480,11 @@ Navigation:
   ↑/↓            - Navigate contact list
   Enter          - Select contact
 
-Commands:
+IRC-style Commands:
   /quit          - Quit application
-  /help          - Show this help`
+  /help          - Show this help
+
+Type commands in the input field and press Enter to execute.`
 
 	modal := tview.NewModal().
 		SetText(helpText).
