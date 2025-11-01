@@ -442,6 +442,31 @@ func (a *App) scrollMessageDown() {
 	a.messageView.ScrollTo(row+1, col)
 }
 
+func (a *App) switchContact(direction int) {
+	a.mu.RLock()
+	currentIndex := a.contactList.GetCurrentItem()
+	partnersLen := len(a.partners)
+	a.mu.RUnlock()
+
+	if partnersLen == 0 {
+		return
+	}
+
+	// Calculate new index with wrap-around
+	newIndex := currentIndex + direction
+	if newIndex < 0 {
+		newIndex = partnersLen - 1
+	} else if newIndex >= partnersLen {
+		newIndex = 0
+	}
+
+	// Set the new selection
+	a.contactList.SetCurrentItem(newIndex)
+
+	// Trigger the selection change
+	a.onContactSelected(newIndex, "", "")
+}
+
 func (a *App) refreshChatHistory() {
 	a.app.QueueUpdate(func() {
 		a.loadChatHistory()
@@ -591,13 +616,21 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyCtrlQ:
 		a.Stop()
 		return nil
-	case tcell.KeyCtrlJ:
+	case tcell.KeyPgUp:
 		// Scroll up in message view
 		a.scrollMessageUp()
 		return nil
-	case tcell.KeyCtrlK:
+	case tcell.KeyPgDn:
 		// Scroll down in message view
 		a.scrollMessageDown()
+		return nil
+	case tcell.KeyCtrlJ:
+		// Switch to next contact
+		a.switchContact(1)
+		return nil
+	case tcell.KeyCtrlK:
+		// Switch to previous contact
+		a.switchContact(-1)
 		return nil
 	case tcell.KeyF1:
 		a.showHelp()
@@ -638,11 +671,12 @@ func (a *App) toggleContactsPane() {
 func (a *App) showHelp() {
 	helpText := `Nospeak TUI Help
 
-Keyboard Shortcuts:
+ Keyboard Shortcuts:
   Ctrl+C/Ctrl+Q  - Quit application
   Tab            - Switch between contact list and input
   Enter          - Send message (when in input field)
-  Ctrl+J/K       - Scroll message pane up/down
+  PgUp/PgDn      - Scroll message pane up/down
+  Ctrl+K/J       - Switch between contacts (K=up, J=down)
   F1             - Show this help
   F2             - Show settings
   F3             - Toggle contacts pane
