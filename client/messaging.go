@@ -18,9 +18,11 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	recipientHex := recipientPubKey.(string)
 
 	// Discover recipient's preferred DM relays
-	recipientRelays, err := c.GetRecipientRelays(ctx, recipientNpub)
+	recipientRelays, err := c.GetRecipientRelays(ctx, recipientNpub, debug)
 	if err != nil {
-		log.Printf("Failed to discover recipient relays, using fallback: %v", err)
+		if debug {
+			log.Printf("Failed to discover recipient relays, using fallback: %v", err)
+		}
 		recipientRelays = []string{"wss://nostr.data.haus"}
 	}
 
@@ -46,7 +48,7 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		fmt.Printf("=====================================\n\n")
 	}
 
-	giftWrap, err := c.CreateGiftWrap(rumor, recipientNpub)
+	giftWrap, err := c.CreateGiftWrap(rumor, recipientNpub, debug)
 	if err != nil {
 		return fmt.Errorf("failed to create gift wrap: %w", err)
 	}
@@ -67,11 +69,13 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		return fmt.Errorf("failed to publish gift wrap: %w", err)
 	}
 
-	log.Printf("Message sent to %s", recipientNpub)
+	if debug {
+		log.Printf("Message sent to %s", recipientNpub)
+	}
 	return nil
 }
 
-func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(senderNpub, message string)) error {
+func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(senderNpub, message string), debug bool) error {
 	filters := nostr.Filters{{
 		Kinds: []int{nostr.KindGiftWrap},
 		Tags: nostr.TagMap{
@@ -79,34 +83,46 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 		},
 	}}
 
-	log.Printf("Listening for gift-wrapped messages for pubkey: %s", c.publicKey)
+	if debug {
+		log.Printf("Listening for gift-wrapped messages for pubkey: %s", c.publicKey)
+	}
 
 	return c.Subscribe(ctx, filters, func(event nostr.Event) {
-		log.Printf("Received gift-wrapped event (kind: %d, id: %s, from: %s)", event.Kind, event.ID, event.PubKey)
+		if debug {
+			log.Printf("Received gift-wrapped event (kind: %d, id: %s, from: %s)", event.Kind, event.ID, event.PubKey)
+		}
 
-		rumor, err := c.UnwrapGiftWrap(event)
+		rumor, err := c.UnwrapGiftWrap(event, debug)
 		if err != nil {
-			log.Printf("Failed to unwrap gift wrap: %v", err)
+			if debug {
+				log.Printf("Failed to unwrap gift wrap: %v", err)
+			}
 			return
 		}
 
 		if rumor.Kind != 14 {
-			log.Printf("Ignoring rumor with kind %d (expected kind 14)", rumor.Kind)
+			if debug {
+				log.Printf("Ignoring rumor with kind %d (expected kind 14)", rumor.Kind)
+			}
 			return
 		}
 
 		senderNpub, err := nip19.EncodePublicKey(rumor.PubKey)
 		if err != nil {
-			log.Printf("Failed to encode sender public key: %v", err)
+			if debug {
+				log.Printf("Failed to encode sender public key: %v", err)
+			}
 			return
 		}
 
-		log.Printf("Successfully decrypted message from %s: %q", senderNpub, rumor.Content)
+		if debug {
+			log.Printf("Successfully decrypted message from %s: %q", senderNpub, rumor.Content)
+		}
 		messageHandler(senderNpub, rumor.Content)
 	})
 }
 
-func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string) ([]string, error) {
+func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, debug bool) ([]string, error) {
 	_, recipientPubKey, err := nip19.Decode(recipientNpub)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode recipient npub: %w", err)
@@ -121,9 +137,11 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string) (
 		Limit:   1,
 	}}
 
-	events, err := c.QueryEvents(ctx, filters)
+	events, err := c.QueryEvents(ctx, filters, debug)
 	if err != nil {
-		log.Printf("Failed to query for recipient's DM relays: %v", err)
+		if debug {
+			log.Printf("Failed to query for recipient's DM relays: %v", err)
+		}
 	}
 
 	var relays []string
@@ -138,9 +156,13 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string) (
 	// Fallback to default relays if none found
 	if len(relays) == 0 {
 		relays = []string{"wss://nostr.data.haus"}
-		log.Printf("No DM relays found for recipient, using fallback: %v", relays)
+		if debug {
+			log.Printf("No DM relays found for recipient, using fallback: %v", relays)
+		}
 	} else {
-		log.Printf("Found DM relays for recipient: %v", relays)
+		if debug {
+			log.Printf("Found DM relays for recipient: %v", relays)
+		}
 	}
 
 	return relays, nil
@@ -173,7 +195,9 @@ func (c *Client) SetProfileName(ctx context.Context, name string, debug bool) er
 		return fmt.Errorf("failed to publish profile metadata: %w", err)
 	}
 
-	log.Printf("Profile name updated to: %s", name)
+	if debug {
+		log.Printf("Profile name updated to: %s", name)
+	}
 	return nil
 }
 
@@ -212,7 +236,9 @@ func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
 		return fmt.Errorf("failed to publish messaging relays event: %w", err)
 	}
 
-	log.Printf("Messaging relays updated: %v", c.config.Relays)
+	if debug {
+		log.Printf("Messaging relays updated: %v", c.config.Relays)
+	}
 	return nil
 }
 

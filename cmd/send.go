@@ -31,7 +31,7 @@ func Send(args []string, debug bool) {
 	}
 
 	ctx := context.Background()
-	if err := nostrClient.Connect(ctx); err != nil {
+	if err := nostrClient.Connect(ctx, debug); err != nil {
 		log.Fatalf("Failed to connect to relays: %v", err)
 	}
 	defer nostrClient.Disconnect()

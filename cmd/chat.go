@@ -28,7 +28,7 @@ func Chat(debug bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := nostrClient.Connect(ctx); err != nil {
+	if err := nostrClient.Connect(ctx, debug); err != nil {
 		log.Fatalf("Failed to connect to relays: %v", err)
 	}
 	defer nostrClient.Disconnect()
@@ -75,7 +75,7 @@ func Chat(debug bool) {
 	}
 
 	go func() {
-		if err := nostrClient.ListenForMessages(ctx, messageHandler); err != nil {
+		if err := nostrClient.ListenForMessages(ctx, messageHandler, debug); err != nil {
 			log.Printf("Error listening for messages: %v", err)
 		}
 	}()

@@ -42,18 +42,22 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Connect(ctx context.Context) error {
+func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for _, relayURL := range c.config.Relays {
 		relay, err := nostr.RelayConnect(ctx, relayURL)
 		if err != nil {
-			log.Printf("Failed to connect to relay %s: %v", relayURL, err)
+			if debug {
+				log.Printf("Failed to connect to relay %s: %v", relayURL, err)
+			}
 			continue
 		}
 		c.relays = append(c.relays, relay)
-		log.Printf("Connected to relay: %s", relayURL)
+		if debug {
+			log.Printf("Connected to relay: %s", relayURL)
+		}
 	}
 
 	if len(c.relays) == 0 {
@@ -89,14 +93,14 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 		}
 
 		if err := relay.Publish(ctx, event); err != nil {
-			log.Printf("Failed to publish to relay %s: %v", relay.URL, err)
 			if debug {
+				log.Printf("Failed to publish to relay %s: %v", relay.URL, err)
 				fmt.Printf("ERROR: Failed to publish to %s: %v\n", relay.URL, err)
 			}
 			lastErr = err
 		} else {
-			log.Printf("Published to relay: %s", relay.URL)
 			if debug {
+				log.Printf("Published to relay: %s", relay.URL)
 				fmt.Printf("SUCCESS: Published to %s\n", relay.URL)
 			}
 		}
@@ -148,7 +152,7 @@ func (c *Client) GetPublicKey() string {
 	return c.publicKey
 }
 
-func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters) ([]nostr.Event, error) {
+func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug bool) ([]nostr.Event, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -211,7 +215,7 @@ func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters) ([]nost
 	}
 
 	// Return events even if some relays failed
-	if len(errors) > 0 {
+	if len(errors) > 0 && debug {
 		log.Printf("Some relays failed during query: %v", errors)
 	}
 

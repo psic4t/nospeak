@@ -52,7 +52,7 @@ func (c *Client) DecryptMessage(encryptedMessage string, senderNpub string) (str
 	return decrypted, nil
 }
 
-func (c *Client) CreateGiftWrap(rumor nostr.Event, recipientNpub string) (nostr.Event, error) {
+func (c *Client) CreateGiftWrap(rumor nostr.Event, recipientNpub string, debug bool) (nostr.Event, error) {
 	_, recipientPubKey, err := nip19.Decode(recipientNpub)
 	if err != nil {
 		return nostr.Event{}, fmt.Errorf("failed to decode recipient npub: %w", err)
@@ -60,7 +60,9 @@ func (c *Client) CreateGiftWrap(rumor nostr.Event, recipientNpub string) (nostr.
 
 	recipientHex := recipientPubKey.(string)
 
-	log.Printf("Creating gift wrap for recipient %s", recipientHex)
+	if debug {
+		log.Printf("Creating gift wrap for recipient %s", recipientHex)
+	}
 
 	// For the seal layer (rumor -> seal), use sender's private key + recipient's public key
 	encryptFunc := func(plaintext string) (string, error) {
@@ -72,7 +74,9 @@ func (c *Client) CreateGiftWrap(rumor nostr.Event, recipientNpub string) (nostr.
 		if err != nil {
 			return "", err
 		}
-		log.Printf("Encrypted rumor for seal layer (length: %d)", len(encrypted))
+		if debug {
+			log.Printf("Encrypted rumor for seal layer (length: %d)", len(encrypted))
+		}
 		return encrypted, nil
 	}
 
@@ -81,7 +85,9 @@ func (c *Client) CreateGiftWrap(rumor nostr.Event, recipientNpub string) (nostr.
 		if err != nil {
 			return err
 		}
-		log.Printf("Signed seal event (kind: %d, id: %s)", event.Kind, event.ID)
+		if debug {
+			log.Printf("Signed seal event (kind: %d, id: %s)", event.Kind, event.ID)
+		}
 		return nil
 	}
 
@@ -91,13 +97,17 @@ func (c *Client) CreateGiftWrap(rumor nostr.Event, recipientNpub string) (nostr.
 		return nostr.Event{}, fmt.Errorf("failed to create gift wrap: %w", err)
 	}
 
-	log.Printf("Created gift wrap (kind: %d, id: %s, recipient: %s)", giftWrap.Kind, giftWrap.ID, recipientHex)
+	if debug {
+		log.Printf("Created gift wrap (kind: %d, id: %s, recipient: %s)", giftWrap.Kind, giftWrap.ID, recipientHex)
+	}
 
 	return giftWrap, nil
 }
 
-func (c *Client) UnwrapGiftWrap(giftWrap nostr.Event) (nostr.Event, error) {
-	log.Printf("Unwrapping gift wrap (kind: %d, id: %s)", giftWrap.Kind, giftWrap.ID)
+func (c *Client) UnwrapGiftWrap(giftWrap nostr.Event, debug bool) (nostr.Event, error) {
+	if debug {
+		log.Printf("Unwrapping gift wrap (kind: %d, id: %s)", giftWrap.Kind, giftWrap.ID)
+	}
 
 	decryptFunc := func(otherPubKey, ciphertext string) (string, error) {
 		conversationKey, err := nip44.GenerateConversationKey(otherPubKey, c.secretKey)
@@ -108,7 +118,9 @@ func (c *Client) UnwrapGiftWrap(giftWrap nostr.Event) (nostr.Event, error) {
 		if err != nil {
 			return "", err
 		}
-		log.Printf("Decrypted layer with pubkey %s (length: %d)", otherPubKey, len(decrypted))
+		if debug {
+			log.Printf("Decrypted layer with pubkey %s (length: %d)", otherPubKey, len(decrypted))
+		}
 		return decrypted, nil
 	}
 
@@ -117,7 +129,9 @@ func (c *Client) UnwrapGiftWrap(giftWrap nostr.Event) (nostr.Event, error) {
 		return nostr.Event{}, fmt.Errorf("failed to unwrap gift: %w", err)
 	}
 
-	log.Printf("Successfully unwrapped rumor (kind: %d, id: %s)", rumor.Kind, rumor.ID)
+	if debug {
+		log.Printf("Successfully unwrapped rumor (kind: %d, id: %s)", rumor.Kind, rumor.ID)
+	}
 
 	return rumor, nil
 }
