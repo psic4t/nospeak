@@ -177,6 +177,45 @@ func (c *Client) SetProfileName(ctx context.Context, name string, debug bool) er
 	return nil
 }
 
+func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
+	// Create kind 10050 event with all relays from config
+	tags := make(nostr.Tags, 0, len(c.config.Relays))
+	for _, relay := range c.config.Relays {
+		tags = append(tags, nostr.Tag{"relay", relay})
+	}
+
+	event := nostr.Event{
+		PubKey:    c.publicKey,
+		CreatedAt: nostr.Now(),
+		Kind:      10050,
+		Tags:      tags,
+		Content:   "",
+	}
+
+	if err := event.Sign(c.secretKey); err != nil {
+		return fmt.Errorf("failed to sign messaging relays event: %w", err)
+	}
+
+	if debug {
+		fmt.Printf("=== DEBUG: Messaging Relays Event (Kind 10050) ===\n")
+		fmt.Printf("ID: %s\n", event.ID)
+		fmt.Printf("Kind: %d\n", event.Kind)
+		fmt.Printf("CreatedAt: %d\n", event.CreatedAt)
+		fmt.Printf("PubKey: %s\n", event.PubKey)
+		fmt.Printf("Tags: %v\n", event.Tags)
+		fmt.Printf("Content: %s\n", event.Content)
+		fmt.Printf("Sig: %s\n", event.Sig)
+		fmt.Printf("================================================\n\n")
+	}
+
+	if err := c.PublishEvent(ctx, event, debug); err != nil {
+		return fmt.Errorf("failed to publish messaging relays event: %w", err)
+	}
+
+	log.Printf("Messaging relays updated: %v", c.config.Relays)
+	return nil
+}
+
 func (c *Client) GetPartnerNpubs() []string {
 	return c.config.Partners
 }
