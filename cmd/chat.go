@@ -100,7 +100,7 @@ func Chat(debug bool) {
 			if username == "" {
 				username = senderNpub
 			}
-			fmt.Printf("\n\x1b[32m[%s]:\x1b[0m %s\n> ", username, message)
+			fmt.Printf("\n\x1b[32m[%s]:\x1b[0m %s\n", username, message)
 		}
 	}
 

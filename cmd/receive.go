@@ -35,7 +35,7 @@ func Receive(debug bool) {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	messageHandler := func(senderNpub, message string) {
-		fmt.Printf("\n[%s]: %s\n> ", senderNpub, message)
+		fmt.Printf("\n[%s]: %s\n", senderNpub, message)
 	}
 
 	go func() {

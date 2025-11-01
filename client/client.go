@@ -129,6 +129,13 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(c.relays))
 
+	// Channel to collect events from all relays
+	eventsChan := make(chan nostr.Event, 100)
+
+	// Map to track processed events by ID
+	processedEvents := make(map[string]bool)
+	var processedMu sync.RWMutex
+
 	for _, relay := range c.relays {
 		wg.Add(1)
 		go func(r *nostr.Relay) {
@@ -141,13 +148,32 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 			}
 
 			for event := range sub.Events {
-				handler(*event)
+				eventsChan <- *event
 			}
 		}(relay)
 	}
 
+	// Single goroutine to handle deduplication and call handler
+	go func() {
+		for event := range eventsChan {
+			processedMu.RLock()
+			if processed := processedEvents[event.ID]; processed {
+				processedMu.RUnlock()
+				continue
+			}
+			processedMu.RUnlock()
+
+			processedMu.Lock()
+			processedEvents[event.ID] = true
+			processedMu.Unlock()
+
+			handler(event)
+		}
+	}()
+
 	go func() {
 		wg.Wait()
+		close(eventsChan)
 		close(errChan)
 	}()
 
