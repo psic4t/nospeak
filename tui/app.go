@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,32 @@ type App struct {
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+// setTerminalTitle sets the terminal window title using ANSI escape sequence
+func (a *App) setTerminalTitle(contactName string) {
+	title := fmt.Sprintf("nospeak: Chat with %s", contactName)
+	// ANSI escape sequence to set window title
+	fmt.Fprint(os.Stdout, "\033]0;"+title+"\007")
+}
+
+// updateTerminalTitle updates the terminal title with the current active contact
+func (a *App) updateTerminalTitle() {
+	a.mu.RLock()
+	currentPartner := a.currentPartner
+	displayNames := a.displayNames
+	a.mu.RUnlock()
+
+	contactName := "None"
+	if currentPartner != "" {
+		if displayName, exists := displayNames[currentPartner]; exists && displayName != "" {
+			contactName = displayName
+		} else {
+			contactName = currentPartner[:8] + "..."
+		}
+	}
+
+	a.setTerminalTitle(contactName)
 }
 
 func NewApp() (*App, error) {
@@ -286,6 +313,9 @@ func (a *App) loadContactsBasic() error {
 	// Highlight current selection
 	a.updateContactListHighlight()
 
+	// Set initial terminal title
+	a.updateTerminalTitle()
+
 	return nil
 }
 
@@ -339,6 +369,7 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 		a.loadChatHistory()
 		a.updateStatusBar()
 		a.updateContactListHighlight()
+		a.updateTerminalTitle()
 	}
 }
 
@@ -375,6 +406,9 @@ func (a *App) updateContactListWithNames() {
 			a.contactList.SetItemText(i, prefix+displayName, partner)
 		}
 	}
+
+	// Update terminal title when names are resolved
+	a.updateTerminalTitle()
 }
 
 func (a *App) updateContactListHighlight() {
@@ -875,6 +909,7 @@ func (a *App) Start(debug bool) error {
 		a.app.QueueUpdate(func() {
 			a.updateContactListWithNames()
 			a.updateStatusBar()
+			a.updateTerminalTitle()
 			a.app.ForceDraw() // Force entire app to redraw
 		})
 	}()
