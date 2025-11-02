@@ -13,6 +13,12 @@ import (
 )
 
 func main() {
+	// Check for help flags before flag.Parse() to override default behavior
+	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
+		printUsage()
+		os.Exit(0)
+	}
+
 	debug := flag.Bool("debug", false, "Enable debug mode to print generated events")
 	flag.Parse()
 
@@ -42,7 +48,7 @@ func main() {
 		cmd.SetMessagingRelays(*debug)
 	case "init":
 		initConfig()
-	case "help":
+	case "help", "--help":
 		printUsage()
 	default:
 		fmt.Printf("Unknown command: %s\n\n", command)
