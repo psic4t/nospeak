@@ -48,6 +48,8 @@ func main() {
 		cmd.SetMessagingRelays(*debug)
 	case "init":
 		initConfig()
+	case "new-identity":
+		generateNewIdentity()
 	case "help", "--help":
 		printUsage()
 	default:
@@ -75,10 +77,11 @@ func printUsage() {
 	fmt.Println("  nospeak                           - Start TUI mode (default)")
 
 	fmt.Println("  nospeak init                      - Initialize configuration file")
+	fmt.Println("  nospeak new-identity              - Generate a new Nostr key pair and add to config")
 	fmt.Println("  nospeak send <npub> <message>     - Send a message")
 	fmt.Println("  nospeak receive                   - Listen for messages")
 	fmt.Println("  nospeak set-name <name>           - Set your profile name")
-	fmt.Println("  nospeak set-messaging-relays     - Set your messaging relays from config")
+	fmt.Println("  nospeak set-messaging-relays      - Set your messaging relays from config")
 	fmt.Println("  nospeak help                      - Show this help")
 	fmt.Println("")
 	fmt.Println("Global flags:")
@@ -110,7 +113,7 @@ func initConfig() {
 	}
 
 	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		log.Fatalf("Failed to create config directory: %v", err)
 	}
 
@@ -124,10 +127,56 @@ func initConfig() {
 		log.Fatalf("Failed to read example config: %v", err)
 	}
 
-	if err := os.WriteFile(configPath, exampleContent, 0644); err != nil {
+	if err := os.WriteFile(configPath, exampleContent, 0o644); err != nil {
 		log.Fatalf("Failed to write config file: %v", err)
 	}
 
 	fmt.Printf("Configuration file created at %s\n", configPath)
 	fmt.Println("Please edit the file with your Nostr keys and preferred relays.")
+}
+
+func generateNewIdentity() {
+	configPath := config.GetConfigPath()
+
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Printf("Configuration file not found at %s\n", configPath)
+		fmt.Println("Please run 'nospeak init' first to create a configuration file.")
+		os.Exit(1)
+	}
+
+	// Load existing config without validation to check if keys already exist
+	existingConfig, err := config.LoadWithoutValidation()
+	if err != nil {
+		fmt.Printf("Failed to load config file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if valid keys already exist
+	if config.HasValidKeys(existingConfig) {
+		fmt.Printf("Warning: Configuration file already contains valid Nostr keys:\n")
+		fmt.Printf("  nsec: %s...\n", existingConfig.Nsec[:8])
+		fmt.Printf("  npub: %s...\n", existingConfig.Npub[:8])
+		fmt.Println("Cannot generate new identity. Remove existing keys first if you want to create a new identity.")
+		os.Exit(1)
+	}
+
+	// Generate new key pair
+	nsec, npub, err := config.GenerateKeyPair()
+	if err != nil {
+		fmt.Printf("Failed to generate new key pair: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Update config with new keys
+	if err := config.UpdateConfigWithKeys(nsec, npub); err != nil {
+		fmt.Printf("Failed to update config with new keys: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("New Nostr identity generated successfully:")
+	fmt.Printf("  nsec: %s\n", nsec)
+	fmt.Printf("  npub: %s\n", npub)
+	fmt.Printf("Keys saved to configuration file at %s\n", configPath)
+	fmt.Println("Keep your private key (nsec) secure and never share it!")
 }

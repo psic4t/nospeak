@@ -2,9 +2,9 @@
 
 # List of relays to connect to
 relays = [
+    "wss://nostr.data.haus"
     "wss://relay.damus.io",
-    "wss://relay.nostr.band",
-    "wss://nos.lol"
+    "wss://relay.nostr.band"
 ]
 
 # Your Nostr keys (generate with: nsec1... and npub1...)
