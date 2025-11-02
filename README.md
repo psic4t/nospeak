@@ -72,8 +72,6 @@ nospeak
 - `PgUp` / `PgDn` - Scroll message pane up/down
 - `Ctrl+k` / `Ctrl+j` - Switch between contacts (k=up, j=down)
 - `Ctrl+p` - Show profile information for current contact
-- `F1` - Show help
-- `F2` - Show settings
 - `F3` - Toggle contacts pane
 - `↑` / `↓` - Navigate contact list
 
