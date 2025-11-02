@@ -12,6 +12,7 @@ import (
 	"github.com/data.haus/nospeak/cache"
 	"github.com/data.haus/nospeak/client"
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/notification"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -895,6 +896,20 @@ func (a *App) Start(debug bool) error {
 
 func (a *App) listenForMessages(debug bool) {
 	messageHandler := func(senderNpub, message string) {
+		if debug {
+			log.Printf("TUI messageHandler called for %s: %q", senderNpub, message)
+		}
+
+		// Send notification for ALL incoming messages
+		username := a.displayNames[senderNpub]
+		if username == "" {
+			username = senderNpub[:8] + "..."
+		}
+		if debug {
+			log.Printf("Sending notification to %s with command: %s", username, a.config.NotifyCommand)
+		}
+		go notification.SendNotification(username, message, a.config.NotifyCommand, debug)
+
 		a.mu.RLock()
 		currentPartner := a.currentPartner
 		a.mu.RUnlock()

@@ -12,6 +12,7 @@ import (
 
 	"github.com/data.haus/nospeak/client"
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/notification"
 )
 
 func Chat(debug bool) {
@@ -95,12 +96,28 @@ func Chat(debug bool) {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	messageHandler := func(senderNpub, message string) {
+		if debug {
+			log.Printf("Chat messageHandler called for %s: %q", senderNpub, message)
+		}
+
+		// Send notification for ALL incoming messages
+		username, _ := nostrClient.ResolveUsername(ctx, senderNpub, debug)
+		if username == "" {
+			username = senderNpub
+		}
+		if debug {
+			log.Printf("Sending notification to %s with command: %s", username, cfg.NotifyCommand)
+		}
+		go notification.SendNotification(username, message, cfg.NotifyCommand, debug)
+
 		if senderNpub == selectedPartner {
-			username, _ := nostrClient.ResolveUsername(ctx, senderNpub, debug)
-			if username == "" {
-				username = senderNpub
-			}
 			fmt.Printf("\n\x1b[32m[%s]:\x1b[0m %s\n", username, message)
+		} else {
+			// Message from other partner - just show brief info
+			if debug {
+				log.Printf("Message from non-selected partner %s", senderNpub)
+			}
+			fmt.Printf("\n\x1b[33m[New message from %s]\x1b[0m\n", username)
 		}
 	}
 

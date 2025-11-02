@@ -147,6 +147,9 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 			log.Printf("Cached received message from %s: %q", senderNpub[:8]+"...", rumor.Content)
 		}
 
+		if debug {
+			log.Printf("Calling messageHandler for %s: %q", senderNpub, rumor.Content)
+		}
 		messageHandler(senderNpub, rumor.Content)
 	})
 }

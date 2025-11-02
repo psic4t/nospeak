@@ -25,3 +25,12 @@ cache = "sqlite"
 
 # Show contacts pane on startup (default: true)
 show_contacts = true
+
+# External notification command for new messages
+# %s will be replaced with sender's username
+# Examples:
+# Linux: notify_command = "notify-send \"New message from %s\""
+# macOS: notify_command = "osascript -e 'display notification \"New message from %s\"'"
+# Windows: notify_command = "powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('New message from %s', 'Nospeak')\""
+# Leave empty to disable notifications
+notify_command = ""

@@ -10,6 +10,7 @@ import (
 
 	"github.com/data.haus/nospeak/client"
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/notification"
 )
 
 func Receive(debug bool) {
@@ -35,7 +36,23 @@ func Receive(debug bool) {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	messageHandler := func(senderNpub, message string) {
+		if debug {
+			log.Printf("Receive messageHandler called for %s: %q", senderNpub, message)
+		}
 		fmt.Printf("\n[%s]: %s\n", senderNpub, message)
+
+		// Send notification with resolved username
+		if debug {
+			log.Printf("Receive mode: sending notification for message from %s", senderNpub)
+		}
+		username, _ := nostrClient.ResolveUsername(ctx, senderNpub, debug)
+		if username == "" {
+			username = senderNpub
+		}
+		if debug {
+			log.Printf("Sending notification to %s with command: %s", username, cfg.NotifyCommand)
+		}
+		go notification.SendNotification(username, message, cfg.NotifyCommand, debug)
 	}
 
 	go func() {

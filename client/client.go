@@ -63,12 +63,12 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 			if debug {
 				log.Printf("NOTICE from %s: %s", relayURL, notice)
 			}
-			
+
 			// Check if notice indicates authentication is required
-			if strings.Contains(strings.ToLower(notice), "auth") || 
-			   strings.Contains(strings.ToLower(notice), "authentication") ||
-			   strings.Contains(strings.ToLower(notice), "restricted") {
-				
+			if strings.Contains(strings.ToLower(notice), "auth") ||
+				strings.Contains(strings.ToLower(notice), "authentication") ||
+				strings.Contains(strings.ToLower(notice), "restricted") {
+
 				// This will be handled below by our authentication attempt
 				if debug {
 					log.Printf("Auth requirement detected from notice for %s", relayURL)
@@ -119,7 +119,7 @@ func (c *Client) authenticateRelay(ctx context.Context, relay *nostr.Relay, debu
 		log.Printf("Authentication available for relay: %s (will authenticate when required)", relay.URL)
 	}
 
-	// For now, we don't authenticate immediately. 
+	// For now, we don't authenticate immediately.
 	// Authentication will be attempted when needed (e.g., when publishing fails with auth error)
 	return nil
 }
@@ -129,10 +129,10 @@ func (c *Client) isAuthError(err error) bool {
 		return false
 	}
 	errMsg := strings.ToLower(err.Error())
-	return strings.Contains(errMsg, "auth") || 
-		   strings.Contains(errMsg, "authentication") ||
-		   strings.Contains(errMsg, "restricted") ||
-		   strings.Contains(errMsg, "unauthorized")
+	return strings.Contains(errMsg, "auth") ||
+		strings.Contains(errMsg, "authentication") ||
+		strings.Contains(errMsg, "restricted") ||
+		strings.Contains(errMsg, "unauthorized")
 }
 
 func (c *Client) attemptAuthentication(ctx context.Context, relay *nostr.Relay, debug bool) error {
@@ -197,7 +197,7 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 				if debug {
 					log.Printf("Publish failed with possible auth error for relay %s, attempting authentication", relay.URL)
 				}
-				
+
 				if authErr := c.attemptAuthentication(ctx, relay, debug); authErr == nil {
 					// Retry publishing after successful authentication
 					if retryErr := relay.Publish(ctx, event); retryErr != nil {
@@ -215,7 +215,7 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 					continue
 				}
 			}
-			
+
 			if debug {
 				log.Printf("Failed to publish to relay %s: %v", relay.URL, err)
 				fmt.Printf("ERROR: Failed to publish to %s: %v\n", relay.URL, err)
