@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,13 +58,41 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	defer c.mu.Unlock()
 
 	for _, relayURL := range c.config.Relays {
-		relay, err := nostr.RelayConnect(ctx, relayURL)
+		// Create notice handler for authentication
+		noticeHandler := func(notice string) {
+			if debug {
+				log.Printf("NOTICE from %s: %s", relayURL, notice)
+			}
+			
+			// Check if notice indicates authentication is required
+			if strings.Contains(strings.ToLower(notice), "auth") || 
+			   strings.Contains(strings.ToLower(notice), "authentication") ||
+			   strings.Contains(strings.ToLower(notice), "restricted") {
+				
+				// This will be handled below by our authentication attempt
+				if debug {
+					log.Printf("Auth requirement detected from notice for %s", relayURL)
+				}
+			}
+		}
+
+		// Connect with notice handler
+		relay, err := nostr.RelayConnect(ctx, relayURL, nostr.WithNoticeHandler(noticeHandler))
 		if err != nil {
 			if debug {
 				log.Printf("Failed to connect to relay %s: %v", relayURL, err)
 			}
 			continue
 		}
+
+		// Attempt authentication if we have a secret key
+		if debug {
+			log.Printf("About to attempt authentication for relay: %s", relayURL)
+		}
+		if err := c.authenticateRelay(ctx, relay, debug); err != nil && debug {
+			log.Printf("Authentication setup failed for relay %s: %v", relayURL, err)
+		}
+
 		c.relays = append(c.relays, relay)
 		if debug {
 			log.Printf("Connected to relay: %s", relayURL)
@@ -72,6 +101,66 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 
 	if len(c.relays) == 0 {
 		return fmt.Errorf("failed to connect to any relays")
+	}
+
+	return nil
+}
+
+func (c *Client) authenticateRelay(ctx context.Context, relay *nostr.Relay, debug bool) error {
+	// Only attempt authentication if we have a secret key
+	if c.secretKey == "" {
+		if debug {
+			log.Printf("No secret key available for authentication")
+		}
+		return nil // Not an error, just no auth possible
+	}
+
+	if debug {
+		log.Printf("Authentication available for relay: %s (will authenticate when required)", relay.URL)
+	}
+
+	// For now, we don't authenticate immediately. 
+	// Authentication will be attempted when needed (e.g., when publishing fails with auth error)
+	return nil
+}
+
+func (c *Client) isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "auth") || 
+		   strings.Contains(errMsg, "authentication") ||
+		   strings.Contains(errMsg, "restricted") ||
+		   strings.Contains(errMsg, "unauthorized")
+}
+
+func (c *Client) attemptAuthentication(ctx context.Context, relay *nostr.Relay, debug bool) error {
+	if c.secretKey == "" {
+		return fmt.Errorf("no secret key available for authentication")
+	}
+
+	if debug {
+		log.Printf("Attempting authentication for relay: %s", relay.URL)
+	}
+
+	err := relay.Auth(ctx, func(event *nostr.Event) error {
+		event.PubKey = c.publicKey
+		event.CreatedAt = nostr.Now()
+		event.Kind = nostr.KindClientAuthentication
+		event.Content = ""
+		return event.Sign(c.secretKey)
+	})
+
+	if err != nil {
+		if debug {
+			log.Printf("Authentication failed for relay %s: %v", relay.URL, err)
+		}
+		return err
+	}
+
+	if debug {
+		log.Printf("Successfully authenticated to relay: %s", relay.URL)
 	}
 
 	return nil
@@ -103,6 +192,30 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 		}
 
 		if err := relay.Publish(ctx, event); err != nil {
+			// Check if this is an authentication error and try to authenticate
+			if c.isAuthError(err) && c.secretKey != "" {
+				if debug {
+					log.Printf("Publish failed with possible auth error for relay %s, attempting authentication", relay.URL)
+				}
+				
+				if authErr := c.attemptAuthentication(ctx, relay, debug); authErr == nil {
+					// Retry publishing after successful authentication
+					if retryErr := relay.Publish(ctx, event); retryErr != nil {
+						if debug {
+							log.Printf("Failed to publish to relay %s even after authentication: %v", relay.URL, retryErr)
+							fmt.Printf("ERROR: Failed to publish to %s after auth: %v\n", relay.URL, retryErr)
+						}
+						lastErr = retryErr
+					} else {
+						if debug {
+							log.Printf("Published to relay after authentication: %s", relay.URL)
+							fmt.Printf("SUCCESS: Published to %s after auth\n", relay.URL)
+						}
+					}
+					continue
+				}
+			}
+			
 			if debug {
 				log.Printf("Failed to publish to relay %s: %v", relay.URL, err)
 				fmt.Printf("ERROR: Failed to publish to %s: %v\n", relay.URL, err)
