@@ -4,7 +4,7 @@
 relays = [
     "wss://nostr.data.haus"
     "wss://relay.damus.io",
-    "wss://relay.nostr.band"
+    "wss://auth.nostr1.com"
 ]
 
 # Your Nostr keys (generate with: nsec1... and npub1...)

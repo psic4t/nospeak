@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/data.haus/nospeak/cmd"
 	"github.com/data.haus/nospeak/config"
@@ -46,8 +45,6 @@ func main() {
 		cmd.SetName(args, *debug)
 	case "set-messaging-relays":
 		cmd.SetMessagingRelays(*debug)
-	case "init":
-		initConfig()
 	case "new-identity":
 		generateNewIdentity()
 	case "help", "--help":
@@ -75,8 +72,6 @@ func printUsage() {
 	fmt.Println("")
 	fmt.Println("Usage:")
 	fmt.Println("  nospeak                           - Start TUI mode (default)")
-
-	fmt.Println("  nospeak init                      - Initialize configuration file")
 	fmt.Println("  nospeak new-identity              - Generate a new Nostr key pair and add to config")
 	fmt.Println("  nospeak send <npub> <message>     - Send a message")
 	fmt.Println("  nospeak receive                   - Listen for messages")
@@ -101,38 +96,7 @@ func printUsage() {
 	fmt.Println("  ↑/↓                              - Navigate contact list")
 	fmt.Println("")
 	fmt.Println("Configuration file location: ~/.config/nospeak/config.toml")
-	fmt.Println("Example configuration is available at: config/example.toml")
-}
-
-func initConfig() {
-	configPath := config.GetConfigPath()
-
-	if _, err := os.Stat(configPath); err == nil {
-		fmt.Printf("Configuration file already exists at %s\n", configPath)
-		return
-	}
-
-	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		log.Fatalf("Failed to create config directory: %v", err)
-	}
-
-	examplePath := "config/example.toml"
-	if _, err := os.Stat(examplePath); err != nil {
-		log.Fatalf("Example config file not found at %s", examplePath)
-	}
-
-	exampleContent, err := os.ReadFile(examplePath)
-	if err != nil {
-		log.Fatalf("Failed to read example config: %v", err)
-	}
-
-	if err := os.WriteFile(configPath, exampleContent, 0o644); err != nil {
-		log.Fatalf("Failed to write config file: %v", err)
-	}
-
-	fmt.Printf("Configuration file created at %s\n", configPath)
-	fmt.Println("Please edit the file with your Nostr keys and preferred relays.")
+	fmt.Println("A configuration template will be created automatically on first run.")
 }
 
 func generateNewIdentity() {
@@ -141,7 +105,8 @@ func generateNewIdentity() {
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		fmt.Printf("Configuration file not found at %s\n", configPath)
-		fmt.Println("Please run 'nospeak init' first to create a configuration file.")
+		fmt.Println("A configuration template will be created automatically on first run.")
+		fmt.Println("Please run nospeak first to create the configuration file.")
 		os.Exit(1)
 	}
 
