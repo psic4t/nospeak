@@ -728,8 +728,8 @@ func (a *App) showHelp() {
   Tab            - Switch between contact list and input
   Enter          - Send message (when in input field)
   PgUp/PgDn      - Scroll message pane up/down
-  Ctrl+K/J       - Switch between contacts (K=up, J=down)
-  Ctrl+P         - Show profile information for current contact
+  Ctrl+k/j       - Switch between contacts (k=up, j=down)
+  Ctrl+p         - Show profile information for current contact
   F1             - Show this help
   F2             - Show settings
   F3             - Toggle contacts pane
