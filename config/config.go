@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/nbd-wtf/go-nostr"
@@ -24,13 +25,14 @@ func Load() (*Config, error) {
 	configPath := GetConfigPath()
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Auto-copy template config when missing
-		if err := copyTemplateConfig(); err != nil {
+		// Auto-copy template config when missing with generated keys
+		nsec, npub, err := copyTemplateConfig()
+		if err != nil {
 			return nil, fmt.Errorf("failed to create config template: %w", err)
 		}
 
-		// Return special error to indicate template was copied
-		return nil, fmt.Errorf("config template created at %s - please edit with your Nostr keys and relays", configPath)
+		// Return special error to indicate template was copied with generated keys
+		return nil, fmt.Errorf("\n config created at %s with new Nostr identity:\n  nsec: %s\n  npub: %s\n\nYou can use these keys or replace them with your own existing keys.\nKeep your private key (nsec) secure and never share it!", configPath, nsec, npub)
 	}
 
 	var config Config
@@ -163,7 +165,7 @@ func UpdateConfigWithKeys(nsec, npub string) error {
 	config.Npub = npub
 
 	// Write back to file
-	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_TRUNC, 0644)
+	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to open config file for writing: %w", err)
 	}
@@ -177,31 +179,42 @@ func UpdateConfigWithKeys(nsec, npub string) error {
 	return nil
 }
 
-func copyTemplateConfig() error {
+func copyTemplateConfig() (string, string, error) {
 	configPath := GetConfigPath()
 
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+		return "", "", fmt.Errorf("failed to create config directory: %w", err)
 	}
 
 	// Path to example template
 	examplePath := "config/example.toml"
 	if _, err := os.Stat(examplePath); err != nil {
-		return fmt.Errorf("example config file not found at %s", examplePath)
+		return "", "", fmt.Errorf("example config file not found at %s", examplePath)
 	}
 
 	// Read template
 	exampleContent, err := os.ReadFile(examplePath)
 	if err != nil {
-		return fmt.Errorf("failed to read example config: %w", err)
+		return "", "", fmt.Errorf("failed to read example config: %w", err)
 	}
 
-	// Write to user config location
-	if err := os.WriteFile(configPath, exampleContent, 0o644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	// Generate new key pair
+	nsec, npub, err := GenerateKeyPair()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate key pair: %w", err)
 	}
 
-	return nil
+	// Replace placeholder keys with generated keys
+	content := string(exampleContent)
+	content = strings.ReplaceAll(content, `npub = "npub1..."`, fmt.Sprintf(`npub = "%s"`, npub))
+	content = strings.ReplaceAll(content, `nsec = "nsec1..."`, fmt.Sprintf(`nsec = "%s"`, nsec))
+
+	// Write modified content to user config location
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		return "", "", fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nsec, npub, nil
 }

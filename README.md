@@ -29,27 +29,22 @@ go install github.com/data.haus/nospeak@latest
 
 ## Quick Start
 
-1. **Initialize configuration:**
+1. **Initialize configuration and create a new keypair:**
    ```bash
-   nospeak init
+   nospeak
+   # Edit ~/.config/nospeak/config.toml to add existing keys
    ```
 
-2. **Generate or add your Nostr identity:**
-   ```bash
-   nospeak new-identity
-   # Or edit ~/.config/nospeak/config.toml to add existing keys
-   ```
-
-3. **Set your mailbox relays from config if needed**
+2. **Set your mailbox relays from config if needed**
    ```bash
    nospeak set-messaging-relays
    ```
 
-4. **Add some npubs to chat in config file**
+3. **Add some npubs to chat in config file**
    ```bash
    (this will be easier in the future)
 
-5. **Start the TUI interface:**
+4. **Start the TUI interface:**
    ```bash
    nospeak
    ```
