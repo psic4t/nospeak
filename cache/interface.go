@@ -4,6 +4,16 @@ import (
 	"time"
 )
 
+// ProfileMetadata represents a Nostr profile metadata structure
+type ProfileMetadata struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	About       string `json:"about"`
+	Picture     string `json:"picture"`
+	NIP05       string `json:"nip05"`
+	LUD16       string `json:"lud16"`
+}
+
 type MessageEntry struct {
 	ID            int64     `json:"id"`
 	RecipientNpub string    `json:"recipient_npub"`
@@ -14,20 +24,20 @@ type MessageEntry struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-type UsernameEntry struct {
+type ProfileEntry struct {
 	ID        int64     `json:"id"`
 	Npub      string    `json:"npub"`
-	Username  string    `json:"username"`
+	Profile   string    `json:"profile"` // JSON string of ProfileMetadata
 	CachedAt  time.Time `json:"cached_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 type CacheStats struct {
-	TotalMessages    int
-	TotalUsernames   int
-	ExpiredUsernames int
-	DatabaseSize     int64
+	TotalMessages   int
+	TotalProfiles   int
+	ExpiredProfiles int
+	DatabaseSize    int64
 }
 
 type Cache interface {
@@ -41,10 +51,10 @@ type Cache interface {
 	GetMessageStats(recipientNpub string) (sent, received int, err error)
 	HasMessage(eventID string) bool
 
-	// Username methods
-	GetUsername(npub string) (string, bool)
-	SetUsername(npub, username string, ttl time.Duration) error
-	ClearExpiredUsernames() error
+	// Profile methods
+	GetProfile(npub string) (ProfileEntry, bool)
+	SetProfile(npub string, profile ProfileMetadata, ttl time.Duration) error
+	ClearExpiredProfiles() error
 
 	// Maintenance methods
 	Clear() error

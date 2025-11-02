@@ -12,23 +12,72 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
-type ProfileMetadata struct {
-	Name string `json:"name"`
+func (c *Client) ResolveUsername(ctx context.Context, npub string, debug bool) (string, error) {
+	// Try to get cached profile first
+	cacheInstance := cache.GetCache()
+	if cachedProfile, found := cacheInstance.GetProfile(npub); found {
+		var metadata cache.ProfileMetadata
+		if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
+			username := metadata.Name
+			if username == "" {
+				username = metadata.DisplayName
+			}
+			if username != "" {
+				if debug {
+					log.Printf("Found cached username for %s: %s", npub[:8]+"...", username)
+				}
+				return username, nil
+			}
+		}
+	}
+
+	// If no cached profile or no name, fetch from network
+	profile, err := c.ResolveProfile(ctx, npub, debug)
+	if err != nil {
+		return npub, err
+	}
+
+	// Extract username from profile
+	username := profile.Name
+	if username == "" {
+		username = profile.DisplayName
+	}
+
+	if username == "" {
+		if debug {
+			log.Printf("No name found in profile metadata for %s", npub)
+		}
+		return npub, nil
+	}
+
+	if debug {
+		log.Printf("Resolved username for %s: %s", npub[:8]+"...", username)
+	}
+
+	return username, nil
 }
 
-func (c *Client) ResolveUsername(ctx context.Context, npub string, debug bool) (string, error) {
-	cache := cache.GetCache()
+func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (cache.ProfileMetadata, error) {
+	cacheInstance := cache.GetCache()
 
-	if username, found := cache.GetUsername(npub); found {
+	// Try to get cached profile first
+	if profile, found := cacheInstance.GetProfile(npub); found {
 		if debug {
-			log.Printf("Found cached username for %s: %s", npub[:8]+"...", username)
+			log.Printf("Found cached profile for %s", npub[:8]+"...")
 		}
-		return username, nil
+		var metadata cache.ProfileMetadata
+		if err := json.Unmarshal([]byte(profile.Profile), &metadata); err != nil {
+			if debug {
+				log.Printf("Failed to parse cached profile for %s: %v", npub[:8]+"...", err)
+			}
+		} else {
+			return metadata, nil
+		}
 	}
 
 	_, pubKey, err := nip19.Decode(npub)
 	if err != nil {
-		return npub, fmt.Errorf("failed to decode npub: %w", err)
+		return cache.ProfileMetadata{}, fmt.Errorf("failed to decode npub: %w", err)
 	}
 
 	hexPubKey := pubKey.(string)
@@ -44,40 +93,33 @@ func (c *Client) ResolveUsername(ctx context.Context, npub string, debug bool) (
 		if debug {
 			log.Printf("Failed to query profile metadata for %s: %v", npub, err)
 		}
-		return npub, err
+		return cache.ProfileMetadata{}, err
 	}
 
 	if len(events) == 0 {
 		if debug {
 			log.Printf("No profile metadata found for %s", npub)
 		}
-		return npub, nil
+		return cache.ProfileMetadata{}, nil
 	}
 
 	event := events[0]
-	var metadata ProfileMetadata
+	var metadata cache.ProfileMetadata
 	if err := json.Unmarshal([]byte(event.Content), &metadata); err != nil {
 		if debug {
 			log.Printf("Failed to parse profile metadata for %s: %v", npub, err)
 		}
-		return npub, err
+		return cache.ProfileMetadata{}, err
 	}
 
-	username := metadata.Name
-	if username == "" {
-		if debug {
-			log.Printf("No name found in profile metadata for %s", npub)
-		}
-		return npub, nil
-	}
-
-	cache.SetUsername(npub, username, 24*time.Hour)
+	// Cache full profile
+	cacheInstance.SetProfile(npub, metadata, 24*time.Hour)
 
 	if debug {
-		log.Printf("Resolved username for %s: %s (cached for 24h)", npub, username)
+		log.Printf("Resolved profile for %s: %s (cached for 24h)", npub, metadata.Name)
 	}
 
-	return username, nil
+	return metadata, nil
 }
 
 func (c *Client) ResolveUsernameWithFallback(ctx context.Context, npub string, debug bool) string {

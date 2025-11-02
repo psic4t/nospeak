@@ -2,6 +2,7 @@ package cache
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,19 +80,19 @@ func (sc *SQLiteCache) createTables() error {
 		return fmt.Errorf("failed to create messages table: %w", err)
 	}
 
-	// Username cache table
+	// Profile cache table
 	_, err = sc.db.Exec(`
-		CREATE TABLE IF NOT EXISTS username_cache (
+		CREATE TABLE IF NOT EXISTS profile_cache (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			npub TEXT NOT NULL UNIQUE,
-			username TEXT NOT NULL,
+			profile TEXT NOT NULL,
 			cached_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to create username_cache table: %w", err)
+		return fmt.Errorf("failed to create profile_cache table: %w", err)
 	}
 
 	// Create indexes
@@ -100,8 +101,8 @@ func (sc *SQLiteCache) createTables() error {
 		"CREATE INDEX IF NOT EXISTS idx_sent_at ON messages(sent_at)",
 		"CREATE INDEX IF NOT EXISTS idx_direction ON messages(direction)",
 		"CREATE INDEX IF NOT EXISTS idx_recipient_sent ON messages(recipient_npub, sent_at DESC)",
-		"CREATE INDEX IF NOT EXISTS idx_npub ON username_cache(npub)",
-		"CREATE INDEX IF NOT EXISTS idx_expires_at ON username_cache(expires_at)",
+		"CREATE INDEX IF NOT EXISTS idx_profile_npub ON profile_cache(npub)",
+		"CREATE INDEX IF NOT EXISTS idx_profile_expires_at ON profile_cache(expires_at)",
 	}
 
 	for _, idx := range indexes {
@@ -340,36 +341,43 @@ func (sc *SQLiteCache) HasMessage(eventID string) bool {
 	return count > 0
 }
 
-// Username methods
-func (sc *SQLiteCache) GetUsername(npub string) (string, bool) {
+// Profile methods
+func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
 
-	var username string
+	var profile ProfileEntry
 	var expiresAt time.Time
 
 	err := sc.db.QueryRow(`
-		SELECT username, expires_at 
-		FROM username_cache 
+		SELECT id, npub, profile_json, cached_at, expires_at, created_at 
+		FROM profile_cache 
 		WHERE npub = ?
-	`, npub).Scan(&username, &expiresAt)
+	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Profile, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
 
 	if err != nil {
-		return "", false
+		return ProfileEntry{}, false
 	}
 
 	if time.Now().After(expiresAt) {
 		// Expired, remove it
-		go sc.deleteExpiredUsername(npub)
-		return "", false
+		go sc.deleteExpiredProfile(npub)
+		return ProfileEntry{}, false
 	}
 
-	return username, true
+	profile.ExpiresAt = expiresAt
+	return profile, true
 }
 
-func (sc *SQLiteCache) SetUsername(npub, username string, ttl time.Duration) error {
+func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time.Duration) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+
+	// Convert profile to JSON for profile_json column
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("failed to marshal profile: %w", err)
+	}
 
 	expiresAt := time.Now().Add(ttl)
 
@@ -379,36 +387,36 @@ func (sc *SQLiteCache) SetUsername(npub, username string, ttl time.Duration) err
 	}
 	defer tx.Rollback()
 
-	// UPSERT: Insert or replace
+	// UPSERT: Insert or replace with individual columns + profile_json
 	_, err = tx.Exec(`
-		INSERT OR REPLACE INTO username_cache (npub, username, cached_at, expires_at)
-		VALUES (?, ?, ?, ?)
-	`, npub, username, time.Now(), expiresAt)
+		INSERT OR REPLACE INTO profile_cache (npub, name, display_name, about, picture, nip05, lud16, profile_json, cached_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture, profile.NIP05, profile.LUD16, string(profileJSON), time.Now(), expiresAt)
 
 	if err != nil {
-		return fmt.Errorf("failed to cache username: %w", err)
+		return fmt.Errorf("failed to cache profile: %w", err)
 	}
 
 	return tx.Commit()
 }
 
-func (sc *SQLiteCache) ClearExpiredUsernames() error {
+func (sc *SQLiteCache) ClearExpiredProfiles() error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
 	_, err := sc.db.Exec(`
-		DELETE FROM username_cache 
+		DELETE FROM profile_cache 
 		WHERE expires_at < ?
 	`, time.Now())
 
 	return err
 }
 
-func (sc *SQLiteCache) deleteExpiredUsername(npub string) {
+func (sc *SQLiteCache) deleteExpiredProfile(npub string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	sc.db.Exec(`DELETE FROM username_cache WHERE npub = ?`, npub)
+	sc.db.Exec(`DELETE FROM profile_cache WHERE npub = ?`, npub)
 }
 
 // Maintenance methods
@@ -421,7 +429,7 @@ func (sc *SQLiteCache) Clear() error {
 		return err
 	}
 
-	_, err = sc.db.Exec(`DELETE FROM username_cache`)
+	_, err = sc.db.Exec(`DELETE FROM profile_cache`)
 	return err
 }
 
@@ -442,13 +450,13 @@ func (sc *SQLiteCache) GetStats() CacheStats {
 	// Count messages
 	sc.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&stats.TotalMessages)
 
-	// Count usernames
-	sc.db.QueryRow(`SELECT COUNT(*) FROM username_cache`).Scan(&stats.TotalUsernames)
+	// Count profiles
+	sc.db.QueryRow(`SELECT COUNT(*) FROM profile_cache`).Scan(&stats.TotalProfiles)
 
-	// Count expired usernames
+	// Count expired profiles
 	sc.db.QueryRow(`
-		SELECT COUNT(*) FROM username_cache WHERE expires_at < ?
-	`, time.Now()).Scan(&stats.ExpiredUsernames)
+		SELECT COUNT(*) FROM profile_cache WHERE expires_at < ?
+	`, time.Now()).Scan(&stats.ExpiredProfiles)
 
 	// Get database size (this is approximate)
 	var pageSize, pageCount int64
@@ -464,7 +472,7 @@ func (sc *SQLiteCache) startCleanupRoutine() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		sc.ClearExpiredUsernames()
+		sc.ClearExpiredProfiles()
 		// Vacuum daily
 		if time.Now().Hour() == 3 { // 3 AM
 			sc.Vacuum()

@@ -274,3 +274,22 @@ func (c *Client) GetPartnerDisplayNames(ctx context.Context, debug bool) (map[st
 
 	return displayNames, nil
 }
+
+func (c *Client) GetPartnerProfiles(ctx context.Context, debug bool) (map[string]cache.ProfileMetadata, error) {
+	profiles := make(map[string]cache.ProfileMetadata)
+
+	for _, npub := range c.config.Partners {
+		profile, err := c.ResolveProfile(ctx, npub, debug)
+		if err != nil {
+			if debug {
+				log.Printf("Failed to resolve profile for %s: %v", npub, err)
+			}
+			// Create empty profile for fallback
+			profiles[npub] = cache.ProfileMetadata{}
+		} else {
+			profiles[npub] = profile
+		}
+	}
+
+	return profiles, nil
+}

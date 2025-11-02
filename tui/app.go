@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -250,9 +251,20 @@ func (a *App) loadContactsBasic() error {
 	messageCache := cache.GetCache()
 
 	for _, partner := range a.partners {
-		// Try to get cached username first
-		if cachedName, found := messageCache.GetUsername(partner); found {
-			a.displayNames[partner] = cachedName
+		// Try to get cached profile first
+		if cachedProfile, found := messageCache.GetProfile(partner); found {
+			var metadata cache.ProfileMetadata
+			if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
+				if metadata.Name != "" {
+					a.displayNames[partner] = metadata.Name
+				} else if metadata.DisplayName != "" {
+					a.displayNames[partner] = metadata.DisplayName
+				} else {
+					a.displayNames[partner] = partner[:8] + "..."
+				}
+			} else {
+				a.displayNames[partner] = partner[:8] + "..."
+			}
 		} else {
 			a.displayNames[partner] = partner[:8] + "..."
 		}
@@ -277,19 +289,31 @@ func (a *App) loadContactsBasic() error {
 }
 
 func (a *App) loadContacts() error {
-	// Get display names (now with relay connections established)
-	displayNames, err := a.client.GetPartnerDisplayNames(a.ctx, false)
+	// Get full profiles (now with relay connections established)
+	profiles, err := a.client.GetPartnerProfiles(a.ctx, false)
 	if err != nil {
-		log.Printf("Failed to resolve usernames: %v", err)
+		log.Printf("Failed to resolve profiles: %v", err)
 		// Use fallback names
 		for _, partner := range a.partners {
-			displayNames[partner] = partner[:8] + "..."
+			a.displayNames[partner] = partner[:8] + "..."
 		}
-	}
+	} else {
+		// Extract display names from profiles
+		displayNames := make(map[string]string)
+		for npub, profile := range profiles {
+			if profile.Name != "" {
+				displayNames[npub] = profile.Name
+			} else if profile.DisplayName != "" {
+				displayNames[npub] = profile.DisplayName
+			} else {
+				displayNames[npub] = npub[:8] + "..."
+			}
+		}
 
-	a.mu.Lock()
-	a.displayNames = displayNames
-	a.mu.Unlock()
+		a.mu.Lock()
+		a.displayNames = displayNames
+		a.mu.Unlock()
+	}
 
 	// Don't update UI here - let the async caller handle UI updates
 	return nil
@@ -666,6 +690,9 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyF3:
 		a.toggleContactsPane()
 		return nil
+	case tcell.KeyCtrlP:
+		a.showProfileModal()
+		return nil
 
 	}
 	return event
@@ -702,6 +729,7 @@ func (a *App) showHelp() {
   Enter          - Send message (when in input field)
   PgUp/PgDn      - Scroll message pane up/down
   Ctrl+K/J       - Switch between contacts (K=up, J=down)
+  Ctrl+P         - Show profile information for current contact
   F1             - Show this help
   F2             - Show settings
   F3             - Toggle contacts pane
@@ -737,6 +765,91 @@ func (a *App) showSettings() {
 		a.app.SetRoot(a.mainFlex, true)
 	})
 	settings.Show()
+}
+
+func (a *App) showProfileModal() {
+	a.mu.RLock()
+	currentPartner := a.currentPartner
+	displayName := a.displayNames[currentPartner]
+	a.mu.RUnlock()
+
+	if currentPartner == "" {
+		a.showMessage("No contact selected")
+		return
+	}
+
+	// Get profile from cache
+	cachedProfile, found := a.messageCache.GetProfile(currentPartner)
+
+	var profileText string
+	if found {
+		var metadata cache.ProfileMetadata
+		if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
+			// Build profile display text
+			profileText = fmt.Sprintf("[violet]Profile Information[white]\n\n")
+
+			// Name/Display Name
+			if metadata.Name != "" || metadata.DisplayName != "" {
+				profileText += fmt.Sprintf("[green]Name:[white]\n")
+				if metadata.Name != "" {
+					profileText += fmt.Sprintf("  %s", metadata.Name)
+					if metadata.DisplayName != "" && metadata.DisplayName != metadata.Name {
+						profileText += fmt.Sprintf(" (%s)", metadata.DisplayName)
+					}
+					profileText += "\n\n"
+				} else if metadata.DisplayName != "" {
+					profileText += fmt.Sprintf("  %s\n\n", metadata.DisplayName)
+				}
+			}
+
+			// About section
+			if metadata.About != "" {
+				profileText += fmt.Sprintf("[green]About:[white]\n  %s\n\n", metadata.About)
+			}
+
+			// NIP05
+			if metadata.NIP05 != "" {
+				profileText += fmt.Sprintf("[green]NIP05:[white]\n  %s\n\n", metadata.NIP05)
+			}
+
+			// Lightning address
+			if metadata.LUD16 != "" {
+				profileText += fmt.Sprintf("[green]Lightning:[white]\n  %s\n\n", metadata.LUD16)
+			}
+
+			// Picture URL
+			if metadata.Picture != "" {
+				profileText += fmt.Sprintf("[green]Picture:[white]\n  %s\n\n", metadata.Picture)
+			}
+
+			// Cache info
+			profileText += fmt.Sprintf("[green]Cached:[white] %s", cachedProfile.CachedAt.Format("2006-01-02 15:04:05"))
+			if cachedProfile.ExpiresAt.After(time.Now()) {
+				profileText += fmt.Sprintf(" (expires in %v)", time.Until(cachedProfile.ExpiresAt).Round(time.Minute))
+			} else {
+				profileText += " (expired)"
+			}
+
+		} else {
+			profileText = fmt.Sprintf("Error parsing profile data for %s", displayName)
+		}
+	} else {
+		// No cached profile
+		profileText = fmt.Sprintf("No profile data cached for %s\n\n", displayName)
+		profileText += fmt.Sprintf("[yellow]Public Key:[white]\n  %s\n\n", currentPartner)
+		profileText += "Profile will be fetched when needed."
+	}
+
+	modal := tview.NewModal().
+		SetText(profileText).
+		AddButtons([]string{"Close"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			a.app.SetRoot(a.mainFlex, true)
+		})
+
+	modal.SetBackgroundColor(tcell.ColorDefault)
+
+	a.app.SetRoot(modal, true)
 }
 
 func (a *App) Start(debug bool) error {
