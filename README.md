@@ -1,6 +1,6 @@
 # Nospeak
 
-A terminal-based Nostr chat client built with Go. Nospeak provides a secure, decentralized messaging experience through the Nostr protocol with both TUI and CLI interfaces.
+nospeak is a terminal-based Nostr chat client built with Go. Nospeak provides a secure, decentralized messaging experience through the Nostr protocol with both TUI and CLI interfaces.
 
 ## Features
 
@@ -134,13 +134,5 @@ make install
 3. **Transport**: Gift wrapped messages are published to configured relays
 4. **Reception**: Clients subscribe to gift wrap events, unwrap them to reveal the inner rumor, then decrypt the content
 
-
-## License
-
-[Add your license information here]
-
-## Support
-
-For issues, questions, or contributions:
-- GitHub Issues: [Create an issue](https://github.com/data.haus/nospeak/issues)
-- Nostr: Find us on the Nostr network
+## About 
+Questions? Ideas? File bugs and TODOs through the issue tracker!
