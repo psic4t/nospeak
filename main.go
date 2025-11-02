@@ -14,11 +14,10 @@ import (
 
 func main() {
 	debug := flag.Bool("debug", false, "Enable debug mode to print generated events")
-	cli := flag.Bool("cli", false, "Use CLI mode instead of TUI")
 	flag.Parse()
 
 	// If no arguments provided, start TUI mode by default
-	if len(flag.Args()) == 0 && !*cli {
+	if len(flag.Args()) == 0 {
 		startTUI(*debug)
 		return
 	}
@@ -36,12 +35,7 @@ func main() {
 		cmd.Send(args, *debug)
 	case "receive":
 		cmd.Receive(*debug)
-	case "chat":
-		if *cli {
-			cmd.Chat(*debug)
-		} else {
-			startTUI(*debug)
-		}
+
 	case "set-name":
 		cmd.SetName(args, *debug)
 	case "set-messaging-relays":
@@ -73,8 +67,7 @@ func printUsage() {
 	fmt.Println("")
 	fmt.Println("Usage:")
 	fmt.Println("  nospeak                           - Start TUI mode (default)")
-	fmt.Println("  nospeak chat                      - Start TUI mode")
-	fmt.Println("  nospeak chat --cli                - Start CLI chat mode")
+
 	fmt.Println("  nospeak init                      - Initialize configuration file")
 	fmt.Println("  nospeak send <npub> <message>     - Send a message")
 	fmt.Println("  nospeak receive                   - Listen for messages")
@@ -84,7 +77,7 @@ func printUsage() {
 	fmt.Println("")
 	fmt.Println("Global flags:")
 	fmt.Println("  --debug                          - Enable debug mode to print generated events")
-	fmt.Println("  --cli                            - Use CLI mode instead of TUI")
+
 	fmt.Println("")
 	fmt.Println("TUI Keyboard Shortcuts:")
 	fmt.Println("  Ctrl+C/Ctrl+Q                    - Quit application")
