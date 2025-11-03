@@ -3,10 +3,10 @@ module github.com/data.haus/nospeak
 go 1.25.3
 
 require (
-	github.com/BurntSushi/toml v1.5.0
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/nbd-wtf/go-nostr v0.52.1
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/rivo/tview v0.42.1-0.20250929082832-e113793670e2
 )
 

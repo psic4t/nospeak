@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/data.haus/nospeak/testutils"
+	"github.com/pelletier/go-toml/v2"
 )
 
 func TestGenerateKeyPair(t *testing.T) {
@@ -175,7 +175,7 @@ show_contacts = true
 	config := &Config{}
 
 	// Test that TOML parsing works (this is what LoadWithoutValidation does)
-	_, err := toml.Decode(configContent, config)
+	err := toml.Unmarshal([]byte(configContent), config)
 	testutils.AssertNoError(t, err)
 
 	// Verify the parsed values

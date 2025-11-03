@@ -13,8 +13,6 @@ nsec = "nsec1..."
 
 # Chat partners (their npub keys)
 partners = [
-    "npub1...",
-    "npub1..."
 ]
 
 # Enable debug mode to print generated events when sending messages

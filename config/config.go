@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,20 +9,20 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
+	"github.com/pelletier/go-toml/v2"
 )
 
 type Config struct {
-	Relays        []string `toml:"relays"`
-	Npub          string   `toml:"npub"`
-	Nsec          string   `toml:"nsec"`
-	Partners      []string `toml:"partners"`
-	Debug         bool     `toml:"debug"`
-	Cache         string   `toml:"cache"`
-	ShowContacts  bool     `toml:"show_contacts"`
-	NotifyCommand string   `toml:"notify_command"`
+	Relays        []string `toml:"relays" comment:"List of relays to connect to"`
+	Npub          string   `toml:"npub" comment:"Your Nostr public key"`
+	Nsec          string   `toml:"nsec" comment:"Your Nostr private key (keep secure)"`
+	Partners      []string `toml:"partners" comment:"Chat partners (their npub keys)"`
+	Debug         bool     `toml:"debug" comment:"Enable debug mode to print generated events"`
+	Cache         string   `toml:"cache" comment:"Cache type: 'sqlite' or 'memory'"`
+	ShowContacts  bool     `toml:"show_contacts" comment:"Show contacts pane on startup"`
+	NotifyCommand string   `toml:"notify_command" comment:"External notification command for new messages"`
 }
 
 func Load() (*Config, error) {
@@ -39,7 +40,11 @@ func Load() (*Config, error) {
 	}
 
 	var config Config
-	_, err := toml.DecodeFile(configPath, &config)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+	err = toml.Unmarshal(data, &config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode config file: %w", err)
 	}
@@ -67,7 +72,11 @@ func LoadWithoutValidation() (*Config, error) {
 	}
 
 	var config Config
-	_, err := toml.DecodeFile(configPath, &config)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+	err = toml.Unmarshal(data, &config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode config file: %w", err)
 	}
@@ -162,7 +171,12 @@ func UpdateConfigWithKeys(nsec, npub string) error {
 
 	// Load existing config without validation
 	var config Config
-	if _, err := toml.DecodeFile(configPath, &config); err != nil {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+	err = toml.Unmarshal(data, &config)
+	if err != nil {
 		return fmt.Errorf("failed to decode config file: %w", err)
 	}
 
@@ -182,9 +196,12 @@ func UpdateConfigWithKeys(nsec, npub string) error {
 	}
 	defer file.Close()
 
-	encoder := toml.NewEncoder(file)
-	if err := encoder.Encode(&config); err != nil {
-		return fmt.Errorf("failed to encode config to file: %w", err)
+	configData, err := toml.Marshal(&config)
+	if err != nil {
+		return fmt.Errorf("failed to encode config: %w", err)
+	}
+	if _, err := file.Write(configData); err != nil {
+		return fmt.Errorf("failed to write config to file: %w", err)
 	}
 
 	return nil
@@ -239,16 +256,21 @@ func (c *Config) Save() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Write config to file
-	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to open config file for writing: %w", err)
-	}
-	defer file.Close()
+	// Use encoder for better control over formatting
+	var buf bytes.Buffer
+	encoder := toml.NewEncoder(&buf)
 
-	encoder := toml.NewEncoder(file)
+	// Set formatting options to match example.toml style
+	encoder.SetArraysMultiline(true) // Format arrays with multiple lines like in example
+	encoder.SetIndentTables(true)    // Indent table contents
+
 	if err := encoder.Encode(c); err != nil {
-		return fmt.Errorf("failed to encode config to file: %w", err)
+		return fmt.Errorf("failed to encode config: %w", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(configPath, buf.Bytes(), 0o644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	return nil
