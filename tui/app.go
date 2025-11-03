@@ -855,21 +855,6 @@ func (a *App) refreshPartners() {
 	a.updateContactListHighlight()
 	a.updateStatusBar()
 	a.updateTerminalTitle()
-
-	// Start profile resolution for new partners in background
-	go func() {
-		if err := a.loadContacts(); err != nil {
-			log.Printf("Failed to resolve contact names: %v", err)
-		}
-
-		// Update UI with resolved names
-		a.app.QueueUpdate(func() {
-			a.updateContactListWithNames()
-			a.updateStatusBar()
-			a.updateTerminalTitle()
-			a.app.ForceDraw()
-		})
-	}()
 }
 
 func (a *App) showSettings() {
@@ -1017,13 +1002,14 @@ func (a *App) listenForMessages(debug bool) {
 			log.Printf("TUI messageHandler called for %s: %q", senderNpub, message)
 		}
 
-		autoAdded := false
 		if !a.client.IsPartner(senderNpub) {
 			if err := a.client.AddPartner(senderNpub); err != nil {
 				log.Printf("Failed to add new partner %s: %v", senderNpub, err)
 			} else {
 				log.Printf("Auto-added new partner: %s", senderNpub[:8]+"...")
-				autoAdded = true
+				a.app.QueueUpdate(func() {
+					a.refreshPartners()
+				})
 			}
 		}
 
@@ -1060,27 +1046,22 @@ func (a *App) listenForMessages(debug bool) {
 			a.unreadMessages[senderNpub] = true
 			a.unreadMu.Unlock()
 
-			// Consolidate all UI updates into single QueueUpdate to prevent race conditions
-			a.app.QueueUpdate(func() {
-				if autoAdded {
-					// If we auto-added this contact, refresh partners first
-					a.refreshPartners()
-					a.app.SetRoot(a.mainFlex, true)
-				}
+			// Message from other contact - mark as unread and show status
+			a.unreadMu.Lock()
+			a.unreadMessages[senderNpub] = true
+			a.unreadMu.Unlock()
 
+			a.app.QueueUpdate(func() {
 				// Show status message
 				username := a.displayNames[senderNpub]
 				if username == "" {
 					username = senderNpub[:8] + "..."
 				}
 				a.setStatusMessage(fmt.Sprintf("New message from %s", username))
-
-				// Update contact list to show green dot (only if not auto-added, since refreshPartners already handles it)
-				if !autoAdded {
-					a.updateContactListWithNames()
-				}
-
 				a.app.ForceDraw()
+
+				// Update contact list to show green dot
+				a.updateContactListWithNames()
 
 				// Clear status message after 3 seconds
 				go func() {
