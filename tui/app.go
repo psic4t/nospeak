@@ -270,9 +270,6 @@ func (a *App) setupUI() error {
 
 func (a *App) loadContactsBasic() error {
 	a.partners = a.client.GetPartnerNpubs()
-	if len(a.partners) == 0 {
-		return fmt.Errorf("no chat partners configured")
-	}
 
 	// Initialize display names with cached values first, then fallback
 	a.displayNames = make(map[string]string)
@@ -300,13 +297,19 @@ func (a *App) loadContactsBasic() error {
 
 	// Populate contact list with cached/fallback names
 	a.contactList.Clear()
-	for i, partner := range a.partners {
-		displayName := a.displayNames[partner]
-		a.contactList.AddItem(displayName, partner, 0, nil)
-		if i == 0 {
-			a.currentPartner = partner
-			a.contactList.SetCurrentItem(0)
-			a.loadChatHistory()
+	if len(a.partners) == 0 {
+		// Show helpful message when no partners are configured
+		a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F2 to add partners[white]", 0, nil)
+		a.currentPartner = ""
+	} else {
+		for i, partner := range a.partners {
+			displayName := a.displayNames[partner]
+			a.contactList.AddItem(displayName, partner, 0, nil)
+			if i == 0 {
+				a.currentPartner = partner
+				a.contactList.SetCurrentItem(0)
+				a.loadChatHistory()
+			}
 		}
 	}
 
@@ -369,6 +372,16 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 		a.loadChatHistory()
 		a.updateStatusBar()
 		a.updateContactListHighlight()
+		a.updateTerminalTitle()
+	} else if partnersLen == 0 && index == 0 {
+		// Handle selection of "no partners" message
+		a.mu.Lock()
+		a.currentPartner = ""
+		a.mu.Unlock()
+
+		a.messageView.Clear()
+		a.messageView.Write([]byte("[yellow]No chat partners configured[white]\n\n[gray]Press F2 to open settings and add partners[white]\n"))
+		a.updateStatusBar()
 		a.updateTerminalTitle()
 	}
 }

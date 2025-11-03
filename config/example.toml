@@ -2,7 +2,7 @@
 
 # List of relays to connect to
 relays = [
-    "wss://nostr.data.haus"
+    "wss://nostr.data.haus",
     "wss://relay.damus.io",
     "wss://auth.nostr1.com"
 ]

@@ -36,7 +36,7 @@ func Load() (*Config, error) {
 		}
 
 		// Return special error to indicate template was copied with generated keys
-		return nil, fmt.Errorf("\n config created at %s with new Nostr identity:\n  nsec: %s\n  npub: %s\n\nYou can use these keys or replace them with your own existing keys.\nKeep your private key (nsec) secure and never share it!", configPath, nsec, npub)
+		return nil, fmt.Errorf("\n\nconfig created at %s with new Nostr identity:\n\n  nsec: %s\n  npub: %s\n\nYou can use these keys or replace them with your own existing keys.\nKeep your private key (nsec) secure and never share it!", configPath, nsec, npub)
 	}
 
 	var config Config
