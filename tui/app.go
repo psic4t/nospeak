@@ -1017,16 +1017,13 @@ func (a *App) listenForMessages(debug bool) {
 			log.Printf("TUI messageHandler called for %s: %q", senderNpub, message)
 		}
 
+		autoAdded := false
 		if !a.client.IsPartner(senderNpub) {
 			if err := a.client.AddPartner(senderNpub); err != nil {
 				log.Printf("Failed to add new partner %s: %v", senderNpub, err)
 			} else {
 				log.Printf("Auto-added new partner: %s", senderNpub[:8]+"...")
-				a.app.QueueUpdate(func() {
-					if err := a.loadContacts(); err != nil {
-						log.Printf("Failed to reload contacts: %v", err)
-					}
-				})
+				autoAdded = true
 			}
 		}
 
@@ -1058,30 +1055,38 @@ func (a *App) listenForMessages(debug bool) {
 				a.app.ForceDraw()
 			})
 		} else {
-			// Message from other contact - mark as unread and show status
+			// Message from other contact - mark as unread
 			a.unreadMu.Lock()
 			a.unreadMessages[senderNpub] = true
 			a.unreadMu.Unlock()
 
+			// Consolidate all UI updates into single QueueUpdate to prevent race conditions
 			a.app.QueueUpdate(func() {
+				if autoAdded {
+					// If we auto-added this contact, refresh partners first
+					a.refreshPartners()
+					a.app.SetRoot(a.mainFlex, true)
+				}
+
 				// Show status message
 				username := a.displayNames[senderNpub]
 				if username == "" {
 					username = senderNpub[:8] + "..."
 				}
-				a.statusMessage = fmt.Sprintf("New message from %s", username)
-				a.updateStatusBar()
-				a.app.ForceDraw()
+				a.setStatusMessage(fmt.Sprintf("New message from %s", username))
 
-				// Update contact list to show green dot
-				a.updateContactListWithNames()
+				// Update contact list to show green dot (only if not auto-added, since refreshPartners already handles it)
+				if !autoAdded {
+					a.updateContactListWithNames()
+				}
+
+				a.app.ForceDraw()
 
 				// Clear status message after 3 seconds
 				go func() {
 					time.Sleep(3 * time.Second)
 					a.app.QueueUpdate(func() {
-						a.statusMessage = ""
-						a.updateStatusBar()
+						a.setStatusMessage("")
 						a.app.ForceDraw()
 					})
 				}()
