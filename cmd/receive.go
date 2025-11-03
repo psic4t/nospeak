@@ -39,6 +39,15 @@ func Receive(debug bool) {
 		if debug {
 			log.Printf("Receive messageHandler called for %s: %q", senderNpub, message)
 		}
+
+		if !nostrClient.IsPartner(senderNpub) {
+			if err := nostrClient.AddPartner(senderNpub); err != nil {
+				log.Printf("Failed to add new partner %s: %v", senderNpub, err)
+			} else {
+				log.Printf("Auto-added new partner: %s", senderNpub[:8]+"...")
+			}
+		}
+
 		fmt.Printf("\n[%s]: %s\n", senderNpub, message)
 
 		// Send notification with resolved username

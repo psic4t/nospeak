@@ -287,3 +287,22 @@ func (c *Client) GetMessageHistoryEnhanced(recipientNpub string, sentLimit, rece
 	messageCache := cache.GetCache()
 	return messageCache.GetRecentMessages(recipientNpub, sentLimit, receivedLimit)
 }
+
+func (c *Client) IsPartner(npub string) bool {
+	for _, partner := range c.config.Partners {
+		if partner == npub {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) AddPartner(npub string) error {
+	if c.IsPartner(npub) {
+		return nil
+	}
+
+	c.config.Partners = append(c.config.Partners, npub)
+
+	return c.config.Save()
+}

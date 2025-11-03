@@ -100,6 +100,14 @@ func Chat(debug bool) {
 			log.Printf("Chat messageHandler called for %s: %q", senderNpub, message)
 		}
 
+		if !nostrClient.IsPartner(senderNpub) {
+			if err := nostrClient.AddPartner(senderNpub); err != nil {
+				log.Printf("Failed to add new partner %s: %v", senderNpub, err)
+			} else {
+				log.Printf("Auto-added new partner: %s", senderNpub[:8]+"...")
+			}
+		}
+
 		// Send notification for ALL incoming messages
 		username, _ := nostrClient.ResolveUsername(ctx, senderNpub, debug)
 		if username == "" {

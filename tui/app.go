@@ -1017,6 +1017,19 @@ func (a *App) listenForMessages(debug bool) {
 			log.Printf("TUI messageHandler called for %s: %q", senderNpub, message)
 		}
 
+		if !a.client.IsPartner(senderNpub) {
+			if err := a.client.AddPartner(senderNpub); err != nil {
+				log.Printf("Failed to add new partner %s: %v", senderNpub, err)
+			} else {
+				log.Printf("Auto-added new partner: %s", senderNpub[:8]+"...")
+				a.app.QueueUpdate(func() {
+					if err := a.loadContacts(); err != nil {
+						log.Printf("Failed to reload contacts: %v", err)
+					}
+				})
+			}
+		}
+
 		// Send notification for ALL incoming messages
 		username := a.displayNames[senderNpub]
 		if username == "" {
