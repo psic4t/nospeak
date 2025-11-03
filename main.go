@@ -11,6 +11,8 @@ import (
 	"github.com/data.haus/nospeak/tui"
 )
 
+const Version = "0.9.3"
+
 func main() {
 	// Check for help flags before flag.Parse() to override default behavior
 	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
@@ -19,7 +21,14 @@ func main() {
 	}
 
 	debug := flag.Bool("debug", false, "Enable debug mode to print generated events")
+	version := flag.Bool("v", false, "Show version information")
 	flag.Parse()
+
+	// Handle version flag
+	if *version {
+		fmt.Printf("nospeak version %s\n", Version)
+		os.Exit(0)
+	}
 
 	// If no arguments provided, start TUI mode by default
 	if len(flag.Args()) == 0 {
@@ -80,6 +89,7 @@ func printUsage() {
 	fmt.Println("  nospeak help                      - Show this help")
 	fmt.Println("")
 	fmt.Println("Global flags:")
+	fmt.Println("  -v                               - Show version information")
 	fmt.Println("  --debug                          - Enable debug mode to print generated events")
 
 	fmt.Println("")
