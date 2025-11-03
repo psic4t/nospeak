@@ -32,8 +32,12 @@ func NewSettingsModal(app *tview.Application, config *config.Config, onSave, onC
 func (sm *SettingsModal) createForm() {
 	sm.form = tview.NewForm()
 	sm.form.SetBorder(true).SetTitle("[violet]Settings[white]")
-	sm.form.SetFieldBackgroundColor(tcell.ColorDefault)
+
+	// Set form colors with proper focus highlighting using theme colors
+	sm.form.SetFieldBackgroundColor(FieldBackgroundColor)
 	sm.form.SetFieldTextColor(tcell.ColorWhite)
+	sm.form.SetButtonBackgroundColor(ButtonBackgroundColor)
+	sm.form.SetButtonTextColor(tcell.ColorWhite)
 	sm.form.SetBackgroundColor(tcell.ColorDefault)
 	sm.form.SetTitleColor(tcell.ColorWhite)
 

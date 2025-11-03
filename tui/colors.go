@@ -14,15 +14,23 @@ var (
 	TimeColor               = tcell.ColorBlue
 )
 
+// Form focus colors
+var (
+	FieldFocusColor       = tcell.ColorBlue
+	FieldBackgroundColor  = tcell.ColorBlack
+	ButtonFocusColor      = tcell.ColorBlue
+	ButtonBackgroundColor = tcell.ColorBlack
+)
+
 func GetTheme() tview.Theme {
 	return tview.Theme{
 		PrimitiveBackgroundColor:    tcell.ColorDefault,
-		ContrastBackgroundColor:     tcell.ColorDefault,
+		ContrastBackgroundColor:     FieldFocusColor,
 		MoreContrastBackgroundColor: tcell.ColorGreen,
 		BorderColor:                 tcell.ColorWhite,
 		TitleColor:                  tcell.ColorWhite,
 		GraphicsColor:               tcell.ColorWhite,
-		PrimaryTextColor:            tcell.ColorDefault,
+		PrimaryTextColor:            tcell.ColorWhite,
 		SecondaryTextColor:          tcell.ColorGray,
 		TertiaryTextColor:           tcell.ColorWhite,
 		InverseTextColor:            tcell.ColorWhite,
