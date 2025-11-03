@@ -123,12 +123,12 @@ dev:
 	go build -o $(BINARY_NAME) .
 	@echo "Built $(BINARY_NAME) for development"
 
-# Release build (optimized) - enables CGO for SQLite support
+# Release build (optimized) - now uses pure Go SQLite
 .PHONY: release
 release:
-	@echo "Building $(BINARY_NAME) for release ($(OS)/$(ARCH)) with CGO..."
+	@echo "Building $(BINARY_NAME) for release ($(OS)/$(ARCH))..."
 	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=1 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) .
+	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) .
 	@echo "Built $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) for release"
 	@echo "Copying necessary files..."
 	@mkdir -p $(BUILD_DIR)/config
@@ -137,35 +137,31 @@ release:
 	@cp LICENSE $(BUILD_DIR)/
 	@echo "Release package created in $(BUILD_DIR)/"
 
-# Cross-compile for multiple platforms - only for current platform due to CGO requirement
+# Cross-compile for multiple platforms - now supports full cross-compilation
 .PHONY: release-all
 release-all:
-	@echo "Building releases for current platform ($(OS)/$(ARCH)) with CGO..."
+	@echo "Building releases for all platforms..."
 	@mkdir -p $(BUILD_DIR)
-	@echo "Building for $(OS)/$(ARCH)..."
-	CGO_ENABLED=1 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) .
-	@echo "Built $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) for release"
+	@echo "Building for linux/amd64..."
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 .
+	@echo "Building for linux/arm64..."
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 .
+	@echo "Building for darwin/amd64..."
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	@echo "Building for darwin/arm64..."
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 .
+	@echo "Building for windows/amd64..."
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe .
 	@echo "Copying necessary files..."
 	@mkdir -p $(BUILD_DIR)/config
 	@cp config/example.toml $(BUILD_DIR)/config/
 	@cp README.md $(BUILD_DIR)/
 	@cp LICENSE $(BUILD_DIR)/
-	@echo "Note: Cross-compilation disabled due to SQLite CGO requirement"
-	@echo "To build for other platforms, run 'make release' on those platforms"
+	@echo "All release packages created in $(BUILD_DIR)/"
 
-# Static release build without CGO (SQLite disabled)
+# Note: All builds are now static since we use pure Go SQLite
 .PHONY: release-static
-release-static:
-	@echo "Building $(BINARY_NAME) for static release ($(OS)/$(ARCH)) without CGO..."
-	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)-static .
-	@echo "Built $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)-static for static release"
-	@echo "Copying necessary files..."
-	@mkdir -p $(BUILD_DIR)/config
-	@cp config/example.toml $(BUILD_DIR)/config/
-	@cp README.md $(BUILD_DIR)/
-	@cp LICENSE $(BUILD_DIR)/
-	@echo "Warning: SQLite will not work in static build - use only for testing"
+release-static: release
 
 # Show help
 .PHONY: help
@@ -184,9 +180,9 @@ help:
 	@echo "  vet            - Run go vet static analysis"
 	@echo "  fmt            - Format Go code"
 	@echo "  dev            - Build for development (with debug info)"
-	@echo "  release        - Build optimized release with CGO (SQLite enabled) and copy necessary files"
-	@echo "  release-all    - Build for current platform (CGO required for SQLite) and copy necessary files"
-	@echo "  release-static - Build static binary without CGO (SQLite disabled) and copy necessary files"
+	@echo "  release        - Build optimized release with pure Go SQLite and copy necessary files"
+	@echo "  release-all    - Build releases for all platforms (Linux, macOS, Windows) and copy necessary files"
+	@echo "  release-static - Same as release (all builds are now static)"
 	@echo "  help           - Show this help message"
 	@echo ""
 	@echo "Variables:"
@@ -196,5 +192,6 @@ help:
 	@echo "Examples:"
 	@echo "  make install                    # Build and install to /usr/local/bin"
 	@echo "  make PREFIX=~/.local install    # Install to ~/.local/bin"
-	@echo "  make release                    # Build optimized binary with SQLite"
-	@echo "  make release-static             # Build static binary without SQLite"
+	@echo "  make release                    # Build optimized binary with pure Go SQLite"
+	@echo "  make release-all                # Build releases for all platforms"
+	@echo "  make release-static             # Same as release (all builds are now static)"

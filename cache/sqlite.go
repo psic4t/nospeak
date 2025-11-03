@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 type SQLiteCache struct {
@@ -26,7 +26,7 @@ func NewSQLiteCache() (*SQLiteCache, error) {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cache database: %w", err)
 	}
@@ -350,7 +350,7 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 	var expiresAt time.Time
 
 	err := sc.db.QueryRow(`
-		SELECT id, npub, profile_json, cached_at, expires_at, created_at 
+		SELECT id, npub, profile, cached_at, expires_at, created_at 
 		FROM profile_cache 
 		WHERE npub = ?
 	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Profile, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
@@ -387,11 +387,11 @@ func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time
 	}
 	defer tx.Rollback()
 
-	// UPSERT: Insert or replace with individual columns + profile_json
+	// UPSERT: Insert or replace with profile JSON
 	_, err = tx.Exec(`
-		INSERT OR REPLACE INTO profile_cache (npub, name, display_name, about, picture, nip05, lud16, profile_json, cached_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture, profile.NIP05, profile.LUD16, string(profileJSON), time.Now(), expiresAt)
+		INSERT OR REPLACE INTO profile_cache (npub, profile, cached_at, expires_at)
+		VALUES (?, ?, ?, ?)
+	`, npub, string(profileJSON), time.Now(), expiresAt)
 
 	if err != nil {
 		return fmt.Errorf("failed to cache profile: %w", err)
