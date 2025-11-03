@@ -85,7 +85,15 @@ func (sc *SQLiteCache) createTables() error {
 		CREATE TABLE IF NOT EXISTS profile_cache (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			npub TEXT NOT NULL UNIQUE,
-			profile TEXT NOT NULL,
+			name TEXT,
+			about TEXT,
+			picture TEXT,
+			nip05 TEXT,
+			lud16 TEXT,
+			display_name TEXT,
+			website TEXT,
+			banner TEXT,
+			profile_json TEXT NOT NULL,
 			cached_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -350,7 +358,7 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 	var expiresAt time.Time
 
 	err := sc.db.QueryRow(`
-		SELECT id, npub, profile, cached_at, expires_at, created_at 
+		SELECT id, npub, profile_json, cached_at, expires_at, created_at 
 		FROM profile_cache 
 		WHERE npub = ?
 	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Profile, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
@@ -389,7 +397,7 @@ func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time
 
 	// UPSERT: Insert or replace with profile JSON
 	_, err = tx.Exec(`
-		INSERT OR REPLACE INTO profile_cache (npub, profile, cached_at, expires_at)
+		INSERT OR REPLACE INTO profile_cache (npub, profile_json, cached_at, expires_at)
 		VALUES (?, ?, ?, ?)
 	`, npub, string(profileJSON), time.Now(), expiresAt)
 
