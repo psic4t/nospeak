@@ -89,8 +89,11 @@ func (a *App) updateTerminalTitle() {
 	a.setTerminalTitle(contactName)
 }
 
-func NewApp() (*App, error) {
-	cfg, err := config.Load()
+func NewApp(configPath string) (*App, error) {
+	if configPath == "" {
+		configPath = config.GetConfigPath()
+	}
+	cfg, err := config.LoadWithPath(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}

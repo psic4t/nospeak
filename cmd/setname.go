@@ -10,7 +10,7 @@ import (
 	"github.com/data.haus/nospeak/config"
 )
 
-func SetName(args []string, debug bool) {
+func SetName(args []string, debug bool, configPath string) {
 	if len(args) < 1 {
 		fmt.Println("Usage: nospeak set-name <name>")
 		os.Exit(1)
@@ -18,7 +18,10 @@ func SetName(args []string, debug bool) {
 
 	name := args[0]
 
-	cfg, err := config.Load()
+	if configPath == "" {
+		configPath = config.GetConfigPath()
+	}
+	cfg, err := config.LoadWithPath(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}

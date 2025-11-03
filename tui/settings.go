@@ -15,14 +15,20 @@ type SettingsModal struct {
 	config   *config.Config
 	onSave   func()
 	onCancel func()
+	saveFunc func() error
 }
 
 func NewSettingsModal(app *tview.Application, config *config.Config, onSave, onCancel func()) *SettingsModal {
+	return NewSettingsModalWithSaveFunc(app, config, onSave, onCancel, nil)
+}
+
+func NewSettingsModalWithSaveFunc(app *tview.Application, config *config.Config, onSave, onCancel func(), saveFunc func() error) *SettingsModal {
 	sm := &SettingsModal{
 		app:      app,
 		config:   config,
 		onSave:   onSave,
 		onCancel: onCancel,
+		saveFunc: saveFunc,
 	}
 
 	sm.createForm()
@@ -133,7 +139,13 @@ func (sm *SettingsModal) saveSettings() {
 	sm.config.Debug = debug
 
 	// Save config to file
-	if err := sm.config.Save(); err != nil {
+	var err error
+	if sm.saveFunc != nil {
+		err = sm.saveFunc()
+	} else {
+		err = sm.config.Save()
+	}
+	if err != nil {
 		// Show error message
 		errorModal := tview.NewModal().
 			SetText(fmt.Sprintf("[red]Failed to save settings:[white] %v", err)).

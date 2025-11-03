@@ -22,6 +22,7 @@ func main() {
 
 	debug := flag.Bool("debug", false, "Enable debug mode to print generated events")
 	version := flag.Bool("v", false, "Show version information")
+	configPath := flag.String("c", "", "Path to config file (default: ~/.config/nospeak/config.toml)")
 	flag.Parse()
 
 	// Handle version flag
@@ -32,7 +33,7 @@ func main() {
 
 	// If no arguments provided, start TUI mode by default
 	if len(flag.Args()) == 0 {
-		startTUI(*debug)
+		startTUI(*debug, *configPath)
 		return
 	}
 
@@ -46,16 +47,16 @@ func main() {
 
 	switch command {
 	case "send":
-		cmd.Send(args, *debug)
+		cmd.Send(args, *debug, *configPath)
 	case "receive":
-		cmd.Receive(*debug)
+		cmd.Receive(*debug, *configPath)
 
 	case "set-name":
-		cmd.SetName(args, *debug)
+		cmd.SetName(args, *debug, *configPath)
 	case "set-messaging-relays":
-		cmd.SetMessagingRelays(*debug)
+		cmd.SetMessagingRelays(*debug, *configPath)
 	case "new-identity":
-		generateNewIdentity()
+		generateNewIdentity(*configPath)
 	case "help", "--help":
 		printUsage()
 	default:
@@ -65,8 +66,8 @@ func main() {
 	}
 }
 
-func startTUI(debug bool) {
-	app, err := tui.NewApp()
+func startTUI(debug bool, configPath string) {
+	app, err := tui.NewApp(configPath)
 	if err != nil {
 		log.Fatalf("Failed to create TUI app: %v", err)
 	}
@@ -91,6 +92,7 @@ func printUsage() {
 	fmt.Println("Global flags:")
 	fmt.Println("  -v                               - Show version information")
 	fmt.Println("  --debug                          - Enable debug mode to print generated events")
+	fmt.Println("  -c <path>                        - Path to config file (default: ~/.config/nospeak/config.toml)")
 
 	fmt.Println("")
 	fmt.Println("TUI Keyboard Shortcuts:")
@@ -109,8 +111,10 @@ func printUsage() {
 	fmt.Println("A configuration template will be created automatically on first run.")
 }
 
-func generateNewIdentity() {
-	configPath := config.GetConfigPath()
+func generateNewIdentity(configPath string) {
+	if configPath == "" {
+		configPath = config.GetConfigPath()
+	}
 
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -121,7 +125,7 @@ func generateNewIdentity() {
 	}
 
 	// Load existing config without validation to check if keys already exist
-	existingConfig, err := config.LoadWithoutValidation()
+	existingConfig, err := config.LoadWithoutValidationWithPath(configPath)
 	if err != nil {
 		fmt.Printf("Failed to load config file: %v\n", err)
 		os.Exit(1)
@@ -144,7 +148,7 @@ func generateNewIdentity() {
 	}
 
 	// Update config with new keys
-	if err := config.UpdateConfigWithKeys(nsec, npub); err != nil {
+	if err := config.UpdateConfigWithKeysAtPath(nsec, npub, configPath); err != nil {
 		fmt.Printf("Failed to update config with new keys: %v\n", err)
 		os.Exit(1)
 	}

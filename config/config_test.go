@@ -299,17 +299,26 @@ partners = ["npub1partner..."]
 debug = true
 `
 
-	_ = testutils.CreateTempFile(t, configContent)
+	tempFile := testutils.CreateTempFile(t, configContent)
 
 	// Generate test keys
 	nsec, npub, err := GenerateKeyPair()
 	testutils.AssertNoError(t, err)
 
-	// Test updating config with keys
-	err = UpdateConfigWithKeys(nsec, npub)
-	// This will fail because it tries to read from the actual config path
-	// In a real test environment, we'd need to mock the file system
-	testutils.AssertError(t, err)
+	// Test updating config with keys using the temporary file path
+	err = UpdateConfigWithKeysAtPath(nsec, npub, tempFile)
+	testutils.AssertNoError(t, err)
+
+	// Verify the keys were saved by reading the file back
+	updatedConfig, err := LoadWithoutValidationWithPath(tempFile)
+	testutils.AssertNoError(t, err)
+
+	if updatedConfig.Nsec != nsec {
+		t.Errorf("Expected nsec %s, got %s", nsec, updatedConfig.Nsec)
+	}
+	if updatedConfig.Npub != npub {
+		t.Errorf("Expected npub %s, got %s", npub, updatedConfig.Npub)
+	}
 }
 
 func TestConfigDefaults(t *testing.T) {

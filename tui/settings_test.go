@@ -20,10 +20,16 @@ func TestSettingsModalDetectsNewPartners(t *testing.T) {
 	// Create test app
 	app := tview.NewApplication()
 
-	// Create settings modal
-	settings := NewSettingsModal(app, cfg, func() {
+	// Create a mock save function that doesn't write to real config
+	mockSave := func() error {
+		// Do nothing - just return success
+		return nil
+	}
+
+	// Create settings modal with mock save function
+	settings := NewSettingsModalWithSaveFunc(app, cfg, func() {
 		// Save callback
-	}, nil)
+	}, nil, mockSave)
 
 	// Simulate adding new partners in the form
 	// Get the partners textarea (index 3) and set new content
@@ -63,10 +69,16 @@ func TestSettingsModalNoNewPartners(t *testing.T) {
 	// Create test app
 	app := tview.NewApplication()
 
-	// Create settings modal
-	settings := NewSettingsModal(app, cfg, func() {
+	// Create a mock save function that doesn't write to real config
+	mockSave := func() error {
+		// Do nothing - just return success
+		return nil
+	}
+
+	// Create settings modal with mock save function
+	settings := NewSettingsModalWithSaveFunc(app, cfg, func() {
 		// Save callback
-	}, nil)
+	}, nil, mockSave)
 
 	// Simulate keeping the same partners in the form
 	partnersTextArea := settings.form.GetFormItem(3).(*tview.TextArea)

@@ -26,11 +26,13 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	configPath := GetConfigPath()
+	return LoadWithPath(GetConfigPath())
+}
 
+func LoadWithPath(configPath string) (*Config, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// Auto-copy template config when missing with generated keys
-		nsec, npub, err := copyTemplateConfig()
+		nsec, npub, err := copyTemplateConfigWithPath(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create config template: %w", err)
 		}
@@ -65,8 +67,10 @@ func Load() (*Config, error) {
 }
 
 func LoadWithoutValidation() (*Config, error) {
-	configPath := GetConfigPath()
+	return LoadWithoutValidationWithPath(GetConfigPath())
+}
 
+func LoadWithoutValidationWithPath(configPath string) (*Config, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("config file not found at %s", configPath)
 	}
@@ -167,8 +171,10 @@ func GenerateKeyPair() (string, string, error) {
 }
 
 func UpdateConfigWithKeys(nsec, npub string) error {
-	configPath := GetConfigPath()
+	return UpdateConfigWithKeysAtPath(nsec, npub, GetConfigPath())
+}
 
+func UpdateConfigWithKeysAtPath(nsec, npub, configPath string) error {
 	// Load existing config without validation
 	var config Config
 	data, err := os.ReadFile(configPath)
@@ -208,8 +214,10 @@ func UpdateConfigWithKeys(nsec, npub string) error {
 }
 
 func copyTemplateConfig() (string, string, error) {
-	configPath := GetConfigPath()
+	return copyTemplateConfigWithPath(GetConfigPath())
+}
 
+func copyTemplateConfigWithPath(configPath string) (string, string, error) {
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -248,8 +256,10 @@ func copyTemplateConfig() (string, string, error) {
 }
 
 func (c *Config) Save() error {
-	configPath := GetConfigPath()
+	return c.SaveAtPath(GetConfigPath())
+}
 
+func (c *Config) SaveAtPath(configPath string) error {
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {

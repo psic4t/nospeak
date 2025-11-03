@@ -11,7 +11,7 @@ import (
 	"github.com/data.haus/nospeak/config"
 )
 
-func Send(args []string, debug bool) {
+func Send(args []string, debug bool, configPath string) {
 	if len(args) < 2 {
 		fmt.Println("Usage: nospeak send <recipient_npub> <message>")
 		os.Exit(1)
@@ -20,7 +20,10 @@ func Send(args []string, debug bool) {
 	recipientNpub := args[0]
 	message := strings.Join(args[1:], " ")
 
-	cfg, err := config.Load()
+	if configPath == "" {
+		configPath = config.GetConfigPath()
+	}
+	cfg, err := config.LoadWithPath(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}

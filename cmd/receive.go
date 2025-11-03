@@ -13,8 +13,11 @@ import (
 	"github.com/data.haus/nospeak/notification"
 )
 
-func Receive(debug bool) {
-	cfg, err := config.Load()
+func Receive(debug bool, configPath string) {
+	if configPath == "" {
+		configPath = config.GetConfigPath()
+	}
+	cfg, err := config.LoadWithPath(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
