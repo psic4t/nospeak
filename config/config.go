@@ -230,6 +230,30 @@ func copyTemplateConfig() (string, string, error) {
 	return nsec, npub, nil
 }
 
+func (c *Config) Save() error {
+	configPath := GetConfigPath()
+
+	// Create config directory if it doesn't exist
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Write config to file
+	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to open config file for writing: %w", err)
+	}
+	defer file.Close()
+
+	encoder := toml.NewEncoder(file)
+	if err := encoder.Encode(c); err != nil {
+		return fmt.Errorf("failed to encode config to file: %w", err)
+	}
+
+	return nil
+}
+
 func getDefaultNotifyCommand() string {
 	switch runtime.GOOS {
 	case "linux":
