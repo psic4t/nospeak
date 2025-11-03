@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/pelletier/go-toml/v2"
+	"github.com/data.haus/nospeak/notification"
 )
 
 type Config struct {
@@ -56,12 +55,7 @@ func LoadWithPath(configPath string) (*Config, error) {
 	}
 
 	// Set default notification command if not configured
-	if config.NotifyCommand == "" {
-		defaultCmd := getDefaultNotifyCommand()
-		if defaultCmd != "" && commandExists(defaultCmd) {
-			config.NotifyCommand = defaultCmd
-		}
-	}
+	config.NotifyCommand = notification.SetDefaultNotifyCommand(config.NotifyCommand)
 
 	return &config, nil
 }
@@ -286,25 +280,3 @@ func (c *Config) SaveAtPath(configPath string) error {
 	return nil
 }
 
-func getDefaultNotifyCommand() string {
-	switch runtime.GOOS {
-	case "linux":
-		return "notify-send \"New message from %s\""
-	case "darwin":
-		return "osascript -e 'display notification \"New message from %s\"'"
-	case "windows":
-		return "powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('New message from %s', 'Nospeak')\""
-	default:
-		return ""
-	}
-}
-
-func commandExists(command string) bool {
-	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return false
-	}
-
-	_, err := exec.LookPath(parts[0])
-	return err == nil
-}

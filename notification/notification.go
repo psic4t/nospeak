@@ -5,8 +5,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-
-	"github.com/data.haus/nospeak/config"
 )
 
 func SendNotification(username, message, notifyCommand string, debug bool) {
@@ -59,13 +57,14 @@ func GetDefaultNotifyCommand() string {
 	}
 }
 
-func SetDefaultNotifyCommand(cfg *config.Config) {
-	if cfg.NotifyCommand == "" {
+func SetDefaultNotifyCommand(notifyCommand string) string {
+	if notifyCommand == "" {
 		defaultCmd := GetDefaultNotifyCommand()
 		if defaultCmd != "" && commandExists(defaultCmd) {
-			cfg.NotifyCommand = defaultCmd
+			return defaultCmd
 		}
 	}
+	return notifyCommand
 }
 
 func commandExists(command string) bool {
