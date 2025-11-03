@@ -804,9 +804,78 @@ Type commands in the input field and press Enter to execute.`
 	a.app.SetRoot(modal, true)
 }
 
+func (a *App) refreshPartners() {
+	// Reload partners from config
+	a.partners = a.client.GetPartnerNpubs()
+
+	// Reinitialize display names for new partners
+	messageCache := cache.GetCache()
+	for _, partner := range a.partners {
+		if _, exists := a.displayNames[partner]; !exists {
+			// Try to get cached profile first
+			if cachedProfile, found := messageCache.GetProfile(partner); found {
+				var metadata cache.ProfileMetadata
+				if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
+					if metadata.Name != "" {
+						a.displayNames[partner] = metadata.Name
+					} else if metadata.DisplayName != "" {
+						a.displayNames[partner] = metadata.DisplayName
+					} else {
+						a.displayNames[partner] = partner[:8] + "..."
+					}
+				} else {
+					a.displayNames[partner] = partner[:8] + "..."
+				}
+			} else {
+				a.displayNames[partner] = partner[:8] + "..."
+			}
+		}
+	}
+
+	// Update contact list
+	a.contactList.Clear()
+	if len(a.partners) == 0 {
+		// Show helpful message when no partners are configured
+		a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F2 to add partners[white]", 0, nil)
+		a.currentPartner = ""
+	} else {
+		for i, partner := range a.partners {
+			displayName := a.displayNames[partner]
+			a.contactList.AddItem(displayName, partner, 0, nil)
+			if i == 0 && a.currentPartner == "" {
+				// Select first partner if none was selected
+				a.currentPartner = partner
+				a.contactList.SetCurrentItem(0)
+				a.loadChatHistory()
+			}
+		}
+	}
+
+	// Update UI
+	a.updateContactListHighlight()
+	a.updateStatusBar()
+	a.updateTerminalTitle()
+
+	// Start profile resolution for new partners in background
+	go func() {
+		if err := a.loadContacts(); err != nil {
+			log.Printf("Failed to resolve contact names: %v", err)
+		}
+
+		// Update UI with resolved names
+		a.app.QueueUpdate(func() {
+			a.updateContactListWithNames()
+			a.updateStatusBar()
+			a.updateTerminalTitle()
+			a.app.ForceDraw()
+		})
+	}()
+}
+
 func (a *App) showSettings() {
 	settings := NewSettingsModal(a.app, a.config, func() {
-		// Settings saved callback
+		// Settings saved callback - refresh partners
+		a.refreshPartners()
 		a.app.SetRoot(a.mainFlex, true)
 	}, func() {
 		// Settings cancelled callback

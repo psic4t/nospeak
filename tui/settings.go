@@ -80,6 +80,12 @@ func (sm *SettingsModal) createForm() {
 }
 
 func (sm *SettingsModal) saveSettings() {
+	// Store original partners to detect new additions
+	originalPartners := make(map[string]bool)
+	for _, partner := range sm.config.Partners {
+		originalPartners[strings.TrimSpace(partner)] = true
+	}
+
 	// Extract values from form and update config
 
 	// Get form field values
@@ -104,10 +110,15 @@ func (sm *SettingsModal) saveSettings() {
 
 	partners := strings.Split(strings.TrimSpace(partnersText), "\n")
 	var cleanPartners []string
+	var newPartners []string
 	for _, partner := range partners {
 		partner = strings.TrimSpace(partner)
 		if partner != "" {
 			cleanPartners = append(cleanPartners, partner)
+			// Check if this is a new partner
+			if !originalPartners[partner] {
+				newPartners = append(newPartners, partner)
+			}
 		}
 	}
 
@@ -135,8 +146,29 @@ func (sm *SettingsModal) saveSettings() {
 		return
 	}
 
-	if sm.onSave != nil {
-		sm.onSave()
+	// Show notification if new partners were added
+	if len(newPartners) > 0 {
+		var message string
+		if len(newPartners) == 1 {
+			message = fmt.Sprintf("[green]New partner added:[white] %s", newPartners[0][:8]+"...")
+		} else {
+			message = fmt.Sprintf("[green]%d new partners added[white]", len(newPartners))
+		}
+
+		notificationModal := tview.NewModal().
+			SetText(message + "\n\n[gray]Contacts will be refreshed automatically.[white]").
+			AddButtons([]string{"[green]OK[white]"}).
+			SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+				if sm.onSave != nil {
+					sm.onSave()
+				}
+			})
+		notificationModal.SetBackgroundColor(tcell.ColorDefault)
+		sm.app.SetRoot(notificationModal, true)
+	} else {
+		if sm.onSave != nil {
+			sm.onSave()
+		}
 	}
 }
 

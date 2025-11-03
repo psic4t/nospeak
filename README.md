@@ -35,19 +35,21 @@ go install github.com/data.haus/nospeak@latest
    # Edit ~/.config/nospeak/config.toml to add existing keys
    ```
 
-2. **Set your mailbox relays from config if needed**
+2. **Set username and mailbox relays from config if needed**
+   ```bash
+   nospeak set-name <your desired username>
+   ```
    ```bash
    nospeak set-messaging-relays
    ```
 
-3. **Add some npubs to chat in config file**
-   ```bash
-   (this will be easier in the future)
-
-4. **Start the TUI interface:**
+3. **Start the TUI interface:**
    ```bash
    nospeak
    ```
+
+4. **Add some npubs in Settings (F2)**
+   ```bash
 
 ## Usage
 
