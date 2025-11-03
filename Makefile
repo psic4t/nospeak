@@ -127,8 +127,15 @@ dev:
 .PHONY: release
 release:
 	@echo "Building $(BINARY_NAME) for release ($(OS)/$(ARCH)) with CGO..."
+	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) .
 	@echo "Built $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) for release"
+	@echo "Copying necessary files..."
+	@mkdir -p $(BUILD_DIR)/config
+	@cp config/example.toml $(BUILD_DIR)/config/
+	@cp README.md $(BUILD_DIR)/
+	@cp LICENSE $(BUILD_DIR)/
+	@echo "Release package created in $(BUILD_DIR)/"
 
 # Cross-compile for multiple platforms - only for current platform due to CGO requirement
 .PHONY: release-all
@@ -138,6 +145,11 @@ release-all:
 	@echo "Building for $(OS)/$(ARCH)..."
 	CGO_ENABLED=1 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) .
 	@echo "Built $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH) for release"
+	@echo "Copying necessary files..."
+	@mkdir -p $(BUILD_DIR)/config
+	@cp config/example.toml $(BUILD_DIR)/config/
+	@cp README.md $(BUILD_DIR)/
+	@cp LICENSE $(BUILD_DIR)/
 	@echo "Note: Cross-compilation disabled due to SQLite CGO requirement"
 	@echo "To build for other platforms, run 'make release' on those platforms"
 
@@ -145,8 +157,14 @@ release-all:
 .PHONY: release-static
 release-static:
 	@echo "Building $(BINARY_NAME) for static release ($(OS)/$(ARCH)) without CGO..."
+	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)-static .
 	@echo "Built $(BUILD_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)-static for static release"
+	@echo "Copying necessary files..."
+	@mkdir -p $(BUILD_DIR)/config
+	@cp config/example.toml $(BUILD_DIR)/config/
+	@cp README.md $(BUILD_DIR)/
+	@cp LICENSE $(BUILD_DIR)/
 	@echo "Warning: SQLite will not work in static build - use only for testing"
 
 # Show help
@@ -166,9 +184,9 @@ help:
 	@echo "  vet            - Run go vet static analysis"
 	@echo "  fmt            - Format Go code"
 	@echo "  dev            - Build for development (with debug info)"
-	@echo "  release        - Build optimized release with CGO (SQLite enabled)"
-	@echo "  release-all    - Build for current platform (CGO required for SQLite)"
-	@echo "  release-static - Build static binary without CGO (SQLite disabled)"
+	@echo "  release        - Build optimized release with CGO (SQLite enabled) and copy necessary files"
+	@echo "  release-all    - Build for current platform (CGO required for SQLite) and copy necessary files"
+	@echo "  release-static - Build static binary without CGO (SQLite disabled) and copy necessary files"
 	@echo "  help           - Show this help message"
 	@echo ""
 	@echo "Variables:"
