@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -37,7 +36,7 @@ type App struct {
 	// State
 	currentPartner string
 	partners       []string
-	displayNames   map[string]string
+	profileResolver *client.ProfileResolver
 	messageCache   cache.Cache
 	connected      bool
 	mu             sync.RWMutex
@@ -74,16 +73,11 @@ func (a *App) setTerminalTitle(contactName string) {
 func (a *App) updateTerminalTitle() {
 	a.mu.RLock()
 	currentPartner := a.currentPartner
-	displayNames := a.displayNames
 	a.mu.RUnlock()
 
 	contactName := "None"
 	if currentPartner != "" {
-		if displayName, exists := displayNames[currentPartner]; exists && displayName != "" {
-			contactName = displayName
-		} else {
-			contactName = currentPartner[:8] + "..."
-		}
+		contactName = a.profileResolver.GetDisplayName(currentPartner)
 	}
 
 	a.setTerminalTitle(contactName)
@@ -109,7 +103,7 @@ func NewApp(configPath string) (*App, error) {
 		app:             tview.NewApplication(),
 		client:          nostrClient,
 		config:          cfg,
-		displayNames:    make(map[string]string),
+		profileResolver: client.NewProfileResolver(nostrClient),
 		messageCache:    cache.GetCache(),
 		contactsVisible: cfg.ShowContacts,
 		unreadMessages:  make(map[string]bool),
@@ -274,29 +268,8 @@ func (a *App) setupUI() error {
 func (a *App) loadContactsBasic() error {
 	a.partners = a.client.GetPartnerNpubs()
 
-	// Initialize display names with cached values first, then fallback
-	a.displayNames = make(map[string]string)
-	messageCache := cache.GetCache()
-
-	for _, partner := range a.partners {
-		// Try to get cached profile first
-		if cachedProfile, found := messageCache.GetProfile(partner); found {
-			var metadata cache.ProfileMetadata
-			if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
-				if metadata.Name != "" {
-					a.displayNames[partner] = metadata.Name
-				} else if metadata.DisplayName != "" {
-					a.displayNames[partner] = metadata.DisplayName
-				} else {
-					a.displayNames[partner] = partner[:8] + "..."
-				}
-			} else {
-				a.displayNames[partner] = partner[:8] + "..."
-			}
-		} else {
-			a.displayNames[partner] = partner[:8] + "..."
-		}
-	}
+	// Initialize display names using ProfileResolver
+	a.profileResolver.InitializeDisplayNames(a.partners)
 
 	// Populate contact list with cached/fallback names
 	a.contactList.Clear()
@@ -306,7 +279,7 @@ func (a *App) loadContactsBasic() error {
 		a.currentPartner = ""
 	} else {
 		for i, partner := range a.partners {
-			displayName := a.displayNames[partner]
+			displayName := a.profileResolver.GetDisplayName(partner)
 			a.contactList.AddItem(displayName, partner, 0, nil)
 			if i == 0 {
 				a.currentPartner = partner
@@ -330,26 +303,14 @@ func (a *App) loadContacts() error {
 	profiles, err := a.client.GetPartnerProfiles(a.ctx, false)
 	if err != nil {
 		log.Printf("Failed to resolve profiles: %v", err)
-		// Use fallback names
-		for _, partner := range a.partners {
-			a.displayNames[partner] = partner[:8] + "..."
-		}
+		// Use fallback names via ProfileResolver
+		a.profileResolver.InitializeDisplayNames(a.partners)
 	} else {
-		// Extract display names from profiles
-		displayNames := make(map[string]string)
-		for npub, profile := range profiles {
-			if profile.Name != "" {
-				displayNames[npub] = profile.Name
-			} else if profile.DisplayName != "" {
-				displayNames[npub] = profile.DisplayName
-			} else {
-				displayNames[npub] = npub[:8] + "..."
-			}
+		// Update ProfileResolver with fetched profiles
+		for npub := range profiles {
+			// Cache the profile
+			a.profileResolver.GetFullProfile(a.ctx, npub, false)
 		}
-
-		a.mu.Lock()
-		a.displayNames = displayNames
-		a.mu.Unlock()
 	}
 
 	// Don't update UI here - let the async caller handle UI updates
@@ -390,16 +351,19 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 }
 
 func (a *App) updateContactListWithNames() {
+	if a.config.Debug {
+		log.Printf("updateContactListWithNames called")
+	}
+
 	a.mu.RLock()
 	currentPartner := a.currentPartner
 	partners := a.partners
-	displayNames := a.displayNames
 	a.mu.RUnlock()
 
 	// Update contact list with resolved names
 	for i, partner := range partners {
 		if i < a.contactList.GetItemCount() {
-			displayName := displayNames[partner]
+			displayName := a.profileResolver.GetDisplayName(partner)
 
 			a.unreadMu.RLock()
 			hasUnread := a.unreadMessages[partner]
@@ -456,10 +420,7 @@ func (a *App) loadChatHistory() {
 		} else {
 			// For received messages, RecipientNpub contains the sender's npub
 			senderNpub := msg.RecipientNpub
-			username := a.displayNames[senderNpub]
-			if username == "" {
-				username = senderNpub[:8] + "..."
-			}
+			username := a.profileResolver.GetDisplayName(senderNpub)
 			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
 		}
 	}
@@ -507,10 +468,7 @@ func (a *App) loadOlderMessages() {
 		} else {
 			// For received messages, RecipientNpub contains the sender's npub
 			senderNpub := msg.RecipientNpub
-			username := a.displayNames[senderNpub]
-			if username == "" {
-				username = senderNpub[:8] + "..."
-			}
+			username := a.profileResolver.GetDisplayName(senderNpub)
 			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
 		}
 	}
@@ -681,8 +639,8 @@ func (a *App) updateStatusBar() {
 	}
 
 	partnerName := "None"
-	if partner != "" && a.displayNames[partner] != "" {
-		partnerName = a.displayNames[partner]
+	if partner != "" {
+		partnerName = a.profileResolver.GetDisplayName(partner)
 	}
 
 	a.statusMu.RLock()
@@ -808,31 +766,50 @@ Type commands in the input field and press Enter to execute.`
 }
 
 func (a *App) refreshPartners() {
+	// Get old partners to detect new additions
+	oldPartners := make(map[string]bool)
+	for _, partner := range a.partners {
+		oldPartners[partner] = true
+	}
+
 	// Reload partners from config
 	a.partners = a.client.GetPartnerNpubs()
 
-	// Reinitialize display names for new partners
-	messageCache := cache.GetCache()
+	// Detect new partners
+	var newPartners []string
 	for _, partner := range a.partners {
-		if _, exists := a.displayNames[partner]; !exists {
-			// Try to get cached profile first
-			if cachedProfile, found := messageCache.GetProfile(partner); found {
-				var metadata cache.ProfileMetadata
-				if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
-					if metadata.Name != "" {
-						a.displayNames[partner] = metadata.Name
-					} else if metadata.DisplayName != "" {
-						a.displayNames[partner] = metadata.DisplayName
-					} else {
-						a.displayNames[partner] = partner[:8] + "..."
-					}
-				} else {
-					a.displayNames[partner] = partner[:8] + "..."
-				}
-			} else {
-				a.displayNames[partner] = partner[:8] + "..."
+		if !oldPartners[partner] {
+			newPartners = append(newPartners, partner)
+			if a.config.Debug {
+				log.Printf("New partner detected: %s", partner[:8]+"...")
 			}
 		}
+	}
+
+	// Initialize display names for all partners using ProfileResolver
+	a.profileResolver.InitializeDisplayNames(a.partners)
+
+	// Fetch profiles for new partners asynchronously
+	if len(newPartners) > 0 {
+		if a.config.Debug {
+			log.Printf("Fetching profiles for %d new partners", len(newPartners))
+		}
+
+		go func() {
+			// Use the existing profile fetching mechanism
+			err := a.loadContacts()
+			if err != nil && a.config.Debug {
+				log.Printf("Failed to load contacts: %v", err)
+			}
+
+			// Update UI with resolved names (same pattern as initialization)
+			a.app.QueueUpdate(func() {
+				a.updateContactListWithNames()
+				a.updateStatusBar()
+				a.updateTerminalTitle()
+				a.app.ForceDraw() // Force entire app to redraw
+			})
+		}()
 	}
 
 	// Update contact list
@@ -843,7 +820,7 @@ func (a *App) refreshPartners() {
 		a.currentPartner = ""
 	} else {
 		for i, partner := range a.partners {
-			displayName := a.displayNames[partner]
+			displayName := a.profileResolver.GetDisplayName(partner)
 			a.contactList.AddItem(displayName, partner, 0, nil)
 			if i == 0 && a.currentPartner == "" {
 				// Select first partner if none was selected
@@ -875,21 +852,20 @@ func (a *App) showSettings() {
 func (a *App) showProfileModal() {
 	a.mu.RLock()
 	currentPartner := a.currentPartner
-	displayName := a.displayNames[currentPartner]
 	a.mu.RUnlock()
+
+	displayName := a.profileResolver.GetDisplayName(currentPartner)
 
 	if currentPartner == "" {
 		a.showMessage("No contact selected")
 		return
 	}
 
-	// Get profile from cache
-	cachedProfile, found := a.messageCache.GetProfile(currentPartner)
+	// Get profile using ProfileResolver
+	metadata, err := a.profileResolver.GetFullProfile(a.ctx, currentPartner, false)
 
 	var profileText string
-	if found {
-		var metadata cache.ProfileMetadata
-		if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
+	if err == nil {
 			// Build profile display text
 			profileText = fmt.Sprintf("[violet]Profile Information[white]\n\n")
 
@@ -926,24 +902,12 @@ func (a *App) showProfileModal() {
 			if metadata.Picture != "" {
 				profileText += fmt.Sprintf("[green]Picture:[white]\n  %s\n\n", metadata.Picture)
 			}
-
-			// Cache info
-			profileText += fmt.Sprintf("[green]Cached:[white] %s", cachedProfile.CachedAt.Format("2006-01-02 15:04:05"))
-			if cachedProfile.ExpiresAt.After(time.Now()) {
-				profileText += fmt.Sprintf(" (expires in %v)", time.Until(cachedProfile.ExpiresAt).Round(time.Minute))
-			} else {
-				profileText += " (expired)"
-			}
-
 		} else {
-			profileText = fmt.Sprintf("Error parsing profile data for %s", displayName)
+			// No profile data available
+			profileText = fmt.Sprintf("No profile data available for %s\n\n", displayName)
+			profileText += fmt.Sprintf("[yellow]Public Key:[white]\n  %s\n\n", currentPartner)
+			profileText += "Profile will be fetched when needed."
 		}
-	} else {
-		// No cached profile
-		profileText = fmt.Sprintf("No profile data cached for %s\n\n", displayName)
-		profileText += fmt.Sprintf("[yellow]Public Key:[white]\n  %s\n\n", currentPartner)
-		profileText += "Profile will be fetched when needed."
-	}
 
 	modal := tview.NewModal().
 		SetText(profileText).
@@ -1017,10 +981,7 @@ func (a *App) listenForMessages(debug bool) {
 		}
 
 		// Send notification for ALL incoming messages
-		username := a.displayNames[senderNpub]
-		if username == "" {
-			username = senderNpub[:8] + "..."
-		}
+		username := a.profileResolver.GetDisplayName(senderNpub)
 		if debug {
 			log.Printf("Sending notification to %s with command: %s", username, a.config.NotifyCommand)
 		}
@@ -1034,10 +995,7 @@ func (a *App) listenForMessages(debug bool) {
 		if senderNpub == currentPartner {
 			a.app.QueueUpdate(func() {
 				timestamp := time.Now().Format("15:04:05")
-				username := a.displayNames[senderNpub]
-				if username == "" {
-					username = senderNpub[:8] + "..."
-				}
+				username := a.profileResolver.GetDisplayName(senderNpub)
 				a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, message)))
 				a.messageView.ScrollToEnd()
 				// Force the UI to redraw
@@ -1056,10 +1014,7 @@ func (a *App) listenForMessages(debug bool) {
 
 			a.app.QueueUpdate(func() {
 				// Show status message
-				username := a.displayNames[senderNpub]
-				if username == "" {
-					username = senderNpub[:8] + "..."
-				}
+				username := a.profileResolver.GetDisplayName(senderNpub)
 				a.setStatusMessage(fmt.Sprintf("New message from %s", username))
 				a.app.ForceDraw()
 

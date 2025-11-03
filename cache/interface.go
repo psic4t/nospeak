@@ -12,6 +12,8 @@ type ProfileMetadata struct {
 	Picture     string `json:"picture"`
 	NIP05       string `json:"nip05"`
 	LUD16       string `json:"lud16"`
+	Website     string `json:"website"`
+	Banner      string `json:"banner"`
 }
 
 type MessageEntry struct {
@@ -25,12 +27,33 @@ type MessageEntry struct {
 }
 
 type ProfileEntry struct {
-	ID        int64     `json:"id"`
-	Npub      string    `json:"npub"`
-	Profile   string    `json:"profile"` // JSON string of ProfileMetadata
-	CachedAt  time.Time `json:"cached_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          int64     `json:"id"`
+	Npub        string    `json:"npub"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	About       string    `json:"about"`
+	Picture     string    `json:"picture"`
+	NIP05       string    `json:"nip05"`
+	LUD16       string    `json:"lud16"`
+	Website     string    `json:"website"`
+	Banner      string    `json:"banner"`
+	CachedAt    time.Time `json:"cached_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// ToProfileMetadata converts ProfileEntry to ProfileMetadata
+func (pe ProfileEntry) ToProfileMetadata() ProfileMetadata {
+	return ProfileMetadata{
+		Name:        pe.Name,
+		DisplayName: pe.DisplayName,
+		About:       pe.About,
+		Picture:     pe.Picture,
+		NIP05:       pe.NIP05,
+		LUD16:       pe.LUD16,
+		Website:     pe.Website,
+		Banner:      pe.Banner,
+	}
 }
 
 type CacheStats struct {

@@ -59,8 +59,13 @@ func (sc *SQLiteCache) init() error {
 		}
 	}
 
-	// Create tables
-	return sc.createTables()
+	// Create tables and migrate if needed
+	if err := sc.createTables(); err != nil {
+		return err
+	}
+
+	// Migrate from JSON blob to structured columns if needed
+	return sc.migrateProfileStorage()
 }
 
 func (sc *SQLiteCache) createTables() error {
@@ -86,14 +91,13 @@ func (sc *SQLiteCache) createTables() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			npub TEXT NOT NULL UNIQUE,
 			name TEXT,
+			display_name TEXT,
 			about TEXT,
 			picture TEXT,
 			nip05 TEXT,
 			lud16 TEXT,
-			display_name TEXT,
 			website TEXT,
 			banner TEXT,
-			profile_json TEXT NOT NULL,
 			cached_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -117,6 +121,77 @@ func (sc *SQLiteCache) createTables() error {
 		if _, err := sc.db.Exec(idx); err != nil {
 			return fmt.Errorf("failed to create index: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// migrateProfileStorage handles migration from JSON blob to structured columns
+func (sc *SQLiteCache) migrateProfileStorage() error {
+	// Check if profile_json column exists
+	var exists bool
+	err := sc.db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('profile_cache')
+		WHERE name = 'profile_json'
+	`).Scan(&exists)
+
+	if err != nil || !exists {
+		// Column doesn't exist or error occurred, no migration needed
+		return nil
+	}
+
+	// Get all profiles with JSON data
+	rows, err := sc.db.Query(`
+		SELECT npub, profile_json, cached_at, expires_at, created_at
+		FROM profile_cache
+		WHERE profile_json IS NOT NULL AND profile_json != ''
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to query profiles for migration: %w", err)
+	}
+	defer rows.Close()
+
+	tx, err := sc.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin migration transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for rows.Next() {
+		var npub, profileJSON string
+		var cachedAt, expiresAt, createdAt time.Time
+
+		if err := rows.Scan(&npub, &profileJSON, &cachedAt, &expiresAt, &createdAt); err != nil {
+			continue // Skip problematic rows
+		}
+
+		// Parse JSON and migrate to structured columns
+		var metadata ProfileMetadata
+		if json.Unmarshal([]byte(profileJSON), &metadata) == nil {
+			// Insert new structured record
+			_, err = tx.Exec(`
+				INSERT OR REPLACE INTO profile_cache
+				(npub, name, display_name, about, picture, nip05, lud16, website, banner, cached_at, expires_at, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, npub, metadata.Name, metadata.DisplayName, metadata.About, metadata.Picture,
+				metadata.NIP05, metadata.LUD16, "", metadata.Banner, cachedAt, expiresAt, createdAt)
+
+			if err != nil {
+				// Log error but continue with other profiles
+				continue
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration: %w", err)
+	}
+
+	// Drop the profile_json column now that migration is complete
+	_, err = sc.db.Exec(`ALTER TABLE profile_cache DROP COLUMN profile_json`)
+	if err != nil {
+		// If we can't drop the column, that's okay - it's no longer being used
 	}
 
 	return nil
@@ -358,10 +433,12 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 	var expiresAt time.Time
 
 	err := sc.db.QueryRow(`
-		SELECT id, npub, profile_json, cached_at, expires_at, created_at 
-		FROM profile_cache 
+		SELECT id, npub, name, display_name, about, picture, nip05, lud16, website, banner, cached_at, expires_at, created_at
+		FROM profile_cache
 		WHERE npub = ?
-	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Profile, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
+	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Name, &profile.DisplayName, &profile.About,
+		&profile.Picture, &profile.NIP05, &profile.LUD16, &profile.Website, &profile.Banner,
+		&profile.CachedAt, &expiresAt, &profile.CreatedAt)
 
 	if err != nil {
 		return ProfileEntry{}, false
@@ -381,12 +458,6 @@ func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	// Convert profile to JSON for profile_json column
-	profileJSON, err := json.Marshal(profile)
-	if err != nil {
-		return fmt.Errorf("failed to marshal profile: %w", err)
-	}
-
 	expiresAt := time.Now().Add(ttl)
 
 	tx, err := sc.db.Begin()
@@ -395,11 +466,13 @@ func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time
 	}
 	defer tx.Rollback()
 
-	// UPSERT: Insert or replace with profile JSON
+	// UPSERT: Insert or replace with structured columns
 	_, err = tx.Exec(`
-		INSERT OR REPLACE INTO profile_cache (npub, profile_json, cached_at, expires_at)
-		VALUES (?, ?, ?, ?)
-	`, npub, string(profileJSON), time.Now(), expiresAt)
+		INSERT OR REPLACE INTO profile_cache
+		(npub, name, display_name, about, picture, nip05, lud16, website, banner, cached_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture,
+		profile.NIP05, profile.LUD16, profile.Website, profile.Banner, time.Now(), expiresAt)
 
 	if err != nil {
 		return fmt.Errorf("failed to cache profile: %w", err)

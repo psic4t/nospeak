@@ -16,18 +16,16 @@ func (c *Client) ResolveUsername(ctx context.Context, npub string, debug bool) (
 	// Try to get cached profile first
 	cacheInstance := cache.GetCache()
 	if cachedProfile, found := cacheInstance.GetProfile(npub); found {
-		var metadata cache.ProfileMetadata
-		if err := json.Unmarshal([]byte(cachedProfile.Profile), &metadata); err == nil {
-			username := metadata.Name
-			if username == "" {
-				username = metadata.DisplayName
+		metadata := cachedProfile.ToProfileMetadata()
+		username := metadata.Name
+		if username == "" {
+			username = metadata.DisplayName
+		}
+		if username != "" {
+			if debug {
+				log.Printf("Found cached username for %s: %s", npub[:8]+"...", username)
 			}
-			if username != "" {
-				if debug {
-					log.Printf("Found cached username for %s: %s", npub[:8]+"...", username)
-				}
-				return username, nil
-			}
+			return username, nil
 		}
 	}
 
@@ -65,14 +63,8 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 		if debug {
 			log.Printf("Found cached profile for %s", npub[:8]+"...")
 		}
-		var metadata cache.ProfileMetadata
-		if err := json.Unmarshal([]byte(profile.Profile), &metadata); err != nil {
-			if debug {
-				log.Printf("Failed to parse cached profile for %s: %v", npub[:8]+"...", err)
-			}
-		} else {
-			return metadata, nil
-		}
+		metadata := profile.ToProfileMetadata()
+		return metadata, nil
 	}
 
 	_, pubKey, err := nip19.Decode(npub)
