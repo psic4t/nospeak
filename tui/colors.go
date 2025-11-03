@@ -25,7 +25,7 @@ var (
 func GetTheme() tview.Theme {
 	return tview.Theme{
 		PrimitiveBackgroundColor:    tcell.ColorDefault,
-		ContrastBackgroundColor:     FieldFocusColor,
+		ContrastBackgroundColor:     tcell.ColorDefault,
 		MoreContrastBackgroundColor: tcell.ColorGreen,
 		BorderColor:                 tcell.ColorWhite,
 		TitleColor:                  tcell.ColorWhite,
