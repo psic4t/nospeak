@@ -210,6 +210,42 @@ Terminal User Interface component for interactive messaging.
 - `github.com/rivo/tview` - High-level UI components with theme support
 - *See Module Dependencies section for complete dependency information*
 
+##### 5.4 **MessageFormatter** (`tui/message_formatter.go`)
+Specialized utility component for consistent message formatting across the TUI interface.
+
+**Responsibilities:**
+- Standardize message appearance and formatting across all UI contexts
+- Provide consistent color coding and timestamp formatting
+- Handle encryption status indicators for secure messaging
+- Support formatting from different data sources (live events, cached messages, pre-formatted)
+- Separate formatting logic from display logic for maintainability
+
+**Key Methods:**
+```go
+func (mf *MessageFormatter) FormatMessage(event *nostr.Event, sender string, isOutgoing bool, isEncrypted bool) string
+func (mf *MessageFormatter) FormatMessageEntry(entry cache.MessageEntry, sender string, isOutgoing bool) string
+func (mf *MessageFormatter) FormatIncomingMessage(timestamp, username, message string) string
+```
+
+**Formatting Features:**
+- **Color Coding**: Blue `[blue]` for outgoing messages, Green `[green]` for incoming messages
+- **Timestamp Format**: HH:MM:SS (24-hour format) for consistency
+- **Encryption Indicators**: 🔒 icon displayed for encrypted messages
+- **Message Sources**: Handles formatting from live Nostr events, cached database entries, and pre-formatted strings
+
+**Integration Points:**
+- **Chat History Loading**: Used in `app.go:423, 428` for loading conversation history from cache
+- **Older Messages**: Used in `app.go:472, 477` for loading historical messages
+- **Real-time Updates**: Used in `app.go:1005` for formatting incoming messages during live chat
+- **Component Lifecycle**: Initialized in `app.go:113` as part of TUI application startup
+
+**Message Format Examples:**
+```
+[blue]Alice [14:30:25]🔒: Hello, this is encrypted
+[blue]14:30:25[white] [orange]You:[white] Hi there!
+[blue]14:31:15[white] [green]Bob:[white] How are you?
+```
+
 #### 6. **CLI** (`cmd/`)
 Command-line interface for scripting and automation.
 

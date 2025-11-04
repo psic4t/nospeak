@@ -57,6 +57,9 @@ type App struct {
 	unreadMessages map[string]bool
 	unreadMu       sync.RWMutex
 
+	// Message formatting
+	messageFormatter *MessageFormatter
+
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -100,15 +103,16 @@ func NewApp(configPath string) (*App, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &App{
-		app:             tview.NewApplication(),
-		client:          nostrClient,
-		config:          cfg,
-		profileResolver: client.NewProfileResolver(nostrClient),
-		messageCache:    cache.GetCache(),
-		contactsVisible: cfg.ShowContacts,
-		unreadMessages:  make(map[string]bool),
-		ctx:             ctx,
-		cancel:          cancel,
+		app:              tview.NewApplication(),
+		client:           nostrClient,
+		config:           cfg,
+		profileResolver:  client.NewProfileResolver(nostrClient),
+		messageCache:     cache.GetCache(),
+		contactsVisible:  cfg.ShowContacts,
+		unreadMessages:   make(map[string]bool),
+		messageFormatter: NewMessageFormatter(),
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 
 	if err := app.setupUI(); err != nil {
@@ -414,15 +418,16 @@ func (a *App) loadChatHistory() {
 	a.messageView.Clear()
 
 	for _, msg := range messages {
-		timestamp := msg.SentAt.Format("15:04:05")
+		var formatted string
 		if msg.Direction == "sent" {
-			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, msg.Message)))
+			formatted = a.messageFormatter.FormatMessageEntry(msg, "", true)
 		} else {
 			// For received messages, RecipientNpub contains the sender's npub
 			senderNpub := msg.RecipientNpub
 			username := a.profileResolver.GetDisplayName(senderNpub)
-			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
+			formatted = a.messageFormatter.FormatMessageEntry(msg, username, false)
 		}
+		a.messageView.Write([]byte(formatted + "\n"))
 	}
 
 	a.messageView.ScrollToEnd()
@@ -462,15 +467,16 @@ func (a *App) loadOlderMessages() {
 	a.messageView.Clear()
 
 	for _, msg := range messages {
-		timestamp := msg.SentAt.Format("15:04:05")
+		var formatted string
 		if msg.Direction == "sent" {
-			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, msg.Message)))
+			formatted = a.messageFormatter.FormatMessageEntry(msg, "", true)
 		} else {
 			// For received messages, RecipientNpub contains the sender's npub
 			senderNpub := msg.RecipientNpub
 			username := a.profileResolver.GetDisplayName(senderNpub)
-			a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, msg.Message)))
+			formatted = a.messageFormatter.FormatMessageEntry(msg, username, false)
 		}
+		a.messageView.Write([]byte(formatted + "\n"))
 	}
 
 	// Calculate new scroll position
@@ -996,7 +1002,8 @@ func (a *App) listenForMessages(debug bool) {
 			a.app.QueueUpdate(func() {
 				timestamp := time.Now().Format("15:04:05")
 				username := a.profileResolver.GetDisplayName(senderNpub)
-				a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s\n", timestamp, username, message)))
+				formatted := a.messageFormatter.FormatIncomingMessage(timestamp, username, message)
+				a.messageView.Write([]byte(formatted + "\n"))
 				a.messageView.ScrollToEnd()
 				// Force the UI to redraw
 				a.app.ForceDraw()
