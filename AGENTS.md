@@ -71,6 +71,7 @@ Manages user profile metadata resolution and caching.
 - `ResolveProfile()` - Get user profile metadata
 - `CacheProfile()` - Store profile with expiration
 - `InvalidateProfile()` - Clear stale cache entries
+- `SetDebugMode(debug bool)` - Enable/disable debug logging to file
 
 #### 4. **Cache** (`cache/`)
 Provides persistent storage and retrieval system using SQLite database.
@@ -206,6 +207,13 @@ Terminal User Interface component for interactive messaging.
 - **Settings Integration**: F2 key access to notification and system configuration
 - **Responsive Design**: Adapts to terminal size changes with proper layout management
 
+**Debug Logging Integration:**
+- **Embedded Logger**: TUI app contains `logger *logging.DebugLogger` for debug output
+- **TUI Compatibility**: Debug messages are written to file, not stderr, preventing interface interference
+- **Debug Topics**: Contact list updates, partner detection, profile fetching, and UI state changes
+- **Configuration**: Debug mode controlled by config file `debug = true` or `--debug` flag
+- **File Location**: All TUI debug output goes to `~/.cache/nospeak/debug.log`
+
 **Dependencies:**
 - `github.com/gdamore/tcell/v2` - Terminal UI library for cross-platform rendering
 - `github.com/rivo/tview` - High-level UI components with theme support
@@ -298,6 +306,12 @@ Cross-platform system-level notifications for all incoming messages.
 notify_command = "notify-send \"New message from %s\""  # Custom notification command with username placeholder
 ```
 
+**Debug Logging Integration:**
+- **Local Logger**: Creates `logging.NewDebugLogger(debug)` instance for debug output
+- **Debug Topics**: Notification command execution, command failures, and successful deliveries
+- **File Output**: Debug messages go to `~/.cache/nospeak/debug.log` without system notification interference
+- **Error Tracking**: Debug logs include detailed error information when notification commands fail
+
 **In-App Notifications** (TUI integration)
 Context-aware notifications within the terminal interface.
 
@@ -380,6 +394,52 @@ notify_command = "notify-send \"New message from %s\""
 - **Real-time Updates**: Changes applied immediately without restart
 - **Debug Support**: `--debug` flag shows notification command execution details
 - **Error Handling**: Graceful fallback when notification commands fail
+
+#### 9. **Debug Logging System** (`internal/logging/logger.go`)
+Centralized debug logging utility that handles all debug output without interfering with the TUI.
+
+**Responsibilities:**
+- File-based debug logging to XDG_CACHE_DIR for persistent logs
+- Thread-safe logging operations with mutex protection
+- Log rotation management (1MB max size, 3 backups)
+- TUI-compatible logging (no stderr interference)
+
+**Key Methods:**
+- `NewDebugLogger(enabled bool)` - Create debug logger instance
+- `Debug(format string, args ...interface{})` - Write debug message
+- `Close()` - Close log file handle
+- `InitGlobalDebugLogger(enabled bool)` - Initialize global logger
+
+**Configuration:**
+```go
+type DebugLogger struct {
+    enabled bool
+    logger  *log.Logger
+    file    *os.File
+    mu      sync.RWMutex
+}
+```
+
+**Log File Location**: `~/.cache/nospeak/debug.log` (respects XDG_CACHE_HOME)
+**Log Format**: `[2025-01-04 15:04:05] DEBUG: message`
+**Log Rotation**: 1MB per file, keep 3 backups
+
+**Integration Points:**
+- **ProfileResolver**: Uses `SetDebugMode(cfg.Debug)` to enable file logging
+- **TUI App**: Has embedded logger for debug output without TUI interference
+- **Notification Service**: Creates local logger instances for debug output
+- **All Components**: Centralized logging ensures consistent format and file output
+
+**Usage Examples:**
+```go
+// In components
+logger := logging.NewDebugLogger(debug)
+logger.Debug("Profile resolved for %s", npub)
+
+// Global logger access
+logging.InitGlobalDebugLogger(true)
+logging.Debug("Application starting")
+```
 
 ## Data Flow Architecture
 
@@ -562,10 +622,44 @@ All git operations require explicit user direction and consent before execution.
 4. **Notification Failures**: Check system notification permissions
 
 ### Debug Mode
-Enable debug logging for detailed operation tracing:
-```bash
-./nospeak -debug receive
+Debug logging provides detailed operation tracing without interfering with the TUI interface.
+
+**Log File Location**: `~/.cache/nospeak/debug.log`
+**Enable via Config**:
+```toml
+debug = true
 ```
+
+**Enable via Command Line**:
+```bash
+./nospeak -debug
+./nospeak --debug receive
+```
+
+**What Gets Logged**:
+- Profile resolution and caching operations
+- Network queries and relay interactions
+- TUI contact list updates and partner detection
+- Notification command execution
+- Message processing errors and troubleshooting
+
+**Log Viewing**:
+```bash
+# View debug logs
+tail -f ~/.cache/nospeak/debug.log
+
+# Search for specific patterns
+grep "profile" ~/.cache/nospeak/debug.log
+
+# View recent logs
+tail -100 ~/.cache/nospeak/debug.log
+```
+
+**Benefits**:
+- **TUI Compatibility**: No debug output interferes with terminal interface
+- **Persistent Logs**: Debug information saved between sessions
+- **Centralized**: All components use consistent logging format
+- **XDG Compliant**: Follows established cache directory standards
 
 ## Module Dependencies
 
@@ -616,6 +710,16 @@ Nospeak uses carefully selected Go modules to provide cross-platform functionali
   - High-performance TOML parser
   - Preserves comments and formatting
   - Strict error reporting for malformed configs
+
+**github.com/data.haus/nospeak/internal/logging** (Internal Package)
+- **Purpose**: Centralized debug logging utility for all components
+- **Usage**: File-based debug logging that doesn't interfere with TUI
+- **Key Features**:
+  - XDG cache directory compliance (`~/.cache/nospeak/debug.log`)
+  - Log rotation and size management (1MB max, 3 backups)
+  - Thread-safe concurrent logging with mutex protection
+  - Consistent timestamp formatting
+  - TUI-compatible operation (no stderr output)
 
 ### SQLite Cross-Compilation Strategy
 

@@ -1,26 +1,25 @@
 package notification
 
 import (
-	"log"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/data.haus/nospeak/internal/logging"
 )
 
 func SendNotification(username, message, notifyCommand string, debug bool) {
+	logger := logging.NewDebugLogger(debug)
+
 	if notifyCommand == "" {
-		if debug {
-			log.Printf("Notification skipped: no command configured")
-		}
+		logger.Debug("Notification skipped: no command configured")
 		return
 	}
 
 	// Replace %s with username in the command
 	command := strings.ReplaceAll(notifyCommand, "%s", username)
 
-	if debug {
-		log.Printf("Executing notification command: %s", command)
-	}
+	logger.Debug("Executing notification command: %s", command)
 
 	// Use shell to handle complex commands with quotes properly
 	var cmd *exec.Cmd
@@ -33,15 +32,11 @@ func SendNotification(username, message, notifyCommand string, debug bool) {
 	}
 
 	if err := cmd.Run(); err != nil {
-		if debug {
-			log.Printf("Notification command failed: %v", err)
-		}
+		logger.Debug("Notification command failed: %v", err)
 		return
 	}
 
-	if debug {
-		log.Printf("Notification sent successfully")
-	}
+	logger.Debug("Notification sent successfully")
 }
 
 func GetDefaultNotifyCommand() string {

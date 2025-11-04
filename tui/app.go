@@ -12,6 +12,7 @@ import (
 	"github.com/data.haus/nospeak/cache"
 	"github.com/data.haus/nospeak/client"
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/internal/logging"
 	"github.com/data.haus/nospeak/notification"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -34,12 +35,13 @@ type App struct {
 	statusBar   *tview.TextView
 
 	// State
-	currentPartner string
-	partners       []string
+	currentPartner  string
+	partners        []string
 	profileResolver *client.ProfileResolver
-	messageCache   cache.Cache
-	connected      bool
-	mu             sync.RWMutex
+	messageCache    cache.Cache
+	connected       bool
+	logger          *logging.DebugLogger
+	mu              sync.RWMutex
 
 	// Message loading state
 	loadedSentCount     int
@@ -94,15 +96,23 @@ func NewApp(configPath string) (*App, error) {
 
 	ctx, cancel := context.WithCancel(baseCtx)
 
+	// Initialize logger with debug mode
+	logger := logging.NewDebugLogger(cfg.Debug)
+
+	// Create ProfileResolver and enable debug mode if configured
+	profileResolver := client.NewProfileResolver(nostrClient)
+	profileResolver.SetDebugMode(cfg.Debug)
+
 	app := &App{
 		app:              tview.NewApplication(),
 		client:           nostrClient,
 		config:           cfg,
-		profileResolver:  client.NewProfileResolver(nostrClient),
+		profileResolver:  profileResolver,
 		messageCache:     cache.GetCache(),
 		contactsVisible:  cfg.ShowContacts,
 		unreadMessages:   make(map[string]bool),
 		messageFormatter: NewMessageFormatter(),
+		logger:           logger,
 		ctx:              ctx,
 		cancel:           cancel,
 	}
@@ -347,9 +357,7 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 }
 
 func (a *App) updateContactListWithNames() {
-	if a.config.Debug {
-		log.Printf("updateContactListWithNames called")
-	}
+	a.logger.Debug("updateContactListWithNames called")
 
 	a.mu.RLock()
 	currentPartner := a.currentPartner
@@ -778,9 +786,7 @@ func (a *App) refreshPartners() {
 	for _, partner := range a.partners {
 		if !oldPartners[partner] {
 			newPartners = append(newPartners, partner)
-			if a.config.Debug {
-				log.Printf("New partner detected: %s", partner[:8]+"...")
-			}
+			a.logger.Debug("New partner detected: %s", partner[:8]+"...")
 		}
 	}
 
@@ -789,15 +795,13 @@ func (a *App) refreshPartners() {
 
 	// Fetch profiles for new partners asynchronously
 	if len(newPartners) > 0 {
-		if a.config.Debug {
-			log.Printf("Fetching profiles for %d new partners", len(newPartners))
-		}
+		a.logger.Debug("Fetching profiles for %d new partners", len(newPartners))
 
 		go func() {
 			// Use the existing profile fetching mechanism
 			err := a.loadContacts()
-			if err != nil && a.config.Debug {
-				log.Printf("Failed to load contacts: %v", err)
+			if err != nil {
+				a.logger.Debug("Failed to load contacts: %v", err)
 			}
 
 			// Update UI with resolved names (same pattern as initialization)
@@ -962,10 +966,10 @@ func (a *App) Start(debug bool) error {
 }
 
 func (a *App) listenForMessages(debug bool) {
+	logger := logging.NewDebugLogger(debug)
+
 	messageHandler := func(senderNpub, message string) {
-		if debug {
-			log.Printf("TUI messageHandler called for %s: %q", senderNpub, message)
-		}
+		logger.Debug("TUI messageHandler called for %s: %q", senderNpub, message)
 
 		if !a.client.IsPartner(senderNpub) {
 			if err := a.client.AddPartner(senderNpub); err != nil {
@@ -980,9 +984,7 @@ func (a *App) listenForMessages(debug bool) {
 
 		// Send notification for ALL incoming messages
 		username := a.profileResolver.GetDisplayName(senderNpub)
-		if debug {
-			log.Printf("Sending notification to %s with command: %s", username, a.config.NotifyCommand)
-		}
+		logger.Debug("Sending notification to %s with command: %s", username, a.config.NotifyCommand)
 		go notification.SendNotification(username, message, a.config.NotifyCommand, debug)
 
 		a.mu.RLock()
