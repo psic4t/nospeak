@@ -490,6 +490,17 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o nospeak-linux .
 - Interface-based design for testability
 - Minimal dependencies between agents
 
+#### Git Operations Policy
+**CRITICAL**: Never perform any git operations (commit, push, pull, merge, etc.) unless explicitly instructed by the user. This includes but is not limited to:
+- git commit commands
+- git push operations
+- git pull or merge operations
+- git branch management
+- git tag operations
+- git rebase or cherry-pick operations
+
+All git operations require explicit user direction and consent before execution.
+
 ### Testing Strategy
 - Unit tests for each agent
 - Integration tests for agent interactions
