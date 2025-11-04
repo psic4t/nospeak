@@ -87,20 +87,12 @@ func (a *App) updateTerminalTitle() {
 }
 
 func NewApp(configPath string) (*App, error) {
-	if configPath == "" {
-		configPath = config.GetConfigPath()
-	}
-	cfg, err := config.LoadWithPath(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	nostrClient, err := client.NewClient(cfg)
+	nostrClient, baseCtx, cfg, err := client.CreateClient(configPath, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(baseCtx)
 
 	app := &App{
 		app:              tview.NewApplication(),

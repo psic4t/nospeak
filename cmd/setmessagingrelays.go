@@ -5,24 +5,15 @@ import (
 	"log"
 
 	"github.com/data.haus/nospeak/client"
-	"github.com/data.haus/nospeak/config"
 )
 
 func SetMessagingRelays(debug bool, configPath string) {
-	if configPath == "" {
-		configPath = config.GetConfigPath()
-	}
-	cfg, err := config.LoadWithPath(configPath)
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	nostrClient, err := client.NewClient(cfg)
+	nostrClient, baseCtx, _, err := client.CreateClient(configPath, debug)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(baseCtx)
 	defer cancel()
 
 	if err := nostrClient.Connect(ctx, debug); err != nil {

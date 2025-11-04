@@ -53,6 +53,31 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	}, nil
 }
 
+// CreateClient is a helper function that consolidates configuration loading and client creation
+func CreateClient(configPath string, debug bool) (*Client, context.Context, *config.Config, error) {
+	// Use default config path if none provided
+	if configPath == "" {
+		configPath = config.GetConfigPath()
+	}
+
+	// Load configuration
+	cfg, err := config.LoadWithPath(configPath)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Create client
+	client, err := NewClient(cfg)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	// Create context
+	ctx := context.Background()
+
+	return client, ctx, cfg, nil
+}
+
 func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

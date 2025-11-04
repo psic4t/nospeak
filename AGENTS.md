@@ -20,6 +20,7 @@ The main orchestrator that manages all Nostr protocol operations.
 
 **Key Methods:**
 - `NewClient()` - Initialize client with configuration
+- `CreateClient()` - Helper that consolidates config loading and client creation
 - `Connect()` - Establish connections to relays
 - `PublishEvent()` - Send events to relays
 - `SubscribeToEvents()` - Listen for incoming events

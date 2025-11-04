@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/data.haus/nospeak/client"
-	"github.com/data.haus/nospeak/config"
 )
 
 func Send(args []string, debug bool, configPath string) {
@@ -20,20 +18,10 @@ func Send(args []string, debug bool, configPath string) {
 	recipientNpub := args[0]
 	message := strings.Join(args[1:], " ")
 
-	if configPath == "" {
-		configPath = config.GetConfigPath()
-	}
-	cfg, err := config.LoadWithPath(configPath)
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	nostrClient, err := client.NewClient(cfg)
+	nostrClient, ctx, _, err := client.CreateClient(configPath, debug)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
-
-	ctx := context.Background()
 	if err := nostrClient.Connect(ctx, debug); err != nil {
 		log.Fatalf("Failed to connect to relays: %v", err)
 	}
