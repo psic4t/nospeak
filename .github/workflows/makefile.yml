@@ -51,12 +51,11 @@ jobs:
 
           # Erweiterte Plattformen: AMD64 + ARM64 (passe Binary-Namen an dein Makefile an)
           declare -A platforms=(
-            ["linux/amd64"]="linux-amd64"
-            ["windows/amd64"]="windows-amd64.exe"
-            ["darwin/amd64"]="darwin-amd64"
-            ["linux/arm64"]="linux-arm64"
-            ["windows/arm64"]="windows-arm64.exe"
-            ["darwin/arm64"]="darwin-arm64"
+            ["linux/amd64"]="${MYAPP_NAME}-linux-amd64"
+            ["windows/amd64"]="${MYAPP_NAME}-windows-amd64.exe"
+            ["darwin/amd64"]="${MYAPP_NAME}-darwin-amd64"
+            ["linux/arm64"]="${MYAPP_NAME}-linux-arm64"
+            ["darwin/arm64"]="${MYAPP_NAME}-darwin-arm64"
           )
 
           for platform in "${!platforms[@]}"; do
