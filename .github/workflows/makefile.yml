@@ -1,0 +1,89 @@
+name: Build and Package Releases
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # Ermöglicht manuelle Ausführung
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest  # Linux-Runner für Cross-Compile
+    permissions:
+      contents: write  # Für Upload zu Releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'  # Passe an deine Go-Version an
+
+      - name: Build binaries
+        run: make release-all  # Baut alle Plattform-Binaries (inkl. ARM)
+
+      - name: Determine release tag
+        id: get-tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            # Für workflow_dispatch: Hole neuesten Release-Tag
+            LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
+            if [ -z "$LATEST_TAG" ]; then
+              echo "No existing releases found. Aborting."
+              exit 1
+            fi
+            echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+            echo "Using latest tag: $LATEST_TAG"
+          fi
+
+      - name: Package and upload ZIPs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Definiere App-Name
+          MYAPP_NAME="nospeak"
+          RELEASE_TAG="${{ steps.get-tag.outputs.tag }}"
+
+          # Erweiterte Plattformen: AMD64 + ARM64 (passe Binary-Namen an dein Makefile an)
+          declare -A platforms=(
+            ["linux/amd64"]="linux-amd64"
+            ["windows/amd64"]="windows-amd64.exe"
+            ["darwin/amd64"]="darwin-amd64"
+            ["linux/arm64"]="linux-arm64"
+            ["windows/arm64"]="windows-arm64.exe"
+            ["darwin/arm64"]="darwin-arm64"
+          )
+
+          for platform in "${!platforms[@]}"; do
+            binary_name="${MYAPP_NAME}-${platforms[$platform]}"
+            zip_name="${MYAPP_NAME}-${RELEASE_TAG}-${platform}.zip"
+            temp_dir="${MYAPP_NAME}_${platform}"
+
+            # Erstelle Temp-Verzeichnis
+            mkdir -p "$temp_dir"
+
+            # Kopiere Binary (angenommen im Root; passe Pfad an, z.B. dist/$binary_name)
+            if [ -f "$binary_name" ]; then
+              cp "build/$binary_name" "$temp_dir/${MYAPP_NAME}"
+            else
+              echo "Binary $binary_name not found, skipping $platform"
+              continue
+            fi
+
+            # Kopiere config/ Verzeichnis
+            cp -r build/config/ "$temp_dir/" || echo "config/ not found, skipping copy"
+
+            # Erstelle ZIP
+            zip -r "$zip_name" "$temp_dir/"
+
+            # Lade als Release-Asset hoch (überschreibt bei manueller Ausführung)
+            gh release upload "$RELEASE_TAG" "$zip_name" --clobber
+
+            # Cleanup
+            rm -rf "$temp_dir" "$zip_name"
+          done
