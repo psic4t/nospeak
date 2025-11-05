@@ -78,6 +78,7 @@ jobs:
             cp -r build/config/ "$temp_dir/" || echo "config/ not found, skipping copy"
 
             # Erstelle ZIP
+            echo "Zip: $zip_name" "$temp_dir/"
             zip -r "$zip_name" "$temp_dir/"
 
             # Lade als Release-Asset hoch (überschreibt bei manueller Ausführung)
