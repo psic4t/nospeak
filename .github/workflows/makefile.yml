@@ -60,8 +60,8 @@ jobs:
 
           for platform in "${!platforms[@]}"; do
             binary_name="${MYAPP_NAME}-${platforms[$platform]}"
-            zip_name="${MYAPP_NAME}-${RELEASE_TAG}-${platform}.zip"
-            temp_dir="${MYAPP_NAME}_${platform}"
+            zip_name="${MYAPP_NAME}-${RELEASE_TAG}-${platforms[$platform]}.zip"
+            temp_dir="${MYAPP_NAME}_${platforms[$platform]}"
 
             # Erstelle Temp-Verzeichnis
             mkdir -p "$temp_dir"
