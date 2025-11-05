@@ -6,7 +6,6 @@ nospeak is a terminal-based Nostr chat client built with Go. Nospeak provides a 
 
 - **Terminal User Interface (TUI)** - Interactive chat interface with contact list and message history
 - **Command Line Interface (CLI)** - Scriptable commands for sending/receiving messages
-- **Modern Nostr Private Messaging** - Implements NIP-44 encryption and NIP-59 gift wraps for secure communication
 - **End-to-end encryption** - Private messaging using NIP-44 v2 encryption protocol
 - **Sealed direct messages** - NIP-59 gift wraps provide metadata protection and sender verification
 - **Message caching** - SQLite or in-memory caching for message persistence
@@ -16,15 +15,13 @@ nospeak is a terminal-based Nostr chat client built with Go. Nospeak provides a 
 ### From Source
 
 ```bash
-git clone https://github.com/data.haus/nospeak.git
-cd nospeak
 make install
 ```
 
 ### Using Go
 
 ```bash
-go install github.com/data.haus/nospeak@latest
+go install github.com/psic4t/nospeak@latest
 ```
 
 ## Quick Start
@@ -49,7 +46,6 @@ go install github.com/data.haus/nospeak@latest
    ```
 
 4. **Add some npubs in Settings (F2)**
-   ```bash
 
 ## Usage
 
@@ -90,11 +86,6 @@ nospeak set-name "Your Name"
 **Set messaging relays from config:**
 ```bash
 nospeak set-messaging-relays
-```
-
-**Initialize configuration file:**
-```bash
-nospeak init
 ```
 
 **Generate new Nostr identity:**
