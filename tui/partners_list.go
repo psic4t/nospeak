@@ -191,3 +191,4 @@ func (pl *PartnersList) Blur() {
 func (pl *PartnersList) HasFocus() bool {
 	return pl.Table.HasFocus()
 }
+

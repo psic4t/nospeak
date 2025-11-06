@@ -48,29 +48,29 @@ func (sm *SettingsModal) createForm() {
 	sm.form.SetTitleColor(tcell.ColorWhite)
 
 	// Add fields for configuration with colored labels
-	sm.form.AddInputField("[green]Npub:[white]", sm.config.Npub, 63, nil, nil)
+	sm.form.AddInputField("[green]Npub:[white]", sm.config.Npub, 65, nil, nil)
 
-	sm.form.AddInputField("[green]Nsec:[white]", sm.config.Nsec, 63, nil, nil)
+	sm.form.AddInputField("[green]Nsec:[white]", sm.config.Nsec, 65, nil, nil)
 
 	relaysText := strings.Join(sm.config.Relays, "\n")
 	relaysHeight := len(sm.config.Relays) + 1
 	if relaysHeight < 3 {
 		relaysHeight = 3
 	}
-	sm.form.AddTextArea("[green]Relays (one per line):[white]", relaysText, 63, relaysHeight, 0, func(text string) {})
+	sm.form.AddTextArea("[green]Relays (one per line):[white]", relaysText, 65, relaysHeight, 0, func(text string) {})
 
 	partnersText := strings.Join(sm.config.Partners, "\n")
 	partnersHeight := len(sm.config.Partners) + 1
 	if partnersHeight < 3 {
 		partnersHeight = 3
 	}
-	sm.form.AddTextArea("[green]Partners (one npub per line):[white]", partnersText, 63, partnersHeight, 0, func(text string) {})
+	sm.form.AddTextArea("[green]Partners (one npub per line):[white]", partnersText, 65, partnersHeight, 0, func(text string) {})
 
 	sm.form.AddInputField("[green]Cache (sqlite/memory):[white]", sm.config.Cache, 20, nil, nil)
 
 	sm.form.AddCheckbox("[green]Show Contacts Pane:[white]", sm.config.ShowContacts, nil)
 
-	sm.form.AddInputField("[green]Notify Command:[white]", sm.config.NotifyCommand, 63, nil, nil)
+	sm.form.AddInputField("[green]Notify Command:[white]", sm.config.NotifyCommand, 65, nil, nil)
 
 	sm.form.AddCheckbox("[green]Debug Mode:[white]", sm.config.Debug, nil)
 
