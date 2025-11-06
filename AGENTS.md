@@ -9,33 +9,178 @@ Nospeak is a terminal-based Nostr chat client that implements decentralized mess
 ### Core Components (Agents)
 
 #### 1. **Client** (`client/client.go`)
-The main orchestrator that manages all Nostr protocol operations.
+The main orchestrator that manages all Nostr protocol operations with enhanced connection management.
 
 **Responsibilities:**
-- Relay connection management and load balancing
-- Event publishing and subscription management
-- Authentication with Nostr relays
-- Coordinating message encryption/decryption
-- Profile resolution and caching
+- **Enhanced Relay Connection Management**: Persistent connection tracking with automatic reconnection
+- **Event Publishing with Retry Logic**: Intelligent retry queue for failed message delivery
+- **Subscription Management**: Real-time event handling across all managed relays
+- **Authentication with Nostr Relays**: Dynamic authentication for relay access
+- **Coordinating Message Encryption/Decryption**: End-to-end encryption coordination
+- **Profile Resolution and Caching**: User profile management
+- **Mailbox Relay Discovery**: NIP-50 relay discovery and management
 
 **Key Methods:**
-- `NewClient()` - Initialize client with configuration
+- `NewClient()` - Initialize client with enhanced connection management
 - `CreateClient()` - Helper that consolidates config loading and client creation
-- `Connect()` - Establish connections to relays
-- `PublishEvent()` - Send events to relays
-- `SubscribeToEvents()` - Listen for incoming events
+- `Connect()` - **Non-blocking** connection initialization with background management
+- `PublishEvent()` - Enhanced publishing with automatic retry logic to ALL managed relays
+- `SubscribeToEvents()` - Multi-relay subscription with deduplication
 - `GetProfile()` - Resolve user profiles
+- `UpdateRelayList()` - **Dynamic** relay list updates for UI synchronization
+- `AddMailboxRelays()` - Add discovered mailbox relays to connection manager
+- `GetTotalManagedRelays()` - Get total configured relay count
+- `GetConnectionStats()` - Detailed connection statistics and health metrics
+
+**Enhanced Configuration:**
+```go
+type Client struct {
+    config            *config.Config
+    relays            []*nostr.Relay                    // Current connected relays
+    secretKey         string
+    publicKey         string
+    mu                sync.RWMutex
+    connectionManager *ConnectionManager                 // Enhanced connection management
+    retryQueue        *RetryQueue                       // Background retry system
+}
+```
+
+**Connection Management Architecture:**
+- **Persistent Connections**: All configured relays continuously managed
+- **Automatic Reconnection**: Exponential backoff retry for dropped connections
+- **Health Monitoring**: Per-relay success/failure tracking
+- **Background Operations**: Non-blocking startup with continuous connection attempts
+- **Mailbox Relay Support**: Automatic discovery and connection to recipient's preferred relays
+
+#### 1.1 **Connection Manager** (`client/connection_manager.go`)
+Advanced connection management system providing persistent relay connectivity with intelligent retry logic.
+
+**Responsibilities:**
+- **Persistent Relay Tracking**: Continuous monitoring of all configured relays
+- **Automatic Reconnection**: Exponential backoff retry (1s, 2s, 4s, 8s, 16s, 30s max)
+- **Health Monitoring**: Per-relay success/failure metrics and consecutive failure tracking
+- **Background Operations**: Non-blocking connection establishment and maintenance
+- **UI Synchronization**: Safe relay list updates for real-time UI feedback
+
+**Key Methods:**
+- `NewConnectionManager()` - Initialize connection manager with retry configuration
+- `Start()` - Launch background connection and health monitoring goroutines
+- `AddRelay()` - Add relay to persistent management system
+- `GetConnectedRelays()` - Retrieve currently active relay connections
+- `GetAllRelays()` - Get all managed relays (connected + disconnected)
+- `MarkRelaySuccess()` - Record successful operations and update health metrics
+- `MarkRelayFailure()` - Track failures and trigger reconnection attempts
+- `GetRelayHealth()` - Retrieve detailed health statistics for specific relay
 
 **Configuration:**
 ```go
-type Client struct {
-    config    *config.Config
-    relays    []*nostr.Relay
-    secretKey string
-    publicKey string
-    mu        sync.RWMutex
+type ConnectionManager struct {
+    client         *Client
+    relays         map[string]*RelayHealth    // Per-relay health tracking
+    config         RetryConfig                // Retry behavior configuration
+    mu             sync.RWMutex
+    ctx            context.Context
+    cancel         context.CancelFunc
+    reconnectChan  chan string                // Reconnection request channel
+    shutdownChan   chan struct{}
+    debug          bool
+}
+
+type RetryConfig struct {
+    MaxRetries          int           // Maximum retry attempts (default: 5)
+    InitialBackoff      time.Duration // Initial retry delay (default: 1s)
+    MaxBackoff          time.Duration // Maximum retry delay (default: 30s)
+    BackoffMultiplier   float64       // Exponential backoff multiplier (default: 2.0)
+    HealthCheckInterval time.Duration // Health check frequency (default: 30s)
+    ConnectionTimeout   time.Duration // Connection timeout (default: 10s)
+}
+
+type RelayHealth struct {
+    URL             string        // Relay URL
+    Relay           *nostr.Relay  // Active relay connection
+    IsConnected     bool          // Current connection status
+    LastConnected   time.Time     // Last successful connection
+    LastAttempt     time.Time     // Last connection attempt
+    SuccessCount    int           // Total successful operations
+    FailureCount    int           // Total failed operations
+    ConsecutiveFails int          // Current consecutive failure streak
+    Mu              sync.RWMutex  // Thread-safe access
 }
 ```
+
+**Background Goroutines:**
+- **`healthCheckLoop()`**: Periodic health monitoring (every 30s)
+- **`reconnectLoop()`**: Process reconnection requests with backoff logic
+- **`uiUpdateLoop()`**: Safe UI synchronization (every 500ms)
+
+**Key Features:**
+- **Non-blocking Startup**: Immediate return while background management continues
+- **Intelligent Retry**: Exponential backoff prevents relay overwhelming
+- **Health Tracking**: Detailed metrics for each relay's performance
+- **Circuit Breaking**: Temporary backoff for consistently failing relays
+- **Safe UI Updates**: Decoupled UI updates prevent deadlocks
+
+#### 1.2 **Retry Queue** (`client/retry_queue.go`)
+Background retry system for failed message publishing with intelligent backoff and delivery tracking.
+
+**Responsibilities:**
+- **Failed Publish Tracking**: Monitor publishing failures across all relays
+- **Intelligent Retry Logic**: Exponential backoff retry for transient failures
+- **Message Queue Management**: Background processing of retry attempts
+- **Delivery Confirmation**: Track successful delivery and retry completion
+- **Statistics Tracking**: Monitor retry queue performance and health
+
+**Key Methods:**
+- `NewRetryQueue()` - Initialize retry queue with configuration
+- `Start()` - Launch background retry processing goroutines
+- `PublishToAllRelays()` - Enhanced publishing to all managed relays with retry
+- `PublishWithRetry()` - Single relay publishing with automatic retry
+- `EnqueueRetry()` - Queue failed publish operation for retry
+- `GetStats()` - Retrieve retry queue performance statistics
+
+**Configuration:**
+```go
+type RetryQueue struct {
+    client       *Client
+    connManager  *ConnectionManager
+    queue        chan *RetryablePublish  // Retry operation queue
+    results      chan PublishResult      // Retry result channel
+    config       RetryConfig
+    mu           sync.RWMutex
+    ctx          context.Context
+    cancel       context.CancelFunc
+    shutdownChan chan struct{}
+    debug        bool
+}
+
+type RetryablePublish struct {
+    Event       nostr.Event   // Event to republish
+    TargetRelay string        // Target relay URL
+    Attempt     int           // Current attempt number
+    MaxAttempts int           // Maximum allowed attempts
+    NextAttempt time.Time     // When to retry next
+    CreatedAt   time.Time     // Original creation time
+}
+
+type PublishResult struct {
+    RelayURL string        // Relay that was attempted
+    Success  bool          // Whether publish succeeded
+    Error    error         // Error if failed
+    Attempt  int           // Attempt number
+}
+```
+
+**Background Processing:**
+- **`processQueue()`**: Handle retry queue operations with timing
+- **`processResults()`**: Process and log retry results
+- **`publishToRelay()`**: Actual publishing with authentication handling
+
+**Key Features:**
+- **Automatic Retry**: Failed publishes automatically retried with backoff
+- **Per-Relay Tracking**: Individual retry status for each relay
+- **Exponential Backoff**: 1s, 2s, 4s, 8s, 16s, 30s maximum
+- **Authentication Handling**: Automatic retry after successful authentication
+- **Result Tracking**: Detailed success/failure statistics
 
 #### 2. **Messaging** (`client/messaging.go`)
 Handles all direct message operations with end-to-end encryption.
@@ -206,6 +351,18 @@ Terminal User Interface component for interactive messaging.
 - **Message History Display**: Real-time message updates for active conversations
 - **Settings Integration**: F2 key access to notification and system configuration
 - **Responsive Design**: Adapts to terminal size changes with proper layout management
+- **Enhanced Relay Counter**: Real-time display of connection status with "X/Y relays" format
+- **Color-Coded Status**: Visual feedback for connection health and progress
+
+**Enhanced Status Bar Features:**
+- **Fractional Display**: Shows "X/Y relays" (connected/total) instead of simple count
+- **Color-Coded Status**:
+  - Red: "0 relays" - No connections
+  - Yellow: "X/Y relays" (X < Y) - Partial connections
+  - Green: "X/Y relays" (X = Y > 0) - Full connections
+- **Real-Time Updates**: Connection status updates every 500ms
+- **Progressive Feedback**: Watch connection progress from "0/3" → "1/3" → "2/3" → "3/3"
+- **Debug Integration**: Connection events logged with visual indicators (✓ NEW CONNECTION, ✗ DISCONNECTED)
 
 **Debug Logging Integration:**
 - **Embedded Logger**: TUI app contains `logger *logging.DebugLogger` for debug output
@@ -445,14 +602,60 @@ logging.Debug("Application starting")
 
 ### Message Sending Flow
 ```
-CLI/TUI → Client Agent → Messaging Agent → Encryption → Client Agent → Relays
+CLI/TUI → Client Agent → Messaging Agent → Encryption → Enhanced Client Agent → All Managed Relays
+                                                                          ├── Connection Manager (Persistent)
+                                                                          ├── Retry Queue (Background)
+                                                                          └── Mailbox Relay Discovery (NIP-50)
 ```
 
 ### Message Receiving Flow
 ```
-Relays → Client Agent → Messaging Agent → Decryption → Cache → Dual Notification System
-                                                               ├── External Notification (Always)
-                                                               └── In-App Notification (Context-aware)
+All Managed Relays → Enhanced Client Agent → Messaging Agent → Decryption → Cache → Dual Notification System
+                                                                                      ├── External Notification (Always)
+                                                                                      └── In-App Notification (Context-aware)
+```
+
+### Enhanced Connection Management Flow
+```
+Application Startup
+    ↓
+Non-blocking Client.Connect()
+    ↓
+Connection Manager.Start()
+    ├── Add all configured relays to management
+    ├── Launch background goroutines:
+    │   ├── healthCheckLoop() (every 30s)
+    │   ├── reconnectLoop() (continuous)
+    │   └── uiUpdateLoop() (every 500ms)
+    └── Immediate return (TUI starts)
+    ↓
+Background Operations (Continuous)
+    ├── Persistent connection attempts
+    ├── Exponential backoff retry logic
+    ├── Health tracking and statistics
+    ├── Automatic reconnection on drops
+    ├── Mailbox relay discovery and connection
+    └── Real-time UI synchronization
+```
+
+### Retry Queue Processing Flow
+```
+PublishEvent() to All Managed Relays
+    ↓
+Immediate Publish Attempts (All relays concurrently)
+    ↓
+Failed Publishes → Enqueue for Retry
+    ↓
+Background Retry Processing
+    ├── Exponential backoff timing (1s, 2s, 4s, 8s, 16s, 30s max)
+    ├── Authentication retry on auth errors
+    ├── Per-relay success/failure tracking
+    └── Update connection manager health metrics
+    ↓
+Result Processing
+    ├── Success: Mark relay healthy, update UI
+    ├── Failure: Track for health monitoring
+    └── Max retries: Stop attempting, log failure
 ```
 
 ### Profile Resolution Flow
@@ -616,10 +819,41 @@ All git operations require explicit user direction and consent before execution.
 ## Troubleshooting
 
 ### Common Issues
-1. **Relay Connection Failures**: Check network connectivity and relay availability
-2. **Decryption Errors**: Verify key format and compatibility
-3. **Cache Corruption**: Delete cache file and restart
-4. **Notification Failures**: Check system notification permissions
+1. **Relay Connection Failures**: Enhanced connection management automatically retries with exponential backoff
+2. **Slow Connection Establishment**: Background management ensures eventual connection to all relays
+3. **Intermittent Connections**: Automatic reconnection handles dropped connections transparently
+4. **Decryption Errors**: Verify key format and compatibility
+5. **Cache Corruption**: Delete cache file and restart
+6. **Notification Failures**: Check system notification permissions
+7. **UI Not Updating**: Connection status updates every 500ms to real-time sync
+
+### Enhanced Connection Debugging
+The enhanced connection management provides detailed logging for troubleshooting:
+
+**Debug Logging Features:**
+- **Connection Events**: `✓ NEW CONNECTION: Successfully connected to relay: wss://...`
+- **Reconnection Events**: `✓ RECONNECTED: Successfully reconnected to relay: wss://...`
+- **Disconnection Events**: `✗ DISCONNECTED: Lost connection to relay: wss://...`
+- **Retry Operations**: Detailed retry queue operations and timing
+- **Health Metrics**: Per-relay success/failure statistics
+
+**Connection Status Monitoring:**
+- **Real-time Counter**: Status bar shows "X/Y relays" with color coding
+- **Progress Tracking**: Watch connection progress from 0/3 to full connectivity
+- **Health Statistics**: Use `GetConnectionStats()` for detailed metrics
+- **Background Operations**: All reconnection happens automatically without user intervention
+
+**Troubleshooting Commands:**
+```bash
+# Enable debug logging for connection details
+./nospeak --debug
+
+# Monitor connection status in real-time
+tail -f ~/.cache/nospeak/debug.log | grep -E "(CONNECTION|DISCONNECTED|RECONNECTED)"
+
+# Check specific relay connection attempts
+grep "relay.damus.io" ~/.cache/nospeak/debug.log
+```
 
 ### Debug Mode
 Debug logging provides detailed operation tracing without interfering with the TUI interface.

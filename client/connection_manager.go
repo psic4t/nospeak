@@ -120,8 +120,13 @@ func (cm *ConnectionManager) AddRelay(relayURL string) {
 		// Trigger initial connection attempt
 		select {
 		case cm.reconnectChan <- relayURL:
+			if cm.debug {
+				log.Printf("Queued initial connection request for: %s", relayURL)
+			}
 		default:
-			// Channel full, will retry on next health check
+			if cm.debug {
+				log.Printf("Reconnection channel full for: %s", relayURL)
+			}
 		}
 
 		if cm.debug {
@@ -232,6 +237,10 @@ func (cm *ConnectionManager) MarkRelaySuccess(relayURL string) {
 
 // connectRelay attempts to connect to a single relay
 func (cm *ConnectionManager) connectRelay(relayURL string) error {
+	if cm.debug {
+		log.Printf("Attempting to connect to relay: %s", relayURL)
+	}
+
 	cm.mu.RLock()
 	health, exists := cm.relays[relayURL]
 	cm.mu.RUnlock()
@@ -266,8 +275,12 @@ func (cm *ConnectionManager) connectRelay(relayURL string) error {
 		}
 		health.Mu.Unlock()
 
-		if cm.debug && wasConnected {
-			log.Printf("✗ DISCONNECTED: Lost connection to relay: %s", relayURL)
+		if cm.debug {
+			if wasConnected {
+				log.Printf("Lost connection to relay: %s", relayURL)
+			} else {
+				log.Printf("Failed to connect to relay %s: %v", relayURL, err)
+			}
 		}
 
 		return fmt.Errorf("failed to connect to relay %s: %w", relayURL, err)
@@ -288,9 +301,9 @@ func (cm *ConnectionManager) connectRelay(relayURL string) error {
 
 	if cm.debug {
 		if !wasConnected {
-			log.Printf("✓ NEW CONNECTION: Successfully connected to relay: %s", relayURL)
+			log.Printf("Successfully connected to relay: %s", relayURL)
 		} else {
-			log.Printf("✓ RECONNECTED: Successfully reconnected to relay: %s", relayURL)
+			log.Printf("Successfully reconnected to relay: %s", relayURL)
 		}
 	}
 
@@ -356,13 +369,26 @@ func (cm *ConnectionManager) checkRelayHealth(relayURL string) {
 
 // reconnectLoop processes reconnection requests
 func (cm *ConnectionManager) reconnectLoop() {
+	if cm.debug {
+		log.Printf("Reconnection loop started")
+	}
 	for {
 		select {
 		case <-cm.ctx.Done():
+			if cm.debug {
+				log.Printf("Reconnection loop stopping: context cancelled")
+			}
 			return
 		case relayURL := <-cm.reconnectChan:
-			cm.handleReconnection(relayURL)
+			if cm.debug {
+				log.Printf("Received reconnection request for: %s", relayURL)
+			}
+			// Handle connection in a separate goroutine to avoid blocking the loop
+			go cm.handleReconnection(relayURL)
 		case <-cm.shutdownChan:
+			if cm.debug {
+				log.Printf("Reconnection loop stopping: shutdown signal")
+			}
 			return
 		}
 	}
@@ -372,6 +398,9 @@ func (cm *ConnectionManager) reconnectLoop() {
 func (cm *ConnectionManager) handleReconnection(relayURL string) {
 	health := cm.GetRelayHealth(relayURL)
 	if health == nil {
+		if cm.debug {
+			log.Printf("Relay health not found for: %s", relayURL)
+		}
 		return
 	}
 

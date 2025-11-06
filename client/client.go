@@ -248,11 +248,40 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Get all managed relays (both connected and disconnected)
-	allRelays := c.connectionManager.GetAllRelays()
+	// Get only currently connected relays for subscriptions
+	connectedRelays := c.connectionManager.GetConnectedRelays()
 
+	// Handle case where no relays are connected yet - this is normal during startup
+	if len(connectedRelays) == 0 {
+		// Start a background goroutine that will establish subscriptions when relays connect
+		go func() {
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					currentRelays := c.connectionManager.GetConnectedRelays()
+					if len(currentRelays) > 0 {
+						// Try to establish subscriptions now that we have connected relays
+						c.establishSubscriptions(ctx, currentRelays, filters, handler)
+						return
+					}
+				}
+			}
+		}()
+		return nil // Don't fail, subscription will be established when relays connect
+	}
+
+	return c.establishSubscriptions(ctx, connectedRelays, filters, handler)
+}
+
+// establishSubscriptions creates subscriptions on the provided relays
+func (c *Client) establishSubscriptions(ctx context.Context, relays []*nostr.Relay, filters nostr.Filters, handler func(nostr.Event)) error {
 	var wg sync.WaitGroup
-	errChan := make(chan error, len(allRelays))
+	errChan := make(chan error, len(relays))
 
 	// Channel to collect events from all relays
 	eventsChan := make(chan nostr.Event, 100)
@@ -261,7 +290,7 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 	processedEvents := make(map[string]bool)
 	var processedMu sync.RWMutex
 
-	for _, relay := range allRelays {
+	for _, relay := range relays {
 		wg.Add(1)
 		go func(r *nostr.Relay) {
 			defer wg.Done()
@@ -302,7 +331,30 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 		close(errChan)
 	}()
 
-	return <-errChan
+	// Only return error if ALL subscriptions fail
+	var errors []error
+	for i := 0; i < len(relays); i++ {
+		select {
+		case err := <-errChan:
+			if err != nil {
+				errors = append(errors, err)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	// If we have some successful subscriptions, don't return an error
+	if len(errors) < len(relays) {
+		return nil
+	}
+
+	// If all subscriptions failed, return the first error
+	if len(errors) > 0 {
+		return errors[0]
+	}
+
+	return nil
 }
 
 func (c *Client) GetSecretKey() string {
@@ -343,14 +395,14 @@ func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug b
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Get all managed relays (both connected and disconnected)
-	allRelays := c.connectionManager.GetAllRelays()
+	// Get only currently connected relays for querying
+	connectedRelays := c.connectionManager.GetConnectedRelays()
 
 	var wg sync.WaitGroup
-	eventsChan := make(chan []nostr.Event, len(allRelays))
-	errChan := make(chan error, len(allRelays))
+	eventsChan := make(chan []nostr.Event, len(connectedRelays))
+	errChan := make(chan error, len(connectedRelays))
 
-	for _, relay := range allRelays {
+	for _, relay := range connectedRelays {
 		wg.Add(1)
 		go func(r *nostr.Relay) {
 			defer wg.Done()
@@ -393,7 +445,7 @@ func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug b
 	var errors []error
 
 	// Collect results
-	for i := 0; i < len(allRelays); i++ {
+	for i := 0; i < len(connectedRelays); i++ {
 		select {
 		case events := <-eventsChan:
 			allEvents = append(allEvents, events...)
