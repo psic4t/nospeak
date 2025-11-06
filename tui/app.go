@@ -793,50 +793,45 @@ func (a *App) refreshPartners() {
 	// Initialize display names for all partners using ProfileResolver
 	a.profileResolver.InitializeDisplayNames(a.partners)
 
-	// Fetch profiles for new partners asynchronously
-	if len(newPartners) > 0 {
-		a.logger.Debug("Fetching profiles for %d new partners", len(newPartners))
-
-		go func() {
-			// Use the existing profile fetching mechanism
+	// Always update UI asynchronously to prevent race conditions
+	go func() {
+		// Fetch profiles for new partners if any
+		if len(newPartners) > 0 {
+			a.logger.Debug("Fetching profiles for %d new partners", len(newPartners))
 			err := a.loadContacts()
 			if err != nil {
 				a.logger.Debug("Failed to load contacts: %v", err)
 			}
-
-			// Update UI with resolved names (same pattern as initialization)
-			a.app.QueueUpdate(func() {
-				a.updateContactListWithNames()
-				a.updateStatusBar()
-				a.updateTerminalTitle()
-				a.app.ForceDraw() // Force entire app to redraw
-			})
-		}()
-	}
-
-	// Update contact list
-	a.contactList.Clear()
-	if len(a.partners) == 0 {
-		// Show helpful message when no partners are configured
-		a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F2 to add partners[white]", 0, nil)
-		a.currentPartner = ""
-	} else {
-		for i, partner := range a.partners {
-			displayName := a.profileResolver.GetDisplayName(partner)
-			a.contactList.AddItem(displayName, partner, 0, nil)
-			if i == 0 && a.currentPartner == "" {
-				// Select first partner if none was selected
-				a.currentPartner = partner
-				a.contactList.SetCurrentItem(0)
-				a.loadChatHistory()
-			}
 		}
-	}
 
-	// Update UI
-	a.updateContactListHighlight()
-	a.updateStatusBar()
-	a.updateTerminalTitle()
+		// Update UI in main thread using QueueUpdate
+		a.app.QueueUpdate(func() {
+			// Update contact list
+			a.contactList.Clear()
+			if len(a.partners) == 0 {
+				// Show helpful message when no partners are configured
+				a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F2 to add partners[white]", 0, nil)
+				a.currentPartner = ""
+			} else {
+				for i, partner := range a.partners {
+					displayName := a.profileResolver.GetDisplayName(partner)
+					a.contactList.AddItem(displayName, partner, 0, nil)
+					if i == 0 && a.currentPartner == "" {
+						// Select first partner if none was selected
+						a.currentPartner = partner
+						a.contactList.SetCurrentItem(0)
+						a.loadChatHistory()
+					}
+				}
+			}
+
+			// Update UI components
+			a.updateContactListWithNames()
+			a.updateStatusBar()
+			a.updateTerminalTitle()
+			a.app.ForceDraw() // Force entire app to redraw
+		})
+	}()
 }
 
 func (a *App) showSettings() {
@@ -976,9 +971,7 @@ func (a *App) listenForMessages(debug bool) {
 				log.Printf("Failed to add new partner %s: %v", senderNpub, err)
 			} else {
 				log.Printf("Auto-added new partner: %s", senderNpub[:8]+"...")
-				a.app.QueueUpdate(func() {
-					a.refreshPartners()
-				})
+				a.refreshPartners()
 			}
 		}
 

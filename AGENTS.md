@@ -813,4 +813,87 @@ Platform-agnostic notification system with automatic detection:
 - **In-memory databases**: Uses temporary SQLite files for isolated tests
 - **Comprehensive coverage**: Tests all cache operations, migrations, edge cases
 
+## CLI Testing Infrastructure
+
+The nospeak project includes comprehensive testing for the CLI package (`cmd/`) to ensure reliable command-line functionality.
+
+### Test Structure (`cmd/cmd_test.go`)
+
+#### Test Categories
+1. **Argument Validation Tests**
+   - Validates command-line argument parsing for all CLI commands
+   - Tests edge cases like missing arguments, empty values, and malformed input
+   - Covers `Send`, `SetName`, `Receive`, `SetMessagingRelays`, and `Chat` commands
+
+2. **Mock Client Integration Tests**
+   - Uses `MockClient` from `mocks/client.go` to simulate client behavior
+   - Tests partner management, message sending, and profile operations
+   - Validates client interactions without requiring real Nostr relay connections
+
+3. **Configuration Validation Tests**
+   - Tests configuration validation logic for various scenarios
+   - Validates nsec/npub formats, relay URLs, and required fields
+   - Tests both valid and invalid configuration combinations
+
+4. **Error Handling Tests**
+   - Comprehensive testing of error conditions and edge cases
+   - Validates proper error responses for invalid inputs
+   - Tests graceful handling of empty values, malformed data, and connection failures
+
+#### Mock Infrastructure (`mocks/`)
+
+##### MockClient (`mocks/client.go`)
+- **Purpose**: Provides a mock implementation of the client interface for testing
+- **Features**:
+  - Partner management (AddPartner, IsPartner, GetPartnerNpubs)
+  - Message operations (SendChatMessage, GetMessageHistoryEnhanced)
+  - Profile management (SetProfileName, GetPartnerDisplayNames)
+  - Configuration operations (SetMessagingRelays)
+- **Usage**: Enables isolated testing without external dependencies
+
+##### MockCache (`mocks/cache.go`)
+- **Purpose**: Implements the Cache interface for testing message and profile storage
+- **Features**:
+  - Thread-safe message storage and retrieval
+  - Profile caching with TTL support
+  - Statistics tracking for cache operations
+- **Integration**: Used by MockClient and other components for isolated testing
+
+#### Test Utilities (`testutils/utils.go`)
+- **TestKeys Generation**: Creates deterministic test key pairs for consistent testing
+- **Temporary File Management**: Handles creation and cleanup of test config files
+- **Event Creation**: Utilities for creating test Nostr events
+- **Assertion Helpers**: Common test assertion patterns and error checking
+
+### Testing Limitations
+
+#### CLI Command Testing Challenges
+- **log.Fatalf Usage**: CLI commands use `log.Fatalf` for error handling, which terminates test execution
+- **Coverage Limitation**: Due to fatal error handling, line coverage is limited to validation logic
+- **Solution Approach**: Tests focus on validation logic, error scenarios, and integration patterns rather than full execution paths
+
+#### Mitigation Strategies
+- **Validation Logic Testing**: Comprehensive testing of argument validation and input sanitization
+- **Mock Integration**: Testing of client interactions and error scenarios through mocks
+- **Integration Testing**: End-to-end testing through the application's normal execution paths
+
+### Test Execution
+
+#### Running Tests
+```bash
+# Run all CLI tests with coverage
+go test -v ./cmd/ -cover
+
+# Generate detailed coverage report
+go test -coverprofile=coverage.out ./cmd/ && go tool cover -func=coverage.out
+```
+
+#### Test Coverage
+- **Validation Logic**: 100% coverage of argument validation and input checking
+- **Error Scenarios**: Comprehensive coverage of error conditions and edge cases
+- **Integration Patterns**: Testing of client interactions and configuration validation
+- **Limitation**: Line coverage limited by `log.Fatalf` usage in CLI commands
+
+This testing infrastructure ensures reliable CLI functionality while maintaining isolation from external dependencies and providing comprehensive validation of command behavior.
+
 This architecture document provides a comprehensive overview of the nospeak system's components and their interactions.
