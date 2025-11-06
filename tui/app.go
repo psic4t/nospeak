@@ -639,9 +639,21 @@ func (a *App) updateStatusBar() {
 	a.mu.RUnlock()
 
 	relayCount := a.client.GetRelayCount()
-	status := fmt.Sprintf("[red]%d relays[white]", relayCount)
+	totalRelays := a.client.GetTotalManagedRelays()
+
+	var status string
+	if totalRelays > 0 {
+		status = fmt.Sprintf("[yellow]%d/%d relays[white]", relayCount, totalRelays)
+	} else {
+		status = fmt.Sprintf("[red]%d relays[white]", relayCount)
+	}
+
 	if connected && relayCount > 0 {
-		status = fmt.Sprintf("[green]%d relays[white]", relayCount)
+		if totalRelays > 0 && relayCount == totalRelays {
+			status = fmt.Sprintf("[green]%d/%d relays[white]", relayCount, totalRelays)
+		} else {
+			status = fmt.Sprintf("[green]%d/%d relays[white]", relayCount, totalRelays)
+		}
 	}
 
 	partnerName := "None"

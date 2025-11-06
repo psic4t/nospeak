@@ -32,6 +32,9 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		recipientRelays = []string{"wss://nostr.data.haus"}
 	}
 
+	// Add recipient's mailbox relays to connection manager for persistent connection
+	c.AddMailboxRelays(recipientRelays)
+
 	rumor := nostr.Event{
 		PubKey:    c.publicKey,
 		CreatedAt: nostr.Now(),

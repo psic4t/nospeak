@@ -15,11 +15,13 @@ import (
 )
 
 type Client struct {
-	config    *config.Config
-	relays    []*nostr.Relay
-	secretKey string
-	publicKey string
-	mu        sync.RWMutex
+	config            *config.Config
+	relays            []*nostr.Relay
+	secretKey         string
+	publicKey         string
+	mu                sync.RWMutex
+	connectionManager *ConnectionManager
+	retryQueue        *RetryQueue
 }
 
 func NewClient(cfg *config.Config) (*Client, error) {
@@ -45,12 +47,19 @@ func NewClient(cfg *config.Config) (*Client, error) {
 		return nil, fmt.Errorf("failed to initialize cache: %w", err)
 	}
 
-	return &Client{
+	client := &Client{
 		config:    cfg,
 		relays:    make([]*nostr.Relay, 0),
 		secretKey: secretKey,
 		publicKey: publicKey,
-	}, nil
+	}
+
+	// Initialize connection manager and retry queue
+	retryConfig := DefaultRetryConfig()
+	client.connectionManager = NewConnectionManager(client, retryConfig, false) // debug will be set later
+	client.retryQueue = NewRetryQueue(client, client.connectionManager, retryConfig, false)
+
+	return client, nil
 }
 
 // CreateClient is a helper function that consolidates configuration loading and client creation
@@ -82,50 +91,25 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Update debug mode for connection manager and retry queue
+	c.connectionManager.debug = debug
+	c.retryQueue.debug = debug
+
+	// Add all configured relays to the connection manager
 	for _, relayURL := range c.config.Relays {
-		// Create notice handler for authentication
-		noticeHandler := func(notice string) {
-			if debug {
-				log.Printf("NOTICE from %s: %s", relayURL, notice)
-			}
-
-			// Check if notice indicates authentication is required
-			if strings.Contains(strings.ToLower(notice), "auth") ||
-				strings.Contains(strings.ToLower(notice), "authentication") ||
-				strings.Contains(strings.ToLower(notice), "restricted") {
-
-				// This will be handled below by our authentication attempt
-				if debug {
-					log.Printf("Auth requirement detected from notice for %s", relayURL)
-				}
-			}
-		}
-
-		// Connect with notice handler
-		relay, err := nostr.RelayConnect(ctx, relayURL, nostr.WithNoticeHandler(noticeHandler))
-		if err != nil {
-			if debug {
-				log.Printf("Failed to connect to relay %s: %v", relayURL, err)
-			}
-			continue
-		}
-
-		// Attempt authentication if we have a secret key
-		if debug {
-			log.Printf("About to attempt authentication for relay: %s", relayURL)
-		}
-		if err := c.authenticateRelay(ctx, relay, debug); err != nil && debug {
-			log.Printf("Authentication setup failed for relay %s: %v", relayURL, err)
-		}
-
-		c.relays = append(c.relays, relay)
-		if debug {
-			log.Printf("Connected to relay: %s", relayURL)
-		}
+		c.connectionManager.AddRelay(relayURL)
 	}
 
-	if len(c.relays) == 0 {
-		return fmt.Errorf("failed to connect to any relays")
+	// Start the connection manager and retry queue
+	c.connectionManager.Start()
+	c.retryQueue.Start()
+
+	// Update the relays slice with currently connected relays (may be empty initially)
+	c.relays = c.connectionManager.GetConnectedRelays()
+
+	if debug {
+		log.Printf("Connection manager started with %d configured relays", len(c.config.Relays))
+		log.Printf("Initially connected to %d relays, background reconnection will continue", len(c.relays))
 	}
 
 	return nil
@@ -195,6 +179,15 @@ func (c *Client) Disconnect() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Stop connection manager and retry queue
+	if c.connectionManager != nil {
+		c.connectionManager.Stop()
+	}
+	if c.retryQueue != nil {
+		c.retryQueue.Stop()
+	}
+
+	// Close any remaining direct connections
 	for _, relay := range c.relays {
 		relay.Close()
 	}
@@ -205,56 +198,47 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if debug {
+		fmt.Printf("=== DEBUG: Publishing Event to All Relays ===\n")
+		fmt.Printf("Event ID: %s\n", event.ID)
+		fmt.Printf("Event Kind: %d\n", event.Kind)
+		fmt.Printf("Event Content Length: %d\n", len(event.Content))
+		fmt.Printf("========================================\n\n")
+	}
+
+	// Use the retry queue to publish to all managed relays
+	results := c.retryQueue.PublishToAllRelays(ctx, event)
+
+	var successCount int
+	var failureCount int
 	var lastErr error
-	for _, relay := range c.relays {
-		if debug {
-			fmt.Printf("=== DEBUG: Publishing to Relay ===\n")
-			fmt.Printf("Relay URL: %s\n", relay.URL)
-			fmt.Printf("Event ID: %s\n", event.ID)
-			fmt.Printf("Event Kind: %d\n", event.Kind)
-			fmt.Printf("Event Content Length: %d\n", len(event.Content))
-			fmt.Printf("================================\n")
-		}
 
-		if err := relay.Publish(ctx, event); err != nil {
-			// Check if this is an authentication error and try to authenticate
-			if c.isAuthError(err) && c.secretKey != "" {
-				if debug {
-					log.Printf("Publish failed with possible auth error for relay %s, attempting authentication", relay.URL)
-				}
-
-				if authErr := c.attemptAuthentication(ctx, relay, debug); authErr == nil {
-					// Retry publishing after successful authentication
-					if retryErr := relay.Publish(ctx, event); retryErr != nil {
-						if debug {
-							log.Printf("Failed to publish to relay %s even after authentication: %v", relay.URL, retryErr)
-							fmt.Printf("ERROR: Failed to publish to %s after auth: %v\n", relay.URL, retryErr)
-						}
-						lastErr = retryErr
-					} else {
-						if debug {
-							log.Printf("Published to relay after authentication: %s", relay.URL)
-							fmt.Printf("SUCCESS: Published to %s after auth\n", relay.URL)
-						}
-					}
-					continue
-				}
-			}
-
+	for _, result := range results {
+		if result.Success {
+			successCount++
 			if debug {
-				log.Printf("Failed to publish to relay %s: %v", relay.URL, err)
-				fmt.Printf("ERROR: Failed to publish to %s: %v\n", relay.URL, err)
+				fmt.Printf("SUCCESS: Published to %s (attempt %d)\n", result.RelayURL, result.Attempt)
 			}
-			lastErr = err
 		} else {
+			failureCount++
+			lastErr = result.Error
 			if debug {
-				log.Printf("Published to relay: %s", relay.URL)
-				fmt.Printf("SUCCESS: Published to %s\n", relay.URL)
+				fmt.Printf("PENDING: Failed to publish to %s (attempt %d) - queued for retry: %v\n",
+					result.RelayURL, result.Attempt, result.Error)
 			}
 		}
-		if debug {
-			fmt.Printf("\n")
-		}
+	}
+
+	if debug {
+		fmt.Printf("\n=== Publish Summary ===\n")
+		fmt.Printf("Successful: %d\n", successCount)
+		fmt.Printf("Pending retry: %d\n", failureCount)
+		fmt.Printf("======================\n\n")
+	}
+
+	// Don't return error if at least one publish succeeded or is queued for retry
+	if successCount > 0 || failureCount > 0 {
+		return nil
 	}
 
 	return lastErr
@@ -264,8 +248,11 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	// Get all managed relays (both connected and disconnected)
+	allRelays := c.connectionManager.GetAllRelays()
+
 	var wg sync.WaitGroup
-	errChan := make(chan error, len(c.relays))
+	errChan := make(chan error, len(allRelays))
 
 	// Channel to collect events from all relays
 	eventsChan := make(chan nostr.Event, 100)
@@ -274,7 +261,7 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 	processedEvents := make(map[string]bool)
 	var processedMu sync.RWMutex
 
-	for _, relay := range c.relays {
+	for _, relay := range allRelays {
 		wg.Add(1)
 		go func(r *nostr.Relay) {
 			defer wg.Done()
@@ -332,15 +319,38 @@ func (c *Client) GetRelayCount() int {
 	return len(c.relays)
 }
 
+// UpdateRelayList updates the client's relay list from the connection manager
+func (c *Client) UpdateRelayList() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Update the relays slice with currently connected relays from connection manager
+	if c.connectionManager != nil {
+		c.relays = c.connectionManager.GetConnectedRelays()
+	}
+}
+
+// GetTotalManagedRelays returns the total number of relays being managed (connected + disconnected)
+func (c *Client) GetTotalManagedRelays() int {
+	if c.connectionManager != nil {
+		allRelays := c.connectionManager.GetAllRelays()
+		return len(allRelays)
+	}
+	return 0
+}
+
 func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug bool) ([]nostr.Event, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var wg sync.WaitGroup
-	eventsChan := make(chan []nostr.Event, len(c.relays))
-	errChan := make(chan error, len(c.relays))
+	// Get all managed relays (both connected and disconnected)
+	allRelays := c.connectionManager.GetAllRelays()
 
-	for _, relay := range c.relays {
+	var wg sync.WaitGroup
+	eventsChan := make(chan []nostr.Event, len(allRelays))
+	errChan := make(chan error, len(allRelays))
+
+	for _, relay := range allRelays {
 		wg.Add(1)
 		go func(r *nostr.Relay) {
 			defer wg.Done()
@@ -383,7 +393,7 @@ func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug b
 	var errors []error
 
 	// Collect results
-	for i := 0; i < len(c.relays); i++ {
+	for i := 0; i < len(allRelays); i++ {
 		select {
 		case events := <-eventsChan:
 			allEvents = append(allEvents, events...)
@@ -430,4 +440,60 @@ func (c *Client) GetPartnerProfiles(ctx context.Context, debug bool) (map[string
 	}
 
 	return profiles, nil
+}
+
+// AddMailboxRelays adds mailbox relays to the connection manager
+func (c *Client) AddMailboxRelays(relayURLs []string) {
+	for _, relayURL := range relayURLs {
+		// Skip if already in config relays
+		found := false
+		for _, configRelay := range c.config.Relays {
+			if configRelay == relayURL {
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.connectionManager.AddRelay(relayURL)
+		}
+	}
+}
+
+// GetConnectionStats returns statistics about relay connections
+func (c *Client) GetConnectionStats() map[string]interface{} {
+	stats := make(map[string]interface{})
+
+	// Get connection manager stats
+	connectedRelays := c.connectionManager.GetConnectedRelays()
+	allRelays := c.connectionManager.GetAllRelays()
+
+	stats["connected_relays"] = len(connectedRelays)
+	stats["total_managed_relays"] = len(allRelays)
+
+	// Get retry queue stats
+	retryStats := c.retryQueue.GetStats()
+	for k, v := range retryStats {
+		stats["retry_queue_"+k] = v
+	}
+
+	// Per-relay health information
+	relayHealth := make(map[string]interface{})
+	for _, relay := range allRelays {
+		health := c.connectionManager.GetRelayHealth(relay.URL)
+		if health != nil {
+			health.Mu.RLock()
+			relayHealth[relay.URL] = map[string]interface{}{
+				"connected":         health.IsConnected,
+				"success_count":     health.SuccessCount,
+				"failure_count":     health.FailureCount,
+				"consecutive_fails": health.ConsecutiveFails,
+				"last_connected":    health.LastConnected,
+				"last_attempt":      health.LastAttempt,
+			}
+			health.Mu.RUnlock()
+		}
+	}
+	stats["relay_health"] = relayHealth
+
+	return stats
 }
