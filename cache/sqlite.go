@@ -4,9 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +19,13 @@ import (
 type SQLiteCache struct {
 	db *sql.DB
 	mu sync.RWMutex
+}
+
+// debugLog logs debug messages if DEBUG environment variable is set
+func debugLog(format string, args ...interface{}) {
+	if debug := os.Getenv("DEBUG"); debug != "" {
+		log.Printf("[CACHE-DEBUG] "+format, args...)
+	}
 }
 
 func NewSQLiteCache() (*SQLiteCache, error) {
@@ -422,6 +432,142 @@ func (sc *SQLiteCache) HasMessage(eventID string) bool {
 	}
 
 	return count > 0
+}
+
+// GetSortedPartners returns partners sorted by most recent message activity
+func (sc *SQLiteCache) GetSortedPartners(partners []string) []string {
+	debugLog("GetSortedPartners called with %d partners: %v", len(partners), partners)
+
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	if len(partners) == 0 {
+		debugLog("Empty partners list, returning as-is")
+		return partners
+	}
+
+	// First, let's check what's actually in the database for these partners
+	debugLog("Checking message database for these partners...")
+	for i, partner := range partners {
+		var count int
+		var latestTimeStr string
+		err := sc.db.QueryRow(`
+			SELECT COUNT(*), MAX(sent_at)
+			FROM messages
+			WHERE recipient_npub = ?
+		`, partner).Scan(&count, &latestTimeStr)
+
+		if err != nil {
+			debugLog("Partner %d (%s): Database error: %v", i, partner[:8]+"...", err)
+		} else {
+			if latestTimeStr != "" {
+				debugLog("Partner %d (%s): %d messages, latest: %s", i, partner[:8]+"...", count, latestTimeStr)
+			} else {
+				debugLog("Partner %d (%s): %d messages, latest: (no messages)", i, partner[:8]+"...", count)
+			}
+		}
+	}
+
+	// Single optimized query instead of N+1 queries
+	placeholders := strings.Repeat("?,", len(partners)-1) + "?"
+	query := `
+		SELECT recipient_npub, MAX(sent_at) as latest_time
+		FROM messages
+		WHERE recipient_npub IN (` + placeholders + `)
+		GROUP BY recipient_npub
+		ORDER BY latest_time DESC
+	`
+
+	debugLog("Executing SQL query: %s", query)
+	debugLog("Query parameters: %v", partners)
+
+	// Prepare arguments
+	args := make([]interface{}, len(partners))
+	for i, partner := range partners {
+		args[i] = partner
+	}
+
+	// Execute query
+	rows, err := sc.db.Query(query, args...)
+	if err != nil {
+		debugLog("SQL query failed: %v, falling back to original order", err)
+		return partners
+	}
+	defer rows.Close()
+
+	// Map to store latest times and maintain order
+	latestTimes := make(map[string]time.Time)
+	partnersWithMessages := make([]string, 0)
+
+	debugLog("Processing query results...")
+	for rows.Next() {
+		var partner string
+		var latestTimeStr string
+		if err := rows.Scan(&partner, &latestTimeStr); err != nil {
+			debugLog("Error scanning row: %v", err)
+			continue
+		}
+		if latestTimeStr != "" {
+			// Remove monotonic clock information (m=+...) as it's not parseable
+			// Example: "2025-11-06 14:18:08.086438893 +0100 CET m=+13.832688068"
+			// becomes: "2025-11-06 14:18:08.086438893 +0100 CET"
+			cleanTimeStr := regexp.MustCompile(`\s+m=\+[\d\.]+$`).ReplaceAllString(latestTimeStr, "")
+
+			// Try multiple time formats to handle different database timestamp formats
+			timeFormats := []string{
+				time.RFC3339,
+				time.RFC3339Nano,
+				"2006-01-02 15:04:05.999999999 -0700 MST",
+				"2006-01-02 15:04:05 -0700 MST",
+			}
+
+			var latestTime time.Time
+			var err error
+			parsed := false
+
+			for _, format := range timeFormats {
+				latestTime, err = time.Parse(format, cleanTimeStr)
+				if err == nil {
+					parsed = true
+					break
+				}
+			}
+
+			if !parsed {
+				debugLog("Error parsing time '%s' (cleaned: '%s') for partner %s: %v", latestTimeStr, cleanTimeStr, partner[:8]+"...", err)
+				continue
+			}
+			latestTimes[partner] = latestTime
+			partnersWithMessages = append(partnersWithMessages, partner)
+			debugLog("Found partner %s with latest time: %v", partner[:8]+"...", latestTime)
+		} else {
+			debugLog("Partner %s has empty latest time, skipping", partner[:8]+"...")
+		}
+	}
+
+	// Check for any query errors
+	if err = rows.Err(); err != nil {
+		debugLog("Row iteration error: %v", err)
+	}
+
+	debugLog("Partners with messages: %v", partnersWithMessages)
+
+	// Separate partners with and without messages (maintain original order)
+	partnersWithoutMessages := make([]string, 0)
+	for _, partner := range partners {
+		if _, hasMessages := latestTimes[partner]; !hasMessages {
+			partnersWithoutMessages = append(partnersWithoutMessages, partner)
+			debugLog("Partner %s has no messages", partner[:8]+"...")
+		}
+	}
+
+	// Combine: partners with messages (already sorted by DB) + partners without messages (original order)
+	result := append(partnersWithMessages, partnersWithoutMessages...)
+
+	debugLog("Final sorted partners: %v", result)
+	debugLog("GetSortedPartners completed")
+
+	return result
 }
 
 // Profile methods

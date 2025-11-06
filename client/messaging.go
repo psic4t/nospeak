@@ -4,12 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/data.haus/nospeak/cache"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
+
+// clientDebugLog logs debug messages if DEBUG environment variable is set
+func clientDebugLog(format string, args ...interface{}) {
+	if debug := os.Getenv("DEBUG"); debug != "" {
+		log.Printf("[CLIENT-DEBUG] "+format, args...)
+	}
+}
 
 func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message string, debug bool) error {
 	if debug {
@@ -279,6 +287,17 @@ func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
 
 func (c *Client) GetPartnerNpubs() []string {
 	return c.config.Partners
+}
+
+func (c *Client) GetSortedPartnerNpubs() []string {
+	clientDebugLog("GetSortedPartnerNpubs called")
+	clientDebugLog("Original partners from config: %v", c.config.Partners)
+
+	messageCache := cache.GetCache()
+	sortedPartners := messageCache.GetSortedPartners(c.config.Partners)
+
+	clientDebugLog("Sorted partners returned: %v", sortedPartners)
+	return sortedPartners
 }
 
 func (c *Client) GetMessageHistory(recipientNpub string, limit int) []cache.MessageEntry {

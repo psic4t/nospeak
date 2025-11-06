@@ -74,6 +74,9 @@ type Cache interface {
 	GetMessageStats(recipientNpub string) (sent, received int, err error)
 	HasMessage(eventID string) bool
 
+	// Contact methods
+	GetSortedPartners(partners []string) []string
+
 	// Profile methods
 	GetProfile(npub string) (ProfileEntry, bool)
 	SetProfile(npub string, profile ProfileMetadata, ttl time.Duration) error

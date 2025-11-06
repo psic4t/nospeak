@@ -272,7 +272,7 @@ func (a *App) setupUI() error {
 }
 
 func (a *App) loadContactsBasic() error {
-	a.partners = a.client.GetPartnerNpubs()
+	a.partners = a.client.GetSortedPartnerNpubs()
 
 	// Initialize display names using ProfileResolver
 	a.profileResolver.InitializeDisplayNames(a.partners)
@@ -790,8 +790,8 @@ func (a *App) refreshPartners() {
 		oldPartners[partner] = true
 	}
 
-	// Reload partners from config
-	a.partners = a.client.GetPartnerNpubs()
+	// Reload partners from config (sorted by most recent message activity)
+	a.partners = a.client.GetSortedPartnerNpubs()
 
 	// Detect new partners
 	var newPartners []string
