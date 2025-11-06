@@ -1,7 +1,6 @@
 package mocks
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -194,16 +193,20 @@ func (m *MockCache) SetProfile(npub string, profile cache.ProfileMetadata, ttl t
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	profileJSON := fmt.Sprintf(`{"name":"%s","display_name":"%s","about":"%s","picture":"%s","nip05":"%s","lud16":"%s"}`,
-		profile.Name, profile.DisplayName, profile.About, profile.Picture, profile.NIP05, profile.LUD16)
-
 	entry := cache.ProfileEntry{
-		ID:        int64(len(m.profiles) + 1),
-		Npub:      npub,
-		Profile:   profileJSON,
-		CachedAt:  time.Now(),
-		ExpiresAt: time.Now().Add(ttl),
-		CreatedAt: time.Now(),
+		ID:          int64(len(m.profiles) + 1),
+		Npub:        npub,
+		Name:        profile.Name,
+		DisplayName: profile.DisplayName,
+		About:       profile.About,
+		Picture:     profile.Picture,
+		NIP05:       profile.NIP05,
+		LUD16:       profile.LUD16,
+		Website:     profile.Website,
+		Banner:      profile.Banner,
+		CachedAt:    time.Now(),
+		ExpiresAt:   time.Now().Add(ttl),
+		CreatedAt:   time.Now(),
 	}
 
 	m.profiles[npub] = entry
