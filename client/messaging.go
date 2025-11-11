@@ -166,12 +166,30 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 }
 
 func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, debug bool) ([]string, error) {
+	cacheInstance := cache.GetCache()
+
+	// Check cache first for relay list
+	if profile, found := cacheInstance.GetProfile(recipientNpub); found && profile.HasRelayList() {
+		relays := profile.GetRelayList()
+		if len(relays) > 0 {
+			if debug {
+				log.Printf("Using cached relay list for %s: %v (%d relays)", recipientNpub[:8]+"...", relays, len(relays))
+			}
+			return relays, nil
+		}
+	}
+
+	// Cache miss - fetch from network
 	_, recipientPubKey, err := nip19.Decode(recipientNpub)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode recipient npub: %w", err)
 	}
 
 	recipientHex := recipientPubKey.(string)
+
+	if debug {
+		log.Printf("No cached relay list for %s, querying network", recipientNpub[:8]+"...")
+	}
 
 	// Query for recipient's kind 10050 event (DM relays)
 	filters := nostr.Filters{{
@@ -188,10 +206,32 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 	}
 
 	var relays []string
+	var relayListEventID string
+
 	for _, event := range events {
+		relayListEventID = event.ID
 		for _, tag := range event.Tags {
 			if len(tag) >= 2 && tag[0] == "relay" {
 				relays = append(relays, tag[1])
+			}
+		}
+	}
+
+	// Update cache with relay list if we found one
+	if len(relays) > 0 && relayListEventID != "" {
+		// Get current profile to preserve metadata, then update with new relay list
+		if cachedProfile, found := cacheInstance.GetProfile(recipientNpub); found {
+			profileMetadata := cachedProfile.ToProfileMetadata()
+			err = cacheInstance.SetProfileWithRelayList(recipientNpub, profileMetadata, relays, relayListEventID, 24*time.Hour)
+			if err != nil && debug {
+				log.Printf("Failed to cache relay list for %s: %v", recipientNpub[:8]+"...", err)
+			}
+		} else {
+			// No cached profile, create minimal one with just relay list
+			minimalProfile := cache.ProfileMetadata{}
+			err = cacheInstance.SetProfileWithRelayList(recipientNpub, minimalProfile, relays, relayListEventID, 24*time.Hour)
+			if err != nil && debug {
+				log.Printf("Failed to cache profile with relay list for %s: %v", recipientNpub[:8]+"...", err)
 			}
 		}
 	}
@@ -204,7 +244,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 		}
 	} else {
 		if debug {
-			log.Printf("Found DM relays for recipient: %v", relays)
+			log.Printf("Found DM relays for recipient: %v (cached for 24h)", relays)
 		}
 	}
 

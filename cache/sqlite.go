@@ -75,7 +75,12 @@ func (sc *SQLiteCache) init() error {
 	}
 
 	// Migrate from JSON blob to structured columns if needed
-	return sc.migrateProfileStorage()
+	if err := sc.migrateProfileStorage(); err != nil {
+		return err
+	}
+
+	// Add relay list columns if they don't exist
+	return sc.migrateRelayListColumns()
 }
 
 func (sc *SQLiteCache) createTables() error {
@@ -108,6 +113,9 @@ func (sc *SQLiteCache) createTables() error {
 			lud16 TEXT,
 			website TEXT,
 			banner TEXT,
+			relay_list TEXT,
+			relay_list_event_id TEXT,
+			relay_list_updated_at DATETIME,
 			cached_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -204,6 +212,52 @@ func (sc *SQLiteCache) migrateProfileStorage() error {
 		// If we can't drop the column, that's okay - it's no longer being used
 	}
 
+	return nil
+}
+
+// migrateRelayListColumns adds relay list columns to existing profile_cache table if they don't exist
+func (sc *SQLiteCache) migrateRelayListColumns() error {
+	// Check if relay_list column exists
+	var relayListExists bool
+	err := sc.db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('profile_cache')
+		WHERE name = 'relay_list'
+	`).Scan(&relayListExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check relay_list column: %w", err)
+	}
+
+	if relayListExists {
+		// Columns already exist, no migration needed
+		return nil
+	}
+
+	debugLog("Migrating profile_cache table to add relay list columns")
+
+	// Add relay list columns
+	alterStatements := []string{
+		"ALTER TABLE profile_cache ADD COLUMN relay_list TEXT",
+		"ALTER TABLE profile_cache ADD COLUMN relay_list_event_id TEXT",
+		"ALTER TABLE profile_cache ADD COLUMN relay_list_updated_at DATETIME",
+	}
+
+	for _, stmt := range alterStatements {
+		if _, err := sc.db.Exec(stmt); err != nil {
+			// Column might already exist, which is fine
+			debugLog("Failed to execute migration statement %s: %v (ignoring)", stmt, err)
+		}
+	}
+
+	// Create index for relay_list_updated_at if it doesn't exist
+	if _, err := sc.db.Exec(
+		"CREATE INDEX IF NOT EXISTS idx_profile_relay_list_updated_at ON profile_cache(relay_list_updated_at)",
+	); err != nil {
+		debugLog("Failed to create relay list index: %v", err)
+	}
+
+	debugLog("Completed relay list columns migration")
 	return nil
 }
 
@@ -577,13 +631,16 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 
 	var profile ProfileEntry
 	var expiresAt time.Time
+	var relayListUpdatedAt sql.NullTime
 
 	err := sc.db.QueryRow(`
-		SELECT id, npub, name, display_name, about, picture, nip05, lud16, website, banner, cached_at, expires_at, created_at
+		SELECT id, npub, name, display_name, about, picture, nip05, lud16, website, banner,
+		       relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at, created_at
 		FROM profile_cache
 		WHERE npub = ?
 	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Name, &profile.DisplayName, &profile.About,
 		&profile.Picture, &profile.NIP05, &profile.LUD16, &profile.Website, &profile.Banner,
+		&profile.RelayList, &profile.RelayListEventID, &relayListUpdatedAt,
 		&profile.CachedAt, &expiresAt, &profile.CreatedAt)
 
 	if err != nil {
@@ -596,15 +653,24 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 		return ProfileEntry{}, false
 	}
 
+	// Handle nullable relay list updated timestamp
+	if relayListUpdatedAt.Valid {
+		profile.RelayListUpdatedAt = relayListUpdatedAt.Time
+	}
+
 	profile.ExpiresAt = expiresAt
 	return profile, true
 }
 
-func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time.Duration) error {
+
+// SetProfileWithRelayList caches both profile metadata and relay list together
+// If relayList is nil or empty, only profile metadata is updated, preserving existing relay list
+func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
 	expiresAt := time.Now().Add(ttl)
+	hasRelayList := len(relayList) > 0 && relayListEventID != ""
 
 	tx, err := sc.db.Begin()
 	if err != nil {
@@ -612,19 +678,65 @@ func (sc *SQLiteCache) SetProfile(npub string, profile ProfileMetadata, ttl time
 	}
 	defer tx.Rollback()
 
-	// UPSERT: Insert or replace with structured columns
-	_, err = tx.Exec(`
-		INSERT OR REPLACE INTO profile_cache
-		(npub, name, display_name, about, picture, nip05, lud16, website, banner, cached_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture,
-		profile.NIP05, profile.LUD16, profile.Website, profile.Banner, time.Now(), expiresAt)
+	if hasRelayList {
+		// Insert or replace with both profile and relay list data
+		relayListJSON := sc.serializeRelayList(relayList)
+		_, err = tx.Exec(`
+			INSERT OR REPLACE INTO profile_cache
+			(npub, name, display_name, about, picture, nip05, lud16, website, banner,
+			 relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture,
+			profile.NIP05, profile.LUD16, profile.Website, profile.Banner,
+			relayListJSON, relayListEventID, time.Now(), time.Now(), expiresAt)
+	} else {
+		// Update only profile metadata, preserving existing relay list data
+		_, err = tx.Exec(`
+			UPDATE profile_cache
+			SET name = ?, display_name = ?, about = ?, picture = ?, nip05 = ?, lud16 = ?,
+			    website = ?, banner = ?, cached_at = ?, expires_at = ?
+			WHERE npub = ?
+		`, profile.Name, profile.DisplayName, profile.About, profile.Picture,
+			profile.NIP05, profile.LUD16, profile.Website, profile.Banner, time.Now(), expiresAt, npub)
+
+		// If no existing profile, insert one without relay list
+		result, err2 := tx.Exec(`SELECT changes()`)
+		if err2 == nil {
+			changes, _ := result.RowsAffected()
+			if changes == 0 {
+				// No existing profile, insert new one
+				_, err = tx.Exec(`
+					INSERT INTO profile_cache
+					(npub, name, display_name, about, picture, nip05, lud16, website, banner,
+					 relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, ?, ?)
+				`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture,
+					profile.NIP05, profile.LUD16, profile.Website, profile.Banner, time.Now(), expiresAt)
+			}
+		}
+	}
 
 	if err != nil {
 		return fmt.Errorf("failed to cache profile: %w", err)
 	}
 
 	return tx.Commit()
+}
+
+
+// serializeRelayList converts a slice of relay URLs to JSON array format
+func (sc *SQLiteCache) serializeRelayList(relayList []string) string {
+	if len(relayList) == 0 {
+		return ""
+	}
+
+	// Simple JSON array serialization
+	var jsonParts []string
+	for _, relay := range relayList {
+		jsonParts = append(jsonParts, fmt.Sprintf(`"%s"`, relay))
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(jsonParts, ","))
 }
 
 func (sc *SQLiteCache) ClearExpiredProfiles() error {

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"strings"
 	"time"
 )
 
@@ -27,19 +28,22 @@ type MessageEntry struct {
 }
 
 type ProfileEntry struct {
-	ID          int64     `json:"id"`
-	Npub        string    `json:"npub"`
-	Name        string    `json:"name"`
-	DisplayName string    `json:"display_name"`
-	About       string    `json:"about"`
-	Picture     string    `json:"picture"`
-	NIP05       string    `json:"nip05"`
-	LUD16       string    `json:"lud16"`
-	Website     string    `json:"website"`
-	Banner      string    `json:"banner"`
-	CachedAt    time.Time `json:"cached_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                int64     `json:"id"`
+	Npub              string    `json:"npub"`
+	Name              string    `json:"name"`
+	DisplayName       string    `json:"display_name"`
+	About             string    `json:"about"`
+	Picture           string    `json:"picture"`
+	NIP05             string    `json:"nip05"`
+	LUD16             string    `json:"lud16"`
+	Website           string    `json:"website"`
+	Banner            string    `json:"banner"`
+	RelayList         string    `json:"relay_list"`           // JSON array of relay URLs
+	RelayListEventID  string    `json:"relay_list_event_id"`  // Kind 10050 event ID
+	RelayListUpdatedAt time.Time `json:"relay_list_updated_at"`
+	CachedAt          time.Time `json:"cached_at"`
+	ExpiresAt         time.Time `json:"expires_at"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // ToProfileMetadata converts ProfileEntry to ProfileMetadata
@@ -54,6 +58,42 @@ func (pe ProfileEntry) ToProfileMetadata() ProfileMetadata {
 		Website:     pe.Website,
 		Banner:      pe.Banner,
 	}
+}
+
+// GetRelayList parses and returns the relay list as a string slice
+func (pe ProfileEntry) GetRelayList() []string {
+	if pe.RelayList == "" {
+		return nil
+	}
+
+	// Simple JSON parsing for relay array
+	var relays []string
+	if pe.RelayList[0] == '[' && pe.RelayList[len(pe.RelayList)-1] == ']' {
+		// Remove brackets and split by comma
+		content := pe.RelayList[1 : len(pe.RelayList)-1]
+		if content == "" {
+			return nil
+		}
+
+		// Parse JSON array elements (strip quotes)
+		parts := strings.Split(content, ",")
+		for _, part := range parts {
+			relay := strings.TrimSpace(part)
+			if len(relay) >= 2 && relay[0] == '"' && relay[len(relay)-1] == '"' {
+				relay = relay[1 : len(relay)-1]
+			}
+			if relay != "" {
+				relays = append(relays, relay)
+			}
+		}
+	}
+
+	return relays
+}
+
+// HasRelayList returns true if the profile has a cached relay list
+func (pe ProfileEntry) HasRelayList() bool {
+	return pe.RelayList != "" && !pe.RelayListUpdatedAt.IsZero()
 }
 
 type CacheStats struct {
@@ -79,7 +119,7 @@ type Cache interface {
 
 	// Profile methods
 	GetProfile(npub string) (ProfileEntry, bool)
-	SetProfile(npub string, profile ProfileMetadata, ttl time.Duration) error
+	SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error
 	ClearExpiredProfiles() error
 
 	// Maintenance methods
