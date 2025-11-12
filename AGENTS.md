@@ -229,6 +229,9 @@ type Cache interface {
     AddMessageWithTimestamp(recipientNpub, message, eventID, direction string, sentAt time.Time) error
     GetMessages(recipientNpub string, limit int) []MessageEntry
     GetRecentMessages(recipientNpub string, sentLimit, receivedLimit int) []MessageEntry
+    GetMessagesBefore(recipientNpub string, cutoff time.Time, limit int) []MessageEntry
+    GetMessagesWithOffset(recipientNpub string, offset int, limit int) []MessageEntry
+    GetLatestMessages(recipientNpub string, limit int) []MessageEntry
     SearchMessages(recipientNpub, query string) []MessageEntry
     GetMessagesByDateRange(recipientNpub string, start, end time.Time) []MessageEntry
     GetMessageStats(recipientNpub string) (sent, received int, err error)
@@ -489,6 +492,160 @@ grep "cached relay list" ~/.cache/nospeak/debug.log
 
 The mailbox relay caching system provides a robust, performant foundation for reliable message delivery while maintaining data integrity and system simplicity through its unified approach to profile and relay list management.
 
+#### 4.2 **Paginated Message Loading System**
+
+##### Overview
+The paginated message loading system provides efficient, chronological message retrieval for large conversation histories while maintaining optimal database performance and memory usage.
+
+##### Architecture
+The system implements a **dual-query approach** that optimizes for both initial chat loading and pagination of older messages, ensuring proper chronological order while maintaining database efficiency.
+
+##### Key Methods
+
+**GetLatestMessages()** - Efficient recent message retrieval:
+```go
+func (sc *SQLiteCache) GetLatestMessages(recipientNpub string, limit int) []MessageEntry
+```
+- **Purpose**: Get most recent messages for initial chat display
+- **Query Strategy**: `ORDER BY sent_at DESC LIMIT ?` for optimal performance
+- **Order Processing**: Results reversed to chronological order (oldest first)
+- **Use Case**: Initial chat history loading in TUI
+
+**GetMessagesBefore()** - Chronological older message loading:
+```go
+func (sc *SQLiteCache) GetMessagesBefore(recipientNpub string, cutoff time.Time, limit int) []MessageEntry
+```
+- **Purpose**: Load messages older than a specific timestamp
+- **Query Strategy**: `WHERE sent_at < ? ORDER BY sent_at ASC LIMIT ?`
+- **Order Processing**: Results already in chronological order (no reversal needed)
+- **Use Case**: Loading older messages when user scrolls to top
+
+**Enhanced Legacy Methods** - Updated for chronological consistency:
+```go
+// Updated to reverse results for chronological order
+func (sc *SQLiteCache) GetMessages(recipientNpub string, limit int) []MessageEntry
+func (sc *SQLiteCache) GetMessagesWithOffset(recipientNpub string, offset int, limit int) []MessageEntry
+```
+
+##### Database Query Optimization
+
+**Latest Messages Query:**
+```sql
+-- Efficient recent message retrieval
+SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+FROM messages 
+WHERE recipient_npub = ? 
+ORDER BY sent_at DESC    -- Optimal for pagination
+LIMIT ?                 -- Get most recent N messages
+```
+- **Performance**: Uses index on `(recipient_npub, sent_at)` for optimal speed
+- **Memory**: Only loads requested number of messages
+- **Processing**: Results reversed in-memory to chronological order
+
+**Older Messages Query:**
+```sql
+-- Efficient chronological older message loading
+SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+FROM messages 
+WHERE recipient_npub = ? AND sent_at < ?  -- Cutoff-based pagination
+ORDER BY sent_at ASC     -- Natural chronological order
+LIMIT ?                 -- Page size limit
+```
+- **Performance**: Indexed query with timestamp cutoff for efficient seeking
+- **Order**: Results already in correct chronological order
+- **Pagination**: Cutoff-based approach prevents offset limitations
+
+##### Chronological Order Guarantee
+
+**Database Efficiency + Display Correctness:**
+1. **Database Queries**: Use `DESC` ordering for optimal index utilization
+2. **Memory Processing**: Reverse results to chronological order when needed
+3. **TUI Integration**: All message arrays processed in chronological order
+4. **Content Building**: Date bars and message flow work naturally
+
+**Order Processing Flow:**
+```
+Database Query (DESC for efficiency) 
+    ↓
+In-Memory Reversal (if needed)
+    ↓
+Chronological Array (oldest first)
+    ↓
+TUI Content Building (natural date flow)
+    ↓
+Proper Chat Display (oldest at top, newest at bottom)
+```
+
+##### Performance Characteristics
+
+**Memory Efficiency:**
+- **Page-based Loading**: Default 50 messages per page prevents memory bloat
+- **Lazy Loading**: Older messages only loaded when user scrolls
+- **Garbage Collection**: Unused message pages can be released
+
+**Database Performance:**
+- **Index Utilization**: Queries optimized for `(recipient_npub, sent_at)` index
+- **Cutoff-based Pagination**: More efficient than `OFFSET` for large datasets
+- **Connection Pooling**: SQLite connection reuse for multiple queries
+
+**UI Responsiveness:**
+- **Non-blocking Queries**: Database operations don't block UI thread
+- **Incremental Loading**: Messages appear as they're loaded
+- **Scroll Position Maintenance**: User's viewport preserved during loading
+
+##### Integration with TUI System
+
+**ChatState Integration:**
+- **Initial Load**: `GetLatestMessages()` populates ChatState.Messages
+- **Older Loading**: `GetMessagesBefore()` prepends older messages
+- **State Management**: ChatState tracks loading status and pagination
+- **Thread Safety**: All operations protected by ChatState mutex
+
+**Content Building Integration:**
+- **buildChatContent()**: Expects chronological message order
+- **Date Bar Logic**: Works naturally with chronological sequences
+- **Message Formatting**: Consistent display regardless of loading method
+
+**Scroll Management Integration:**
+- **Viewport Anchoring**: Maintains scroll position during content updates
+- **Loading Triggers**: Detects when user reaches top of loaded messages
+- **Position Restoration**: Preserves user context after loading older messages
+
+##### Testing and Validation
+
+**Comprehensive Test Coverage:**
+- **Chronological Order Tests**: Verify proper message sequencing
+- **Pagination Tests**: Validate cutoff-based loading logic
+- **Performance Tests**: Ensure efficient database utilization
+- **Edge Case Tests**: Handle empty conversations and boundary conditions
+
+**Test Methods:**
+```go
+func TestGetLatestMessages(t *testing.T)           // Chronological order validation
+func TestGetLatestMessagesLimit(t *testing.T)       // Pagination limit testing
+func TestGetLatestMessagesEmpty(t *testing.T)       // Empty result handling
+func TestGetLatestMessagesZeroLimit(t *testing.T)    // Edge case validation
+```
+
+##### Benefits Over Previous System
+
+**Performance Improvements:**
+- **Database Efficiency**: Optimized queries with proper index utilization
+- **Memory Usage**: Page-based loading prevents large memory allocations
+- **Query Speed**: Cutoff-based pagination faster than offset for large datasets
+
+**Reliability Improvements:**
+- **Chronological Guarantee**: Consistent message ordering across all operations
+- **Thread Safety**: Proper mutex protection prevents race conditions
+- **Error Handling**: Graceful degradation for database failures
+
+**User Experience Improvements:**
+- **Smooth Scrolling**: No message jumping or duplication during pagination
+- **Fast Initial Load**: Recent messages appear quickly
+- **Infinite Scroll**: Seamless loading of older messages as needed
+
+The paginated message loading system provides a robust, efficient foundation for handling large conversation histories while maintaining optimal performance and user experience.
+
 #### 5. **TUI** (`tui/`)
 Terminal User Interface component for interactive messaging.
 
@@ -577,6 +734,154 @@ func (mf *MessageFormatter) FormatIncomingMessage(timestamp, username, message s
 [blue]14:30:25[white] [orange]You:[white] Hi there!
 [blue]14:31:15[white] [green]Bob:[white] How are you?
 ```
+
+##### 5.5 **Paginated Scrolling System** (`tui/app.go`)
+Advanced message loading and scrolling system with efficient pagination and chronological display.
+
+**Architecture Overview:**
+The paginated scrolling system replaces complex state management with a clean, efficient approach that provides smooth scrolling through large conversation histories while maintaining proper chronological order.
+
+**Core Components:**
+
+**ChatState Struct** - Centralized state management for each conversation:
+```go
+type ChatState struct {
+    Partner         string                    // Current conversation partner
+    Messages        []cache.MessageEntry     // All loaded messages (chronological order)
+    TotalCount      int                     // Total messages in cache
+    CurrentOffset   int                     // Pagination offset (legacy, deprecated)
+    PageSize        int                     // Messages per page (default: 50)
+    IsFullyLoaded   bool                    // All messages loaded from cache
+    ScrollPosition  int                     // Current scroll row position
+    ViewportHeight  int                     // Visible rows in message view
+    ScrollAnchor    string                   // Message ID at viewport top
+    IsLoading      bool                     // Loading state indicator
+    mu             sync.RWMutex             // Thread-safe access
+}
+```
+
+**Key Methods:**
+```go
+// State Management
+func (a *App) getChatState(partner string) *ChatState
+func (a *App) setCurrentChatState(partner string)
+func (a *App) getCurrentChatState() *ChatState
+
+// Message Loading
+func (a *App) loadChatHistory()                    // Initial message load
+func (a *App) loadOlderMessages()                  // Load older messages on scroll
+func (cs *ChatState) AddMessages(messages []cache.MessageEntry, prepend bool)
+
+// Content Building
+func (a *App) buildChatContent(messages []cache.MessageEntry) string
+
+// Scroll Management
+func (a *App) restoreScrollPosition(anchor string, row, col int)
+func (a *App) findRowForMessage(messageID string) int
+func (cs *ChatState) GetScrollAnchor() string
+func (cs *ChatState) SetScrollPosition(position int)
+```
+
+**Pagination Strategy:**
+
+**Initial Load (`loadChatHistory`)**
+- Uses `cache.GetLatestMessages(partner, pageSize)` to get most recent messages
+- Messages are returned in chronological order (oldest first)
+- ChatState initialized with loaded messages and metadata
+- UI scrolls to bottom to show most recent messages
+
+**Loading Older Messages (`loadOlderMessages`)**
+- Triggered when user scrolls to top of current messages
+- Uses `cache.GetMessagesBefore(partner, oldestMessage.SentAt, pageSize)`
+- Older messages are prepended to maintain chronological order
+- Scroll position restored to maintain user's viewport
+
+**Database Query Optimization:**
+```sql
+-- GetLatestMessages: Efficient recent message retrieval
+SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+FROM messages 
+WHERE recipient_npub = ? 
+ORDER BY sent_at DESC
+LIMIT ?  -- Get most recent, then reverse to chronological
+
+-- GetMessagesBefore: Efficient older message loading  
+SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+FROM messages 
+WHERE recipient_npub = ? AND sent_at < ?
+ORDER BY sent_at ASC  -- Already chronological
+LIMIT ?
+```
+
+**Content Building (`buildChatContent`)**
+- Processes messages in chronological order (oldest first)
+- Automatically inserts date bars when message date changes
+- Uses MessageFormatter for consistent message appearance
+- Handles both sent and received messages with proper formatting
+
+**Scroll Position Management:**
+- **Viewport Anchoring**: Tracks message ID at top of viewport during content changes
+- **Position Restoration**: Maintains user's scroll position when loading older messages
+- **Smooth Scrolling**: PageUp/PageDown with proper boundary detection
+- **Loading Prevention**: Blocks concurrent loading operations to prevent race conditions
+
+**Thread Safety:**
+- **ChatState Mutex**: Protects all ChatState fields during concurrent access
+- **App-Level Mutex**: Protects currentPartner and other shared state
+- **Atomic Operations**: Content updates and scroll changes are atomic
+
+**Performance Optimizations:**
+
+**Memory Efficiency:**
+- Messages loaded in pages (default 50 messages per page)
+- Older messages only loaded when needed (lazy loading)
+- Date bars generated dynamically during content building
+
+**Database Efficiency:**
+- Indexed queries on `recipient_npub` and `sent_at` columns
+- Pagination prevents loading entire conversation history
+- DESC queries with in-memory reversal for optimal performance
+
+**UI Responsiveness:**
+- Non-blocking message loading with loading state indicators
+- Atomic content updates prevent visual glitches
+- Scroll position restoration maintains user context
+
+**Integration with Cache System:**
+
+**New Cache Methods:**
+```go
+// GetLatestMessages returns most recent messages in chronological order
+func (cache *SQLiteCache) GetLatestMessages(recipientNpub string, limit int) []MessageEntry
+
+// GetMessagesBefore returns messages older than cutoff time
+func (cache *SQLiteCache) GetMessagesBefore(recipientNpub string, cutoff time.Time, limit int) []MessageEntry
+```
+
+**Chronological Order Guarantee:**
+- All database queries use efficient DESC ordering for pagination
+- Results are reversed to chronological order in memory
+- `buildChatContent()` expects and processes chronological order
+- Date bars and message flow work naturally with proper ordering
+
+**Error Handling and Edge Cases:**
+- **Empty Conversations**: Graceful handling of partners with no messages
+- **Loading Failures**: Proper error handling and state cleanup
+- **Concurrent Operations**: Prevention of duplicate loading operations
+- **Scroll Boundaries**: Proper handling at top/bottom of message history
+
+**Benefits Over Previous System:**
+- **Simplified State Management**: Single ChatState struct replaces scattered variables
+- **Reliable Chronological Order**: Guaranteed proper message ordering
+- **Smooth Scrolling**: No jumping or duplication during pagination
+- **Better Performance**: Efficient database queries and memory usage
+- **Thread Safety**: Proper mutex protection prevents race conditions
+- **Maintainable Code**: Clean separation of concerns and single responsibility
+
+**Configuration:**
+- **Page Size**: Configurable via `ChatState.PageSize` (default: 50 messages)
+- **Scroll Sensitivity**: Adjustable via TUI keyboard shortcuts
+- **Loading Behavior**: Configurable loading indicators and timeouts
 
 #### 6. **CLI** (`cmd/`)
 Command-line interface for scripting and automation.
@@ -788,6 +1093,32 @@ Message Composition → GetRecipientRelays → Cache Check → NIP-50 Fetch (if 
 All Managed Relays → Enhanced Client Agent → Messaging Agent → Decryption → Cache → Dual Notification System
                                                                                       ├── External Notification (Always)
                                                                                       └── In-App Notification (Context-aware)
+```
+
+### Enhanced Message Loading Flow (Paginated Scrolling)
+```
+TUI Chat Initialization
+    ↓
+loadChatHistory() - Initial message load
+    ├── GetLatestMessages(partner, pageSize) - Database query (DESC + reverse)
+    ├── ChatState.Messages = chronological messages
+    ├── buildChatContent(messages) - Format with date bars
+    └── ScrollToEnd() - Show most recent messages
+    ↓
+User Scrolls to Top
+    ↓
+loadOlderMessages() - Load older messages
+    ├── GetMessagesBefore(partner, oldestMessage.SentAt, pageSize) - Cutoff query
+    ├── ChatState.AddMessages(olderMessages, prepend) - Maintain order
+    ├── buildChatContent(allMessages) - Rebuild content
+    ├── restoreScrollPosition() - Maintain viewport
+    └── Update loading state
+    ↓
+Continuous Pagination
+    ├── Repeat loadOlderMessages() as user scrolls up
+    ├── IsFullyLoaded prevents unnecessary queries
+    ├── IsLoading prevents concurrent operations
+    └── ChatState maintains all pagination state
 ```
 
 ### Enhanced Connection Management Flow
