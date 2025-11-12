@@ -330,6 +330,118 @@ func (sc *SQLiteCache) GetMessages(recipientNpub string, limit int) []MessageEnt
 		messages = append(messages, msg)
 	}
 
+	// Reverse to chronological order (oldest first) for proper display
+	// Database returns DESC for pagination efficiency, but display needs ASC
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages
+}
+
+func (sc *SQLiteCache) GetMessagesBefore(recipientNpub string, cutoff time.Time, limit int) []MessageEntry {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	query := `
+		SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+		FROM messages 
+		WHERE recipient_npub = ? AND sent_at < ?
+		ORDER BY sent_at ASC
+	`
+	if limit > 0 {
+		query += " LIMIT ?"
+	}
+
+	rows, err := sc.db.Query(query, recipientNpub, cutoff, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var messages []MessageEntry
+	for rows.Next() {
+		var msg MessageEntry
+		err := rows.Scan(&msg.ID, &msg.RecipientNpub, &msg.Message, &msg.SentAt, &msg.EventID, &msg.Direction, &msg.CreatedAt)
+		if err != nil {
+			continue
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages
+}
+
+func (sc *SQLiteCache) GetMessagesWithOffset(recipientNpub string, offset int, limit int) []MessageEntry {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	query := `
+		SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+		FROM messages 
+		WHERE recipient_npub = ?
+		ORDER BY sent_at DESC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := sc.db.Query(query, recipientNpub, limit, offset)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var messages []MessageEntry
+	for rows.Next() {
+		var msg MessageEntry
+		err := rows.Scan(&msg.ID, &msg.RecipientNpub, &msg.Message, &msg.SentAt, &msg.EventID, &msg.Direction, &msg.CreatedAt)
+		if err != nil {
+			continue
+		}
+		messages = append(messages, msg)
+	}
+
+	// Reverse to chronological order (oldest first) for proper display
+	// Database returns DESC for pagination efficiency, but display needs ASC
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages
+}
+
+func (sc *SQLiteCache) GetLatestMessages(recipientNpub string, limit int) []MessageEntry {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	query := `
+		SELECT id, recipient_npub, message, sent_at, event_id, direction, created_at
+		FROM messages 
+		WHERE recipient_npub = ? 
+		ORDER BY sent_at DESC
+		LIMIT ?
+	`
+
+	rows, err := sc.db.Query(query, recipientNpub, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var messages []MessageEntry
+	for rows.Next() {
+		var msg MessageEntry
+		err := rows.Scan(&msg.ID, &msg.RecipientNpub, &msg.Message, &msg.SentAt, &msg.EventID, &msg.Direction, &msg.CreatedAt)
+		if err != nil {
+			continue
+		}
+		messages = append(messages, msg)
+	}
+
+	// Reverse to chronological order (oldest first) for proper display
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
 	return messages
 }
 
@@ -662,7 +774,6 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 	return profile, true
 }
 
-
 // SetProfileWithRelayList caches both profile metadata and relay list together
 // If relayList is nil or empty, only profile metadata is updated, preserving existing relay list
 func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error {
@@ -722,7 +833,6 @@ func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetad
 
 	return tx.Commit()
 }
-
 
 // serializeRelayList converts a slice of relay URLs to JSON array format
 func (sc *SQLiteCache) serializeRelayList(relayList []string) string {

@@ -28,22 +28,22 @@ type MessageEntry struct {
 }
 
 type ProfileEntry struct {
-	ID                int64     `json:"id"`
-	Npub              string    `json:"npub"`
-	Name              string    `json:"name"`
-	DisplayName       string    `json:"display_name"`
-	About             string    `json:"about"`
-	Picture           string    `json:"picture"`
-	NIP05             string    `json:"nip05"`
-	LUD16             string    `json:"lud16"`
-	Website           string    `json:"website"`
-	Banner            string    `json:"banner"`
-	RelayList         string    `json:"relay_list"`           // JSON array of relay URLs
-	RelayListEventID  string    `json:"relay_list_event_id"`  // Kind 10050 event ID
+	ID                 int64     `json:"id"`
+	Npub               string    `json:"npub"`
+	Name               string    `json:"name"`
+	DisplayName        string    `json:"display_name"`
+	About              string    `json:"about"`
+	Picture            string    `json:"picture"`
+	NIP05              string    `json:"nip05"`
+	LUD16              string    `json:"lud16"`
+	Website            string    `json:"website"`
+	Banner             string    `json:"banner"`
+	RelayList          string    `json:"relay_list"`          // JSON array of relay URLs
+	RelayListEventID   string    `json:"relay_list_event_id"` // Kind 10050 event ID
 	RelayListUpdatedAt time.Time `json:"relay_list_updated_at"`
-	CachedAt          time.Time `json:"cached_at"`
-	ExpiresAt         time.Time `json:"expires_at"`
-	CreatedAt         time.Time `json:"created_at"`
+	CachedAt           time.Time `json:"cached_at"`
+	ExpiresAt          time.Time `json:"expires_at"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 // ToProfileMetadata converts ProfileEntry to ProfileMetadata
@@ -109,6 +109,9 @@ type Cache interface {
 	AddMessageWithTimestamp(recipientNpub, message, eventID, direction string, sentAt time.Time) error
 	GetMessages(recipientNpub string, limit int) []MessageEntry
 	GetRecentMessages(recipientNpub string, sentLimit, receivedLimit int) []MessageEntry
+	GetMessagesBefore(recipientNpub string, cutoff time.Time, limit int) []MessageEntry
+	GetMessagesWithOffset(recipientNpub string, offset int, limit int) []MessageEntry
+	GetLatestMessages(recipientNpub string, limit int) []MessageEntry
 	SearchMessages(recipientNpub, query string) []MessageEntry
 	GetMessagesByDateRange(recipientNpub string, start, end time.Time) []MessageEntry
 	GetMessageStats(recipientNpub string) (sent, received int, err error)

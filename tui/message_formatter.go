@@ -45,6 +45,36 @@ func (mf *MessageFormatter) FormatIncomingMessage(timestamp, username, message s
 	return fmt.Sprintf("[blue]%s[white] [green]%s:[white] %s", timestamp, username, message)
 }
 
+// CountLinesInFormattedMessages counts the number of lines that would be generated
+// by formatting the given messages with date bars
+func (mf *MessageFormatter) CountLinesInFormattedMessages(messages []cache.MessageEntry, getDisplayName func(string) string) int {
+	var lineCount int
+	var prevTime time.Time
+
+	for i, msg := range messages {
+		// Add date bar lines
+		if i == 0 || shouldInsertDateBar(prevTime, msg.SentAt) {
+			if i > 0 {
+				lineCount++ // Spacing before date bar
+			}
+			lineCount++    // Date bar line
+			lineCount += 2 // Two spacing lines after date bar (\n\n)
+		}
+
+		// Message line
+		lineCount++
+
+		// Newline between messages (except last)
+		if i < len(messages)-1 {
+			lineCount++
+		}
+
+		prevTime = msg.SentAt
+	}
+
+	return lineCount
+}
+
 // formatDateBar creates a styled single-line date separator
 func formatDateBar(date time.Time) string {
 	dateStr := date.Format("January 2, 2006")

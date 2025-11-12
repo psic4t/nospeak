@@ -18,6 +18,217 @@ import (
 	"github.com/rivo/tview"
 )
 
+// ChatState manages the state for a single chat conversation
+type ChatState struct {
+	Partner        string               // Partner npub
+	Messages       []cache.MessageEntry // All loaded messages (chronological order)
+	TotalCount     int                  // Total messages in cache for this partner
+	CurrentOffset  int                  // Current offset for pagination
+	PageSize       int                  // Messages per page
+	IsFullyLoaded  bool                 // All messages loaded
+	ScrollPosition int                  // Current scroll row
+	ViewportHeight int                  // Visible rows in message view
+	ScrollAnchor   string               // Message ID at top of viewport
+	IsLoading      bool                 // Loading state
+	mu             sync.RWMutex         // Thread safety
+}
+
+// GetScrollAnchor returns the message ID at current scroll position
+func (cs *ChatState) GetScrollAnchor() string {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+
+	if cs.ScrollPosition < len(cs.Messages) {
+		return cs.Messages[cs.ScrollPosition].EventID
+	}
+	return ""
+}
+
+// SetScrollPosition sets the scroll position and updates anchor
+func (cs *ChatState) SetScrollPosition(position int) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	cs.ScrollPosition = position
+	if position < len(cs.Messages) {
+		cs.ScrollAnchor = cs.Messages[position].EventID
+	}
+}
+
+// AddMessages adds new messages to the chat state
+func (cs *ChatState) AddMessages(newMessages []cache.MessageEntry, prepend bool) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	if prepend {
+		// Add older messages to the beginning
+		cs.Messages = append(newMessages, cs.Messages...)
+	} else {
+		// Add newer messages to the end
+		cs.Messages = append(cs.Messages, newMessages...)
+	}
+}
+
+// GetVisibleMessages returns messages currently visible in viewport
+func (cs *ChatState) GetVisibleMessages() []cache.MessageEntry {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+
+	if cs.ScrollPosition >= len(cs.Messages) {
+		return []cache.MessageEntry{}
+	}
+
+	end := cs.ScrollPosition + cs.ViewportHeight
+	if end > len(cs.Messages) {
+		end = len(cs.Messages)
+	}
+
+	return cs.Messages[cs.ScrollPosition:end]
+}
+
+// buildChatContent builds formatted chat content from messages (chronological order)
+func (a *App) buildChatContent(messages []cache.MessageEntry) string {
+	var result strings.Builder
+	var prevTime time.Time
+
+	for i, message := range messages {
+		// Insert date bar if needed
+		if shouldInsertDateBar(prevTime, message.SentAt) {
+			if i > 0 {
+				result.WriteString("\n") // Add spacing before date bar
+			}
+			result.WriteString(formatDateBar(message.SentAt))
+			result.WriteString("\n\n")
+		}
+
+		// Format actual message
+		var formatted string
+		if message.Direction == "sent" {
+			formatted = a.messageFormatter.FormatMessageEntry(message, "", true)
+		} else {
+			// For received messages, RecipientNpub contains the sender's npub
+			senderNpub := message.RecipientNpub
+			username := a.profileResolver.GetDisplayName(senderNpub)
+			formatted = a.messageFormatter.FormatMessageEntry(message, username, false)
+		}
+
+		result.WriteString(formatted)
+
+		if i < len(messages)-1 {
+			result.WriteString("\n") // Add newline between messages
+		}
+
+		prevTime = message.SentAt
+	}
+
+	return result.String()
+}
+
+// restoreScrollPosition maintains user's viewport after content changes
+func (a *App) restoreScrollPosition(scrollAnchor string, originalRow, originalCol int) {
+	chatState := a.getCurrentChatState()
+	if chatState == nil || scrollAnchor == "" {
+		// If no anchor, scroll to bottom for new content
+		a.messageView.ScrollToEnd()
+		return
+	}
+
+	// Find the new row position for the anchor message
+	newRow := a.findRowForMessage(scrollAnchor)
+	if newRow == -1 {
+		// Anchor message not found, scroll to bottom
+		a.messageView.ScrollToEnd()
+		return
+	}
+
+	// If user was at the top (row 0), keep them at top to see older messages
+	// If user was scrolled down, maintain their relative position
+	var targetRow int
+	if originalRow == 0 {
+		targetRow = 0
+	} else {
+		targetRow = newRow
+	}
+
+	a.messageView.ScrollTo(targetRow, originalCol)
+}
+
+// findRowForMessage finds the row position for a message ID in current content
+func (a *App) findRowForMessage(messageID string) int {
+	// This is a simplified implementation - in practice, we'd need to
+	// parse the formatted content to find the exact row
+	// For now, we'll use a basic approach
+	chatState := a.getCurrentChatState()
+	if chatState == nil {
+		return -1
+	}
+
+	for i, msg := range chatState.Messages {
+		if msg.EventID == messageID {
+			return i
+		}
+	}
+	return -1
+}
+
+// Helper methods for App to manage chat states
+
+// getChatState returns the chat state for a partner, creating one if needed
+func (a *App) getChatState(partner string) *ChatState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if state, exists := a.chatStates[partner]; exists {
+		return state
+	}
+
+	// Create new chat state
+	state := &ChatState{
+		Partner:        partner,
+		Messages:       []cache.MessageEntry{},
+		CurrentOffset:  0,
+		PageSize:       50,
+		IsFullyLoaded:  false,
+		ScrollPosition: 0,
+		ViewportHeight: 20, // Will be updated when UI is ready
+		IsLoading:      false,
+	}
+
+	a.chatStates[partner] = state
+	return state
+}
+
+// setCurrentChatState sets the active chat state
+func (a *App) setCurrentChatState(partner string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if state, exists := a.chatStates[partner]; exists {
+		a.currentChatState = state
+	} else {
+		// Create new state if it doesn't exist
+		state := &ChatState{
+			Partner:        partner,
+			Messages:       []cache.MessageEntry{},
+			CurrentOffset:  0,
+			PageSize:       50,
+			IsFullyLoaded:  false,
+			ScrollPosition: 0,
+			ViewportHeight: 20,
+			IsLoading:      false,
+		}
+		a.chatStates[partner] = state
+		a.currentChatState = state
+	}
+}
+
+// getCurrentChatState returns the current active chat state
+func (a *App) getCurrentChatState() *ChatState {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.currentChatState
+}
+
 type App struct {
 	app    *tview.Application
 	client *client.Client
@@ -43,10 +254,9 @@ type App struct {
 	logger          *logging.DebugLogger
 	mu              sync.RWMutex
 
-	// Message loading state
-	loadedSentCount     int
-	loadedReceivedCount int
-	hasMoreMessages     bool
+	// Chat state management
+	chatStates       map[string]*ChatState
+	currentChatState *ChatState
 
 	// UI state
 	contactsVisible bool
@@ -119,6 +329,7 @@ func NewApp(configPath string) (*App, error) {
 		logger:           logger,
 		ctx:              ctx,
 		cancel:           cancel,
+		chatStates:       make(map[string]*ChatState),
 	}
 
 	if err := app.setupUI(); err != nil {
@@ -413,44 +624,6 @@ func (a *App) updateContactListHighlight() {
 	a.updateContactListWithNames()
 }
 
-// formatMessagesWithDateBars formats messages with date separators
-func (a *App) formatMessagesWithDateBars(messages []cache.MessageEntry) string {
-	var result strings.Builder
-	var prevTime time.Time
-
-	for i, message := range messages {
-		// Insert date bar if needed
-		if shouldInsertDateBar(prevTime, message.SentAt) {
-			if i > 0 {
-				result.WriteString("\n") // Add spacing before date bar
-			}
-			result.WriteString(formatDateBar(message.SentAt))
-			result.WriteString("\n\n")
-		}
-
-		// Format the actual message
-		var formatted string
-		if message.Direction == "sent" {
-			formatted = a.messageFormatter.FormatMessageEntry(message, "", true)
-		} else {
-			// For received messages, RecipientNpub contains the sender's npub
-			senderNpub := message.RecipientNpub
-			username := a.profileResolver.GetDisplayName(senderNpub)
-			formatted = a.messageFormatter.FormatMessageEntry(message, username, false)
-		}
-
-		result.WriteString(formatted)
-
-		if i < len(messages)-1 {
-			result.WriteString("\n") // Add newline between messages
-		}
-
-		prevTime = message.SentAt
-	}
-
-	return result.String()
-}
-
 func (a *App) loadChatHistory() {
 	a.mu.RLock()
 	partner := a.currentPartner
@@ -460,84 +633,102 @@ func (a *App) loadChatHistory() {
 		return
 	}
 
-	// Reset loading state for new contact
-	a.loadedSentCount = 10
-	a.loadedReceivedCount = 10
-	a.hasMoreMessages = true
+	// Initialize chat state for this partner
+	chatState := a.getChatState(partner)
+	a.setCurrentChatState(partner)
 
-	messages := a.client.GetMessageHistoryEnhanced(partner, a.loadedSentCount, a.loadedReceivedCount)
+	// Load initial messages - get most recent messages in chronological order
+	messages := a.messageCache.GetLatestMessages(partner, chatState.PageSize)
+
+	// Update chat state
+	chatState.Messages = messages
+	chatState.IsFullyLoaded = len(messages) < chatState.PageSize
+	chatState.IsLoading = false
+
+	// Get total count for this partner
+	allMessages := a.messageCache.GetMessages(partner, 1000) // Get a lot to count
+	chatState.TotalCount = len(allMessages)
 
 	a.messageView.Clear()
 
 	// Format messages with date bars
-	formattedContent := a.formatMessagesWithDateBars(messages)
+	formattedContent := a.buildChatContent(messages)
 	a.messageView.Write([]byte(formattedContent))
 
 	a.messageView.ScrollToEnd()
 
 	// Update date tracking for new messages
 	if len(messages) > 0 {
-		a.lastMessageTime = messages[0].SentAt // Most recent message
+		a.lastMessageTime = messages[len(messages)-1].SentAt // Most recent message (last in chronological)
 		a.lastRecipient = partner
 	}
 }
 
 func (a *App) loadOlderMessages() {
-	a.mu.RLock()
-	partner := a.currentPartner
-	a.mu.RUnlock()
-
-	if partner == "" || !a.hasMoreMessages {
+	chatState := a.getCurrentChatState()
+	if chatState == nil || chatState.IsFullyLoaded || chatState.IsLoading {
 		return
 	}
 
-	// Store current content and scroll position
-	currentContent := a.messageView.GetText(false)
-	row, col := a.messageView.GetScrollOffset()
+	// Set loading flag to prevent concurrent operations
+	chatState.mu.Lock()
+	chatState.IsLoading = true
+	chatState.mu.Unlock()
 
-	// Load more messages
-	newSentCount := a.loadedSentCount + 10
-	newReceivedCount := a.loadedReceivedCount + 10
+	// Capture current scroll position before content changes
+	currentRow, currentCol := a.messageView.GetScrollOffset()
+	scrollAnchor := chatState.GetScrollAnchor()
 
-	messages := a.client.GetMessageHistoryEnhanced(partner, newSentCount, newReceivedCount)
-
-	// Check if we got more messages
-	if len(messages) <= (a.loadedSentCount + a.loadedReceivedCount) {
-		a.hasMoreMessages = false
+	// Load older messages using the oldest message we currently have as cutoff
+	if len(chatState.Messages) == 0 {
+		chatState.mu.Lock()
+		chatState.IsLoading = false
+		chatState.mu.Unlock()
+		return
 	}
 
-	a.loadedSentCount = newSentCount
-	a.loadedReceivedCount = newReceivedCount
+	oldestMessage := chatState.Messages[0] // First message is oldest due to chronological order
+	olderMessages := a.messageCache.GetMessagesBefore(chatState.Partner, oldestMessage.SentAt, chatState.PageSize)
 
-	// Count how many new lines we're adding
-	oldLineCount := len(strings.Split(currentContent, "\n"))
+	if len(olderMessages) == 0 {
+		// No more messages to load
+		chatState.mu.Lock()
+		chatState.IsFullyLoaded = true
+		chatState.IsLoading = false
+		chatState.mu.Unlock()
+		return
+	}
 
-	// Rebuild the entire message view with date bars
+	// Update chat state with new messages
+	chatState.AddMessages(olderMessages, true) // Prepend older messages
+	chatState.IsLoading = false
+
+	// Rebuild entire content with all messages
+	formattedContent := a.buildChatContent(chatState.Messages)
+
+	// Update view atomically
 	a.messageView.Clear()
-
-	// Format messages with date bars
-	formattedContent := a.formatMessagesWithDateBars(messages)
 	a.messageView.Write([]byte(formattedContent))
 
-	// Calculate new scroll position
-	newLineCount := len(strings.Split(a.messageView.GetText(false), "\n"))
-	lineDifference := newLineCount - oldLineCount
-
-	// Restore scroll position, adjusted for new content
-	newScrollRow := row + lineDifference
-	if newScrollRow < 0 {
-		newScrollRow = 0
-	}
-	a.messageView.ScrollTo(newScrollRow, col)
+	// Restore scroll position to maintain user's view
+	a.restoreScrollPosition(scrollAnchor, currentRow, currentCol)
 }
 
 func (a *App) scrollMessageUp() {
 	row, col := a.messageView.GetScrollOffset()
 	if row > 0 {
 		a.messageView.ScrollTo(row-1, col)
-	} else if row == 0 && a.hasMoreMessages {
-		// At the top and there are more messages to load
-		a.loadOlderMessages()
+		// Update chat state scroll position
+		if chatState := a.getCurrentChatState(); chatState != nil {
+			chatState.SetScrollPosition(row - 1)
+		}
+	} else if row == 0 {
+		// At the top - check if we can load more messages
+		chatState := a.getCurrentChatState()
+		if chatState != nil && !chatState.IsFullyLoaded && !chatState.IsLoading {
+			// At the top and there are more messages to load
+			a.loadOlderMessages()
+		}
 	}
 }
 
