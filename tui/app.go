@@ -62,6 +62,10 @@ type App struct {
 	// Message formatting
 	messageFormatter *MessageFormatter
 
+	// Date tracking for message display
+	lastMessageTime time.Time
+	lastRecipient   string
+
 	// Context
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -332,6 +336,11 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 		a.mu.Lock()
 		a.currentPartner = a.partners[index]
 		selectedPartner := a.partners[index]
+
+		// Reset date tracking when switching contacts
+		a.lastMessageTime = time.Time{}
+		a.lastRecipient = selectedPartner
+
 		a.mu.Unlock()
 
 		// Clear unread status for selected contact
@@ -347,10 +356,15 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 		// Handle selection of "no partners" message
 		a.mu.Lock()
 		a.currentPartner = ""
+
+		// Reset date tracking
+		a.lastMessageTime = time.Time{}
+		a.lastRecipient = ""
+
 		a.mu.Unlock()
 
 		a.messageView.Clear()
-		a.messageView.Write([]byte("[yellow]No chat partners configured[white]\n\n[gray]Press F2 to open settings and add partners[white]\n"))
+		a.messageView.Write([]byte("[yellow]No chat partners configured[white]\n\n[gray]Press F2 to add partners[white]\n"))
 		a.updateStatusBar()
 		a.updateTerminalTitle()
 	}
@@ -399,6 +413,44 @@ func (a *App) updateContactListHighlight() {
 	a.updateContactListWithNames()
 }
 
+// formatMessagesWithDateBars formats messages with date separators
+func (a *App) formatMessagesWithDateBars(messages []cache.MessageEntry) string {
+	var result strings.Builder
+	var prevTime time.Time
+
+	for i, message := range messages {
+		// Insert date bar if needed
+		if shouldInsertDateBar(prevTime, message.SentAt) {
+			if i > 0 {
+				result.WriteString("\n") // Add spacing before date bar
+			}
+			result.WriteString(formatDateBar(message.SentAt))
+			result.WriteString("\n\n")
+		}
+
+		// Format the actual message
+		var formatted string
+		if message.Direction == "sent" {
+			formatted = a.messageFormatter.FormatMessageEntry(message, "", true)
+		} else {
+			// For received messages, RecipientNpub contains the sender's npub
+			senderNpub := message.RecipientNpub
+			username := a.profileResolver.GetDisplayName(senderNpub)
+			formatted = a.messageFormatter.FormatMessageEntry(message, username, false)
+		}
+
+		result.WriteString(formatted)
+
+		if i < len(messages)-1 {
+			result.WriteString("\n") // Add newline between messages
+		}
+
+		prevTime = message.SentAt
+	}
+
+	return result.String()
+}
+
 func (a *App) loadChatHistory() {
 	a.mu.RLock()
 	partner := a.currentPartner
@@ -417,20 +469,17 @@ func (a *App) loadChatHistory() {
 
 	a.messageView.Clear()
 
-	for _, msg := range messages {
-		var formatted string
-		if msg.Direction == "sent" {
-			formatted = a.messageFormatter.FormatMessageEntry(msg, "", true)
-		} else {
-			// For received messages, RecipientNpub contains the sender's npub
-			senderNpub := msg.RecipientNpub
-			username := a.profileResolver.GetDisplayName(senderNpub)
-			formatted = a.messageFormatter.FormatMessageEntry(msg, username, false)
-		}
-		a.messageView.Write([]byte(formatted + "\n"))
-	}
+	// Format messages with date bars
+	formattedContent := a.formatMessagesWithDateBars(messages)
+	a.messageView.Write([]byte(formattedContent))
 
 	a.messageView.ScrollToEnd()
+
+	// Update date tracking for new messages
+	if len(messages) > 0 {
+		a.lastMessageTime = messages[0].SentAt // Most recent message
+		a.lastRecipient = partner
+	}
 }
 
 func (a *App) loadOlderMessages() {
@@ -463,21 +512,12 @@ func (a *App) loadOlderMessages() {
 	// Count how many new lines we're adding
 	oldLineCount := len(strings.Split(currentContent, "\n"))
 
-	// Rebuild the entire message view
+	// Rebuild the entire message view with date bars
 	a.messageView.Clear()
 
-	for _, msg := range messages {
-		var formatted string
-		if msg.Direction == "sent" {
-			formatted = a.messageFormatter.FormatMessageEntry(msg, "", true)
-		} else {
-			// For received messages, RecipientNpub contains the sender's npub
-			senderNpub := msg.RecipientNpub
-			username := a.profileResolver.GetDisplayName(senderNpub)
-			formatted = a.messageFormatter.FormatMessageEntry(msg, username, false)
-		}
-		a.messageView.Write([]byte(formatted + "\n"))
-	}
+	// Format messages with date bars
+	formattedContent := a.formatMessagesWithDateBars(messages)
+	a.messageView.Write([]byte(formattedContent))
 
 	// Calculate new scroll position
 	newLineCount := len(strings.Split(a.messageView.GetText(false), "\n"))
@@ -560,10 +600,34 @@ func (a *App) sendMessage() {
 	}
 
 	// Display message immediately
-	timestamp := time.Now().Format("15:04:05")
+	currentTime := time.Now()
+	timestamp := currentTime.Format("15:04:05")
+
+	// Check if we need a date bar
+	// Don't add date bar if this is the first message for the contact
+	// Also don't add if today's date bar already exists in the view
+	currentContent := a.messageView.GetText(false)
+	hasExistingMessages := strings.TrimSpace(currentContent) != ""
+
+	// Check if there's already a date bar for today in the message view
+	todayDateBar := formatDateBar(currentTime)
+	hasTodayDateBar := strings.Contains(currentContent, todayDateBar)
+
+	if hasExistingMessages && !hasTodayDateBar && shouldInsertDateBar(a.lastMessageTime, currentTime) {
+		dateBar := formatDateBar(currentTime)
+		a.messageView.Write([]byte("\n" + dateBar + "\n"))
+	} else if hasExistingMessages {
+		// Add spacing when no date bar is added but there are existing messages
+		a.messageView.Write([]byte("\n"))
+	}
+
 	a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, message)))
 	a.messageView.ScrollToEnd()
 	a.inputField.SetText("")
+
+	// Update date tracking
+	a.lastMessageTime = currentTime
+	a.lastRecipient = partner
 
 	// Show sending status
 	a.setStatusMessage("sending message...")
@@ -875,48 +939,48 @@ func (a *App) showProfileModal() {
 
 	var profileText string
 	if err == nil {
-			// Build profile display text
-			profileText = fmt.Sprintf("[violet]Profile Information[white]\n\n")
+		// Build profile display text
+		profileText = fmt.Sprintf("[violet]Profile Information[white]\n\n")
 
-			// Name/Display Name
-			if metadata.Name != "" || metadata.DisplayName != "" {
-				profileText += fmt.Sprintf("[green]Name:[white]\n")
-				if metadata.Name != "" {
-					profileText += fmt.Sprintf("  %s", metadata.Name)
-					if metadata.DisplayName != "" && metadata.DisplayName != metadata.Name {
-						profileText += fmt.Sprintf(" (%s)", metadata.DisplayName)
-					}
-					profileText += "\n\n"
-				} else if metadata.DisplayName != "" {
-					profileText += fmt.Sprintf("  %s\n\n", metadata.DisplayName)
+		// Name/Display Name
+		if metadata.Name != "" || metadata.DisplayName != "" {
+			profileText += fmt.Sprintf("[green]Name:[white]\n")
+			if metadata.Name != "" {
+				profileText += fmt.Sprintf("  %s", metadata.Name)
+				if metadata.DisplayName != "" && metadata.DisplayName != metadata.Name {
+					profileText += fmt.Sprintf(" (%s)", metadata.DisplayName)
 				}
+				profileText += "\n\n"
+			} else if metadata.DisplayName != "" {
+				profileText += fmt.Sprintf("  %s\n\n", metadata.DisplayName)
 			}
-
-			// About section
-			if metadata.About != "" {
-				profileText += fmt.Sprintf("[green]About:[white]\n  %s\n\n", metadata.About)
-			}
-
-			// NIP05
-			if metadata.NIP05 != "" {
-				profileText += fmt.Sprintf("[green]NIP05:[white]\n  %s\n\n", metadata.NIP05)
-			}
-
-			// Lightning address
-			if metadata.LUD16 != "" {
-				profileText += fmt.Sprintf("[green]Lightning:[white]\n  %s\n\n", metadata.LUD16)
-			}
-
-			// Picture URL
-			if metadata.Picture != "" {
-				profileText += fmt.Sprintf("[green]Picture:[white]\n  %s\n\n", metadata.Picture)
-			}
-		} else {
-			// No profile data available
-			profileText = fmt.Sprintf("No profile data available for %s\n\n", displayName)
-			profileText += fmt.Sprintf("[yellow]Public Key:[white]\n  %s\n\n", currentPartner)
-			profileText += "Profile will be fetched when needed."
 		}
+
+		// About section
+		if metadata.About != "" {
+			profileText += fmt.Sprintf("[green]About:[white]\n  %s\n\n", metadata.About)
+		}
+
+		// NIP05
+		if metadata.NIP05 != "" {
+			profileText += fmt.Sprintf("[green]NIP05:[white]\n  %s\n\n", metadata.NIP05)
+		}
+
+		// Lightning address
+		if metadata.LUD16 != "" {
+			profileText += fmt.Sprintf("[green]Lightning:[white]\n  %s\n\n", metadata.LUD16)
+		}
+
+		// Picture URL
+		if metadata.Picture != "" {
+			profileText += fmt.Sprintf("[green]Picture:[white]\n  %s\n\n", metadata.Picture)
+		}
+	} else {
+		// No profile data available
+		profileText = fmt.Sprintf("No profile data available for %s\n\n", displayName)
+		profileText += fmt.Sprintf("[yellow]Public Key:[white]\n  %s\n\n", currentPartner)
+		profileText += "Profile will be fetched when needed."
+	}
 
 	modal := tview.NewModal().
 		SetText(profileText).
@@ -999,11 +1063,24 @@ func (a *App) listenForMessages(debug bool) {
 		// Update UI if message is from current partner
 		if senderNpub == currentPartner {
 			a.app.QueueUpdate(func() {
-				timestamp := time.Now().Format("15:04:05")
+				currentTime := time.Now()
+				timestamp := currentTime.Format("15:04:05")
 				username := a.profileResolver.GetDisplayName(senderNpub)
+
+				// Check if we need a date bar
+				if shouldInsertDateBar(a.lastMessageTime, currentTime) {
+					dateBar := formatDateBar(currentTime)
+					a.messageView.Write([]byte("\n" + dateBar + "\n"))
+				}
+
 				formatted := a.messageFormatter.FormatIncomingMessage(timestamp, username, message)
 				a.messageView.Write([]byte(formatted + "\n"))
 				a.messageView.ScrollToEnd()
+
+				// Update date tracking
+				a.lastMessageTime = currentTime
+				a.lastRecipient = senderNpub
+
 				// Force the UI to redraw
 				a.app.ForceDraw()
 			})
