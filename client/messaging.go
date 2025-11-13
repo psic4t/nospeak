@@ -205,34 +205,68 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 		}
 	}
 
+	if debug {
+		log.Printf("QueryEvents returned %d events for %s", len(events), recipientNpub[:8]+"...")
+	}
+
 	var relays []string
 	var relayListEventID string
 
 	for _, event := range events {
+		if debug {
+			log.Printf("Processing Event 10002: ID=%s, Tags=%d", event.ID, len(event.Tags))
+		}
 		relayListEventID = event.ID
 		for _, tag := range event.Tags {
+			if debug {
+				log.Printf("Processing tag: %v", tag)
+			}
 			if len(tag) >= 2 && tag[0] == "r" {
+				if debug {
+					log.Printf("Found relay tag: %s", tag[1])
+				}
 				relays = append(relays, tag[1])
 			}
 		}
 	}
 
+	if debug {
+		log.Printf("Extracted %d relays from Event 10002", len(relays))
+	}
+
 	// Update cache with relay list if we found one
 	if len(relays) > 0 && relayListEventID != "" {
+		if debug {
+			log.Printf("Updating cache with %d relays for %s", len(relays), recipientNpub[:8]+"...")
+		}
 		// Get current profile to preserve metadata, then update with new relay list
 		if cachedProfile, found := cacheInstance.GetProfile(recipientNpub); found {
+			if debug {
+				log.Printf("Found existing cached profile for %s, updating with relay list", recipientNpub[:8]+"...")
+			}
 			profileMetadata := cachedProfile.ToProfileMetadata()
 			err = cacheInstance.SetProfileWithRelayList(recipientNpub, profileMetadata, relays, relayListEventID, 24*time.Hour)
 			if err != nil && debug {
 				log.Printf("Failed to cache relay list for %s: %v", recipientNpub[:8]+"...", err)
+			} else if debug {
+				log.Printf("Successfully cached relay list for %s", recipientNpub[:8]+"...")
 			}
 		} else {
+			if debug {
+				log.Printf("No existing cached profile for %s, creating new with relay list", recipientNpub[:8]+"...")
+			}
 			// No cached profile, create minimal one with just relay list
 			minimalProfile := cache.ProfileMetadata{}
 			err = cacheInstance.SetProfileWithRelayList(recipientNpub, minimalProfile, relays, relayListEventID, 24*time.Hour)
 			if err != nil && debug {
 				log.Printf("Failed to cache profile with relay list for %s: %v", recipientNpub[:8]+"...", err)
+			} else if debug {
+				log.Printf("Successfully created new profile with relay list for %s", recipientNpub[:8]+"...")
 			}
+		}
+	} else {
+		if debug {
+			log.Printf("No relays found for %s (len(relays)=%d, relayListEventID=%s)", recipientNpub[:8]+"...", len(relays), relayListEventID)
 		}
 	}
 
