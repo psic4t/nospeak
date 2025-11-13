@@ -11,7 +11,7 @@ import (
 	"github.com/data.haus/nospeak/tui"
 )
 
-const Version = "0.9.6"
+const Version = "0.9.7"
 
 func main() {
 	// Check for help flags before flag.Parse() to override default behavior

@@ -115,6 +115,41 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	return nil
 }
 
+// WaitForConnections waits for at least one relay connection before proceeding
+// This is useful for CLI operations that need immediate connectivity
+func (c *Client) WaitForConnections(ctx context.Context, minConnections int, timeout time.Duration, debug bool) error {
+	if debug {
+		log.Printf("Waiting for at least %d relay connections (timeout: %v)", minConnections, timeout)
+	}
+
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			connectedCount := len(c.connectionManager.GetConnectedRelays())
+			return fmt.Errorf("timeout waiting for connections: got %d, need %d", connectedCount, minConnections)
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			connectedCount := len(c.connectionManager.GetConnectedRelays())
+			if connectedCount >= minConnections {
+				if debug {
+					log.Printf("Successfully connected to %d relays", connectedCount)
+				}
+				// Update the client's relay slice with the connected relays
+				c.UpdateRelayList()
+				return nil
+			}
+			if debug {
+				log.Printf("Waiting for connections: currently %d connected, need %d", connectedCount, minConnections)
+			}
+		}
+	}
+}
+
 func (c *Client) authenticateRelay(ctx context.Context, relay *nostr.Relay, debug bool) error {
 	// Only attempt authentication if we have a secret key
 	if c.secretKey == "" {
