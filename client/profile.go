@@ -77,9 +77,9 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 
 	hexPubKey := pubKey.(string)
 
-	// Query for both profile metadata (kind 0) and relay list (kind 10050)
+	// Query for both profile metadata (kind 0) and relay list (kind 10002)
 	filters := nostr.Filters{{
-		Kinds:   []int{0, 10050}, // Query both kinds
+		Kinds:   []int{0, 10002}, // Query both kinds
 		Authors: []string{hexPubKey},
 		Limit:   10, // Higher limit to get both events
 	}}
@@ -108,11 +108,11 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 		switch event.Kind {
 		case 0:
 			profileEvent = &event
-		case 10050:
+		case 10002:
 			relayListEvent = &event
 			// Extract relays from the event tags
 			for _, tag := range event.Tags {
-				if len(tag) >= 2 && tag[0] == "relay" {
+				if len(tag) >= 2 && tag[0] == "r" {
 					relayList = append(relayList, tag[1])
 				}
 			}

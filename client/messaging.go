@@ -191,9 +191,9 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 		log.Printf("No cached relay list for %s, querying network", recipientNpub[:8]+"...")
 	}
 
-	// Query for recipient's kind 10050 event (DM relays)
+	// Query for recipient's kind 10002 event (NIP-65 relay list)
 	filters := nostr.Filters{{
-		Kinds:   []int{10050},
+		Kinds:   []int{10002},
 		Authors: []string{recipientHex},
 		Limit:   1,
 	}}
@@ -201,7 +201,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 	events, err := c.QueryEvents(ctx, filters, debug)
 	if err != nil {
 		if debug {
-			log.Printf("Failed to query for recipient's DM relays: %v", err)
+			log.Printf("Failed to query for recipient's NIP-65 relay list: %v", err)
 		}
 	}
 
@@ -211,7 +211,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 	for _, event := range events {
 		relayListEventID = event.ID
 		for _, tag := range event.Tags {
-			if len(tag) >= 2 && tag[0] == "relay" {
+			if len(tag) >= 2 && tag[0] == "r" {
 				relays = append(relays, tag[1])
 			}
 		}
@@ -285,16 +285,16 @@ func (c *Client) SetProfileName(ctx context.Context, name string, debug bool) er
 }
 
 func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
-	// Create kind 10050 event with all relays from config
+	// Create kind 10002 event with all relays from config (NIP-65)
 	tags := make(nostr.Tags, 0, len(c.config.Relays))
 	for _, relay := range c.config.Relays {
-		tags = append(tags, nostr.Tag{"relay", relay})
+		tags = append(tags, nostr.Tag{"r", relay})
 	}
 
 	event := nostr.Event{
 		PubKey:    c.publicKey,
 		CreatedAt: nostr.Now(),
-		Kind:      10050,
+		Kind:      10002,
 		Tags:      tags,
 		Content:   "",
 	}
@@ -304,7 +304,7 @@ func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
 	}
 
 	if debug {
-		fmt.Printf("=== DEBUG: Messaging Relays Event (Kind 10050) ===\n")
+		fmt.Printf("=== DEBUG: Messaging Relays Event (Kind 10002 - NIP-65) ===\n")
 		fmt.Printf("ID: %s\n", event.ID)
 		fmt.Printf("Kind: %d\n", event.Kind)
 		fmt.Printf("CreatedAt: %d\n", event.CreatedAt)

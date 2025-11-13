@@ -18,7 +18,7 @@ The main orchestrator that manages all Nostr protocol operations with enhanced c
 - **Authentication with Nostr Relays**: Dynamic authentication for relay access
 - **Coordinating Message Encryption/Decryption**: End-to-end encryption coordination
 - **Profile Resolution and Caching**: User profile management
-- **Mailbox Relay Discovery**: NIP-50 relay discovery and management
+- **Mailbox Relay Discovery**: NIP-65 relay discovery and management
 
 **Key Methods:**
 - `NewClient()` - Initialize client with enhanced connection management
@@ -280,7 +280,7 @@ CREATE TABLE profile_cache (
     name TEXT, display_name TEXT, about TEXT, picture TEXT,
     nip05 TEXT, lud16 TEXT, website TEXT, banner TEXT,
     relay_list TEXT,                        -- JSON array of mailbox relay URLs
-    relay_list_event_id TEXT,               -- NIP-50 event ID for relay list
+    relay_list_event_id TEXT,               -- NIP-65 event ID for relay list
     relay_list_updated_at DATETIME,         -- When relay list was last fetched
     cached_at DATETIME NOT NULL,
     expires_at DATETIME NOT NULL,
@@ -312,7 +312,7 @@ type ProfileEntry struct {
     Website           string    `json:"website"`
     Banner            string    `json:"banner"`
     RelayList         string    `json:"relay_list"`           // JSON array of relay URLs
-    RelayListEventID  string    `json:"relay_list_event_id"`  // Kind 10050 event ID
+    RelayListEventID  string    `json:"relay_list_event_id"`  // Kind 10002 event ID
     RelayListUpdatedAt time.Time `json:"relay_list_updated_at"`
     CachedAt          time.Time `json:"cached_at"`
     ExpiresAt         time.Time `json:"expires_at"`
@@ -334,13 +334,13 @@ type CacheStats struct {
 - **Automatic Cleanup**: Remove expired profiles, vacuum database
 - **Migration Support**: Handles schema upgrades from JSON to structured storage
 - **Performance Monitoring**: Built-in statistics and database size tracking
-- **Mailbox Relay Caching**: NIP-50 relay list caching for improved message delivery performance
+- **Mailbox Relay Caching**: NIP-65 relay list caching for improved message delivery performance
 - **Unified Profile Management**: Single method for profile and relay list updates eliminates race conditions
 
 #### 4.1 **Mailbox Relay Caching System**
 
 ##### Overview
-The mailbox relay caching system provides intelligent caching of NIP-50 (Messaging Relay List) events alongside profile metadata, significantly improving message delivery performance by eliminating redundant network queries for recipient relay information.
+The mailbox relay caching system provides intelligent caching of NIP-65 (Messaging Relay List) events alongside profile metadata, significantly improving message delivery performance by eliminating redundant network queries for recipient relay information.
 
 ##### Architecture
 The system implements a **unified caching approach** that stores both profile metadata and relay lists together, eliminating race conditions that previously caused relay list duplication.
@@ -354,7 +354,7 @@ The system implements a **unified caching approach** that stores both profile me
 - **Race Condition Elimination**: Single update path prevents concurrent interference
 
 **Enhanced Profile Resolution (`client/profile.go`)**
-- **Dual Event Fetching**: Simultaneously queries both kind 0 (profile) and kind 10050 (relay list) events
+- **Dual Event Fetching**: Simultaneously queries both kind 0 (profile) and kind 10002 (relay list) events
 - **Combined Caching**: Stores profile metadata and relay lists in single atomic operation
 - **24-Hour TTL**: Consistent caching duration for both data types
 - **Debug Integration**: Detailed logging for cache operations and relay discovery
@@ -371,7 +371,7 @@ The system implements a **unified caching approach** that stores both profile me
 ```sql
 -- New columns added to profile_cache table
 ALTER TABLE profile_cache ADD COLUMN relay_list TEXT;                -- JSON array: ["wss://relay1.com", "wss://relay2.com"]
-ALTER TABLE profile_cache ADD COLUMN relay_list_event_id TEXT;          -- Kind 10050 event ID
+ALTER TABLE profile_cache ADD COLUMN relay_list_event_id TEXT;          -- Kind 10002 event ID
 ALTER TABLE profile_cache ADD COLUMN relay_list_updated_at DATETIME;    -- Fetch timestamp
 ```
 
@@ -390,7 +390,7 @@ func (pe ProfileEntry) ToProfileMetadata() ProfileMetadata
 ##### Performance Benefits
 
 **Network Optimization**
-- **~90% Fewer Queries**: Eliminates redundant NIP-50 fetches for frequent contacts
+- **~90% Fewer Queries**: Eliminates redundant NIP-65 fetches for frequent contacts
 - **200-1000ms Faster**: Immediate message sending with cached relay lists
 - **Reduced Latency**: No network round-trips for cached recipients
 - **Offline Capability**: Send messages using cached relay information when network unavailable
@@ -419,7 +419,7 @@ func (pe ProfileEntry) ToProfileMetadata() ProfileMetadata
 
 **Profile Resolution Flow**
 ```
-User Interaction → ProfileResolver → Cache Check → Network Fetch (Kind 0 + 10050) → Atomic Cache Store → Display
+User Interaction → ProfileResolver → Cache Check → Network Fetch (Kind 0 + 10002) → Atomic Cache Store → Display
 ```
 
 **Message Sending Flow**
@@ -446,7 +446,7 @@ if cachedProfile, found := cache.GetProfile(npub); found {
 
 **Debug Logging Features**
 - **Cache Hit/Miss Tracking**: Monitor relay list cache effectiveness
-- **Network Query Logging**: Track NIP-50 fetch operations and timing
+- **Network Query Logging**: Track NIP-65 fetch operations and timing
 - **JSON Serialization Debug**: Verify relay list data integrity
 - **Performance Metrics**: Measure message sending latency improvements
 
@@ -1076,12 +1076,12 @@ logging.Debug("Application starting")
 CLI/TUI → Client Agent → Messaging Agent → Encryption → Enhanced Client Agent → All Managed Relays
                                                                           ├── Connection Manager (Persistent)
                                                                           ├── Retry Queue (Background)
-                                                                          └── Mailbox Relay Discovery (NIP-50 + Cached Relay Lists)
+                                                                          └── Mailbox Relay Discovery (NIP-65 + Cached Relay Lists)
 ```
 
 ### Enhanced Message Sending with Relay Caching
 ```
-Message Composition → GetRecipientRelays → Cache Check → NIP-50 Fetch (if cache miss) → Cache Update → All Managed Relays
+Message Composition → GetRecipientRelays → Cache Check → NIP-65 Fetch (if cache miss) → Cache Update → All Managed Relays
                                                                                            ├── Cached Relay Lists (Immediate)
                                                                                            ├── Network Discovery (Cache Miss)
                                                                                            ├── Profile Resolution (Automatic Cache Refresh)
@@ -1166,9 +1166,9 @@ Result Processing
 
 ### Profile Resolution Flow
 ```
-TUI/CLI → Profile Resolver → Cache Check → Network Fetch (Kind 0 + 10050) → Atomic Cache Store → Display
+TUI/CLI → Profile Resolver → Cache Check → Network Fetch (Kind 0 + 10002) → Atomic Cache Store → Display
                                                           ├── Profile Metadata (Kind 0)
-                                                          ├── Relay Lists (Kind 10050)
+                                                          ├── Relay Lists (Kind 10002)
                                                           └── Unified Caching (24h TTL)
 ```
 
@@ -1231,7 +1231,7 @@ Visual State Update
 - **NIP-04**: Deprecated encryption (legacy support)
 - **NIP-19**: Bech32 encoding for keys (nsec/npub formats)
 - **NIP-44**: End-to-end encryption v2
-- **NIP-50**: Messaging relay list (cached alongside profiles)
+- **NIP-65**: Messaging relay list (cached alongside profiles)
 - **NIP-59**: Gift wrapped events
 - **NIP-05**: DNS-based identifier verification
 - *Implemented via github.com/nbd-wtf/go-nostr - see Module Dependencies for details*
@@ -1240,7 +1240,7 @@ Visual State Update
 - **Kind 0**: Profile metadata
 - **Kind 14**: Direct messages (deprecated)
 - **Kind 4**: Encrypted direct messages
-- **Kind 10050**: Messaging relay list (NIP-50) - **Cached with profile metadata**
+- **Kind 10002**: Messaging relay list (NIP-65) - **Cached with profile metadata**
 - **Kind 1059**: Gift wrap event
 - **Kind 1062**: Sealed direct event
 

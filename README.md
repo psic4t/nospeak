@@ -8,6 +8,7 @@ nospeak is a terminal-based Nostr chat client built with Go. Nospeak provides a 
 - **Command Line Interface (CLI)** - Scriptable commands for sending/receiving messages
 - **End-to-end encryption** - Private messaging using NIP-44 v2 encryption protocol
 - **Sealed direct messages** - NIP-59 gift wraps provide metadata protection and sender verification
+- **Outbox Model** - Uses NIP-65 Inbox/Outbox relays for contacts
 - **Message caching** - SQLite or in-memory caching for message persistence
 
 ## Installation

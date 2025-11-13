@@ -39,7 +39,7 @@ type ProfileEntry struct {
 	Website            string    `json:"website"`
 	Banner             string    `json:"banner"`
 	RelayList          string    `json:"relay_list"`          // JSON array of relay URLs
-	RelayListEventID   string    `json:"relay_list_event_id"` // Kind 10050 event ID
+	RelayListEventID   string    `json:"relay_list_event_id"` // Kind 10002 event ID
 	RelayListUpdatedAt time.Time `json:"relay_list_updated_at"`
 	CachedAt           time.Time `json:"cached_at"`
 	ExpiresAt          time.Time `json:"expires_at"`
