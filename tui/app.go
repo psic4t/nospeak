@@ -116,6 +116,8 @@ func (a *App) buildChatContent(messages []cache.MessageEntry) string {
 
 		if i < len(messages)-1 {
 			result.WriteString("\n") // Add newline between messages
+		} else {
+			result.WriteString("\n") // Add newline after last message for real-time continuity
 		}
 
 		prevTime = message.SentAt
@@ -807,9 +809,6 @@ func (a *App) sendMessage() {
 	if hasExistingMessages && !hasTodayDateBar && shouldInsertDateBar(a.lastMessageTime, currentTime) {
 		dateBar := formatDateBar(currentTime)
 		a.messageView.Write([]byte("\n" + dateBar + "\n"))
-	} else if hasExistingMessages {
-		// Add spacing when no date bar is added but there are existing messages
-		a.messageView.Write([]byte("\n"))
 	}
 
 	a.messageView.Write([]byte(fmt.Sprintf("[blue]%s[white] [orange]You:[white] %s\n", timestamp, message)))
