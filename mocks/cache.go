@@ -205,6 +205,11 @@ func (m *MockCache) GetProfile(npub string) (cache.ProfileEntry, bool) {
 		return cache.ProfileEntry{}, false
 	}
 
+	// Debug: verify we're returning the right data
+	if profile.ReadRelays == "" && profile.WriteRelays == "" {
+		panic(fmt.Sprintf("GetProfile returning empty NIP-65 data for %s: read=%q, write=%q", npub, profile.ReadRelays, profile.WriteRelays))
+	}
+
 	return profile, true
 }
 
@@ -233,57 +238,53 @@ func (m *MockCache) SetProfile(npub string, profile cache.ProfileMetadata, ttl t
 	return nil
 }
 
-// User profile methods
-func (m *MockCache) GetUserProfile(npub string) (cache.UserProfileEntry, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	profile, exists := m.userProfiles[npub]
-	return profile, exists
-}
-
-func (m *MockCache) SetUserProfile(npub string, readRelays, writeRelays []string, ttl time.Duration) error {
+// SetNIP65Relays caches NIP-65 read/write relay information for a user
+func (m *MockCache) SetNIP65Relays(npub string, readRelays, writeRelays []string, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	entry := cache.UserProfileEntry{
-		Npub:         npub,
-		ReadRelays:   serializeRelayList(readRelays),
-		WriteRelays:  serializeRelayList(writeRelays),
-		DiscoveredAt: time.Now(),
-		ExpiresAt:    time.Now().Add(ttl),
-		CreatedAt:    time.Now(),
+	// Update existing profile or create new one with NIP-65 data
+	profile, exists := m.profiles[npub]
+	if !exists {
+		profile = cache.ProfileEntry{
+			ID:        int64(len(m.profiles) + 1),
+			Npub:      npub,
+			CachedAt:  time.Now(),
+			ExpiresAt: time.Now().Add(ttl),
+			CreatedAt: time.Now(),
+		}
 	}
 
-	m.userProfiles[npub] = entry
-	return nil
-}
+	profile.ReadRelays = serializeRelayList(readRelays)
+	profile.WriteRelays = serializeRelayList(writeRelays)
+	profile.CachedAt = time.Now()
+	profile.ExpiresAt = time.Now().Add(ttl)
 
-func (m *MockCache) GetCachedReadRelays(npub string) []string {
-	if profile, found := m.GetUserProfile(npub); found && !profile.IsExpired() {
-		return profile.GetReadRelays()
-	}
-	return nil
-}
+	m.profiles[npub] = profile
 
-func (m *MockCache) GetCachedWriteRelays(npub string) []string {
-	if profile, found := m.GetUserProfile(npub); found && !profile.IsExpired() {
-		return profile.GetWriteRelays()
-	}
-	return nil
-}
-
-func (m *MockCache) ClearExpiredUserProfiles() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for npub, profile := range m.userProfiles {
-		if profile.IsExpired() {
-			delete(m.userProfiles, npub)
+	// Debug: verify profile was stored
+	if storedProfile, exists := m.profiles[npub]; exists {
+		if storedProfile.ReadRelays != profile.ReadRelays || storedProfile.WriteRelays != profile.WriteRelays {
+			panic("Profile NIP-65 data not stored correctly")
 		}
 	}
 
 	return nil
+}
+
+// serializeRelayList converts a slice of relay URLs to JSON array format
+func (m *MockCache) serializeRelayList(relayList []string) string {
+	if len(relayList) == 0 {
+		return ""
+	}
+
+	// Simple JSON array serialization
+	var jsonParts []string
+	for _, relay := range relayList {
+		jsonParts = append(jsonParts, fmt.Sprintf(`"%s"`, relay))
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(jsonParts, ","))
 }
 
 func (m *MockCache) ClearExpiredProfiles() error {

@@ -28,22 +28,26 @@ type MessageEntry struct {
 }
 
 type ProfileEntry struct {
-	ID                 int64     `json:"id"`
-	Npub               string    `json:"npub"`
-	Name               string    `json:"name"`
-	DisplayName        string    `json:"display_name"`
-	About              string    `json:"about"`
-	Picture            string    `json:"picture"`
-	NIP05              string    `json:"nip05"`
-	LUD16              string    `json:"lud16"`
-	Website            string    `json:"website"`
-	Banner             string    `json:"banner"`
+	ID          int64  `json:"id"`
+	Npub        string `json:"npub"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	About       string `json:"about"`
+	Picture     string `json:"picture"`
+	NIP05       string `json:"nip05"`
+	LUD16       string `json:"lud16"`
+	Website     string `json:"website"`
+	Banner      string `json:"banner"`
+	// Legacy relay list (will be removed after migration)
 	RelayList          string    `json:"relay_list"`          // JSON array of relay URLs
 	RelayListEventID   string    `json:"relay_list_event_id"` // Kind 10002 event ID
 	RelayListUpdatedAt time.Time `json:"relay_list_updated_at"`
-	CachedAt           time.Time `json:"cached_at"`
-	ExpiresAt          time.Time `json:"expires_at"`
-	CreatedAt          time.Time `json:"created_at"`
+	// NIP-65 relay information (from user_profile consolidation)
+	ReadRelays  string    `json:"read_relays"`  // JSON array of read relay URLs
+	WriteRelays string    `json:"write_relays"` // JSON array of write relay URLs
+	CachedAt    time.Time `json:"cached_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // ToProfileMetadata converts ProfileEntry to ProfileMetadata
@@ -94,6 +98,26 @@ func (pe ProfileEntry) GetRelayList() []string {
 // HasRelayList returns true if the profile has a cached relay list
 func (pe ProfileEntry) HasRelayList() bool {
 	return pe.RelayList != "" && !pe.RelayListUpdatedAt.IsZero()
+}
+
+// GetReadRelays parses and returns read relays as a string slice
+func (pe ProfileEntry) GetReadRelays() []string {
+	return parseRelayJSON(pe.ReadRelays)
+}
+
+// GetWriteRelays parses and returns write relays as a string slice
+func (pe ProfileEntry) GetWriteRelays() []string {
+	return parseRelayJSON(pe.WriteRelays)
+}
+
+// HasReadRelays returns true if profile has cached read relays
+func (pe ProfileEntry) HasReadRelays() bool {
+	return pe.ReadRelays != ""
+}
+
+// HasWriteRelays returns true if profile has cached write relays
+func (pe ProfileEntry) HasWriteRelays() bool {
+	return pe.WriteRelays != ""
 }
 
 type UserProfileEntry struct {
@@ -189,14 +213,8 @@ type Cache interface {
 	// Profile methods
 	GetProfile(npub string) (ProfileEntry, bool)
 	SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error
+	SetNIP65Relays(npub string, readRelays, writeRelays []string, ttl time.Duration) error
 	ClearExpiredProfiles() error
-
-	// User profile methods for NIP-65 relay discovery
-	GetUserProfile(npub string) (UserProfileEntry, bool)
-	SetUserProfile(npub string, readRelays, writeRelays []string, ttl time.Duration) error
-	GetCachedReadRelays(npub string) []string
-	GetCachedWriteRelays(npub string) []string
-	ClearExpiredUserProfiles() error
 
 	// Maintenance methods
 	Clear() error

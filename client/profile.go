@@ -171,7 +171,7 @@ func (c *Client) DiscoverUserRelays(ctx context.Context, npub string, debug bool
 	cacheInstance := cache.GetCache()
 
 	// Check cache first for startup optimization
-	if cachedProfile, found := cacheInstance.GetUserProfile(npub); found && !cachedProfile.IsExpired() {
+	if cachedProfile, found := cacheInstance.GetProfile(npub); found {
 		if debug {
 			log.Printf("Using cached relays for %s: %d read, %d write",
 				npub[:8]+"...", len(cachedProfile.GetReadRelays()), len(cachedProfile.GetWriteRelays()))
@@ -235,7 +235,7 @@ func (c *Client) DiscoverUserRelays(ctx context.Context, npub string, debug bool
 	}
 
 	// Cache the discovered relays
-	err = cacheInstance.SetUserProfile(npub, readRelayList, writeRelayList, 24*time.Hour)
+	err = cacheInstance.SetNIP65Relays(npub, readRelayList, writeRelayList, 24*time.Hour)
 	if err != nil && debug {
 		log.Printf("Failed to cache user relays for %s: %v", npub, err)
 	}
@@ -252,7 +252,7 @@ func (c *Client) DiscoverUserRelays(ctx context.Context, npub string, debug bool
 func (c *Client) GetCachedUserRelays(npub string, debug bool) (readRelays, writeRelays []string, found bool) {
 	cacheInstance := cache.GetCache()
 
-	if cachedProfile, found := cacheInstance.GetUserProfile(npub); found && !cachedProfile.IsExpired() {
+	if cachedProfile, found := cacheInstance.GetProfile(npub); found {
 		if debug {
 			log.Printf("Retrieved cached relays for %s: %d read, %d write",
 				npub[:8]+"...", len(cachedProfile.GetReadRelays()), len(cachedProfile.GetWriteRelays()))

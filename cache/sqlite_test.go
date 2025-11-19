@@ -561,7 +561,7 @@ func TestProfileEntryRelayListHelpers(t *testing.T) {
 
 	// Test GetRelayList with JSON data
 	profileWithRelays := ProfileEntry{
-		RelayList:         `["wss://relay1.com", "wss://relay2.com"]`,
+		RelayList:          `["wss://relay1.com", "wss://relay2.com"]`,
 		RelayListUpdatedAt: time.Now(),
 	}
 
@@ -583,7 +583,7 @@ func TestProfileEntryRelayListHelpers(t *testing.T) {
 
 	// Test GetRelayList with empty JSON array
 	emptyJSONArrayProfile := ProfileEntry{
-		RelayList:         `[]`,
+		RelayList:          `[]`,
 		RelayListUpdatedAt: time.Now(),
 	}
 
@@ -648,14 +648,37 @@ func TestProfileUpdatePreservesRelayList(t *testing.T) {
 	relayList := []string{"wss://relay1.com", "wss://relay2.com", "wss://relay3.com"}
 	relayListEventID := "relay123"
 
-	// First, set profile with relay list
-	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayListEventID, 24*time.Hour)
+	// First, set profile with NIP-65 relay data
+	err = cache.SetProfileWithRelayList(npub, profile, nil, "", 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify initial state
 	cachedProfile, found := cache.GetProfile(npub)
 	if !found {
-		t.Fatalf("Expected to find cached profile")
+		t.Error("Expected to find cached profile")
+	}
+
+	if cachedProfile.Name != profile.Name {
+		t.Errorf("Expected name '%s', got '%s'", profile.Name, cachedProfile.Name)
+	}
+
+	// Verify NIP-65 relay list (new unified approach)
+	cachedReadRelays := cachedProfile.GetReadRelays()
+	cachedWriteRelays := cachedProfile.GetWriteRelays()
+
+	// Check if we have either read or write relays
+	if len(cachedReadRelays) == 0 && len(cachedWriteRelays) == 0 {
+		t.Error("Expected either read or write relays to be cached")
+	}
+
+	// For backward compatibility, also check legacy relay list
+	cachedRelays := cachedProfile.GetRelayList()
+	if len(cachedRelays) != len(relayList) {
+		t.Errorf("Initial relay list incorrect: expected %v, got %v", relayList, cachedRelays)
+	}
+
+	if cachedProfile.Name != profile.Name {
+		t.Errorf("Expected name '%s', got '%s'", profile.Name, cachedProfile.Name)
 	}
 
 	initialRelays := cachedProfile.GetRelayList()

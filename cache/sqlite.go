@@ -84,8 +84,17 @@ func (sc *SQLiteCache) init() error {
 		return err
 	}
 
-	// Migrate existing relay list data to user_profile table
-	return sc.migrateToUserProfileTable()
+	// Add NIP-65 columns if they don't exist
+	if err := sc.migrateNIP65Columns(); err != nil {
+		return err
+	}
+
+	// Clean up redundant relay_list columns after migration
+	if err := sc.migrateRelayListCleanup(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (sc *SQLiteCache) createTables() error {
@@ -121,6 +130,8 @@ func (sc *SQLiteCache) createTables() error {
 			relay_list TEXT,
 			relay_list_event_id TEXT,
 			relay_list_updated_at DATETIME,
+			read_relays TEXT,
+			write_relays TEXT,
 			cached_at DATETIME NOT NULL,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -281,6 +292,154 @@ func (sc *SQLiteCache) migrateRelayListColumns() error {
 	}
 
 	debugLog("Completed relay list columns migration")
+	return nil
+}
+
+// migrateNIP65Columns adds NIP-65 relay columns to existing profile_cache table if they don't exist
+func (sc *SQLiteCache) migrateNIP65Columns() error {
+	// Check if read_relays column exists
+	var readRelaysExists bool
+	err := sc.db.QueryRow(`
+		SELECT COUNT(*) > 0 
+		FROM pragma_table_info('profile_cache') 
+		WHERE name = 'read_relays'
+	`).Scan(&readRelaysExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check read_relays column: %w", err)
+	}
+
+	if readRelaysExists {
+		// Columns already exist, migrate data from relay_list if needed
+		return sc.migrateRelayListToNIP65()
+	}
+
+	debugLog("Migrating profile_cache table to add NIP-65 relay columns")
+
+	// Add NIP-65 relay columns
+	alterStatements := []string{
+		"ALTER TABLE profile_cache ADD COLUMN read_relays TEXT",
+		"ALTER TABLE profile_cache ADD COLUMN write_relays TEXT",
+	}
+
+	for _, stmt := range alterStatements {
+		if _, err := sc.db.Exec(stmt); err != nil {
+			// Column might already exist, which is fine
+			debugLog("Failed to execute NIP-65 migration statement %s: %v (ignoring)", stmt, err)
+		}
+	}
+
+	// Create indexes for NIP-65 columns
+	indexStatements := []string{
+		"CREATE INDEX IF NOT EXISTS idx_profile_read_relays ON profile_cache(read_relays)",
+		"CREATE INDEX IF NOT EXISTS idx_profile_write_relays ON profile_cache(write_relays)",
+	}
+
+	for _, stmt := range indexStatements {
+		if _, err := sc.db.Exec(stmt); err != nil {
+			debugLog("Failed to create NIP-65 index: %v", err)
+		}
+	}
+
+	debugLog("Completed NIP-65 columns migration")
+	return nil
+}
+
+// migrateRelayListCleanup removes redundant relay_list columns after migration to NIP-65
+func (sc *SQLiteCache) migrateRelayListCleanup() error {
+	// Check if relay_list columns still exist before trying to drop them
+	var relayListExists bool
+	err := sc.db.QueryRow(`
+		SELECT COUNT(*) > 0 
+		FROM pragma_table_info('profile_cache') 
+		WHERE name IN ('relay_list', 'relay_list_event_id', 'relay_list_updated_at')
+	`).Scan(&relayListExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check relay_list columns: %w", err)
+	}
+
+	if !relayListExists {
+		// Columns already removed, no cleanup needed
+		debugLog("Redundant relay_list columns already removed")
+		return nil
+	}
+
+	debugLog("Starting cleanup of redundant relay_list columns")
+
+	// Drop redundant columns
+	dropStatements := []string{
+		"ALTER TABLE profile_cache DROP COLUMN relay_list",
+		"ALTER TABLE profile_cache DROP COLUMN relay_list_event_id",
+		"ALTER TABLE profile_cache DROP COLUMN relay_list_updated_at",
+	}
+
+	for _, stmt := range dropStatements {
+		if _, err := sc.db.Exec(stmt); err != nil {
+			// Column might not exist, which is fine
+			debugLog("Failed to execute cleanup statement %s: %v (ignoring)", stmt, err)
+		} else {
+			debugLog("Dropped column: %s", stmt)
+		}
+	}
+
+	// Drop index if it exists
+	if _, err := sc.db.Exec("DROP INDEX IF EXISTS idx_profile_relay_list_updated_at"); err != nil {
+		debugLog("Failed to drop relay list index: %v (ignoring)", err)
+	} else {
+		debugLog("Dropped relay list index")
+	}
+
+	debugLog("Completed cleanup of redundant relay_list columns")
+	return nil
+}
+
+// migrateRelayListToNIP65 migrates existing relay_list data to NIP-65 read/write columns
+func (sc *SQLiteCache) migrateRelayListToNIP65() error {
+	debugLog("Starting migration of relay_list data to NIP-65 columns")
+
+	// Get profiles with relay_list data but empty NIP-65 columns
+	rows, err := sc.db.Query(`
+		SELECT npub, relay_list 
+		FROM profile_cache 
+		WHERE relay_list IS NOT NULL AND relay_list != '' 
+		AND (read_relays IS NULL OR read_relays = '') 
+		AND (write_relays IS NULL OR write_relays = '')
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to query profiles for migration: %w", err)
+	}
+	defer rows.Close()
+
+	var migratedCount int
+	for rows.Next() {
+		var npub, relayList string
+		if err := rows.Scan(&npub, &relayList); err != nil {
+			debugLog("Failed to scan migration row: %v", err)
+			continue
+		}
+
+		// For migration, we'll move relay_list data to both read and write relays
+		// This is a reasonable default for existing data
+		_, err := sc.db.Exec(`
+			UPDATE profile_cache 
+			SET read_relays = ?, write_relays = ?
+			WHERE npub = ?
+		`, relayList, relayList, npub)
+
+		if err != nil {
+			debugLog("Failed to migrate relays for %s: %v", npub[:8]+"...", err)
+			continue
+		}
+
+		migratedCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error during migration rows iteration: %w", err)
+	}
+
+	debugLog("Completed migration of %d profiles to NIP-65 columns", migratedCount)
 	return nil
 }
 
@@ -766,31 +925,50 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 
 	var profile ProfileEntry
 	var expiresAt time.Time
+	var relayList, relayListEventID string
 	var relayListUpdatedAt sql.NullTime
 
+	// Try to query with NIP-65 columns first (new schema)
 	err := sc.db.QueryRow(`
 		SELECT id, npub, name, display_name, about, picture, nip05, lud16, website, banner,
-		       relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at, created_at
+		       read_relays, write_relays, cached_at, expires_at, created_at
 		FROM profile_cache
 		WHERE npub = ?
 	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Name, &profile.DisplayName, &profile.About,
 		&profile.Picture, &profile.NIP05, &profile.LUD16, &profile.Website, &profile.Banner,
-		&profile.RelayList, &profile.RelayListEventID, &relayListUpdatedAt,
-		&profile.CachedAt, &expiresAt, &profile.CreatedAt)
+		&profile.ReadRelays, &profile.WriteRelays, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
 
 	if err != nil {
-		return ProfileEntry{}, false
+		// Fallback to legacy schema with relay_list columns
+		err = sc.db.QueryRow(`
+			SELECT id, npub, name, display_name, about, picture, nip05, lud16, website, banner,
+			       relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at, created_at
+			FROM profile_cache
+			WHERE npub = ?
+		`, npub).Scan(&profile.ID, &profile.Npub, &profile.Name, &profile.DisplayName, &profile.About,
+			&profile.Picture, &profile.NIP05, &profile.LUD16, &profile.Website, &profile.Banner,
+			&relayList, &relayListEventID, &relayListUpdatedAt, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
+
+		if err != nil {
+			return ProfileEntry{}, false
+		}
+
+		// Convert legacy relay_list to NIP-65 format for backward compatibility
+		if relayList != "" {
+			profile.ReadRelays = relayList
+			profile.WriteRelays = relayList
+		}
+		profile.RelayList = relayList
+		profile.RelayListEventID = relayListEventID
+		if relayListUpdatedAt.Valid {
+			profile.RelayListUpdatedAt = relayListUpdatedAt.Time
+		}
 	}
 
 	if time.Now().After(expiresAt) {
 		// Expired, remove it
 		go sc.deleteExpiredProfile(npub)
 		return ProfileEntry{}, false
-	}
-
-	// Handle nullable relay list updated timestamp
-	if relayListUpdatedAt.Valid {
-		profile.RelayListUpdatedAt = relayListUpdatedAt.Time
 	}
 
 	profile.ExpiresAt = expiresAt
@@ -884,75 +1062,6 @@ func (sc *SQLiteCache) ClearExpiredProfiles() error {
 	return err
 }
 
-// GetUserProfile retrieves cached user profile with NIP-65 relay information
-func (sc *SQLiteCache) GetUserProfile(npub string) (UserProfileEntry, bool) {
-	sc.mu.RLock()
-	defer sc.mu.RUnlock()
-
-	var entry UserProfileEntry
-	err := sc.db.QueryRow(`
-		SELECT id, npub, read_relays, write_relays, discovered_at, expires_at, created_at
-		FROM user_profile 
-		WHERE npub = ?
-	`, npub).Scan(&entry.ID, &entry.Npub, &entry.ReadRelays, &entry.WriteRelays,
-		&entry.DiscoveredAt, &entry.ExpiresAt, &entry.CreatedAt)
-
-	if err != nil {
-		return UserProfileEntry{}, false
-	}
-
-	return entry, true
-}
-
-// SetUserProfile caches user profile with NIP-65 relay information
-func (sc *SQLiteCache) SetUserProfile(npub string, readRelays, writeRelays []string, ttl time.Duration) error {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	now := time.Now()
-	expiresAt := now.Add(ttl)
-
-	readRelaysJSON := sc.serializeRelayList(readRelays)
-	writeRelaysJSON := sc.serializeRelayList(writeRelays)
-
-	_, err := sc.db.Exec(`
-		INSERT OR REPLACE INTO user_profile 
-		(npub, read_relays, write_relays, discovered_at, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, npub, readRelaysJSON, writeRelaysJSON, now, expiresAt, now)
-
-	return err
-}
-
-// GetCachedReadRelays returns cached read relays for a user
-func (sc *SQLiteCache) GetCachedReadRelays(npub string) []string {
-	if profile, found := sc.GetUserProfile(npub); found && !profile.IsExpired() {
-		return profile.GetReadRelays()
-	}
-	return nil
-}
-
-// GetCachedWriteRelays returns cached write relays for a user
-func (sc *SQLiteCache) GetCachedWriteRelays(npub string) []string {
-	if profile, found := sc.GetUserProfile(npub); found && !profile.IsExpired() {
-		return profile.GetWriteRelays()
-	}
-	return nil
-}
-
-// ClearExpiredUserProfiles removes expired user profile entries
-func (sc *SQLiteCache) ClearExpiredUserProfiles() error {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-
-	_, err := sc.db.Exec(`
-		DELETE FROM user_profile 
-		WHERE expires_at < ?
-	`, time.Now())
-
-	return err
-}
-
 func (sc *SQLiteCache) deleteExpiredProfile(npub string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -1008,13 +1117,30 @@ func (sc *SQLiteCache) GetStats() CacheStats {
 	return stats
 }
 
+// SetNIP65Relays caches NIP-65 read/write relay information for a user
+func (sc *SQLiteCache) SetNIP65Relays(npub string, readRelays, writeRelays []string, ttl time.Duration) error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	expiresAt := time.Now().Add(ttl)
+	readRelaysJSON := sc.serializeRelayList(readRelays)
+	writeRelaysJSON := sc.serializeRelayList(writeRelays)
+
+	_, err := sc.db.Exec(`
+		UPDATE profile_cache 
+		SET read_relays = ?, write_relays = ?, cached_at = ?, expires_at = ?
+		WHERE npub = ?
+	`, readRelaysJSON, writeRelaysJSON, time.Now(), expiresAt, npub)
+
+	return err
+}
+
 func (sc *SQLiteCache) startCleanupRoutine() {
 	ticker := time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		sc.ClearExpiredProfiles()
-		sc.ClearExpiredUserProfiles()
 		// Vacuum daily
 		if time.Now().Hour() == 3 { // 3 AM
 			sc.Vacuum()
