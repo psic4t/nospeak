@@ -96,6 +96,72 @@ func (pe ProfileEntry) HasRelayList() bool {
 	return pe.RelayList != "" && !pe.RelayListUpdatedAt.IsZero()
 }
 
+type UserProfileEntry struct {
+	ID           int64     `json:"id"`
+	Npub         string    `json:"npub"`
+	ReadRelays   string    `json:"read_relays"`  // JSON array of read relay URLs
+	WriteRelays  string    `json:"write_relays"` // JSON array of write relay URLs
+	DiscoveredAt time.Time `json:"discovered_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// GetReadRelays parses and returns read relays as a string slice
+func (upe UserProfileEntry) GetReadRelays() []string {
+	return parseRelayJSON(upe.ReadRelays)
+}
+
+// GetWriteRelays parses and returns write relays as a string slice
+func (upe UserProfileEntry) GetWriteRelays() []string {
+	return parseRelayJSON(upe.WriteRelays)
+}
+
+// HasReadRelays returns true if user profile has cached read relays
+func (upe UserProfileEntry) HasReadRelays() bool {
+	return upe.ReadRelays != ""
+}
+
+// HasWriteRelays returns true if user profile has cached write relays
+func (upe UserProfileEntry) HasWriteRelays() bool {
+	return upe.WriteRelays != ""
+}
+
+// IsExpired returns true if the cache entry has expired
+func (upe UserProfileEntry) IsExpired() bool {
+	return time.Now().After(upe.ExpiresAt)
+}
+
+// parseRelayJSON parses JSON array of relay URLs
+func parseRelayJSON(relayJSON string) []string {
+	if relayJSON == "" {
+		return nil
+	}
+
+	// Simple JSON parsing for relay array
+	var relays []string
+	if relayJSON[0] == '[' && relayJSON[len(relayJSON)-1] == ']' {
+		// Remove brackets and split by comma
+		content := relayJSON[1 : len(relayJSON)-1]
+		if content == "" {
+			return nil
+		}
+
+		// Parse JSON array elements (strip quotes)
+		parts := strings.Split(content, ",")
+		for _, part := range parts {
+			relay := strings.TrimSpace(part)
+			if len(relay) >= 2 && relay[0] == '"' && relay[len(relay)-1] == '"' {
+				relay = relay[1 : len(relay)-1]
+			}
+			if relay != "" {
+				relays = append(relays, relay)
+			}
+		}
+	}
+
+	return relays
+}
+
 type CacheStats struct {
 	TotalMessages   int
 	TotalProfiles   int
@@ -125,8 +191,18 @@ type Cache interface {
 	SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error
 	ClearExpiredProfiles() error
 
+	// User profile methods for NIP-65 relay discovery
+	GetUserProfile(npub string) (UserProfileEntry, bool)
+	SetUserProfile(npub string, readRelays, writeRelays []string, ttl time.Duration) error
+	GetCachedReadRelays(npub string) []string
+	GetCachedWriteRelays(npub string) []string
+	ClearExpiredUserProfiles() error
+
 	// Maintenance methods
 	Clear() error
 	Vacuum() error
 	GetStats() CacheStats
+
+	// Testing support
+	SetCache(cache interface{}) // For testing purposes
 }

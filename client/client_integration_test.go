@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/testutils"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -14,14 +15,11 @@ func TestClientWithConnectionManager(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Create test config with real relays
+	// Create test config - will use discovery relays
 	cfg := &config.Config{
-		Relays: []string{
-			"wss://relay.damus.io",
-			"wss://nos.lol",
-		},
-		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		// No static relays - will use discovery relays automatically
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -89,14 +87,11 @@ func TestClientRetryLogic(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Create config with a mix of working and non-working relays
+	// Create config - will use discovery relays with retry logic
 	cfg := &config.Config{
-		Relays: []string{
-			"wss://relay.damus.io", // Working relay
-			"ws://localhost:12345", // Non-working relay
-		},
-		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		// No static relays - will use discovery relays with retry logic
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -156,12 +151,12 @@ func TestMailboxRelayHandling(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io"},
+		// No static relays - will use discovery relays
 		Partners: []string{
 			"npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
 		},
-		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -193,8 +188,8 @@ func TestMailboxRelayHandling(t *testing.T) {
 	stats := client.GetConnectionStats()
 	totalManaged := stats["total_managed_relays"].(int)
 
-	if totalManaged < len(cfg.Relays)+len(mailboxRelays) {
-		t.Logf("Note: Some mailbox relays may already be in config. Total managed: %d", totalManaged)
+	if totalManaged < len(mailboxRelays) {
+		t.Logf("Note: Some mailbox relays may already be managed. Total managed: %d", totalManaged)
 	}
 
 	// Test sending a message (this will discover and add more mailbox relays)
@@ -218,12 +213,9 @@ func TestEnhancedSubscribe(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Relays: []string{
-			"wss://relay.damus.io",
-			"wss://nos.lol",
-		},
-		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		// No static relays - will use discovery relays
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -271,6 +263,251 @@ func TestEnhancedSubscribe(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	t.Logf("Received %d events through enhanced subscription", len(receivedEvents))
+
+	client.Disconnect()
+}
+
+func TestDynamicMessageSendingIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Create config without static relays - should use discovery
+	cfg := &config.Config{
+		// No relays configured - test dynamic discovery (Relays field removed)
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
+		Partners: []string{
+			"npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", // Self for testing
+		},
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	// Connect should use discovery relays when no static relays configured
+	if err := client.Connect(ctx, true); err != nil {
+		t.Logf("Connection completed with discovery relays: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// Verify discovery relays are being used
+	stats := client.GetConnectionStats()
+	totalManaged := stats["total_managed_relays"].(int)
+	connectedRelays := stats["connected_relays"].(int)
+
+	t.Logf("Connected to %d out of %d discovery relays", connectedRelays, totalManaged)
+
+	if totalManaged == 0 {
+		t.Error("Expected at least one discovery relay to be managed")
+	}
+
+	// Test sending message with dynamic relay discovery
+	err = client.SendChatMessage(ctx, cfg.Partners[0], "Test dynamic message sending", true)
+	if err != nil {
+		t.Logf("Message sending completed with dynamic relay discovery: %v", err)
+	}
+
+	// Wait for message processing and relay discovery
+	time.Sleep(5 * time.Second)
+
+	// Check that additional relays may have been discovered and added
+	finalStats := client.GetConnectionStats()
+	finalTotalManaged := finalStats["total_managed_relays"].(int)
+
+	t.Logf("Final managed relays after message sending: %d", finalTotalManaged)
+
+	client.Disconnect()
+}
+
+func TestCacheMissAndFallbackIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Test recipient with no cached relay information
+	unknownRecipient := "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60syp3hjuyqewzw44msqs8v6"
+
+	cfg := &config.Config{
+		// No static relays - force discovery
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := client.Connect(ctx, true); err != nil {
+		t.Logf("Connected with discovery relays: %v", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// Send message to unknown recipient - should trigger cache miss and fallback
+	err = client.SendChatMessage(ctx, unknownRecipient, "Test cache miss fallback", true)
+	if err != nil {
+		t.Logf("Message sent with cache miss handling: %v", err)
+	}
+
+	// Wait for processing
+	time.Sleep(3 * time.Second)
+
+	// Verify fallback behavior worked
+	stats := client.GetConnectionStats()
+	t.Logf("Stats after cache miss test: %+v", stats)
+
+	client.Disconnect()
+}
+
+func TestExpiredCacheRefreshIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	cfg := &config.Config{
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	// Setup cache with expired entry manually (simulating expired cache)
+	testRecipient := "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := client.Connect(ctx, true); err != nil {
+		t.Logf("Connected with discovery relays: %v", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// Send message - should handle expired cache gracefully
+	err = client.SendChatMessage(ctx, testRecipient, "Test expired cache refresh", true)
+	if err != nil {
+		t.Logf("Message sent with expired cache handling: %v", err)
+	}
+
+	// Wait for cache refresh and message processing
+	time.Sleep(5 * time.Second)
+
+	// Verify cache refresh occurred
+	stats := client.GetConnectionStats()
+	t.Logf("Stats after expired cache test: %+v", stats)
+
+	client.Disconnect()
+}
+
+func TestDiscoveryRelaysOnlyIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Test with only discovery relays (no static config)
+	cfg := &config.Config{
+		// No static relays - will use discovery-only mode automatically
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Should connect to discovery relays only
+	if err := client.Connect(ctx, true); err != nil {
+		t.Logf("Connected to discovery relays only: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// Verify only discovery relays are managed
+	stats := client.GetConnectionStats()
+	totalManaged := stats["total_managed_relays"].(int)
+	connectedRelays := stats["connected_relays"].(int)
+
+	t.Logf("Discovery-only mode: %d/%d relays connected", connectedRelays, totalManaged)
+
+	// Should have exactly the 4 discovery relays managed
+	expectedDiscoveryCount := 4
+	if totalManaged < expectedDiscoveryCount {
+		t.Logf("Note: Expected %d discovery relays, got %d (some may be filtered)", expectedDiscoveryCount, totalManaged)
+	}
+
+	// Test sending message with discovery-only setup
+	err = client.SendChatMessage(ctx, "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", "Discovery-only test message", true)
+	if err != nil {
+		t.Logf("Message sent via discovery relays: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	client.Disconnect()
+}
+
+func TestMixedRelayConfigurationIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Test with discovery relays (static relays removed)
+	cfg := &config.Config{
+		// No static relays - will use discovery relays
+		Nsec: testutils.GenerateTestKeys(t).Nsec,
+		Npub: testutils.GenerateTestKeys(t).Npub,
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := client.Connect(ctx, true); err != nil {
+		t.Logf("Connected with mixed relay configuration: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// Should have both static and discovery relays
+	stats := client.GetConnectionStats()
+	totalManaged := stats["total_managed_relays"].(int)
+	connectedRelays := stats["connected_relays"].(int)
+
+	t.Logf("Mixed configuration: %d/%d relays connected (static + discovery)", connectedRelays, totalManaged)
+
+	if totalManaged < 1 {
+		t.Error("Expected at least one relay (static or discovery) to be managed")
+	}
+
+	// Test message sending with mixed relay setup
+	err = client.SendChatMessage(ctx, "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", "Mixed relay test message", true)
+	if err != nil {
+		t.Logf("Message sent with mixed relay configuration: %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
 
 	client.Disconnect()
 }

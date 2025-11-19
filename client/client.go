@@ -14,6 +14,23 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
+// DiscoveryRelays contains predefined relays for NIP-65 discovery
+type DiscoveryRelays struct {
+	Relays []string
+}
+
+// GetDiscoveryRelays returns the predefined discovery relays
+func GetDiscoveryRelays() DiscoveryRelays {
+	return DiscoveryRelays{
+		Relays: []string{
+			"wss://purplepag.es",
+			"wss://nostr.data.haus",
+			"wss://nos.lol",
+			"wss://relay.damus.io",
+		},
+	}
+}
+
 type Client struct {
 	config            *config.Config
 	relays            []*nostr.Relay
@@ -95,8 +112,12 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.connectionManager.debug = debug
 	c.retryQueue.debug = debug
 
-	// Add all configured relays to the connection manager
-	for _, relayURL := range c.config.Relays {
+	// Use discovery relays (no more configured relays)
+	discoveryRelays := GetDiscoveryRelays()
+	relayURLs := discoveryRelays.Relays
+
+	// Add relays to the connection manager
+	for _, relayURL := range relayURLs {
 		c.connectionManager.AddRelay(relayURL)
 	}
 
@@ -108,7 +129,7 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.relays = c.connectionManager.GetConnectedRelays()
 
 	if debug {
-		log.Printf("Connection manager started with %d configured relays", len(c.config.Relays))
+		log.Printf("Connection manager started with %d discovery relays", len(relayURLs))
 		log.Printf("Initially connected to %d relays, background reconnection will continue", len(c.relays))
 	}
 
@@ -532,17 +553,8 @@ func (c *Client) GetPartnerProfiles(ctx context.Context, debug bool) (map[string
 // AddMailboxRelays adds mailbox relays to the connection manager
 func (c *Client) AddMailboxRelays(relayURLs []string) {
 	for _, relayURL := range relayURLs {
-		// Skip if already in config relays
-		found := false
-		for _, configRelay := range c.config.Relays {
-			if configRelay == relayURL {
-				found = true
-				break
-			}
-		}
-		if !found {
-			c.connectionManager.AddRelay(relayURL)
-		}
+		// Add all discovered relays (no more config filtering)
+		c.connectionManager.AddRelay(relayURL)
 	}
 }
 

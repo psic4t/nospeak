@@ -12,9 +12,9 @@ import (
 func TestRetryQueue(t *testing.T) {
 	// Create test client
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io"},
-		Nsec:   "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub:   "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
+		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
 	}
 
 	client, err := NewClient(cfg)
@@ -53,9 +53,9 @@ func TestRetryQueueBackoffCalculation(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io"},
-		Nsec:   "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub:   "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
+		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
 	}
 
 	client, _ := NewClient(cfg)
@@ -64,9 +64,9 @@ func TestRetryQueueBackoffCalculation(t *testing.T) {
 
 	// Test backoff calculation
 	tests := []struct {
-		attempt         int
-		expectedMin     time.Duration
-		expectedMax     time.Duration
+		attempt     int
+		expectedMin time.Duration
+		expectedMax time.Duration
 	}{
 		{1, 100 * time.Millisecond, 100 * time.Millisecond},
 		{2, 200 * time.Millisecond, 200 * time.Millisecond},
@@ -94,9 +94,9 @@ func TestEnqueueRetry(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io"},
-		Nsec:   "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub:   "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
+		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
 	}
 
 	client, _ := NewClient(cfg)
@@ -182,9 +182,9 @@ func TestPublishToAllRelays(t *testing.T) {
 	// This test would require actual relay connections, so we'll test the structure
 	retryConfig := DefaultRetryConfig()
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io"},
-		Nsec:   "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub:   "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
+		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
 	}
 
 	client, _ := NewClient(cfg)

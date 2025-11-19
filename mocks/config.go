@@ -6,7 +6,6 @@ import (
 
 // MockConfig provides a mock configuration for testing
 type MockConfig struct {
-	Relays       []string
 	Npub         string
 	Nsec         string
 	Partners     []string
@@ -18,7 +17,6 @@ type MockConfig struct {
 // NewMockConfig creates a new mock configuration
 func NewMockConfig() *MockConfig {
 	return &MockConfig{
-		Relays:       []string{"wss://relay.example.com"},
 		Npub:         "npub1test...",
 		Nsec:         "nsec1test...",
 		Partners:     []string{"npub1partner1...", "npub1partner2..."},
@@ -31,7 +29,6 @@ func NewMockConfig() *MockConfig {
 // ToConfig converts mock config to actual config.Config
 func (m *MockConfig) ToConfig() *config.Config {
 	return &config.Config{
-		Relays:       m.Relays,
 		Npub:         m.Npub,
 		Nsec:         m.Nsec,
 		Partners:     m.Partners,
@@ -41,9 +38,9 @@ func (m *MockConfig) ToConfig() *config.Config {
 	}
 }
 
-// WithRelays sets the relays in mock config
+// WithRelays is a no-op since relays are now dynamically discovered
 func (m *MockConfig) WithRelays(relays ...string) *MockConfig {
-	m.Relays = relays
+	// No-op - relays are now dynamically discovered
 	return m
 }
 

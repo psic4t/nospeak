@@ -166,6 +166,106 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 	return metadata, nil
 }
 
+// DiscoverUserRelays fetches and caches NIP-65 relay information for a user
+func (c *Client) DiscoverUserRelays(ctx context.Context, npub string, debug bool) (readRelays, writeRelays []string, err error) {
+	cacheInstance := cache.GetCache()
+
+	// Check cache first for startup optimization
+	if cachedProfile, found := cacheInstance.GetUserProfile(npub); found && !cachedProfile.IsExpired() {
+		if debug {
+			log.Printf("Using cached relays for %s: %d read, %d write",
+				npub[:8]+"...", len(cachedProfile.GetReadRelays()), len(cachedProfile.GetWriteRelays()))
+		}
+		return cachedProfile.GetReadRelays(), cachedProfile.GetWriteRelays(), nil
+	}
+
+	_, pubKey, err := nip19.Decode(npub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode npub: %w", err)
+	}
+
+	hexPubKey := pubKey.(string)
+
+	// Query specifically for NIP-65 relay list (kind 10002)
+	filters := nostr.Filters{{
+		Kinds:   []int{10002},
+		Authors: []string{hexPubKey},
+		Limit:   1, // Only need the most recent
+	}}
+
+	events, err := c.QueryEvents(ctx, filters, debug)
+	if err != nil {
+		if debug {
+			log.Printf("Failed to query NIP-65 relay list for %s: %v", npub, err)
+		}
+		return nil, nil, err
+	}
+
+	if len(events) == 0 {
+		if debug {
+			log.Printf("No NIP-65 relay list found for %s, using discovery relays as fallback", npub)
+		}
+		// Return discovery relays as fallback
+		discovery := GetDiscoveryRelays()
+		return discovery.Relays, discovery.Relays, nil
+	}
+
+	// Parse NIP-65 event for read/write relays
+	event := events[0]
+	var readRelayList, writeRelayList []string
+
+	for _, tag := range event.Tags {
+		if len(tag) >= 3 {
+			relayType := tag[0]
+			relayURL := tag[1]
+			mark := tag[2]
+
+			if relayType == "r" && relayURL != "" {
+				if mark == "read" {
+					readRelayList = append(readRelayList, relayURL)
+				} else if mark == "write" {
+					writeRelayList = append(writeRelayList, relayURL)
+				} else {
+					// Unmarked relays go to both lists (backward compatibility)
+					readRelayList = append(readRelayList, relayURL)
+					writeRelayList = append(writeRelayList, relayURL)
+				}
+			}
+		}
+	}
+
+	// Cache the discovered relays
+	err = cacheInstance.SetUserProfile(npub, readRelayList, writeRelayList, 24*time.Hour)
+	if err != nil && debug {
+		log.Printf("Failed to cache user relays for %s: %v", npub, err)
+	}
+
+	if debug {
+		log.Printf("Discovered relays for %s: %d read, %d write (cached for 24h)",
+			npub[:8]+"...", len(readRelayList), len(writeRelayList))
+	}
+
+	return readRelayList, writeRelayList, nil
+}
+
+// GetCachedUserRelays returns cached relays for a user without network discovery
+func (c *Client) GetCachedUserRelays(npub string, debug bool) (readRelays, writeRelays []string, found bool) {
+	cacheInstance := cache.GetCache()
+
+	if cachedProfile, found := cacheInstance.GetUserProfile(npub); found && !cachedProfile.IsExpired() {
+		if debug {
+			log.Printf("Retrieved cached relays for %s: %d read, %d write",
+				npub[:8]+"...", len(cachedProfile.GetReadRelays()), len(cachedProfile.GetWriteRelays()))
+		}
+		return cachedProfile.GetReadRelays(), cachedProfile.GetWriteRelays(), true
+	}
+
+	if debug {
+		log.Printf("No valid cached relays found for %s", npub[:8]+"...")
+	}
+	return nil, nil, false
+}
+
 func (c *Client) ResolveUsernameWithFallback(ctx context.Context, npub string, debug bool) string {
 	username, err := c.ResolveUsername(ctx, npub, debug)
 	if err != nil || username == npub {

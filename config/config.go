@@ -7,14 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/data.haus/nospeak/notification"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/data.haus/nospeak/notification"
 )
 
 type Config struct {
-	Relays        []string `toml:"relays" comment:"List of relays to connect to"`
 	Npub          string   `toml:"npub" comment:"Your Nostr public key"`
 	Nsec          string   `toml:"nsec" comment:"Your Nostr private key (keep secure)"`
 	Partners      []string `toml:"partners" comment:"Chat partners (their npub keys)"`
@@ -103,10 +102,6 @@ func HasValidKeys(config *Config) bool {
 }
 
 func validateConfig(config *Config) error {
-	if len(config.Relays) == 0 {
-		return fmt.Errorf("at least one relay must be configured")
-	}
-
 	if config.Nsec == "" {
 		return fmt.Errorf("nsec (private key) is required")
 	}
@@ -279,4 +274,3 @@ func (c *Config) SaveAtPath(configPath string) error {
 
 	return nil
 }
-

@@ -37,3 +37,7 @@ func GetCache() Cache {
 	}
 	return cacheInstance
 }
+
+func SetCache(c Cache) {
+	cacheInstance = c
+}

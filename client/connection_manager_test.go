@@ -10,9 +10,9 @@ import (
 func TestConnectionManager(t *testing.T) {
 	// Create test client with mock config
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io", "wss://nos.lol"},
-		Nsec:   "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub:   "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
+		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
 	}
 
 	client, err := NewClient(cfg)
@@ -69,9 +69,9 @@ func TestConnectionManager(t *testing.T) {
 
 func TestConnectionManagerHealthTracking(t *testing.T) {
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.damus.io"},
-		Nsec:   "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub:   "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
+		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
 	}
 
 	client, err := NewClient(cfg)
@@ -140,7 +140,7 @@ func TestBackoffCalculation(t *testing.T) {
 		{2, 200 * time.Millisecond},
 		{3, 400 * time.Millisecond},
 		{4, 800 * time.Millisecond},
-		{5, 1000 * time.Millisecond}, // Capped at max
+		{5, 1000 * time.Millisecond},  // Capped at max
 		{10, 1000 * time.Millisecond}, // Still capped
 	}
 
@@ -156,9 +156,9 @@ func TestBackoffCalculation(t *testing.T) {
 func TestConnectionManagerWithMockRelay(t *testing.T) {
 	// Test with a mock relay that simulates failures
 	cfg := &config.Config{
-		Relays: []string{"ws://localhost:12345"}, // Non-existent relay
-		Nsec:   "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub:   "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		// No static relays - will use discovery relays
+		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
+		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
 	}
 
 	client, err := NewClient(cfg)

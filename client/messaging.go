@@ -31,24 +31,45 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 
 	recipientHex := recipientPubKey.(string)
 
-	// Discover recipient's preferred DM relays
-	recipientRelays, err := c.GetRecipientRelays(ctx, recipientNpub, debug)
+	// Discover recipient's read relays (NIP-65)
+	recipientReadRelays, _, err := c.DiscoverUserRelays(ctx, recipientNpub, debug)
 	if err != nil {
 		if debug {
 			log.Printf("Failed to discover recipient relays, using fallback: %v", err)
 		}
-		recipientRelays = []string{"wss://nostr.data.haus"}
+		discovery := GetDiscoveryRelays()
+		recipientReadRelays = discovery.Relays
 	}
 
-	// Add recipient's mailbox relays to connection manager for persistent connection
-	c.AddMailboxRelays(recipientRelays)
+	// Discover sender's write relays (NIP-65)
+	senderNpub, err := nip19.EncodePublicKey(c.publicKey)
+	if err != nil {
+		return fmt.Errorf("failed to encode sender public key: %w", err)
+	}
+
+	_, senderWriteRelays, err := c.DiscoverUserRelays(ctx, senderNpub, debug)
+	if err != nil {
+		if debug {
+			log.Printf("Failed to discover sender relays, using fallback: %v", err)
+		}
+		discovery := GetDiscoveryRelays()
+		senderWriteRelays = discovery.Relays
+	}
+
+	// Combine all target relays (sender write + recipient read)
+	var targetRelays []string
+	targetRelays = append(targetRelays, senderWriteRelays...)
+	targetRelays = append(targetRelays, recipientReadRelays...)
+
+	// Add all discovered relays to connection manager for persistent connection
+	c.AddMailboxRelays(targetRelays)
 
 	rumor := nostr.Event{
 		PubKey:    c.publicKey,
 		CreatedAt: nostr.Now(),
 		Kind:      14,
 		Tags: nostr.Tags{
-			nostr.Tag{"p", recipientHex, recipientRelays[0]},
+			nostr.Tag{"p", recipientHex, recipientReadRelays[0]},
 		},
 		Content: message,
 	}
@@ -319,9 +340,10 @@ func (c *Client) SetProfileName(ctx context.Context, name string, debug bool) er
 }
 
 func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
-	// Create kind 10002 event with all relays from config (NIP-65)
-	tags := make(nostr.Tags, 0, len(c.config.Relays))
-	for _, relay := range c.config.Relays {
+	// Create kind 10002 event with discovery relays (NIP-65)
+	discoveryRelays := GetDiscoveryRelays()
+	tags := make(nostr.Tags, 0, len(discoveryRelays.Relays))
+	for _, relay := range discoveryRelays.Relays {
 		tags = append(tags, nostr.Tag{"r", relay})
 	}
 
@@ -354,7 +376,8 @@ func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
 	}
 
 	if debug {
-		log.Printf("Messaging relays updated: %v", c.config.Relays)
+		discoveryRelays := GetDiscoveryRelays()
+		log.Printf("Messaging relays updated: %v", discoveryRelays.Relays)
 	}
 	return nil
 }

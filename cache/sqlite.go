@@ -80,7 +80,12 @@ func (sc *SQLiteCache) init() error {
 	}
 
 	// Add relay list columns if they don't exist
-	return sc.migrateRelayListColumns()
+	if err := sc.migrateRelayListColumns(); err != nil {
+		return err
+	}
+
+	// Migrate existing relay list data to user_profile table
+	return sc.migrateToUserProfileTable()
 }
 
 func (sc *SQLiteCache) createTables() error {
@@ -125,6 +130,22 @@ func (sc *SQLiteCache) createTables() error {
 		return fmt.Errorf("failed to create profile_cache table: %w", err)
 	}
 
+	// User profile table for NIP-65 relay discovery
+	_, err = sc.db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_profile (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			npub TEXT NOT NULL UNIQUE,
+			read_relays TEXT,
+			write_relays TEXT,
+			discovered_at DATETIME NOT NULL,
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create user_profile table: %w", err)
+	}
+
 	// Create indexes
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_recipient_npub ON messages(recipient_npub)",
@@ -133,6 +154,8 @@ func (sc *SQLiteCache) createTables() error {
 		"CREATE INDEX IF NOT EXISTS idx_recipient_sent ON messages(recipient_npub, sent_at DESC)",
 		"CREATE INDEX IF NOT EXISTS idx_profile_npub ON profile_cache(npub)",
 		"CREATE INDEX IF NOT EXISTS idx_profile_expires_at ON profile_cache(expires_at)",
+		"CREATE INDEX IF NOT EXISTS idx_user_profile_npub ON user_profile(npub)",
+		"CREATE INDEX IF NOT EXISTS idx_user_profile_expires_at ON user_profile(expires_at)",
 	}
 
 	for _, idx := range indexes {
@@ -861,6 +884,75 @@ func (sc *SQLiteCache) ClearExpiredProfiles() error {
 	return err
 }
 
+// GetUserProfile retrieves cached user profile with NIP-65 relay information
+func (sc *SQLiteCache) GetUserProfile(npub string) (UserProfileEntry, bool) {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	var entry UserProfileEntry
+	err := sc.db.QueryRow(`
+		SELECT id, npub, read_relays, write_relays, discovered_at, expires_at, created_at
+		FROM user_profile 
+		WHERE npub = ?
+	`, npub).Scan(&entry.ID, &entry.Npub, &entry.ReadRelays, &entry.WriteRelays,
+		&entry.DiscoveredAt, &entry.ExpiresAt, &entry.CreatedAt)
+
+	if err != nil {
+		return UserProfileEntry{}, false
+	}
+
+	return entry, true
+}
+
+// SetUserProfile caches user profile with NIP-65 relay information
+func (sc *SQLiteCache) SetUserProfile(npub string, readRelays, writeRelays []string, ttl time.Duration) error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	now := time.Now()
+	expiresAt := now.Add(ttl)
+
+	readRelaysJSON := sc.serializeRelayList(readRelays)
+	writeRelaysJSON := sc.serializeRelayList(writeRelays)
+
+	_, err := sc.db.Exec(`
+		INSERT OR REPLACE INTO user_profile 
+		(npub, read_relays, write_relays, discovered_at, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, npub, readRelaysJSON, writeRelaysJSON, now, expiresAt, now)
+
+	return err
+}
+
+// GetCachedReadRelays returns cached read relays for a user
+func (sc *SQLiteCache) GetCachedReadRelays(npub string) []string {
+	if profile, found := sc.GetUserProfile(npub); found && !profile.IsExpired() {
+		return profile.GetReadRelays()
+	}
+	return nil
+}
+
+// GetCachedWriteRelays returns cached write relays for a user
+func (sc *SQLiteCache) GetCachedWriteRelays(npub string) []string {
+	if profile, found := sc.GetUserProfile(npub); found && !profile.IsExpired() {
+		return profile.GetWriteRelays()
+	}
+	return nil
+}
+
+// ClearExpiredUserProfiles removes expired user profile entries
+func (sc *SQLiteCache) ClearExpiredUserProfiles() error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	_, err := sc.db.Exec(`
+		DELETE FROM user_profile 
+		WHERE expires_at < ?
+	`, time.Now())
+
+	return err
+}
+
 func (sc *SQLiteCache) deleteExpiredProfile(npub string) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -917,11 +1009,12 @@ func (sc *SQLiteCache) GetStats() CacheStats {
 }
 
 func (sc *SQLiteCache) startCleanupRoutine() {
-	ticker := time.NewTicker(1 * time.Hour)
+	ticker := time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		sc.ClearExpiredProfiles()
+		sc.ClearExpiredUserProfiles()
 		// Vacuum daily
 		if time.Now().Hour() == 3 { // 3 AM
 			sc.Vacuum()
@@ -929,6 +1022,70 @@ func (sc *SQLiteCache) startCleanupRoutine() {
 	}
 }
 
+// migrateToUserProfileTable migrates existing relay list data to user_profile table
+func (sc *SQLiteCache) migrateToUserProfileTable() error {
+	// Check if user_profile table has data
+	var count int
+	err := sc.db.QueryRow("SELECT COUNT(*) FROM user_profile").Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check user_profile table: %w", err)
+	}
+
+	// Skip migration if user_profile already has data
+	if count > 0 {
+		return nil
+	}
+
+	// Get profiles with relay lists from profile_cache
+	rows, err := sc.db.Query(`
+		SELECT npub, relay_list, relay_list_updated_at, cached_at
+		FROM profile_cache 
+		WHERE relay_list IS NOT NULL AND relay_list != ''
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to query profiles for migration: %w", err)
+	}
+	defer rows.Close()
+
+	tx, err := sc.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin migration transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for rows.Next() {
+		var npub, relayList string
+		var relayListUpdatedAt, cachedAt time.Time
+
+		if err := rows.Scan(&npub, &relayList, &relayListUpdatedAt, &cachedAt); err != nil {
+			continue // Skip problematic rows
+		}
+
+		// Use 24-hour TTL from cached time
+		expiresAt := cachedAt.Add(24 * time.Hour)
+
+		// Insert into user_profile table
+		_, err = tx.Exec(`
+			INSERT OR REPLACE INTO user_profile 
+			(npub, read_relays, write_relays, discovered_at, expires_at, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, npub, relayList, relayList, // Use same list for both read and write initially
+			relayListUpdatedAt, expiresAt, cachedAt)
+
+		if err != nil {
+			// Log error but continue with other profiles
+			continue
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (sc *SQLiteCache) Close() error {
 	return sc.db.Close()
+}
+
+// SetCache is a no-op for SQLiteCache as it doesn't need to be replaced
+func (sc *SQLiteCache) SetCache(cache interface{}) {
+	// No-op - SQLiteCache doesn't need to be replaced
 }

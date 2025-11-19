@@ -52,12 +52,10 @@ func (sm *SettingsModal) createForm() {
 
 	sm.form.AddInputField("[green]Nsec:[white]", sm.config.Nsec, 65, nil, nil)
 
-	relaysText := strings.Join(sm.config.Relays, "\n")
-	relaysHeight := len(sm.config.Relays) + 1
-	if relaysHeight < 3 {
-		relaysHeight = 3
-	}
-	sm.form.AddTextArea("[green]Relays (one per line):[white]", relaysText, 65, relaysHeight, 0, func(text string) {})
+	// Relays now discovered automatically via NIP-65
+	relaysText := "Relays are discovered automatically via NIP-65"
+	relaysHeight := 2
+	sm.form.AddTextArea("[green]Relay Discovery:[white]", relaysText, 65, relaysHeight, 0, func(text string) {})
 
 	partnersText := strings.Join(sm.config.Partners, "\n")
 	partnersHeight := len(sm.config.Partners) + 1
@@ -131,7 +129,7 @@ func (sm *SettingsModal) saveSettings() {
 	// Update config with extracted values
 	sm.config.Npub = strings.TrimSpace(npub)
 	sm.config.Nsec = strings.TrimSpace(nsec)
-	sm.config.Relays = cleanRelays
+	// Relays field removed - no longer saved to config
 	sm.config.Partners = cleanPartners
 	sm.config.Cache = strings.TrimSpace(cache)
 	sm.config.ShowContacts = showContacts

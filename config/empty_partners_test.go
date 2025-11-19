@@ -7,7 +7,6 @@ import (
 func TestConfigValidationAllowsEmptyPartners(t *testing.T) {
 	// Test that config validation allows empty partners array
 	cfg := &Config{
-		Relays:   []string{"wss://nostr.data.haus"},
 		Npub:     "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
 		Nsec:     "nsec1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
 		Partners: []string{}, // Empty partners should be allowed
@@ -25,7 +24,6 @@ func TestConfigValidationAllowsEmptyPartners(t *testing.T) {
 		t.Errorf("Expected empty partners array, got %d partners", len(cfg.Partners))
 	}
 
-	if len(cfg.Relays) == 0 {
-		t.Error("Relays array should not be empty")
-	}
+	// Relays field removed from config struct
+	// Test should pass without relay validation
 }

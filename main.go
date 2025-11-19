@@ -13,6 +13,23 @@ import (
 
 const Version = "0.9.8"
 
+// DiscoveryRelays contains predefined relays for NIP-65 discovery
+type DiscoveryRelays struct {
+	Relays []string
+}
+
+// GetDiscoveryRelays returns the predefined discovery relays
+func GetDiscoveryRelays() DiscoveryRelays {
+	return DiscoveryRelays{
+		Relays: []string{
+			"wss://purplepag.es",
+			"wss://nostr.data.haus",
+			"wss://nos.lol",
+			"wss://relay.damus.io",
+		},
+	}
+}
+
 func main() {
 	// Check for help flags before flag.Parse() to override default behavior
 	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h") {

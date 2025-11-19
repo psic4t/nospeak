@@ -1,13 +1,7 @@
 # Nostr Chat Configuration
 
-# List of relays to connect to
-relays = [
-    "wss://nostr.data.haus",
-    "wss://relay.damus.io",
-    "wss://auth.nostr1.com"
-]
-
 # Your Nostr keys (generate with: nsec1... and npub1...)
+# Note: Relays are now discovered automatically via NIP-65
 npub = "npub1..."
 nsec = "nsec1..."
 

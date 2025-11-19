@@ -16,7 +16,7 @@ func TestNewClient(t *testing.T) {
 
 	// Create test config
 	cfg := &config.Config{
-		Relays:   []string{"wss://relay.example.com"},
+		// No static relays - will use discovery relays
 		Nsec:     keys.Nsec,
 		Npub:     keys.Npub,
 		Partners: []string{keys.Npub},
@@ -49,20 +49,20 @@ func TestNewClientInvalidConfig(t *testing.T) {
 		{
 			name: "invalid nsec",
 			cfg: &config.Config{
-				Relays: []string{"wss://relay.example.com"},
-				Nsec:   "invalid-nsec",
-				Npub:   "npub1test...",
-				Cache:  "memory",
+				// No static relays - will use discovery relays
+				Nsec:  "invalid-nsec",
+				Npub:  "npub1test...",
+				Cache: "memory",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid npub",
 			cfg: &config.Config{
-				Relays: []string{"wss://relay.example.com"},
-				Nsec:   "nsec1test...",
-				Npub:   "invalid-npub",
-				Cache:  "memory",
+				// No static relays - will use discovery relays
+				Nsec:  "nsec1test...",
+				Npub:  "invalid-npub",
+				Cache: "memory",
 			},
 			wantErr: true,
 		},
@@ -86,10 +86,10 @@ func TestClientConnect(t *testing.T) {
 
 	// Create test config
 	cfg := &config.Config{
-		Relays: []string{"wss://relay1.example.com", "wss://relay2.example.com"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)
@@ -106,10 +106,10 @@ func TestClientDisconnect(t *testing.T) {
 	keys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.example.com"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)
@@ -127,10 +127,10 @@ func TestClientPublishEvent(t *testing.T) {
 	keys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.example.com"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)
@@ -153,10 +153,10 @@ func TestClientSubscribe(t *testing.T) {
 	keys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.example.com"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)
@@ -181,10 +181,10 @@ func TestClientQueryEvents(t *testing.T) {
 	keys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.example.com"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)
@@ -212,7 +212,7 @@ func TestClientGetPartnerDisplayNames(t *testing.T) {
 	partnerKeys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays:   []string{"wss://relay.example.com"},
+		// No static relays - will use discovery relays
 		Nsec:     keys.Nsec,
 		Npub:     keys.Npub,
 		Partners: []string{partnerKeys.Npub},
@@ -241,7 +241,7 @@ func TestClientGetPartnerProfiles(t *testing.T) {
 	partnerKeys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays:   []string{"wss://relay.example.com"},
+		// No static relays - will use discovery relays
 		Nsec:     keys.Nsec,
 		Npub:     keys.Npub,
 		Partners: []string{partnerKeys.Npub},
@@ -270,7 +270,7 @@ func TestClientGetPartnerNpubs(t *testing.T) {
 	partnerKeys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays:   []string{"wss://relay.example.com"},
+		// No static relays - will use discovery relays
 		Nsec:     keys.Nsec,
 		Npub:     keys.Npub,
 		Partners: []string{partnerKeys.Npub, "npub1another..."},
@@ -297,7 +297,7 @@ func TestClientGetMessageHistory(t *testing.T) {
 	partnerKeys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays:   []string{"wss://relay.example.com"},
+		// No static relays - will use discovery relays
 		Nsec:     keys.Nsec,
 		Npub:     keys.Npub,
 		Partners: []string{partnerKeys.Npub},
@@ -320,7 +320,7 @@ func TestClientGetMessageHistoryEnhanced(t *testing.T) {
 	partnerKeys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays:   []string{"wss://relay.example.com"},
+		// No static relays - will use discovery relays
 		Nsec:     keys.Nsec,
 		Npub:     keys.Npub,
 		Partners: []string{partnerKeys.Npub},
@@ -342,10 +342,10 @@ func TestClientAuthentication(t *testing.T) {
 	keys := testutils.GenerateTestKeys(t)
 
 	cfg := &config.Config{
-		Relays: []string{"wss://relay.example.com"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)
@@ -377,10 +377,10 @@ func TestClientWithMockRelay(t *testing.T) {
 	_ = relayPool.AddRelay("wss://mock.relay")
 
 	cfg := &config.Config{
-		Relays: []string{"wss://mock.relay"},
-		Nsec:   keys.Nsec,
-		Npub:   keys.Npub,
-		Cache:  "memory",
+		// No static relays - will use discovery relays
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
 	}
 
 	client, err := NewClient(cfg)

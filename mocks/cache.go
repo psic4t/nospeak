@@ -1,26 +1,45 @@
 package mocks
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/data.haus/nospeak/cache"
 )
 
+// serializeRelayList converts a slice of relay URLs to JSON array format
+func serializeRelayList(relayList []string) string {
+	if len(relayList) == 0 {
+		return ""
+	}
+
+	// Simple JSON array serialization
+	var jsonParts []string
+	for _, relay := range relayList {
+		jsonParts = append(jsonParts, fmt.Sprintf(`"%s"`, relay))
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(jsonParts, ","))
+}
+
 // MockCache implements the Cache interface for testing
 type MockCache struct {
-	messages map[string][]cache.MessageEntry
-	profiles map[string]cache.ProfileEntry
-	stats    cache.CacheStats
-	mu       sync.RWMutex
+	messages     map[string][]cache.MessageEntry
+	profiles     map[string]cache.ProfileEntry
+	userProfiles map[string]cache.UserProfileEntry
+	stats        cache.CacheStats
+	mu           sync.RWMutex
 }
 
 // NewMockCache creates a new mock cache instance
 func NewMockCache() *MockCache {
 	return &MockCache{
-		messages: make(map[string][]cache.MessageEntry),
-		profiles: make(map[string]cache.ProfileEntry),
-		stats:    cache.CacheStats{},
+		messages:     make(map[string][]cache.MessageEntry),
+		profiles:     make(map[string]cache.ProfileEntry),
+		userProfiles: make(map[string]cache.UserProfileEntry),
+		stats:        cache.CacheStats{},
 	}
 }
 
@@ -214,6 +233,59 @@ func (m *MockCache) SetProfile(npub string, profile cache.ProfileMetadata, ttl t
 	return nil
 }
 
+// User profile methods
+func (m *MockCache) GetUserProfile(npub string) (cache.UserProfileEntry, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	profile, exists := m.userProfiles[npub]
+	return profile, exists
+}
+
+func (m *MockCache) SetUserProfile(npub string, readRelays, writeRelays []string, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entry := cache.UserProfileEntry{
+		Npub:         npub,
+		ReadRelays:   serializeRelayList(readRelays),
+		WriteRelays:  serializeRelayList(writeRelays),
+		DiscoveredAt: time.Now(),
+		ExpiresAt:    time.Now().Add(ttl),
+		CreatedAt:    time.Now(),
+	}
+
+	m.userProfiles[npub] = entry
+	return nil
+}
+
+func (m *MockCache) GetCachedReadRelays(npub string) []string {
+	if profile, found := m.GetUserProfile(npub); found && !profile.IsExpired() {
+		return profile.GetReadRelays()
+	}
+	return nil
+}
+
+func (m *MockCache) GetCachedWriteRelays(npub string) []string {
+	if profile, found := m.GetUserProfile(npub); found && !profile.IsExpired() {
+		return profile.GetWriteRelays()
+	}
+	return nil
+}
+
+func (m *MockCache) ClearExpiredUserProfiles() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for npub, profile := range m.userProfiles {
+		if profile.IsExpired() {
+			delete(m.userProfiles, npub)
+		}
+	}
+
+	return nil
+}
+
 func (m *MockCache) ClearExpiredProfiles() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -262,6 +334,115 @@ func (m *MockCache) GetStats() cache.CacheStats {
 	m.stats.ExpiredProfiles = expiredCount
 
 	return m.stats
+}
+
+// GetMessagesWithOffset returns messages with offset (mock implementation)
+func (m *MockCache) GetMessagesWithOffset(recipientNpub string, offset, limit int) []cache.MessageEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	messages, exists := m.messages[recipientNpub]
+	if !exists {
+		return nil
+	}
+
+	if offset >= len(messages) {
+		return nil
+	}
+
+	end := offset + limit
+	if end > len(messages) {
+		end = len(messages)
+	}
+
+	result := make([]cache.MessageEntry, end-offset)
+	copy(result, messages[offset:end])
+	return result
+}
+
+// GetLatestMessages returns most recent messages (mock implementation)
+func (m *MockCache) GetLatestMessages(recipientNpub string, limit int) []cache.MessageEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	messages, exists := m.messages[recipientNpub]
+	if !exists {
+		return nil
+	}
+
+	// Return last 'limit' messages
+	if len(messages) <= limit {
+		result := make([]cache.MessageEntry, len(messages))
+		copy(result, messages)
+		return result
+	}
+
+	start := len(messages) - limit
+	result := make([]cache.MessageEntry, limit)
+	copy(result, messages[start:])
+	return result
+}
+
+// GetMessagesBefore returns messages before cutoff time (mock implementation)
+func (m *MockCache) GetMessagesBefore(recipientNpub string, cutoff time.Time, limit int) []cache.MessageEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	messages, exists := m.messages[recipientNpub]
+	if !exists {
+		return nil
+	}
+
+	var result []cache.MessageEntry
+	for _, message := range messages {
+		if message.SentAt.Before(cutoff) {
+			result = append(result, message)
+			if len(result) >= limit {
+				break
+			}
+		}
+	}
+
+	return result
+}
+
+// GetSortedPartners returns sorted list of partners (mock implementation)
+func (m *MockCache) GetSortedPartners(partners []string) []string {
+	// Simple implementation - return as-is
+	return partners
+}
+
+// SetProfileWithRelayList sets profile with relay list (mock implementation)
+func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entry := cache.ProfileEntry{
+		Npub:               npub,
+		Name:               profile.Name,
+		DisplayName:        profile.DisplayName,
+		About:              profile.About,
+		Picture:            profile.Picture,
+		NIP05:              profile.NIP05,
+		LUD16:              profile.LUD16,
+		Website:            profile.Website,
+		Banner:             profile.Banner,
+		RelayList:          serializeRelayList(relayList),
+		RelayListEventID:   relayListEventID,
+		RelayListUpdatedAt: time.Now(),
+		CachedAt:           time.Now(),
+		ExpiresAt:          time.Now().Add(ttl),
+		CreatedAt:          time.Now(),
+	}
+
+	m.profiles[npub] = entry
+	m.stats.TotalProfiles++
+	return nil
+}
+
+// SetCache is a no-op for MockCache
+func (m *MockCache) SetCache(cache interface{}) {
+	// No-op for mock
 }
 
 // Helper function for substring search

@@ -160,7 +160,6 @@ func TestGetConfigPath(t *testing.T) {
 func TestLoadWithoutValidation(t *testing.T) {
 	// Create a temporary config file
 	configContent := `
-relays = ["wss://relay.example.com"]
 nsec = "nsec1test..."
 npub = "npub1test..."
 partners = ["npub1partner..."]
@@ -178,10 +177,9 @@ show_contacts = true
 	err := toml.Unmarshal([]byte(configContent), config)
 	testutils.AssertNoError(t, err)
 
-	// Verify the parsed values
-	if len(config.Relays) != 1 || config.Relays[0] != "wss://relay.example.com" {
-		t.Error("Relays not parsed correctly")
-	}
+	// Verify the parsed values - relays field should be empty (not defined in config)
+	// Relays field removed from struct - config should load without relays
+	// This validates that the config loads successfully without relays field
 
 	if config.Nsec != "nsec1test..." {
 		t.Error("Nsec not parsed correctly")
@@ -220,7 +218,6 @@ func TestValidateConfig(t *testing.T) {
 				keys := testutils.GenerateTestKeys(t)
 				partnerKeys := testutils.GenerateTestKeys(t)
 				return &Config{
-					Relays:   []string{"wss://relay.example.com"},
 					Nsec:     keys.Nsec,
 					Npub:     keys.Npub,
 					Partners: []string{partnerKeys.Npub},
@@ -233,9 +230,8 @@ func TestValidateConfig(t *testing.T) {
 			config: func() *Config {
 				keys := testutils.GenerateTestKeys(t)
 				return &Config{
-					Relays: []string{},
-					Nsec:   keys.Nsec,
-					Npub:   keys.Npub,
+					Nsec: keys.Nsec,
+					Npub: keys.Npub,
 				}
 			}(),
 			wantErr: true,
@@ -245,9 +241,8 @@ func TestValidateConfig(t *testing.T) {
 			config: func() *Config {
 				keys := testutils.GenerateTestKeys(t)
 				return &Config{
-					Relays: []string{"wss://relay.example.com"},
-					Nsec:   "",
-					Npub:   keys.Npub,
+					Nsec: "",
+					Npub: keys.Npub,
 				}
 			}(),
 			wantErr: true,
@@ -257,9 +252,8 @@ func TestValidateConfig(t *testing.T) {
 			config: func() *Config {
 				keys := testutils.GenerateTestKeys(t)
 				return &Config{
-					Relays: []string{"wss://relay.example.com"},
-					Nsec:   keys.Nsec,
-					Npub:   "",
+					Nsec: keys.Nsec,
+					Npub: "",
 				}
 			}(),
 			wantErr: true,
@@ -269,7 +263,6 @@ func TestValidateConfig(t *testing.T) {
 			config: func() *Config {
 				keys := testutils.GenerateTestKeys(t)
 				return &Config{
-					Relays:   []string{"wss://relay.example.com"},
 					Nsec:     keys.Nsec,
 					Npub:     keys.Npub,
 					Partners: []string{"invalid-npub"},
@@ -325,9 +318,8 @@ func TestConfigDefaults(t *testing.T) {
 	config := &Config{}
 
 	// Test zero values
-	if len(config.Relays) != 0 {
-		t.Error("Relays should default to empty slice")
-	}
+	// Relays field removed from struct - no validation needed
+	// Config should load without relays field
 
 	if config.Nsec != "" {
 		t.Error("Nsec should default to empty string")
