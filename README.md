@@ -46,7 +46,7 @@ go install github.com/psic4t/nospeak@latest
    nospeak
    ```
 
-4. **Add some npubs in Settings (F2)**
+4. **Add some npubs in Settings (F1)**
 
 ## Usage
 

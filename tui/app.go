@@ -498,7 +498,7 @@ func (a *App) loadContactsBasic() error {
 	a.contactList.Clear()
 	if len(a.partners) == 0 {
 		// Show helpful message when no partners are configured
-		a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F2 to add partners[white]", 0, nil)
+		a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F1 to add partners[white]", 0, nil)
 		a.currentPartner = ""
 	} else {
 		for i, partner := range a.partners {
@@ -582,7 +582,7 @@ func (a *App) onContactSelected(index int, mainText, secondaryText string) {
 		a.mu.Unlock()
 
 		a.messageView.Clear()
-		a.messageView.Write([]byte("[yellow]No chat partners configured[white]\n\n[gray]Press F2 to add partners[white]\n"))
+		a.messageView.Write([]byte("[yellow]No chat partners configured[white]\n\n[gray]Press F1 to add partners[white]\n"))
 		a.updateStatusBar()
 		a.updateTerminalTitle()
 	}
@@ -967,7 +967,7 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 		a.switchContact(-1)
 		return nil
 
-	case tcell.KeyF2:
+	case tcell.KeyF1:
 		a.showSettings()
 		return nil
 	case tcell.KeyF3:
@@ -1014,7 +1014,7 @@ func (a *App) showHelp() {
   Ctrl+k/j       - Switch between contacts (k=up, j=down)
   Ctrl+p         - Show profile information for current contact
 
-  F2             - Show settings
+  F1             - Show settings
   F3             - Toggle contacts pane
 
 Note: Contacts pane visibility can be set in config.toml with "show_contacts" option
@@ -1078,7 +1078,7 @@ func (a *App) refreshPartners() {
 			a.contactList.Clear()
 			if len(a.partners) == 0 {
 				// Show helpful message when no partners are configured
-				a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F2 to add partners[white]", 0, nil)
+				a.contactList.AddItem("[yellow]No chat partners configured[white]", "[gray]Press F1 to add partners[white]", 0, nil)
 				a.currentPartner = ""
 			} else {
 				for i, partner := range a.partners {

@@ -670,7 +670,7 @@ Terminal User Interface component for interactive messaging.
 
 **Responsibilities:**
 - Render chat interface in terminal with responsive layout
-- Handle user input and keyboard shortcuts (F2 for settings, Ctrl+C to quit)
+- Handle user input and keyboard shortcuts (F1 for settings, Ctrl+C to quit)
 - Manage contact list and conversations with real-time updates
 - Display in-app notifications and status updates
 - Track current contact selection and unread message states
@@ -691,7 +691,7 @@ Terminal User Interface component for interactive messaging.
 **UI Features:**
 - **Contact List Highlighting**: "▶ " for current contact, "● " for unread contacts
 - **Message History Display**: Real-time message updates for active conversations
-- **Settings Integration**: F2 key access to notification and system configuration
+- **Settings Integration**: F1 key access to notification and system configuration
 - **Responsive Design**: Adapts to terminal size changes with proper layout management
 - **Enhanced Relay Counter**: Real-time display of connection status with "X/Y relays" format
 - **Color-Coded Status**: Visual feedback for connection health and progress
@@ -994,7 +994,7 @@ Current Contact Check
 ```
 
 **Configuration Integration:**
-- **Settings UI**: Accessible via F2 key in TUI
+- **Settings UI**: Accessible via F1 key in TUI
 - **Debug Mode**: `--debug` flag enables detailed notification logging
 - **Custom Commands**: Users can set custom notification commands or disable entirely
 
@@ -1037,7 +1037,7 @@ notify_command = "notify-send \"New message from %s\""
 ```
 
 **Settings Integration:**
-- **TUI Settings**: Accessible via F2 key for interactive configuration
+- **TUI Settings**: Accessible via F1 key for interactive configuration
 - **Real-time Updates**: Changes applied immediately without restart
 - **Debug Support**: `--debug` flag shows notification command execution details
 - **Error Handling**: Graceful fallback when notification commands fail

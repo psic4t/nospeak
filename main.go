@@ -129,7 +129,7 @@ func printUsage() {
 	fmt.Println("  Ctrl+k/j                         - Switch between contacts (k=up, j=down)")
 	fmt.Println("  Ctrl+p                           - Show profile information for current contact")
 
-	fmt.Println("  F2                               - Show settings")
+	fmt.Println("  F1                               - Show settings")
 	fmt.Println("  F3                               - Toggle contacts pane")
 	fmt.Println("  ↑/↓                              - Navigate contact list")
 	fmt.Println("")

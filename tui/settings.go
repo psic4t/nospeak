@@ -52,11 +52,6 @@ func (sm *SettingsModal) createForm() {
 
 	sm.form.AddInputField("[green]Nsec:[white]", sm.config.Nsec, 65, nil, nil)
 
-	// Relays now discovered automatically via NIP-65
-	relaysText := "Relays are discovered automatically via NIP-65"
-	relaysHeight := 2
-	sm.form.AddTextArea("[green]Relay Discovery:[white]", relaysText, 65, relaysHeight, 0, func(text string) {})
-
 	partnersText := strings.Join(sm.config.Partners, "\n")
 	partnersHeight := len(sm.config.Partners) + 1
 	if partnersHeight < 3 {
@@ -81,6 +76,17 @@ func (sm *SettingsModal) createForm() {
 			sm.onCancel()
 		}
 	})
+
+	// Add ESC key handler to close settings modal
+	sm.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			if sm.onCancel != nil {
+				sm.onCancel()
+			}
+			return nil // Consume the event
+		}
+		return event // Let other keys pass through
+	})
 }
 
 func (sm *SettingsModal) saveSettings() {
@@ -95,22 +101,11 @@ func (sm *SettingsModal) saveSettings() {
 	// Get form field values
 	npub := sm.form.GetFormItem(0).(*tview.InputField).GetText()
 	nsec := sm.form.GetFormItem(1).(*tview.InputField).GetText()
-	relaysText := sm.form.GetFormItem(2).(*tview.TextArea).GetText()
-	partnersText := sm.form.GetFormItem(3).(*tview.TextArea).GetText()
-	cache := sm.form.GetFormItem(4).(*tview.InputField).GetText()
-	showContacts := sm.form.GetFormItem(5).(*tview.Checkbox).IsChecked()
-	notifyCommand := sm.form.GetFormItem(6).(*tview.InputField).GetText()
-	debug := sm.form.GetFormItem(7).(*tview.Checkbox).IsChecked()
-
-	// Parse textarea content into string slices
-	relays := strings.Split(strings.TrimSpace(relaysText), "\n")
-	var cleanRelays []string
-	for _, relay := range relays {
-		relay = strings.TrimSpace(relay)
-		if relay != "" {
-			cleanRelays = append(cleanRelays, relay)
-		}
-	}
+	partnersText := sm.form.GetFormItem(2).(*tview.TextArea).GetText()
+	cache := sm.form.GetFormItem(3).(*tview.InputField).GetText()
+	showContacts := sm.form.GetFormItem(4).(*tview.Checkbox).IsChecked()
+	notifyCommand := sm.form.GetFormItem(5).(*tview.InputField).GetText()
+	debug := sm.form.GetFormItem(6).(*tview.Checkbox).IsChecked()
 
 	partners := strings.Split(strings.TrimSpace(partnersText), "\n")
 	var cleanPartners []string
@@ -189,9 +184,6 @@ func (sm *SettingsModal) Show() {
 	sm.app.SetRoot(sm.form, true)
 
 	// Force TextAreas to display from top instead of bottom
-	relaysTextArea := sm.form.GetFormItem(2).(*tview.TextArea)
-	relaysTextArea.SetOffset(0, 0)
-
-	partnersTextArea := sm.form.GetFormItem(3).(*tview.TextArea)
+	partnersTextArea := sm.form.GetFormItem(2).(*tview.TextArea)
 	partnersTextArea.SetOffset(0, 0)
 }
