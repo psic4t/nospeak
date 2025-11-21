@@ -65,39 +65,23 @@ func (pe ProfileEntry) ToProfileMetadata() ProfileMetadata {
 }
 
 // GetRelayList parses and returns the relay list as a string slice
+// Deprecated: Use GetReadRelays or GetWriteRelays instead
 func (pe ProfileEntry) GetRelayList() []string {
-	if pe.RelayList == "" {
-		return nil
+	// Prefer NIP-65 read relays as the default "relay list"
+	if pe.ReadRelays != "" {
+		return parseRelayJSON(pe.ReadRelays)
 	}
-
-	// Simple JSON parsing for relay array
-	var relays []string
-	if pe.RelayList[0] == '[' && pe.RelayList[len(pe.RelayList)-1] == ']' {
-		// Remove brackets and split by comma
-		content := pe.RelayList[1 : len(pe.RelayList)-1]
-		if content == "" {
-			return nil
-		}
-
-		// Parse JSON array elements (strip quotes)
-		parts := strings.Split(content, ",")
-		for _, part := range parts {
-			relay := strings.TrimSpace(part)
-			if len(relay) >= 2 && relay[0] == '"' && relay[len(relay)-1] == '"' {
-				relay = relay[1 : len(relay)-1]
-			}
-			if relay != "" {
-				relays = append(relays, relay)
-			}
-		}
+	// Fallback to legacy relay list
+	if pe.RelayList != "" {
+		return parseRelayJSON(pe.RelayList)
 	}
-
-	return relays
+	return nil
 }
 
 // HasRelayList returns true if the profile has a cached relay list
+// Deprecated: Use HasReadRelays or HasWriteRelays instead
 func (pe ProfileEntry) HasRelayList() bool {
-	return pe.RelayList != "" && !pe.RelayListUpdatedAt.IsZero()
+	return (pe.ReadRelays != "" || pe.RelayList != "") && !pe.RelayListUpdatedAt.IsZero()
 }
 
 // GetReadRelays parses and returns read relays as a string slice
@@ -212,7 +196,7 @@ type Cache interface {
 
 	// Profile methods
 	GetProfile(npub string) (ProfileEntry, bool)
-	SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error
+	SetProfileWithRelayList(npub string, profile ProfileMetadata, readRelays []string, writeRelays []string, relayListEventID string, ttl time.Duration) error
 	SetNIP65Relays(npub string, readRelays, writeRelays []string, ttl time.Duration) error
 	ClearExpiredProfiles() error
 

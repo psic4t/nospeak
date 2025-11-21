@@ -238,7 +238,7 @@ func TestSQLiteCacheProfile(t *testing.T) {
 		LUD16:       "test@ln.example.com",
 	}
 
-	err = cache.SetProfileWithRelayList(npub, profile, nil, "", time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, nil, nil, "", time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Get the profile
@@ -269,7 +269,7 @@ func TestSQLiteCacheProfileExpiration(t *testing.T) {
 		Name: "Test User",
 	}
 
-	err = cache.SetProfileWithRelayList(npub, profile, nil, "", time.Millisecond)
+	err = cache.SetProfileWithRelayList(npub, profile, nil, nil, "", time.Millisecond)
 	testutils.AssertNoError(t, err)
 
 	// Wait for expiration
@@ -297,7 +297,7 @@ func TestSQLiteCacheClear(t *testing.T) {
 	testutils.AssertNoError(t, err)
 
 	profile := ProfileMetadata{Name: "Test User"}
-	err = cache.SetProfileWithRelayList("npub1...", profile, nil, "", time.Hour)
+	err = cache.SetProfileWithRelayList("npub1...", profile, nil, nil, "", time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify data exists
@@ -339,7 +339,7 @@ func TestSQLiteCacheGetStats(t *testing.T) {
 	}
 
 	profile := ProfileMetadata{Name: "Test User"}
-	err = cache.SetProfileWithRelayList("npub1...", profile, nil, "", time.Hour)
+	err = cache.SetProfileWithRelayList("npub1...", profile, nil, nil, "", time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Get stats
@@ -452,7 +452,7 @@ func TestRelayListCaching(t *testing.T) {
 	relayListEventID := "event12345"
 
 	// Test SetProfileWithRelayList
-	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayListEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayList, relayListEventID, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Test GetProfile includes relay list
@@ -508,7 +508,7 @@ func TestUpdateRelayList(t *testing.T) {
 	updatedEventID := "updated456"
 
 	// Set initial profile with relay list
-	err = cache.SetProfileWithRelayList(npub, profile, initialRelays, initialEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, initialRelays, initialRelays, initialEventID, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify initial state
@@ -521,7 +521,7 @@ func TestUpdateRelayList(t *testing.T) {
 	// Update only the relay list by updating profile with existing metadata but new relay list
 	cachedProfile, _ = cache.GetProfile(npub)
 	existingProfile := cachedProfile.ToProfileMetadata()
-	err = cache.SetProfileWithRelayList(npub, existingProfile, updatedRelays, updatedEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, existingProfile, updatedRelays, updatedRelays, updatedEventID, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify updated relay list
@@ -609,7 +609,7 @@ func TestRelayListMigration(t *testing.T) {
 	profile := ProfileMetadata{Name: "Migration Test"}
 	relays := []string{"wss://migration.test"}
 
-	err = cache.SetProfileWithRelayList(npub, profile, relays, "migration123", 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, relays, relays, "migration123", 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify the data was stored correctly
@@ -649,7 +649,7 @@ func TestProfileUpdatePreservesRelayList(t *testing.T) {
 	relayListEventID := "relay123"
 
 	// First, set profile with NIP-65 relay data
-	err = cache.SetProfileWithRelayList(npub, profile, nil, "", 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayList, relayListEventID, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify initial state
@@ -693,7 +693,7 @@ func TestProfileUpdatePreservesRelayList(t *testing.T) {
 		About:       "Updated about",
 	}
 
-	err = cache.SetProfileWithRelayList(npub, updatedProfile, nil, "", 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, updatedProfile, nil, nil, "", 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify that relay list is preserved

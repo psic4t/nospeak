@@ -347,12 +347,12 @@ func (sc *SQLiteCache) migrateNIP65Columns() error {
 
 // migrateRelayListCleanup removes redundant relay_list columns after migration to NIP-65
 func (sc *SQLiteCache) migrateRelayListCleanup() error {
-	// Check if relay_list columns still exist before trying to drop them
+	// Check if relay_list column still exists before trying to drop it
 	var relayListExists bool
 	err := sc.db.QueryRow(`
 		SELECT COUNT(*) > 0 
 		FROM pragma_table_info('profile_cache') 
-		WHERE name IN ('relay_list', 'relay_list_event_id', 'relay_list_updated_at')
+		WHERE name = 'relay_list'
 	`).Scan(&relayListExists)
 
 	if err != nil {
@@ -367,11 +367,9 @@ func (sc *SQLiteCache) migrateRelayListCleanup() error {
 
 	debugLog("Starting cleanup of redundant relay_list columns")
 
-	// Drop redundant columns
+	// Drop redundant columns - keep event_id and updated_at for metadata
 	dropStatements := []string{
 		"ALTER TABLE profile_cache DROP COLUMN relay_list",
-		"ALTER TABLE profile_cache DROP COLUMN relay_list_event_id",
-		"ALTER TABLE profile_cache DROP COLUMN relay_list_updated_at",
 	}
 
 	for _, stmt := range dropStatements {
@@ -419,13 +417,14 @@ func (sc *SQLiteCache) migrateRelayListToNIP65() error {
 			continue
 		}
 
-		// For migration, we'll move relay_list data to both read and write relays
-		// This is a reasonable default for existing data
+		// For migration, we'll move relay_list data to read_relays only
+		// We leave write_relays empty to force a fresh discovery which will correctly separate them
+		// This avoids the issue where we blindly copy legacy mixed relays into write_relays
 		_, err := sc.db.Exec(`
 			UPDATE profile_cache 
-			SET read_relays = ?, write_relays = ?
+			SET read_relays = ?, write_relays = '[]'
 			WHERE npub = ?
-		`, relayList, relayList, npub)
+		`, relayList, npub)
 
 		if err != nil {
 			debugLog("Failed to migrate relays for %s: %v", npub[:8]+"...", err)
@@ -931,12 +930,16 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 	// Try to query with NIP-65 columns first (new schema)
 	err := sc.db.QueryRow(`
 		SELECT id, npub, name, display_name, about, picture, nip05, lud16, website, banner,
-		       read_relays, write_relays, cached_at, expires_at, created_at
+		       read_relays, write_relays, relay_list_event_id, relay_list_updated_at, cached_at, expires_at, created_at
 		FROM profile_cache
 		WHERE npub = ?
 	`, npub).Scan(&profile.ID, &profile.Npub, &profile.Name, &profile.DisplayName, &profile.About,
 		&profile.Picture, &profile.NIP05, &profile.LUD16, &profile.Website, &profile.Banner,
-		&profile.ReadRelays, &profile.WriteRelays, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
+		&profile.ReadRelays, &profile.WriteRelays, &profile.RelayListEventID, &relayListUpdatedAt, &profile.CachedAt, &expiresAt, &profile.CreatedAt)
+
+	if relayListUpdatedAt.Valid {
+		profile.RelayListUpdatedAt = relayListUpdatedAt.Time
+	}
 
 	if err != nil {
 		// Fallback to legacy schema with relay_list columns
@@ -976,13 +979,13 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 }
 
 // SetProfileWithRelayList caches both profile metadata and relay list together
-// If relayList is nil or empty, only profile metadata is updated, preserving existing relay list
-func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error {
+// If readRelays and writeRelays are nil or empty, only profile metadata is updated, preserving existing relay list
+func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetadata, readRelays []string, writeRelays []string, relayListEventID string, ttl time.Duration) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
 	expiresAt := time.Now().Add(ttl)
-	hasRelayList := len(relayList) > 0 && relayListEventID != ""
+	hasRelays := (len(readRelays) > 0 || len(writeRelays) > 0) && relayListEventID != ""
 
 	tx, err := sc.db.Begin()
 	if err != nil {
@@ -990,17 +993,19 @@ func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetad
 	}
 	defer tx.Rollback()
 
-	if hasRelayList {
+	if hasRelays {
 		// Insert or replace with both profile and relay list data
-		relayListJSON := sc.serializeRelayList(relayList)
+		readRelaysJSON := sc.serializeRelayList(readRelays)
+		writeRelaysJSON := sc.serializeRelayList(writeRelays)
+
 		_, err = tx.Exec(`
 			INSERT OR REPLACE INTO profile_cache
 			(npub, name, display_name, about, picture, nip05, lud16, website, banner,
-			 relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 read_relays, write_relays, relay_list_event_id, relay_list_updated_at, cached_at, expires_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture,
 			profile.NIP05, profile.LUD16, profile.Website, profile.Banner,
-			relayListJSON, relayListEventID, time.Now(), time.Now(), expiresAt)
+			readRelaysJSON, writeRelaysJSON, relayListEventID, time.Now(), time.Now(), expiresAt)
 	} else {
 		// Update only profile metadata, preserving existing relay list data
 		_, err = tx.Exec(`
@@ -1020,8 +1025,8 @@ func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetad
 				_, err = tx.Exec(`
 					INSERT INTO profile_cache
 					(npub, name, display_name, about, picture, nip05, lud16, website, banner,
-					 relay_list, relay_list_event_id, relay_list_updated_at, cached_at, expires_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, ?, ?)
+					 read_relays, write_relays, relay_list_event_id, relay_list_updated_at, cached_at, expires_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', NULL, ?, ?)
 				`, npub, profile.Name, profile.DisplayName, profile.About, profile.Picture,
 					profile.NIP05, profile.LUD16, profile.Website, profile.Banner, time.Now(), expiresAt)
 			}

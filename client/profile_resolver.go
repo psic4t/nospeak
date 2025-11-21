@@ -84,7 +84,7 @@ func (pr *ProfileResolver) GetFullProfile(ctx context.Context, npub string, debu
 	}
 
 	// Cache the profile
-	pr.cache.SetProfileWithRelayList(npub, metadata, nil, "", 24*time.Hour)
+	pr.cache.SetProfileWithRelayList(npub, metadata, nil, nil, "", 24*time.Hour)
 
 	// Update display name cache
 	displayName := pr.extractDisplayName(metadata)
@@ -103,7 +103,7 @@ func (pr *ProfileResolver) RefreshProfile(ctx context.Context, npub string, debu
 	}
 
 	// Update cache
-	pr.cache.SetProfileWithRelayList(npub, metadata, nil, "", 24*time.Hour)
+	pr.cache.SetProfileWithRelayList(npub, metadata, nil, nil, "", 24*time.Hour)
 
 	// Update display name cache
 	displayName := pr.extractDisplayName(metadata)
@@ -161,7 +161,6 @@ func (pr *ProfileResolver) AddNewPartner(npub string) {
 	}
 }
 
-
 // GetAllDisplayNames returns a copy of all display names
 func (pr *ProfileResolver) GetAllDisplayNames() map[string]string {
 	pr.mu.RLock()
@@ -199,7 +198,6 @@ func (pr *ProfileResolver) setDisplayName(npub, displayName string) {
 	defer pr.mu.Unlock()
 	pr.displayNames[npub] = displayName
 }
-
 
 func (pr *ProfileResolver) fetchProfileFromNetwork(ctx context.Context, npub string, debug bool) (cache.ProfileMetadata, error) {
 	_, pubKey, err := nip19.Decode(npub)

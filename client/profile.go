@@ -102,7 +102,8 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 	// Process events - separate profile metadata from relay list
 	var profileEvent *nostr.Event
 	var relayListEvent *nostr.Event
-	var relayList []string
+	var readRelays []string
+	var writeRelays []string
 
 	for _, event := range events {
 		switch event.Kind {
@@ -113,11 +114,30 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 			// Extract relays from the event tags
 			for _, tag := range event.Tags {
 				if len(tag) >= 2 && tag[0] == "r" {
-					relayList = append(relayList, tag[1])
+					relayURL := tag[1]
+					var marker string
+					if len(tag) >= 3 {
+						marker = tag[2]
+					}
+
+					switch marker {
+					case "read":
+						readRelays = append(readRelays, relayURL)
+					case "write":
+						writeRelays = append(writeRelays, relayURL)
+					default:
+						// Unmarked or unknown marker -> both
+						readRelays = append(readRelays, relayURL)
+						writeRelays = append(writeRelays, relayURL)
+					}
 				}
 			}
 		}
 	}
+
+	// Deduplicate relay lists
+	readRelays = removeDuplicates(readRelays)
+	writeRelays = removeDuplicates(writeRelays)
 
 	// We need at least a profile event
 	if profileEvent == nil {
@@ -141,16 +161,17 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 		relayListEventID = relayListEvent.ID
 	}
 
-	if len(relayList) > 0 && relayListEventID != "" {
+	if (len(readRelays) > 0 || len(writeRelays) > 0) && relayListEventID != "" {
 		// Cache both profile and relay list together
-		err = cacheInstance.SetProfileWithRelayList(npub, metadata, relayList, relayListEventID, 24*time.Hour)
+		err = cacheInstance.SetProfileWithRelayList(npub, metadata, readRelays, writeRelays, relayListEventID, 24*time.Hour)
 		if debug {
-			log.Printf("Resolved profile for %s: %s with %d relays (cached for 24h)", npub, metadata.Name, len(relayList))
+			log.Printf("Resolved profile for %s: %s with %d read / %d write relays (cached for 24h)",
+				npub, metadata.Name, len(readRelays), len(writeRelays))
 		}
 	} else {
 		// Cache profile only (preserves existing relay list if present)
 		// Use empty relay list and event ID to update profile metadata only
-		err = cacheInstance.SetProfileWithRelayList(npub, metadata, nil, "", 24*time.Hour)
+		err = cacheInstance.SetProfileWithRelayList(npub, metadata, nil, nil, "", 24*time.Hour)
 		if debug {
 			log.Printf("Resolved profile for %s: %s (cached for 24h, no relay list found)", npub, metadata.Name)
 		}
@@ -272,4 +293,17 @@ func (c *Client) ResolveUsernameWithFallback(ctx context.Context, npub string, d
 		return npub[:8] + "..."
 	}
 	return username
+}
+
+func removeDuplicates(elements []string) []string {
+	encountered := map[string]bool{}
+	result := []string{}
+
+	for _, v := range elements {
+		if encountered[v] == false {
+			encountered[v] = true
+			result = append(result, v)
+		}
+	}
+	return result
 }

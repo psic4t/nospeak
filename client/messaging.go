@@ -230,7 +230,8 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 		log.Printf("QueryEvents returned %d events for %s", len(events), recipientNpub[:8]+"...")
 	}
 
-	var relays []string
+	var readRelays []string
+	var writeRelays []string
 	var relayListEventID string
 
 	for _, event := range events {
@@ -243,22 +244,41 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 				log.Printf("Processing tag: %v", tag)
 			}
 			if len(tag) >= 2 && tag[0] == "r" {
-				if debug {
-					log.Printf("Found relay tag: %s", tag[1])
+				relayURL := tag[1]
+				var marker string
+				if len(tag) >= 3 {
+					marker = tag[2]
 				}
-				relays = append(relays, tag[1])
+
+				if debug {
+					log.Printf("Found relay tag: %s (marker: %s)", relayURL, marker)
+				}
+
+				switch marker {
+				case "read":
+					readRelays = append(readRelays, relayURL)
+				case "write":
+					writeRelays = append(writeRelays, relayURL)
+				default:
+					readRelays = append(readRelays, relayURL)
+					writeRelays = append(writeRelays, relayURL)
+				}
 			}
 		}
 	}
 
+	// Deduplicate
+	readRelays = removeDuplicates(readRelays)
+	writeRelays = removeDuplicates(writeRelays)
+
 	if debug {
-		log.Printf("Extracted %d relays from Event 10002", len(relays))
+		log.Printf("Extracted %d read relays and %d write relays from Event 10002", len(readRelays), len(writeRelays))
 	}
 
 	// Update cache with relay list if we found one
-	if len(relays) > 0 && relayListEventID != "" {
+	if (len(readRelays) > 0 || len(writeRelays) > 0) && relayListEventID != "" {
 		if debug {
-			log.Printf("Updating cache with %d relays for %s", len(relays), recipientNpub[:8]+"...")
+			log.Printf("Updating cache with relays for %s", recipientNpub[:8]+"...")
 		}
 		// Get current profile to preserve metadata, then update with new relay list
 		if cachedProfile, found := cacheInstance.GetProfile(recipientNpub); found {
@@ -266,7 +286,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 				log.Printf("Found existing cached profile for %s, updating with relay list", recipientNpub[:8]+"...")
 			}
 			profileMetadata := cachedProfile.ToProfileMetadata()
-			err = cacheInstance.SetProfileWithRelayList(recipientNpub, profileMetadata, relays, relayListEventID, 24*time.Hour)
+			err = cacheInstance.SetProfileWithRelayList(recipientNpub, profileMetadata, readRelays, writeRelays, relayListEventID, 24*time.Hour)
 			if err != nil && debug {
 				log.Printf("Failed to cache relay list for %s: %v", recipientNpub[:8]+"...", err)
 			} else if debug {
@@ -278,7 +298,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 			}
 			// No cached profile, create minimal one with just relay list
 			minimalProfile := cache.ProfileMetadata{}
-			err = cacheInstance.SetProfileWithRelayList(recipientNpub, minimalProfile, relays, relayListEventID, 24*time.Hour)
+			err = cacheInstance.SetProfileWithRelayList(recipientNpub, minimalProfile, readRelays, writeRelays, relayListEventID, 24*time.Hour)
 			if err != nil && debug {
 				log.Printf("Failed to cache profile with relay list for %s: %v", recipientNpub[:8]+"...", err)
 			} else if debug {
@@ -287,17 +307,19 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 		}
 	} else {
 		if debug {
-			log.Printf("No relays found for %s (len(relays)=%d, relayListEventID=%s)", recipientNpub[:8]+"...", len(relays), relayListEventID)
+			log.Printf("No relays found for %s (relayListEventID=%s)", recipientNpub[:8]+"...", relayListEventID)
 		}
 	}
 
 	// Fallback to default relays if none found
-	if len(relays) == 0 {
+	var relays []string
+	if len(readRelays) == 0 {
 		relays = []string{"wss://nostr.data.haus"}
 		if debug {
 			log.Printf("No DM relays found for recipient, using fallback: %v", relays)
 		}
 	} else {
+		relays = readRelays
 		if debug {
 			log.Printf("Found DM relays for recipient: %v (cached for 24h)", relays)
 		}

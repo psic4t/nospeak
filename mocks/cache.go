@@ -414,7 +414,7 @@ func (m *MockCache) GetSortedPartners(partners []string) []string {
 }
 
 // SetProfileWithRelayList sets profile with relay list (mock implementation)
-func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMetadata, relayList []string, relayListEventID string, ttl time.Duration) error {
+func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMetadata, readRelays []string, writeRelays []string, relayListEventID string, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -428,7 +428,8 @@ func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMe
 		LUD16:              profile.LUD16,
 		Website:            profile.Website,
 		Banner:             profile.Banner,
-		RelayList:          serializeRelayList(relayList),
+		ReadRelays:         serializeRelayList(readRelays),
+		WriteRelays:        serializeRelayList(writeRelays),
 		RelayListEventID:   relayListEventID,
 		RelayListUpdatedAt: time.Now(),
 		CachedAt:           time.Now(),
