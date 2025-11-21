@@ -10,6 +10,7 @@ nospeak is a terminal-based Nostr chat client built with Go. Nospeak provides a 
 - **Sealed direct messages** - NIP-59 gift wraps provide metadata protection and sender verification
 - **Outbox Model** - Uses NIP-65 Inbox/Outbox relays for contacts
 - **Message caching** - SQLite or in-memory caching for message persistence
+- **Real-time relay monitoring** - Live connection status and health monitoring for all configured relays
 
 ## Installation
 
@@ -64,6 +65,8 @@ nospeak
 - `PgUp` / `PgDn` - Scroll message pane up/down
 - `Ctrl+k` / `Ctrl+j` - Switch between contacts (k=up, j=down)
 - `Ctrl+p` - Show profile information for current contact
+- `F1` - Show settings
+- `F2` - Show relay connections (view connection status, health metrics, and relay statistics)
 - `F3` - Toggle contacts pane
 - `↑` / `↓` - Navigate contact list
 

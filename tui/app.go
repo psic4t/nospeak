@@ -970,6 +970,9 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyF1:
 		a.showSettings()
 		return nil
+	case tcell.KeyF2:
+		a.showRelayConnections()
+		return nil
 	case tcell.KeyF3:
 		a.toggleContactsPane()
 		return nil
@@ -1015,6 +1018,7 @@ func (a *App) showHelp() {
   Ctrl+p         - Show profile information for current contact
 
   F1             - Show settings
+  F2             - Show relay connections
   F3             - Toggle contacts pane
 
 Note: Contacts pane visibility can be set in config.toml with "show_contacts" option
@@ -1112,6 +1116,13 @@ func (a *App) showSettings() {
 		a.app.SetRoot(a.mainFlex, true)
 	})
 	settings.Show()
+}
+
+func (a *App) showRelayConnections() {
+	relayModal := NewRelayConnectionsModal(a.app, a.client, func() {
+		a.app.SetRoot(a.mainFlex, true)
+	})
+	relayModal.Show()
 }
 
 func (a *App) showProfileModal() {
