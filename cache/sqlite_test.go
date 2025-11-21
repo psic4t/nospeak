@@ -238,7 +238,7 @@ func TestSQLiteCacheProfile(t *testing.T) {
 		LUD16:       "test@ln.example.com",
 	}
 
-	err = cache.SetProfileWithRelayList(npub, profile, nil, nil, "", time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, nil, nil, time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Get the profile
@@ -269,7 +269,7 @@ func TestSQLiteCacheProfileExpiration(t *testing.T) {
 		Name: "Test User",
 	}
 
-	err = cache.SetProfileWithRelayList(npub, profile, nil, nil, "", time.Millisecond)
+	err = cache.SetProfileWithRelayList(npub, profile, nil, nil, time.Millisecond)
 	testutils.AssertNoError(t, err)
 
 	// Wait for expiration
@@ -301,7 +301,7 @@ func TestSQLiteCacheClear(t *testing.T) {
 	testutils.AssertNoError(t, err)
 
 	profile := ProfileMetadata{Name: "Test User"}
-	err = cache.SetProfileWithRelayList("npub1...", profile, nil, nil, "", time.Hour)
+	err = cache.SetProfileWithRelayList("npub1...", profile, nil, nil, time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify data exists
@@ -343,7 +343,7 @@ func TestSQLiteCacheGetStats(t *testing.T) {
 	}
 
 	profile := ProfileMetadata{Name: "Test User"}
-	err = cache.SetProfileWithRelayList("npub1...", profile, nil, nil, "", time.Hour)
+	err = cache.SetProfileWithRelayList("npub1...", profile, nil, nil, time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Get stats
@@ -453,10 +453,9 @@ func TestRelayListCaching(t *testing.T) {
 		About:       "Test profile for relay list caching",
 	}
 	relayList := []string{"wss://relay1.com", "wss://relay2.com", "wss://relay3.com"}
-	relayListEventID := "event12345"
 
 	// Test SetProfileWithRelayList
-	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayList, relayListEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayList, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Test GetProfile includes relay list
@@ -485,10 +484,6 @@ func TestRelayListCaching(t *testing.T) {
 			t.Errorf("Expected relay '%s' at index %d, got '%s'", relay, i, cachedRelays[i])
 		}
 	}
-
-	if cachedProfile.RelayListEventID != relayListEventID {
-		t.Errorf("Expected relay list event ID '%s', got '%s'", relayListEventID, cachedProfile.RelayListEventID)
-	}
 }
 
 func TestUpdateRelayList(t *testing.T) {
@@ -508,11 +503,9 @@ func TestUpdateRelayList(t *testing.T) {
 	}
 	initialRelays := []string{"wss://initial.com"}
 	updatedRelays := []string{"wss://updated1.com", "wss://updated2.com"}
-	initialEventID := "initial123"
-	updatedEventID := "updated456"
 
 	// Set initial profile with relay list
-	err = cache.SetProfileWithRelayList(npub, profile, initialRelays, initialRelays, initialEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, initialRelays, initialRelays, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify initial state
@@ -525,7 +518,7 @@ func TestUpdateRelayList(t *testing.T) {
 	// Update only the relay list by updating profile with existing metadata but new relay list
 	cachedProfile, _ = cache.GetProfile(npub)
 	existingProfile := cachedProfile.ToProfileMetadata()
-	err = cache.SetProfileWithRelayList(npub, existingProfile, updatedRelays, updatedRelays, updatedEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, existingProfile, updatedRelays, updatedRelays, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify updated relay list
@@ -545,11 +538,6 @@ func TestUpdateRelayList(t *testing.T) {
 	if cachedProfile.Name != profile.Name {
 		t.Errorf("Expected profile name to be preserved as '%s', got '%s'", profile.Name, cachedProfile.Name)
 	}
-
-	// Verify event ID is updated
-	if cachedProfile.RelayListEventID != updatedEventID {
-		t.Errorf("Expected updated event ID '%s', got '%s'", updatedEventID, cachedProfile.RelayListEventID)
-	}
 }
 
 func TestProfileEntryRelayListHelpers(t *testing.T) {
@@ -565,8 +553,7 @@ func TestProfileEntryRelayListHelpers(t *testing.T) {
 
 	// Test GetRelayList with JSON data
 	profileWithRelays := ProfileEntry{
-		RelayList:          `["wss://relay1.com", "wss://relay2.com"]`,
-		RelayListUpdatedAt: time.Now(),
+		RelayList: `["wss://relay1.com", "wss://relay2.com"]`,
 	}
 
 	if !profileWithRelays.HasRelayList() {
@@ -587,8 +574,7 @@ func TestProfileEntryRelayListHelpers(t *testing.T) {
 
 	// Test GetRelayList with empty JSON array
 	emptyJSONArrayProfile := ProfileEntry{
-		RelayList:          `[]`,
-		RelayListUpdatedAt: time.Now(),
+		RelayList: `[]`,
 	}
 
 	relays = emptyJSONArrayProfile.GetRelayList()
@@ -613,7 +599,7 @@ func TestRelayListMigration(t *testing.T) {
 	profile := ProfileMetadata{Name: "Migration Test"}
 	relays := []string{"wss://migration.test"}
 
-	err = cache.SetProfileWithRelayList(npub, profile, relays, relays, "migration123", 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, relays, relays, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify the data was stored correctly
@@ -650,10 +636,9 @@ func TestProfileUpdatePreservesRelayList(t *testing.T) {
 		About:       "Original about",
 	}
 	relayList := []string{"wss://relay1.com", "wss://relay2.com", "wss://relay3.com"}
-	relayListEventID := "relay123"
 
 	// First, set profile with NIP-65 relay data
-	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayList, relayListEventID, 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, profile, relayList, relayList, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify initial state
@@ -697,7 +682,7 @@ func TestProfileUpdatePreservesRelayList(t *testing.T) {
 		About:       "Updated about",
 	}
 
-	err = cache.SetProfileWithRelayList(npub, updatedProfile, nil, nil, "", 24*time.Hour)
+	err = cache.SetProfileWithRelayList(npub, updatedProfile, nil, nil, 24*time.Hour)
 	testutils.AssertNoError(t, err)
 
 	// Verify that relay list is preserved
@@ -729,14 +714,5 @@ func TestProfileUpdatePreservesRelayList(t *testing.T) {
 		if preservedRelays[i] != expected {
 			t.Errorf("Relay %d not preserved: expected '%s', got '%s'", i, expected, preservedRelays[i])
 		}
-	}
-
-	// Verify other relay list metadata is preserved
-	if updatedCachedProfile.RelayListEventID != relayListEventID {
-		t.Errorf("Expected relay list event ID to be preserved as '%s', got '%s'", relayListEventID, updatedCachedProfile.RelayListEventID)
-	}
-
-	if updatedCachedProfile.RelayListUpdatedAt.IsZero() {
-		t.Errorf("Expected relay list updated timestamp to be preserved")
 	}
 }

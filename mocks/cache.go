@@ -414,27 +414,25 @@ func (m *MockCache) GetSortedPartners(partners []string) []string {
 }
 
 // SetProfileWithRelayList sets profile with relay list (mock implementation)
-func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMetadata, readRelays []string, writeRelays []string, relayListEventID string, ttl time.Duration) error {
+func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMetadata, readRelays []string, writeRelays []string, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	entry := cache.ProfileEntry{
-		Npub:               npub,
-		Name:               profile.Name,
-		DisplayName:        profile.DisplayName,
-		About:              profile.About,
-		Picture:            profile.Picture,
-		NIP05:              profile.NIP05,
-		LUD16:              profile.LUD16,
-		Website:            profile.Website,
-		Banner:             profile.Banner,
-		ReadRelays:         serializeRelayList(readRelays),
-		WriteRelays:        serializeRelayList(writeRelays),
-		RelayListEventID:   relayListEventID,
-		RelayListUpdatedAt: time.Now(),
-		CachedAt:           time.Now(),
-		ExpiresAt:          time.Now().Add(ttl),
-		CreatedAt:          time.Now(),
+		Npub:        npub,
+		Name:        profile.Name,
+		DisplayName: profile.DisplayName,
+		About:       profile.About,
+		Picture:     profile.Picture,
+		NIP05:       profile.NIP05,
+		LUD16:       profile.LUD16,
+		Website:     profile.Website,
+		Banner:      profile.Banner,
+		ReadRelays:  serializeRelayList(readRelays),
+		WriteRelays: serializeRelayList(writeRelays),
+		CachedAt:    time.Now(),
+		ExpiresAt:   time.Now().Add(ttl),
+		CreatedAt:   time.Now(),
 	}
 
 	m.profiles[npub] = entry

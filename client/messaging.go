@@ -286,7 +286,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 				log.Printf("Found existing cached profile for %s, updating with relay list", recipientNpub[:8]+"...")
 			}
 			profileMetadata := cachedProfile.ToProfileMetadata()
-			err = cacheInstance.SetProfileWithRelayList(recipientNpub, profileMetadata, readRelays, writeRelays, relayListEventID, 24*time.Hour)
+			err = cacheInstance.SetProfileWithRelayList(recipientNpub, profileMetadata, readRelays, writeRelays, 24*time.Hour)
 			if err != nil && debug {
 				log.Printf("Failed to cache relay list for %s: %v", recipientNpub[:8]+"...", err)
 			} else if debug {
@@ -298,7 +298,7 @@ func (c *Client) GetRecipientRelays(ctx context.Context, recipientNpub string, d
 			}
 			// No cached profile, create minimal one with just relay list
 			minimalProfile := cache.ProfileMetadata{}
-			err = cacheInstance.SetProfileWithRelayList(recipientNpub, minimalProfile, readRelays, writeRelays, relayListEventID, 24*time.Hour)
+			err = cacheInstance.SetProfileWithRelayList(recipientNpub, minimalProfile, readRelays, writeRelays, 24*time.Hour)
 			if err != nil && debug {
 				log.Printf("Failed to cache profile with relay list for %s: %v", recipientNpub[:8]+"...", err)
 			} else if debug {

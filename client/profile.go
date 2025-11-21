@@ -163,7 +163,7 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 
 	if (len(readRelays) > 0 || len(writeRelays) > 0) && relayListEventID != "" {
 		// Cache both profile and relay list together
-		err = cacheInstance.SetProfileWithRelayList(npub, metadata, readRelays, writeRelays, relayListEventID, 24*time.Hour)
+		err = cacheInstance.SetProfileWithRelayList(npub, metadata, readRelays, writeRelays, 24*time.Hour)
 		if debug {
 			log.Printf("Resolved profile for %s: %s with %d read / %d write relays (cached for 24h)",
 				npub, metadata.Name, len(readRelays), len(writeRelays))
@@ -171,7 +171,7 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 	} else {
 		// Cache profile only (preserves existing relay list if present)
 		// Use empty relay list and event ID to update profile metadata only
-		err = cacheInstance.SetProfileWithRelayList(npub, metadata, nil, nil, "", 24*time.Hour)
+		err = cacheInstance.SetProfileWithRelayList(npub, metadata, nil, nil, 24*time.Hour)
 		if debug {
 			log.Printf("Resolved profile for %s: %s (cached for 24h, no relay list found)", npub, metadata.Name)
 		}

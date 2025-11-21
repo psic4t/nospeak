@@ -99,7 +99,7 @@ func (pr *ProfileResolver) GetFullProfile(ctx context.Context, npub string, debu
 	}
 
 	// Cache the profile
-	pr.cache.SetProfileWithRelayList(npub, metadata, nil, nil, "", 24*time.Hour)
+	pr.cache.SetProfileWithRelayList(npub, metadata, nil, nil, 24*time.Hour)
 
 	// Update display name cache
 	displayName := pr.extractDisplayName(metadata)
@@ -118,7 +118,7 @@ func (pr *ProfileResolver) RefreshProfile(ctx context.Context, npub string, debu
 	}
 
 	// Update cache
-	pr.cache.SetProfileWithRelayList(npub, metadata, nil, nil, "", 24*time.Hour)
+	pr.cache.SetProfileWithRelayList(npub, metadata, nil, nil, 24*time.Hour)
 
 	// Update display name cache
 	displayName := pr.extractDisplayName(metadata)
