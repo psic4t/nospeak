@@ -275,10 +275,14 @@ func TestSQLiteCacheProfileExpiration(t *testing.T) {
 	// Wait for expiration
 	time.Sleep(10 * time.Millisecond)
 
-	// Profile should be expired
-	_, exists := cache.GetProfile(npub)
-	if exists {
-		t.Error("Expected GetProfile to return false for expired profile")
+	// Profile should be expired but still returned
+	entry, exists := cache.GetProfile(npub)
+	if !exists {
+		t.Error("Expected GetProfile to return true for expired profile")
+	}
+
+	if !time.Now().After(entry.ExpiresAt) {
+		t.Error("Expected profile to be expired")
 	}
 }
 

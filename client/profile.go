@@ -197,8 +197,50 @@ func (c *Client) DiscoverUserRelays(ctx context.Context, npub string, debug bool
 			log.Printf("Using cached relays for %s: %d read, %d write",
 				npub[:8]+"...", len(cachedProfile.GetReadRelays()), len(cachedProfile.GetWriteRelays()))
 		}
+
+		// Check if expired and trigger background refresh if needed
+		if time.Now().After(cachedProfile.ExpiresAt) {
+			c.triggerBackgroundRelayRefresh(npub, debug)
+		}
+
 		return cachedProfile.GetReadRelays(), cachedProfile.GetWriteRelays(), nil
 	}
+
+	return c.fetchUserRelaysFromNetwork(ctx, npub, debug)
+}
+
+func (c *Client) triggerBackgroundRelayRefresh(npub string, debug bool) {
+	c.refreshingRelaysMu.Lock()
+	if c.refreshingRelays[npub] {
+		c.refreshingRelaysMu.Unlock()
+		return
+	}
+	c.refreshingRelays[npub] = true
+	c.refreshingRelaysMu.Unlock()
+
+	go func() {
+		defer func() {
+			c.refreshingRelaysMu.Lock()
+			delete(c.refreshingRelays, npub)
+			c.refreshingRelaysMu.Unlock()
+		}()
+
+		// Create a background context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if debug {
+			log.Printf("Triggering background relay refresh for %s", npub[:8]+"...")
+		}
+		_, _, err := c.fetchUserRelaysFromNetwork(ctx, npub, debug)
+		if err != nil && debug {
+			log.Printf("Background relay refresh failed for %s: %v", npub[:8]+"...", err)
+		}
+	}()
+}
+
+func (c *Client) fetchUserRelaysFromNetwork(ctx context.Context, npub string, debug bool) (readRelays, writeRelays []string, err error) {
+	cacheInstance := cache.GetCache()
 
 	_, pubKey, err := nip19.Decode(npub)
 	if err != nil {

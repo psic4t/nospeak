@@ -396,6 +396,23 @@ func (sc *SQLiteCache) migrateRelayListCleanup() error {
 func (sc *SQLiteCache) migrateRelayListToNIP65() error {
 	debugLog("Starting migration of relay_list data to NIP-65 columns")
 
+	// Check if relay_list column exists
+	var relayListExists bool
+	err := sc.db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('profile_cache')
+		WHERE name = 'relay_list'
+	`).Scan(&relayListExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check relay_list column: %w", err)
+	}
+
+	if !relayListExists {
+		debugLog("relay_list column does not exist, skipping data migration")
+		return nil
+	}
+
 	// Get profiles with relay_list data but empty NIP-65 columns
 	rows, err := sc.db.Query(`
 		SELECT npub, relay_list 
@@ -966,12 +983,6 @@ func (sc *SQLiteCache) GetProfile(npub string) (ProfileEntry, bool) {
 		if relayListUpdatedAt.Valid {
 			profile.RelayListUpdatedAt = relayListUpdatedAt.Time
 		}
-	}
-
-	if time.Now().After(expiresAt) {
-		// Expired, remove it
-		go sc.deleteExpiredProfile(npub)
-		return ProfileEntry{}, false
 	}
 
 	profile.ExpiresAt = expiresAt

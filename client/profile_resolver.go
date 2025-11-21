@@ -20,6 +20,8 @@ type ProfileResolver struct {
 	displayNames map[string]string
 	logger       *logging.DebugLogger
 	mu           sync.RWMutex
+	refreshing   map[string]bool
+	refreshMu    sync.Mutex
 }
 
 // NewProfileResolver creates a new ProfileResolver instance
@@ -29,6 +31,7 @@ func NewProfileResolver(client *Client) *ProfileResolver {
 		cache:        cache.GetCache(),
 		displayNames: make(map[string]string),
 		logger:       logging.NewDebugLogger(false), // Default debug disabled
+		refreshing:   make(map[string]bool),
 	}
 }
 
@@ -53,6 +56,12 @@ func (pr *ProfileResolver) GetDisplayName(npub string) string {
 		displayName := pr.extractDisplayName(metadata)
 		if displayName != "" {
 			pr.setDisplayName(npub, displayName)
+
+			// Check expiration
+			if time.Now().After(cachedProfile.ExpiresAt) {
+				pr.triggerBackgroundRefresh(npub)
+			}
+
 			return displayName
 		}
 	}
@@ -74,6 +83,12 @@ func (pr *ProfileResolver) GetFullProfile(ctx context.Context, npub string, debu
 		if displayName != "" {
 			pr.setDisplayName(npub, displayName)
 		}
+
+		// Check if expired and trigger background refresh if needed
+		if time.Now().After(cachedProfile.ExpiresAt) {
+			pr.triggerBackgroundRefresh(npub)
+		}
+
 		return metadata, nil
 	}
 
@@ -133,6 +148,11 @@ func (pr *ProfileResolver) InitializeDisplayNames(npubs []string) {
 				} else {
 					pr.displayNames[npub] = npub[:8] + "..."
 				}
+
+				// Check expiration
+				if time.Now().After(cachedProfile.ExpiresAt) {
+					pr.triggerBackgroundRefresh(npub)
+				}
 			} else {
 				pr.displayNames[npub] = npub[:8] + "..."
 			}
@@ -154,6 +174,11 @@ func (pr *ProfileResolver) AddNewPartner(npub string) {
 				pr.displayNames[npub] = displayName
 			} else {
 				pr.displayNames[npub] = npub[:8] + "..."
+			}
+
+			// Check expiration
+			if time.Now().After(cachedProfile.ExpiresAt) {
+				pr.triggerBackgroundRefresh(npub)
 			}
 		} else {
 			pr.displayNames[npub] = npub[:8] + "..."
@@ -179,6 +204,33 @@ func (pr *ProfileResolver) ClearDisplayNames() {
 	defer pr.mu.Unlock()
 
 	pr.displayNames = make(map[string]string)
+}
+
+func (pr *ProfileResolver) triggerBackgroundRefresh(npub string) {
+	pr.refreshMu.Lock()
+	if pr.refreshing[npub] {
+		pr.refreshMu.Unlock()
+		return
+	}
+	pr.refreshing[npub] = true
+	pr.refreshMu.Unlock()
+
+	go func() {
+		defer func() {
+			pr.refreshMu.Lock()
+			delete(pr.refreshing, npub)
+			pr.refreshMu.Unlock()
+		}()
+
+		// Create a background context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		pr.logger.Debug("Triggering background profile refresh for %s", npub[:8]+"...")
+		if err := pr.RefreshProfile(ctx, npub, true); err != nil {
+			pr.logger.Debug("Background refresh failed for %s: %v", npub[:8]+"...", err)
+		}
+	}()
 }
 
 // Helper methods

@@ -32,13 +32,15 @@ func GetDiscoveryRelays() DiscoveryRelays {
 }
 
 type Client struct {
-	config            *config.Config
-	relays            []*nostr.Relay
-	secretKey         string
-	publicKey         string
-	mu                sync.RWMutex
-	connectionManager *ConnectionManager
-	retryQueue        *RetryQueue
+	config             *config.Config
+	relays             []*nostr.Relay
+	secretKey          string
+	publicKey          string
+	mu                 sync.RWMutex
+	connectionManager  *ConnectionManager
+	retryQueue         *RetryQueue
+	refreshingRelays   map[string]bool
+	refreshingRelaysMu sync.Mutex
 }
 
 func NewClient(cfg *config.Config) (*Client, error) {
@@ -65,10 +67,11 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	}
 
 	client := &Client{
-		config:    cfg,
-		relays:    make([]*nostr.Relay, 0),
-		secretKey: secretKey,
-		publicKey: publicKey,
+		config:           cfg,
+		relays:           make([]*nostr.Relay, 0),
+		secretKey:        secretKey,
+		publicKey:        publicKey,
+		refreshingRelays: make(map[string]bool),
 	}
 
 	// Initialize connection manager and retry queue
