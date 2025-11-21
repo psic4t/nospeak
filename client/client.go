@@ -744,11 +744,12 @@ func (c *Client) GetConnectionStats() map[string]interface{} {
 
 	// Per-relay health information
 	relayHealth := make(map[string]interface{})
-	for _, relay := range allRelays {
-		health := c.connectionManager.GetRelayHealth(relay.URL)
+	allRelayURLs := c.connectionManager.GetAllManagedRelayURLs()
+	for _, relayURL := range allRelayURLs {
+		health := c.connectionManager.GetRelayHealth(relayURL)
 		if health != nil {
 			health.Mu.RLock()
-			relayHealth[relay.URL] = map[string]interface{}{
+			relayHealth[relayURL] = map[string]interface{}{
 				"connected":         health.IsConnected,
 				"success_count":     health.SuccessCount,
 				"failure_count":     health.FailureCount,
