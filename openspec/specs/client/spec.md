@@ -28,3 +28,11 @@ The client SHALL correctly parse NIP-65 kind 10002 events to separate read and w
 - **THEN** write relays list SHALL contain only relays marked "write" or unmarked
 - **THEN** no relay SHALL be incorrectly categorized due to marker parsing errors
 
+### Requirement: Profile Resolver Legacy Field Handling
+The ProfileResolver MUST NOT use removed legacy fields when interacting with the cache.
+
+#### Scenario: Calling SetProfileWithRelayList
+- **Given** the `ProfileResolver` in `client/profile_resolver.go`
+- **When** calling `cache.SetProfileWithRelayList`
+- **Then** it SHALL NOT pass `relayListEventID` as it is removed from the signature
+
