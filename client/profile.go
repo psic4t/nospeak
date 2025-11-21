@@ -111,8 +111,12 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 			profileEvent = &event
 		case 10002:
 			relayListEvent = &event
+			if debug {
+				log.Printf("Processing NIP-65 relay list event for %s: %s", npub[:8]+"...", event.ID)
+				log.Printf("Raw event tags: %v", event.Tags)
+			}
 			// Extract relays from the event tags
-			for _, tag := range event.Tags {
+			for i, tag := range event.Tags {
 				if len(tag) >= 2 && tag[0] == "r" {
 					relayURL := tag[1]
 					var marker string
@@ -120,24 +124,48 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 						marker = tag[2]
 					}
 
+					if debug {
+						log.Printf("Found relay tag %d: URL=%s, marker=%s", i, relayURL, marker)
+					}
+
 					switch marker {
 					case "read":
 						readRelays = append(readRelays, relayURL)
+						if debug {
+							log.Printf("Added %s to read relays", relayURL)
+						}
 					case "write":
 						writeRelays = append(writeRelays, relayURL)
+						if debug {
+							log.Printf("Added %s to write relays", relayURL)
+						}
 					default:
 						// Unmarked or unknown marker -> both
 						readRelays = append(readRelays, relayURL)
 						writeRelays = append(writeRelays, relayURL)
+						if debug {
+							log.Printf("Added %s to both read and write relays (marker: %s)", relayURL, marker)
+						}
 					}
 				}
+			}
+			if debug {
+				log.Printf("Initial relay counts - Read: %d, Write: %d", len(readRelays), len(writeRelays))
 			}
 		}
 	}
 
 	// Deduplicate relay lists
+	if debug {
+		log.Printf("Before deduplication - Read: %v", readRelays)
+		log.Printf("Before deduplication - Write: %v", writeRelays)
+	}
 	readRelays = removeDuplicates(readRelays)
 	writeRelays = removeDuplicates(writeRelays)
+	if debug {
+		log.Printf("After deduplication - Read: %d relays: %v", len(readRelays), readRelays)
+		log.Printf("After deduplication - Write: %d relays: %v", len(writeRelays), writeRelays)
+	}
 
 	// We need at least a profile event
 	if profileEvent == nil {
@@ -161,8 +189,18 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 		relayListEventID = relayListEvent.ID
 	}
 
+	if debug {
+		log.Printf("Profile resolution complete - has relay list: %v, readRelays: %d, writeRelays: %d",
+			relayListEvent != nil, len(readRelays), len(writeRelays))
+	}
+
 	if (len(readRelays) > 0 || len(writeRelays) > 0) && relayListEventID != "" {
 		// Cache both profile and relay list together
+		if debug {
+			log.Printf("Caching profile with relay data for %s", npub[:8]+"...")
+			log.Printf("Read relays to cache: %v", readRelays)
+			log.Printf("Write relays to cache: %v", writeRelays)
+		}
 		err = cacheInstance.SetProfileWithRelayList(npub, metadata, readRelays, writeRelays, 24*time.Hour)
 		if debug {
 			log.Printf("Resolved profile for %s: %s with %d read / %d write relays (cached for 24h)",
@@ -171,6 +209,9 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 	} else {
 		// Cache profile only (preserves existing relay list if present)
 		// Use empty relay list and event ID to update profile metadata only
+		if debug {
+			log.Printf("Caching profile metadata only for %s (no relay data)", npub[:8]+"...")
+		}
 		err = cacheInstance.SetProfileWithRelayList(npub, metadata, nil, nil, 24*time.Hour)
 		if debug {
 			log.Printf("Resolved profile for %s: %s (cached for 24h, no relay list found)", npub, metadata.Name)
@@ -182,6 +223,10 @@ func (c *Client) ResolveProfile(ctx context.Context, npub string, debug bool) (c
 			log.Printf("Failed to cache profile for %s: %v", npub, err)
 		}
 		// Continue even if caching fails
+	} else {
+		if debug {
+			log.Printf("Successfully cached profile for %s", npub[:8]+"...")
+		}
 	}
 
 	return metadata, nil
@@ -250,6 +295,9 @@ func (c *Client) fetchUserRelaysFromNetwork(ctx context.Context, npub string, de
 	hexPubKey := pubKey.(string)
 
 	// Query specifically for NIP-65 relay list (kind 10002)
+	if debug {
+		log.Printf("Querying NIP-65 relay list for %s (hex key: %s)", npub[:8]+"...", hexPubKey[:16]+"...")
+	}
 	filters := nostr.Filters{{
 		Kinds:   []int{10002},
 		Authors: []string{hexPubKey},
@@ -264,12 +312,19 @@ func (c *Client) fetchUserRelaysFromNetwork(ctx context.Context, npub string, de
 		return nil, nil, err
 	}
 
+	if debug {
+		log.Printf("Received %d NIP-65 events for %s", len(events), npub[:8]+"...")
+	}
+
 	if len(events) == 0 {
 		if debug {
 			log.Printf("No NIP-65 relay list found for %s, using discovery relays as fallback", npub)
 		}
 		// Return discovery relays as fallback
 		discovery := GetDiscoveryRelays()
+		if debug {
+			log.Printf("Using discovery relays as fallback: %v", discovery.Relays)
+		}
 		return discovery.Relays, discovery.Relays, nil
 	}
 
@@ -277,24 +332,59 @@ func (c *Client) fetchUserRelaysFromNetwork(ctx context.Context, npub string, de
 	event := events[0]
 	var readRelayList, writeRelayList []string
 
-	for _, tag := range event.Tags {
-		if len(tag) >= 3 {
-			relayType := tag[0]
-			relayURL := tag[1]
-			mark := tag[2]
+	if debug {
+		log.Printf("Parsing NIP-65 event %s for %s", event.ID, npub[:8]+"...")
+		log.Printf("Event tags: %v", event.Tags)
+	}
 
-			if relayType == "r" && relayURL != "" {
-				if mark == "read" {
-					readRelayList = append(readRelayList, relayURL)
-				} else if mark == "write" {
-					writeRelayList = append(writeRelayList, relayURL)
-				} else {
-					// Unmarked relays go to both lists (backward compatibility)
-					readRelayList = append(readRelayList, relayURL)
-					writeRelayList = append(writeRelayList, relayURL)
+	for i, tag := range event.Tags {
+		if len(tag) >= 2 && tag[0] == "r" {
+			relayURL := tag[1]
+			if relayURL == "" {
+				continue
+			}
+
+			var marker string
+			if len(tag) >= 3 {
+				marker = tag[2]
+			}
+
+			if debug {
+				log.Printf("Processing tag %d: URL=%s, marker=%s", i, relayURL, marker)
+			}
+
+			switch marker {
+			case "read":
+				readRelayList = append(readRelayList, relayURL)
+				if debug {
+					log.Printf("Added %s to read relay list", relayURL)
+				}
+			case "write":
+				writeRelayList = append(writeRelayList, relayURL)
+				if debug {
+					log.Printf("Added %s to write relay list", relayURL)
+				}
+			default:
+				// Unmarked or unknown marker -> both
+				readRelayList = append(readRelayList, relayURL)
+				writeRelayList = append(writeRelayList, relayURL)
+				if debug {
+					log.Printf("Added %s to both read and write relay lists (marker: %s)", relayURL, marker)
 				}
 			}
 		}
+	}
+
+	// Deduplicate the relay lists
+	if debug {
+		log.Printf("Before deduplication - Read: %v", readRelayList)
+		log.Printf("Before deduplication - Write: %v", writeRelayList)
+	}
+	readRelayList = removeDuplicates(readRelayList)
+	writeRelayList = removeDuplicates(writeRelayList)
+	if debug {
+		log.Printf("After deduplication - Read: %d relays: %v", len(readRelayList), readRelayList)
+		log.Printf("After deduplication - Write: %d relays: %v", len(writeRelayList), writeRelayList)
 	}
 
 	// Cache the discovered relays

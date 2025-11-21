@@ -67,11 +67,12 @@ func main() {
 		cmd.Send(args, *debug, *configPath)
 	case "receive":
 		cmd.Receive(*debug, *configPath)
-
 	case "set-name":
 		cmd.SetName(args, *debug, *configPath)
 	case "set-messaging-relays":
 		cmd.SetMessagingRelays(*debug, *configPath)
+	case "debug-relay":
+		cmd.DebugRelay(args, *debug, *configPath)
 	case "new-identity":
 		generateNewIdentity(*configPath)
 	case "help", "--help":
@@ -104,7 +105,15 @@ func printUsage() {
 	fmt.Println("  nospeak receive                   - Listen for messages")
 	fmt.Println("  nospeak set-name <name>           - Set your profile name")
 	fmt.Println("  nospeak set-messaging-relays      - Set your messaging relays from config")
+	fmt.Println("  nospeak debug-relay <npub> [cmd]  - Debug relay data issues")
 	fmt.Println("  nospeak help                      - Show this help")
+	fmt.Println("")
+	fmt.Println("Debug Relay Commands:")
+	fmt.Println("  inspect     - Show cached relay data")
+	fmt.Println("  validate    - Validate relay data and show issues")
+	fmt.Println("  repair      - Attempt to repair corrupted relay data")
+	fmt.Println("  refresh     - Force refresh relay data from network")
+	fmt.Println("  trace       - Trace NIP-65 discovery with detailed logging")
 	fmt.Println("")
 	fmt.Println("Global flags:")
 	fmt.Println("  -v                               - Show version information")

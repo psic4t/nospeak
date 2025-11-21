@@ -440,6 +440,84 @@ func (m *MockCache) SetProfileWithRelayList(npub string, profile cache.ProfileMe
 	return nil
 }
 
+// Validation methods
+
+func (m *MockCache) ValidateRelayData(npub string) (isValid bool, issues []string, err error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	profile, exists := m.profiles[npub]
+	if !exists {
+		return false, []string{"Profile not found"}, nil
+	}
+
+	issues = []string{}
+	isValid = true
+
+	// Check for expired data
+	if time.Now().After(profile.ExpiresAt) {
+		issues = append(issues, "Relay data is expired")
+		isValid = false
+	}
+
+	// Validate read relays JSON
+	if profile.ReadRelays != "" {
+		readRelays := cache.ParseRelayJSON(profile.ReadRelays)
+		if readRelays == nil && profile.ReadRelays != "" {
+			issues = append(issues, fmt.Sprintf("Invalid JSON in read_relays: %s", profile.ReadRelays))
+			isValid = false
+		}
+	}
+
+	// Validate write relays JSON
+	if profile.WriteRelays != "" {
+		writeRelays := cache.ParseRelayJSON(profile.WriteRelays)
+		if writeRelays == nil && profile.WriteRelays != "" {
+			issues = append(issues, fmt.Sprintf("Invalid JSON in write_relays: %s", profile.WriteRelays))
+			isValid = false
+		}
+	}
+
+	// Check for migration issues (identical read and write relays when they shouldn't be)
+	if profile.ReadRelays != "" && profile.WriteRelays != "" && profile.ReadRelays == profile.WriteRelays && profile.ReadRelays != "[]" {
+		issues = append(issues, "Read and write relays are identical (possible migration corruption)")
+		isValid = false
+	}
+
+	// Check for completely empty write relays when read relays exist
+	if profile.ReadRelays != "" && profile.ReadRelays != "[]" && (profile.WriteRelays == "" || profile.WriteRelays == "[]") {
+		issues = append(issues, "Empty write relays but non-empty read relays")
+		isValid = false
+	}
+
+	return isValid, issues, nil
+}
+
+func (m *MockCache) RepairRelayData(npub string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Validate first to show what we're fixing
+	isValid, _, err := m.ValidateRelayData(npub)
+	if err != nil {
+		return fmt.Errorf("failed to validate before repair: %w", err)
+	}
+
+	if isValid {
+		return nil // No repair needed
+	}
+
+	// For mock, simply clear both fields to force rediscovery
+	if profile, exists := m.profiles[npub]; exists {
+		profile.ReadRelays = "[]"
+		profile.WriteRelays = "[]"
+		profile.ExpiresAt = time.Now().Add(-1 * time.Hour) // Set to past to force refresh
+		m.profiles[npub] = profile
+	}
+
+	return nil
+}
+
 // SetCache is a no-op for MockCache
 func (m *MockCache) SetCache(cache interface{}) {
 	// No-op for mock

@@ -5,14 +5,16 @@ import (
 	"time"
 
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/testutils"
 )
 
 func TestConnectionManager(t *testing.T) {
 	// Create test client with mock config
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -68,10 +70,11 @@ func TestConnectionManager(t *testing.T) {
 }
 
 func TestConnectionManagerHealthTracking(t *testing.T) {
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -155,10 +158,11 @@ func TestBackoffCalculation(t *testing.T) {
 
 func TestConnectionManagerWithMockRelay(t *testing.T) {
 	// Test with a mock relay that simulates failures
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -202,5 +206,39 @@ func TestConnectionManagerWithMockRelay(t *testing.T) {
 	}
 	if isConnected {
 		t.Error("Expected relay to not be connected")
+	}
+}
+
+func TestConnectionManagerRemoveRelay(t *testing.T) {
+	// Create test client
+	keys := testutils.GenerateTestKeys(t)
+	cfg := &config.Config{
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
+	}
+
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	retryConfig := DefaultRetryConfig()
+	cm := NewConnectionManager(client, retryConfig, true)
+
+	relayURL := "wss://relay.damus.io"
+	cm.AddRelay(relayURL)
+
+	if cm.GetRelayHealth(relayURL) == nil {
+		t.Fatal("Relay should exist after AddRelay")
+	}
+
+	cm.RemoveRelay(relayURL)
+
+	if cm.GetRelayHealth(relayURL) != nil {
+		t.Fatal("Relay should not exist after RemoveRelay")
+	}
+
+	if len(cm.relays) != 0 {
+		t.Errorf("Expected 0 relays, got %d", len(cm.relays))
 	}
 }

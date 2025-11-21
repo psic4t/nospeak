@@ -138,41 +138,41 @@ func (rq *RetryQueue) PublishWithRetry(ctx context.Context, event nostr.Event, r
 	}
 }
 
-// PublishToAllRelays publishes to all connected relays with retry logic
+// PublishToAllRelays publishes to all managed relays with retry logic
 func (rq *RetryQueue) PublishToAllRelays(ctx context.Context, event nostr.Event) []PublishResult {
 	var results []PublishResult
 	var wg sync.WaitGroup
 	resultsChan := make(chan PublishResult, 100)
 
 	// Get all managed relays (both connected and disconnected)
-	allRelays := rq.connManager.GetAllRelays()
+	allRelayURLs := rq.connManager.GetAllManagedRelayURLs()
 
 	// Publish to all relays concurrently
-	for _, relay := range allRelays {
+	for _, relayURL := range allRelayURLs {
 		wg.Add(1)
-		go func(r *nostr.Relay) {
+		go func(url string) {
 			defer wg.Done()
 
-			if err := rq.publishToRelay(ctx, event, r.URL); err == nil {
-				rq.connManager.MarkRelaySuccess(r.URL)
+			if err := rq.publishToRelay(ctx, event, url); err == nil {
+				rq.connManager.MarkRelaySuccess(url)
 				resultsChan <- PublishResult{
-					RelayURL: r.URL,
+					RelayURL: url,
 					Success:  true,
 					Attempt:  1,
 				}
 			} else {
-				rq.connManager.MarkRelayFailure(r.URL)
+				rq.connManager.MarkRelayFailure(url)
 				resultsChan <- PublishResult{
-					RelayURL: r.URL,
+					RelayURL: url,
 					Success:  false,
 					Error:    err,
 					Attempt:  1,
 				}
 
 				// Enqueue for retry
-				rq.EnqueueRetry(event, r.URL, 1)
+				rq.EnqueueRetry(event, url, 1)
 			}
-		}(relay)
+		}(relayURL)
 	}
 
 	// Wait for all publishes to complete
@@ -320,7 +320,7 @@ func (rq *RetryQueue) calculateBackoff(attempt int) time.Duration {
 	}
 
 	delay := time.Duration(float64(rq.config.InitialBackoff) *
-		float64(uint(1) << (attempt - 1)) * rq.config.BackoffMultiplier)
+		float64(uint(1)<<(attempt-1)) * rq.config.BackoffMultiplier)
 
 	if delay > rq.config.MaxBackoff {
 		delay = rq.config.MaxBackoff
@@ -335,9 +335,9 @@ func (rq *RetryQueue) GetStats() map[string]interface{} {
 	defer rq.mu.RUnlock()
 
 	return map[string]interface{}{
-		"queue_length": len(rq.queue),
-		"max_retries":  rq.config.MaxRetries,
+		"queue_length":    len(rq.queue),
+		"max_retries":     rq.config.MaxRetries,
 		"backoff_initial": rq.config.InitialBackoff.String(),
-		"backoff_max":      rq.config.MaxBackoff.String(),
+		"backoff_max":     rq.config.MaxBackoff.String(),
 	}
 }

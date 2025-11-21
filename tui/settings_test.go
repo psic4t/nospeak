@@ -11,7 +11,6 @@ func TestSettingsModalDetectsNewPartners(t *testing.T) {
 	// Create a test config with existing partners
 	cfg := &config.Config{
 		Partners: []string{"npub1existing1", "npub1existing2"},
-		Relays:   []string{"wss://relay.example.com"},
 		Npub:     "npub1test",
 		Nsec:     "nsec1test",
 		Cache:    "sqlite",
@@ -60,7 +59,6 @@ func TestSettingsModalNoNewPartners(t *testing.T) {
 	// Create a test config with existing partners
 	cfg := &config.Config{
 		Partners: []string{"npub1existing1", "npub1existing2"},
-		Relays:   []string{"wss://relay.example.com"},
 		Npub:     "npub1test",
 		Nsec:     "nsec1test",
 		Cache:    "sqlite",

@@ -12,15 +12,15 @@ import (
 
 // RelayHealth tracks the health and connection status of a relay
 type RelayHealth struct {
-	URL             string
-	Relay           *nostr.Relay
-	IsConnected     bool
-	LastConnected   time.Time
-	LastAttempt     time.Time
-	SuccessCount    int
-	FailureCount    int
+	URL              string
+	Relay            *nostr.Relay
+	IsConnected      bool
+	LastConnected    time.Time
+	LastAttempt      time.Time
+	SuccessCount     int
+	FailureCount     int
 	ConsecutiveFails int
-	Mu              sync.RWMutex
+	Mu               sync.RWMutex
 }
 
 // RetryConfig holds configuration for retry behavior
@@ -47,15 +47,15 @@ func DefaultRetryConfig() RetryConfig {
 
 // ConnectionManager manages relay connections with persistent retry logic
 type ConnectionManager struct {
-	client         *Client
-	relays         map[string]*RelayHealth
-	config         RetryConfig
-	mu             sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
-	reconnectChan  chan string
-	shutdownChan   chan struct{}
-	debug          bool
+	client        *Client
+	relays        map[string]*RelayHealth
+	config        RetryConfig
+	mu            sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
+	reconnectChan chan string
+	shutdownChan  chan struct{}
+	debug         bool
 }
 
 // NewConnectionManager creates a new connection manager
@@ -135,6 +135,30 @@ func (cm *ConnectionManager) AddRelay(relayURL string) {
 	}
 }
 
+// RemoveRelay removes a relay from management, closing any active connection
+func (cm *ConnectionManager) RemoveRelay(relayURL string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if health, exists := cm.relays[relayURL]; exists {
+		health.Mu.Lock()
+		// Close connection if active
+		if health.Relay != nil {
+			health.Relay.Close()
+			health.Relay = nil
+		}
+		health.IsConnected = false
+		health.Mu.Unlock()
+
+		// Remove from map
+		delete(cm.relays, relayURL)
+
+		if cm.debug {
+			log.Printf("Removed relay %s from connection manager", relayURL)
+		}
+	}
+}
+
 // GetConnectedRelays returns all currently connected relays
 func (cm *ConnectionManager) GetConnectedRelays() []*nostr.Relay {
 	cm.mu.RLock()
@@ -167,6 +191,19 @@ func (cm *ConnectionManager) GetAllRelays() []*nostr.Relay {
 	}
 
 	return all
+}
+
+// GetAllManagedRelayURLs returns the URLs of all managed relays, regardless of connection status
+func (cm *ConnectionManager) GetAllManagedRelayURLs() []string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	var urls []string
+	for url := range cm.relays {
+		urls = append(urls, url)
+	}
+
+	return urls
 }
 
 // GetRelayHealth returns health information for a specific relay

@@ -1080,14 +1080,24 @@ func (sc *SQLiteCache) SetProfileWithRelayList(npub string, profile ProfileMetad
 
 // serializeRelayList converts a slice of relay URLs to JSON array format
 func (sc *SQLiteCache) serializeRelayList(relayList []string) string {
+	// Always return valid JSON array, even if empty
 	if len(relayList) == 0 {
-		return ""
+		return "[]"
 	}
 
 	// Simple JSON array serialization
 	var jsonParts []string
 	for _, relay := range relayList {
+		// Skip empty relay URLs
+		if relay == "" {
+			continue
+		}
 		jsonParts = append(jsonParts, fmt.Sprintf(`"%s"`, relay))
+	}
+
+	// Return empty array if all relays were empty
+	if len(jsonParts) == 0 {
+		return "[]"
 	}
 
 	return fmt.Sprintf("[%s]", strings.Join(jsonParts, ","))
@@ -1169,13 +1179,40 @@ func (sc *SQLiteCache) SetNIP65Relays(npub string, readRelays, writeRelays []str
 	readRelaysJSON := sc.serializeRelayList(readRelays)
 	writeRelaysJSON := sc.serializeRelayList(writeRelays)
 
-	_, err := sc.db.Exec(`
-		UPDATE profile_cache 
-		SET read_relays = ?, write_relays = ?, cached_at = ?, expires_at = ?
-		WHERE npub = ?
-	`, readRelaysJSON, writeRelaysJSON, time.Now(), expiresAt, npub)
+	// Check if profile exists first
+	var exists bool
+	err := sc.db.QueryRow(`SELECT COUNT(*) > 0 FROM profile_cache WHERE npub = ?`, npub).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check profile existence: %w", err)
+	}
 
-	return err
+	if exists {
+		// Update existing profile, preserving all other fields
+		_, err = sc.db.Exec(`
+			UPDATE profile_cache SET
+			read_relays = ?,
+			write_relays = ?,
+			cached_at = ?,
+			expires_at = ?
+			WHERE npub = ?
+		`, readRelaysJSON, writeRelaysJSON, time.Now(), expiresAt, npub)
+	} else {
+		// Insert new profile with only relay data
+		_, err = sc.db.Exec(`
+			INSERT INTO profile_cache
+			(npub, read_relays, write_relays, cached_at, expires_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, npub, readRelaysJSON, writeRelaysJSON, time.Now(), expiresAt)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to cache NIP-65 relays: %w", err)
+	}
+
+	debugLog("SetNIP65Relays for %s: read=%d, write=%d, exists=%v",
+		npub[:8]+"...", len(readRelays), len(writeRelays), exists)
+
+	return nil
 }
 
 func (sc *SQLiteCache) startCleanupRoutine() {
@@ -1248,6 +1285,102 @@ func (sc *SQLiteCache) migrateToUserProfileTable() error {
 	}
 
 	return tx.Commit()
+}
+
+// ValidateRelayData checks for corrupted relay data in cached profiles
+func (sc *SQLiteCache) ValidateRelayData(npub string) (isValid bool, issues []string, err error) {
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
+
+	var readRelaysStr, writeRelaysStr string
+	var expiresAt time.Time
+
+	// Get the profile's relay data
+	err = sc.db.QueryRow(`
+		SELECT read_relays, write_relays, expires_at
+		FROM profile_cache
+		WHERE npub = ?
+	`, npub).Scan(&readRelaysStr, &writeRelaysStr, &expiresAt)
+
+	if err != nil {
+		return false, []string{fmt.Sprintf("Failed to query profile: %v", err)}, err
+	}
+
+	issues = []string{}
+	isValid = true
+
+	// Check for expired data
+	if time.Now().After(expiresAt) {
+		issues = append(issues, "Relay data is expired")
+		isValid = false
+	}
+
+	// Validate read relays JSON
+	if readRelaysStr != "" {
+		readRelays := ParseRelayJSON(readRelaysStr)
+		if readRelays == nil && readRelaysStr != "" {
+			issues = append(issues, fmt.Sprintf("Invalid JSON in read_relays: %s", readRelaysStr))
+			isValid = false
+		}
+	}
+
+	// Validate write relays JSON
+	if writeRelaysStr != "" {
+		writeRelays := ParseRelayJSON(writeRelaysStr)
+		if writeRelays == nil && writeRelaysStr != "" {
+			issues = append(issues, fmt.Sprintf("Invalid JSON in write_relays: %s", writeRelaysStr))
+			isValid = false
+		}
+	}
+
+	// Check for migration issues (identical read and write relays when they shouldn't be)
+	if readRelaysStr != "" && writeRelaysStr != "" && readRelaysStr == writeRelaysStr && readRelaysStr != "[]" {
+		issues = append(issues, "Read and write relays are identical (possible migration corruption)")
+		isValid = false
+	}
+
+	// Check for completely empty write relays when read relays exist
+	if readRelaysStr != "" && readRelaysStr != "[]" && (writeRelaysStr == "" || writeRelaysStr == "[]") {
+		issues = append(issues, "Empty write relays but non-empty read relays")
+		isValid = false
+	}
+
+	debugLog("Relay data validation for %s: valid=%v, issues=%v", npub[:8]+"...", isValid, issues)
+	return isValid, issues, nil
+}
+
+// RepairRelayData attempts to fix corrupted relay data
+func (sc *SQLiteCache) RepairRelayData(npub string) error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	// Validate first
+	isValid, issues, err := sc.ValidateRelayData(npub)
+	if err != nil {
+		return fmt.Errorf("failed to validate before repair: %w", err)
+	}
+
+	if isValid {
+		debugLog("No repair needed for %s", npub[:8]+"...")
+		return nil
+	}
+
+	debugLog("Repairing relay data for %s due to: %v", npub[:8]+"...", issues)
+
+	// For now, the simplest repair is to clear both fields to force rediscovery
+	// In the future, we could implement more sophisticated repair strategies
+	_, err = sc.db.Exec(`
+		UPDATE profile_cache
+		SET read_relays = '[]', write_relays = '[]', cached_at = ?, expires_at = ?
+		WHERE npub = ?
+	`, time.Now(), time.Now().Add(-1*time.Hour), npub) // Set expires to past to force refresh
+
+	if err != nil {
+		return fmt.Errorf("failed to repair relay data: %w", err)
+	}
+
+	debugLog("Successfully repaired relay data for %s (cleared to force rediscovery)", npub[:8]+"...")
+	return nil
 }
 
 func (sc *SQLiteCache) Close() error {

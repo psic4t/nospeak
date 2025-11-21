@@ -136,7 +136,84 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 		log.Printf("Initially connected to %d relays, background reconnection will continue", len(c.relays))
 	}
 
+	// Bootstrap user relays in background
+	go c.bootstrapUserRelays(relayURLs, debug)
+
 	return nil
+}
+
+func (c *Client) bootstrapUserRelays(discoveryRelays []string, debug bool) {
+	// Use a detached context for background operation
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if debug {
+		log.Printf("Starting relay bootstrapping...")
+	}
+
+	// Wait for connections to discovery relays
+	// We need at least 1 connection to query
+	if err := c.WaitForConnections(ctx, 1, 10*time.Second, debug); err != nil {
+		if debug {
+			log.Printf("Bootstrapping skipped: failed to connect to discovery relays: %v", err)
+		}
+		return
+	}
+
+	// Encode public key to npub
+	npub, err := nip19.EncodePublicKey(c.publicKey)
+	if err != nil {
+		if debug {
+			log.Printf("Bootstrapping failed: invalid public key: %v", err)
+		}
+		return
+	}
+
+	// Fetch user relays
+	// fetching relays uses QueryEvents which uses connected relays (currently discovery relays)
+	readRelays, _, err := c.fetchUserRelaysFromNetwork(ctx, npub, debug)
+	if err != nil {
+		if debug {
+			log.Printf("Bootstrapping failed to fetch user relays: %v. Keeping discovery relays.", err)
+		}
+		return
+	}
+
+	if len(readRelays) == 0 {
+		if debug {
+			log.Printf("Bootstrapping found no read relays. Keeping discovery relays.")
+		}
+		return
+	}
+
+	if debug {
+		log.Printf("Bootstrapping found %d user read relays. Switching active set...", len(readRelays))
+	}
+
+	// Update connection manager
+	// 1. Add new relays
+	for _, url := range readRelays {
+		c.connectionManager.AddRelay(url)
+	}
+
+	// 2. Identify relays to remove (discovery relays NOT in user list)
+	userRelaysMap := make(map[string]bool)
+	for _, url := range readRelays {
+		userRelaysMap[url] = true
+	}
+
+	for _, url := range discoveryRelays {
+		if !userRelaysMap[url] {
+			c.connectionManager.RemoveRelay(url)
+		}
+	}
+
+	// Update client relay list
+	c.UpdateRelayList()
+
+	if debug {
+		log.Printf("Bootstrapping complete. Active relays updated.")
+	}
 }
 
 // WaitForConnections waits for at least one relay connection before proceeding
@@ -444,8 +521,7 @@ func (c *Client) UpdateRelayList() {
 // GetTotalManagedRelays returns the total number of relays being managed (connected + disconnected)
 func (c *Client) GetTotalManagedRelays() int {
 	if c.connectionManager != nil {
-		allRelays := c.connectionManager.GetAllRelays()
-		return len(allRelays)
+		return len(c.connectionManager.GetAllManagedRelayURLs())
 	}
 	return 0
 }
@@ -532,6 +608,64 @@ func (c *Client) GetPartnerDisplayNames(ctx context.Context, debug bool) (map[st
 	}
 
 	return displayNames, nil
+}
+
+// ConnectToContactRelays ensures we are connected to relays for all partners
+func (c *Client) ConnectToContactRelays(ctx context.Context, debug bool) error {
+	// Check if we need discovery relays (if any partner is missing from cache)
+	needDiscovery := false
+	for _, partner := range c.config.Partners {
+		_, _, found := c.GetCachedUserRelays(partner, debug)
+		if !found {
+			needDiscovery = true
+			break
+		}
+	}
+
+	// If we need discovery, ensure discovery relays are connected
+	if needDiscovery {
+		if debug {
+			log.Printf("Missing cached relays for some partners, enabling discovery relays")
+		}
+		discovery := GetDiscoveryRelays()
+		c.AddMailboxRelays(discovery.Relays)
+		// Wait for connections to ensure query capability
+		_ = c.WaitForConnections(ctx, 1, 5*time.Second, debug)
+	}
+
+	// Iterate partners and connect to their relays
+	relaysAdded := false
+	for _, partner := range c.config.Partners {
+		// 1. Try cache
+		readRelays, _, found := c.GetCachedUserRelays(partner, debug)
+
+		if !found {
+			// 2. No cache - discover from network
+			var err error
+			// DiscoverUserRelays uses connected relays (now including discovery relays)
+			readRelays, _, err = c.DiscoverUserRelays(ctx, partner, debug)
+			if err != nil {
+				if debug {
+					log.Printf("Failed to discover relays for %s: %v", partner, err)
+				}
+				continue
+			}
+		}
+
+		// Connect to the contact's relays
+		if len(readRelays) > 0 {
+			c.AddMailboxRelays(readRelays)
+			relaysAdded = true
+		}
+	}
+
+	if relaysAdded {
+		// Give connection manager a moment to establish connections to the newly added relays
+		// This significantly improves success rate for subsequent operations
+		_ = c.WaitForConnections(ctx, 1, 2*time.Second, debug)
+	}
+
+	return nil
 }
 
 func (c *Client) GetPartnerProfiles(ctx context.Context, debug bool) (map[string]cache.ProfileMetadata, error) {

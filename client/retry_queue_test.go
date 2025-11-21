@@ -6,15 +6,17 @@ import (
 	"time"
 
 	"github.com/data.haus/nospeak/config"
+	"github.com/data.haus/nospeak/testutils"
 	"github.com/nbd-wtf/go-nostr"
 )
 
 func TestRetryQueue(t *testing.T) {
 	// Create test client
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, err := NewClient(cfg)
@@ -52,10 +54,11 @@ func TestRetryQueueBackoffCalculation(t *testing.T) {
 		BackoffMultiplier: 2.0,
 	}
 
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, _ := NewClient(cfg)
@@ -93,10 +96,11 @@ func TestEnqueueRetry(t *testing.T) {
 		HealthCheckInterval: 100 * time.Millisecond,
 	}
 
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1j4c6269d9q9zqemgqz82xnhl3nyjh2zrfqnyy40s8qfmgvlrnwqsmv9p8r",
-		Npub: "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, _ := NewClient(cfg)
@@ -179,30 +183,34 @@ func TestPublishResult(t *testing.T) {
 }
 
 func TestPublishToAllRelays(t *testing.T) {
-	// This test would require actual relay connections, so we'll test the structure
+	// This test verifies that we attempt to publish to disconnected relays
+	// and that they are queued for retry
 	retryConfig := DefaultRetryConfig()
+	keys := testutils.GenerateTestKeys(t)
 	cfg := &config.Config{
 		// No static relays - will use discovery relays
-		Nsec: "nsec1ufkus6z956de9n5vycpskvq6ue66w5qk0c7xk4qrpnu2z2qvw0qsv4w5x",
-		Npub: "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr0l60jsyhx3fawhc5r0apsq9vu8",
+		Nsec: keys.Nsec,
+		Npub: keys.Npub,
 	}
 
 	client, _ := NewClient(cfg)
 	cm := NewConnectionManager(client, retryConfig, false)
-	rq := NewRetryQueue(client, cm, retryConfig, false)
+	rq := NewRetryQueue(client, cm, retryConfig, true)
 
-	// Add a mock relay to test structure
-	cm.AddRelay("wss://relay.damus.io")
+	// Add a mock relay to test structure - it will be disconnected
+	mockRelayURL := "wss://relay.damus.io"
+	cm.AddRelay(mockRelayURL)
 
 	event := nostr.Event{
 		ID:        "test-event-id",
-		PubKey:    "test-pubkey",
+		PubKey:    keys.PublicKey,
 		CreatedAt: nostr.Now(),
 		Kind:      1,
 		Content:   "test content",
 	}
 
-	// This will likely fail since we don't have real connections, but tests the structure
+	// This will fail since we don't have real connections, but should return failure result
+	// and enqueue a retry
 	ctx := context.Background()
 	results := rq.PublishToAllRelays(ctx, event)
 
@@ -212,12 +220,26 @@ func TestPublishToAllRelays(t *testing.T) {
 	}
 
 	// Check result structure
+	found := false
 	for _, result := range results {
-		if result.RelayURL == "" {
-			t.Error("Expected relay URL in result")
+		if result.RelayURL == mockRelayURL {
+			found = true
+			if result.Success {
+				t.Error("Expected success to be false for disconnected relay")
+			}
+			if result.Error == nil {
+				t.Error("Expected error for disconnected relay")
+			}
 		}
-		if result.Attempt == 0 {
-			t.Error("Expected attempt count > 0")
-		}
+	}
+
+	if !found {
+		t.Errorf("Expected result for relay %s", mockRelayURL)
+	}
+
+	// Verify that the item was enqueued for retry
+	stats := rq.GetStats()
+	if stats["queue_length"].(int) != 1 {
+		t.Errorf("Expected queue length to be 1, got %v", stats["queue_length"])
 	}
 }

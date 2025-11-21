@@ -67,11 +67,11 @@ func (pe ProfileEntry) ToProfileMetadata() ProfileMetadata {
 func (pe ProfileEntry) GetRelayList() []string {
 	// Prefer NIP-65 read relays as the default "relay list"
 	if pe.ReadRelays != "" {
-		return parseRelayJSON(pe.ReadRelays)
+		return ParseRelayJSON(pe.ReadRelays)
 	}
 	// Fallback to legacy relay list
 	if pe.RelayList != "" {
-		return parseRelayJSON(pe.RelayList)
+		return ParseRelayJSON(pe.RelayList)
 	}
 	return nil
 }
@@ -84,12 +84,12 @@ func (pe ProfileEntry) HasRelayList() bool {
 
 // GetReadRelays parses and returns read relays as a string slice
 func (pe ProfileEntry) GetReadRelays() []string {
-	return parseRelayJSON(pe.ReadRelays)
+	return ParseRelayJSON(pe.ReadRelays)
 }
 
 // GetWriteRelays parses and returns write relays as a string slice
 func (pe ProfileEntry) GetWriteRelays() []string {
-	return parseRelayJSON(pe.WriteRelays)
+	return ParseRelayJSON(pe.WriteRelays)
 }
 
 // HasReadRelays returns true if profile has cached read relays
@@ -114,12 +114,12 @@ type UserProfileEntry struct {
 
 // GetReadRelays parses and returns read relays as a string slice
 func (upe UserProfileEntry) GetReadRelays() []string {
-	return parseRelayJSON(upe.ReadRelays)
+	return ParseRelayJSON(upe.ReadRelays)
 }
 
 // GetWriteRelays parses and returns write relays as a string slice
 func (upe UserProfileEntry) GetWriteRelays() []string {
-	return parseRelayJSON(upe.WriteRelays)
+	return ParseRelayJSON(upe.WriteRelays)
 }
 
 // HasReadRelays returns true if user profile has cached read relays
@@ -137,19 +137,24 @@ func (upe UserProfileEntry) IsExpired() bool {
 	return time.Now().After(upe.ExpiresAt)
 }
 
-// parseRelayJSON parses JSON array of relay URLs
-func parseRelayJSON(relayJSON string) []string {
+// ParseRelayJSON parses JSON array of relay URLs
+func ParseRelayJSON(relayJSON string) []string {
 	if relayJSON == "" {
-		return nil
+		return nil // Backward compatibility: treat empty string as no data
+	}
+
+	// Handle empty JSON array
+	if relayJSON == "[]" {
+		return []string{} // Empty slice, not nil (distinct from "no data")
 	}
 
 	// Simple JSON parsing for relay array
 	var relays []string
-	if relayJSON[0] == '[' && relayJSON[len(relayJSON)-1] == ']' {
+	if len(relayJSON) >= 2 && relayJSON[0] == '[' && relayJSON[len(relayJSON)-1] == ']' {
 		// Remove brackets and split by comma
 		content := relayJSON[1 : len(relayJSON)-1]
 		if content == "" {
-			return nil
+			return []string{} // Empty array
 		}
 
 		// Parse JSON array elements (strip quotes)
@@ -197,6 +202,10 @@ type Cache interface {
 	SetProfileWithRelayList(npub string, profile ProfileMetadata, readRelays []string, writeRelays []string, ttl time.Duration) error
 	SetNIP65Relays(npub string, readRelays, writeRelays []string, ttl time.Duration) error
 	ClearExpiredProfiles() error
+
+	// Validation methods
+	ValidateRelayData(npub string) (isValid bool, issues []string, err error)
+	RepairRelayData(npub string) error
 
 	// Maintenance methods
 	Clear() error
