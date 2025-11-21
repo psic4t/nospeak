@@ -66,7 +66,7 @@ func TestClientWithConnectionManager(t *testing.T) {
 	}
 
 	// Publish with retry logic
-	if err := client.PublishEvent(ctx, event, true); err != nil {
+	if _, err := client.PublishEvent(ctx, event, true); err != nil {
 		t.Logf("Publish warning: %v", err)
 		// Don't fail - retry queue will handle failures
 	}
@@ -131,7 +131,7 @@ func TestClientRetryLogic(t *testing.T) {
 	}
 
 	// This should succeed for working relays and queue retries for failed ones
-	if err := client.PublishEvent(ctx, event, true); err != nil {
+	if _, err := client.PublishEvent(ctx, event, true); err != nil {
 		t.Logf("Publish completed with retries queued: %v", err)
 	}
 
@@ -193,7 +193,7 @@ func TestMailboxRelayHandling(t *testing.T) {
 	}
 
 	// Test sending a message (this will discover and add more mailbox relays)
-	err = client.SendChatMessage(ctx, cfg.Partners[0], "Test mailbox relay handling", true)
+	_, err = client.SendChatMessage(ctx, cfg.Partners[0], "Test mailbox relay handling", true)
 	if err != nil {
 		t.Logf("Message sending completed with retries: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestDynamicMessageSendingIntegration(t *testing.T) {
 	}
 
 	// Test sending message with dynamic relay discovery
-	err = client.SendChatMessage(ctx, cfg.Partners[0], "Test dynamic message sending", true)
+	_, err = client.SendChatMessage(ctx, cfg.Partners[0], "Test dynamic message sending", true)
 	if err != nil {
 		t.Logf("Message sending completed with dynamic relay discovery: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestCacheMissAndFallbackIntegration(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Send message to unknown recipient - should trigger cache miss and fallback
-	err = client.SendChatMessage(ctx, unknownRecipient, "Test cache miss fallback", true)
+	_, err = client.SendChatMessage(ctx, unknownRecipient, "Test cache miss fallback", true)
 	if err != nil {
 		t.Logf("Message sent with cache miss handling: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestExpiredCacheRefreshIntegration(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Send message - should handle expired cache gracefully
-	err = client.SendChatMessage(ctx, testRecipient, "Test expired cache refresh", true)
+	_, err = client.SendChatMessage(ctx, testRecipient, "Test expired cache refresh", true)
 	if err != nil {
 		t.Logf("Message sent with expired cache handling: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestDiscoveryRelaysOnlyIntegration(t *testing.T) {
 	}
 
 	// Test sending message with discovery-only setup
-	err = client.SendChatMessage(ctx, "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", "Discovery-only test message", true)
+	_, err = client.SendChatMessage(ctx, "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", "Discovery-only test message", true)
 	if err != nil {
 		t.Logf("Message sent via discovery relays: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestMixedRelayConfigurationIntegration(t *testing.T) {
 	}
 
 	// Test message sending with mixed relay setup
-	err = client.SendChatMessage(ctx, "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", "Mixed relay test message", true)
+	_, err = client.SendChatMessage(ctx, "npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft", "Mixed relay test message", true)
 	if err != nil {
 		t.Logf("Message sent with mixed relay configuration: %v", err)
 	}

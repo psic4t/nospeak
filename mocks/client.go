@@ -58,26 +58,27 @@ func (m *MockClient) GetPartnerNpubs() []string {
 }
 
 // SendChatMessage mocks sending a chat message
-func (m *MockClient) SendChatMessage(ctx context.Context, recipientNpub, message string, debug bool) error {
+func (m *MockClient) SendChatMessage(ctx context.Context, recipientNpub, message string, debug bool) (int, error) {
 	if recipientNpub == "" {
-		return fmt.Errorf("recipient cannot be empty")
+		return 0, fmt.Errorf("recipient cannot be empty")
 	}
 
 	if message == "" {
-		return fmt.Errorf("message cannot be empty")
+		return 0, fmt.Errorf("message cannot be empty")
 	}
 
 	// Add to cache as sent message
 	err := m.cache.AddMessage(recipientNpub, message, "mock-event-id", "sent")
 	if err != nil {
-		return fmt.Errorf("failed to cache message: %w", err)
+		return 0, fmt.Errorf("failed to cache message: %w", err)
 	}
 
 	if debug {
 		fmt.Printf("Mock: Sent message to %s: %s\n", recipientNpub[:8]+"...", message)
 	}
 
-	return nil
+	// Mock: return 1 successful relay
+	return 1, nil
 }
 
 // SetProfileName mocks setting a profile name

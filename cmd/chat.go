@@ -145,7 +145,7 @@ func Chat(debug bool) {
 				return
 			}
 			if text != "" {
-				if err := nostrClient.SendChatMessage(ctx, selectedPartner, text, debug); err != nil {
+				if _, err := nostrClient.SendChatMessage(ctx, selectedPartner, text, debug); err != nil {
 					log.Printf("Failed to send message: %v", err)
 				}
 			}

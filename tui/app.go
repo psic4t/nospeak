@@ -829,7 +829,7 @@ func (a *App) sendMessage() {
 
 	// Send message in background
 	go func() {
-		err := a.client.SendChatMessage(a.ctx, partner, message, false)
+		successCount, err := a.client.SendChatMessage(a.ctx, partner, message, false)
 
 		if err != nil {
 			a.app.QueueUpdate(func() {
@@ -847,7 +847,12 @@ func (a *App) sendMessage() {
 			})
 		} else {
 			a.app.QueueUpdate(func() {
-				a.statusMessage = "sent"
+				// Format status message with relay count
+				if successCount == 1 {
+					a.statusMessage = "sent to 1 relay"
+				} else {
+					a.statusMessage = fmt.Sprintf("sent to %d relays", successCount)
+				}
 				a.updateStatusBar()
 				a.app.ForceDraw()
 			})

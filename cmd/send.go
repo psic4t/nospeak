@@ -27,9 +27,14 @@ func Send(args []string, debug bool, configPath string) {
 	}
 	defer nostrClient.Disconnect()
 
-	if err := nostrClient.SendChatMessage(ctx, recipientNpub, message, debug); err != nil {
+	successCount, err := nostrClient.SendChatMessage(ctx, recipientNpub, message, debug)
+	if err != nil {
 		log.Fatalf("Failed to send message: %v", err)
 	}
 
-	fmt.Printf("Message sent to %s\n", recipientNpub)
+	if successCount == 1 {
+		fmt.Printf("Message sent to %s via 1 relay\n", recipientNpub)
+	} else {
+		fmt.Printf("Message sent to %s via %d relays\n", recipientNpub, successCount)
+	}
 }

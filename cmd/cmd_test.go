@@ -139,9 +139,9 @@ func TestSetMessagingRelaysValidation(t *testing.T) {
 
 	// Test basic relay validation
 	relayTests := []struct {
-		name      string
-		relayURL  string
-		valid     bool
+		name     string
+		relayURL string
+		valid    bool
 	}{
 		{
 			name:     "valid wss relay",
@@ -192,7 +192,7 @@ func TestChatValidation(t *testing.T) {
 	}
 
 	// Test message sending
-	err := mockClient.SendChatMessage(nil, partnerKeys.Npub, "Hello world", true)
+	_, err := mockClient.SendChatMessage(nil, partnerKeys.Npub, "Hello world", true)
 	if err != nil {
 		t.Errorf("Failed to send chat message: %v", err)
 	}
@@ -217,12 +217,12 @@ func TestChatValidation(t *testing.T) {
 func TestCommandArgumentValidation(t *testing.T) {
 	// Test general argument validation patterns
 	testCases := []struct {
-		name           string
-		args           []string
-		minArgs        int
-		maxArgs        int
-		expectValid    bool
-		description    string
+		name        string
+		args        []string
+		minArgs     int
+		maxArgs     int
+		expectValid bool
+		description string
 	}{
 		{
 			name:        "empty args",
@@ -371,14 +371,16 @@ func TestErrorHandling(t *testing.T) {
 		{
 			name: "send empty message",
 			testFunc: func() error {
-				return mockClient.SendChatMessage(nil, testKeys.Npub, "", true)
+				_, err := mockClient.SendChatMessage(nil, testKeys.Npub, "", true)
+				return err
 			},
 			expectError: true,
 		},
 		{
 			name: "send valid message",
 			testFunc: func() error {
-				return mockClient.SendChatMessage(nil, testKeys.Npub, "Hello", true)
+				_, err := mockClient.SendChatMessage(nil, testKeys.Npub, "Hello", true)
+				return err
 			},
 			expectError: false,
 		},

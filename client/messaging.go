@@ -19,14 +19,14 @@ func clientDebugLog(format string, args ...interface{}) {
 	}
 }
 
-func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message string, debug bool) error {
+func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message string, debug bool) (int, error) {
 	if debug {
 		log.Printf("SendChatMessage: recipient=%s, message=%q", recipientNpub[:8]+"...", message)
 	}
 
 	_, recipientPubKey, err := nip19.Decode(recipientNpub)
 	if err != nil {
-		return fmt.Errorf("failed to decode recipient npub: %w", err)
+		return 0, fmt.Errorf("failed to decode recipient npub: %w", err)
 	}
 
 	recipientHex := recipientPubKey.(string)
@@ -44,7 +44,7 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	// Discover sender's write relays (NIP-65)
 	senderNpub, err := nip19.EncodePublicKey(c.publicKey)
 	if err != nil {
-		return fmt.Errorf("failed to encode sender public key: %w", err)
+		return 0, fmt.Errorf("failed to encode sender public key: %w", err)
 	}
 
 	_, senderWriteRelays, err := c.DiscoverUserRelays(ctx, senderNpub, debug)
@@ -97,7 +97,7 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 
 	giftWrap, err := c.CreateGiftWrap(rumor, recipientNpub, debug)
 	if err != nil {
-		return fmt.Errorf("failed to create gift wrap: %w", err)
+		return 0, fmt.Errorf("failed to create gift wrap: %w", err)
 	}
 
 	if debug {
@@ -112,8 +112,9 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		fmt.Printf("=======================================\n\n")
 	}
 
-	if err := c.PublishEvent(ctx, giftWrap, debug); err != nil {
-		return fmt.Errorf("failed to publish gift wrap: %w", err)
+	successCount, err := c.PublishEvent(ctx, giftWrap, debug)
+	if err != nil {
+		return 0, fmt.Errorf("failed to publish gift wrap: %w", err)
 	}
 
 	messageCache := cache.GetCache()
@@ -124,7 +125,7 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	} else if debug {
 		log.Printf("Message cached for %s with event ID: %s", recipientNpub[:8]+"...", giftWrap.ID)
 	}
-	return nil
+	return successCount, nil
 }
 
 // removeDuplicateRelays removes duplicate relay URLs while preserving order
@@ -417,7 +418,7 @@ func (c *Client) SetProfileName(ctx context.Context, name string, debug bool) er
 		fmt.Printf("===================================\n\n")
 	}
 
-	if err := c.PublishEvent(ctx, event, debug); err != nil {
+	if _, err := c.PublishEvent(ctx, event, debug); err != nil {
 		return fmt.Errorf("failed to publish profile metadata: %w", err)
 	}
 
@@ -459,7 +460,7 @@ func (c *Client) SetMessagingRelays(ctx context.Context, debug bool) error {
 		fmt.Printf("================================================\n\n")
 	}
 
-	if err := c.PublishEvent(ctx, event, debug); err != nil {
+	if _, err := c.PublishEvent(ctx, event, debug); err != nil {
 		return fmt.Errorf("failed to publish messaging relays event: %w", err)
 	}
 

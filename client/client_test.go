@@ -144,9 +144,52 @@ func TestClientPublishEvent(t *testing.T) {
 
 	// Try to publish (will fail without real connection)
 	ctx := context.Background()
-	err = client.PublishEvent(ctx, event, false)
+	_, err = client.PublishEvent(ctx, event, false)
 	// May not error if no relays are connected
 	_ = err
+}
+
+func TestClientPublishEventSuccessCount(t *testing.T) {
+	keys := testutils.GenerateTestKeys(t)
+
+	cfg := &config.Config{
+		Nsec:  keys.Nsec,
+		Npub:  keys.Npub,
+		Cache: "memory",
+	}
+
+	client, err := NewClient(cfg)
+	testutils.AssertNoError(t, err)
+	defer client.Disconnect()
+
+	// Create a test event
+	event := nostr.Event{
+		PubKey:    keys.PublicKey,
+		CreatedAt: nostr.Now(),
+		Kind:      1,
+		Tags:      nostr.Tags{},
+		Content:   "Test message for success count",
+	}
+
+	// Sign the event properly
+	err = event.Sign(keys.PrivateKey)
+	testutils.AssertNoError(t, err)
+
+	// Try to publish and check success count
+	ctx := context.Background()
+	successCount, err := client.PublishEvent(ctx, event, false)
+
+	// Should not error even if no relays are connected (retry queue handles it)
+	if err != nil {
+		t.Logf("Publish completed with retries queued: %v", err)
+	}
+
+	// Success count should be >= 0 (may be 0 if no relays connected)
+	if successCount < 0 {
+		t.Errorf("Expected success count >= 0, got %d", successCount)
+	}
+
+	t.Logf("Publish completed with success count: %d, error: %v", successCount, err)
 }
 
 func TestClientSubscribe(t *testing.T) {

@@ -331,7 +331,7 @@ func (c *Client) Disconnect() {
 	c.relays = c.relays[:0]
 }
 
-func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool) error {
+func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool) (int, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -343,7 +343,7 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 		fmt.Printf("========================================\n\n")
 	}
 
-	// Use the retry queue to publish to all managed relays
+	// Use retry queue to publish to all managed relays
 	results := c.retryQueue.PublishToAllRelays(ctx, event)
 
 	var successCount int
@@ -375,10 +375,10 @@ func (c *Client) PublishEvent(ctx context.Context, event nostr.Event, debug bool
 
 	// Don't return error if at least one publish succeeded or is queued for retry
 	if successCount > 0 || failureCount > 0 {
-		return nil
+		return successCount, nil
 	}
 
-	return lastErr
+	return successCount, lastErr
 }
 
 func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler func(nostr.Event)) error {
