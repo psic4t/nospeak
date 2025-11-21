@@ -61,13 +61,13 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	recipientReadRelays = removeDuplicateRelays(recipientReadRelays)
 
 	if debug {
-		log.Printf("Sender write relays: %v", senderWriteRelays)
-		log.Printf("Recipient read relays: %v", recipientReadRelays)
+		log.Printf("Sender write relays (temporary for message): %v", senderWriteRelays)
+		log.Printf("Recipient read relays (temporary for message): %v", recipientReadRelays)
 	}
 
-	// Add sender's write relays as persistent connections (these should already be connected)
+	// Add sender's write relays as temporary connections for message delivery
 	for _, relayURL := range senderWriteRelays {
-		c.connectionManager.AddPersistentRelay(relayURL)
+		c.connectionManager.AddTemporaryRelay(relayURL)
 	}
 
 	// Add recipient's read relays as temporary connections for message delivery
@@ -83,6 +83,8 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 
 	if debug {
 		log.Printf("Target relays for message delivery: %v (%d unique relays)", targetRelays, len(targetRelays))
+		log.Printf("Sender write relays (temporary): %v", senderWriteRelays)
+		log.Printf("Recipient read relays (temporary): %v", recipientReadRelays)
 	}
 
 	rumor := nostr.Event{
