@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -387,20 +388,46 @@ func (c *Client) Subscribe(ctx context.Context, filters nostr.Filters, handler f
 	// Get only currently connected relays for subscriptions
 	connectedRelays := c.connectionManager.GetConnectedRelays()
 
+	// Debug logging for subscription targets
+	if debug := os.Getenv("DEBUG"); debug != "" {
+		relayURLs := make([]string, len(connectedRelays))
+		for i, relay := range connectedRelays {
+			relayURLs[i] = relay.URL
+		}
+		log.Printf("[SUBSCRIPTION-DEBUG] Subscribing to %d connected relays: %v", len(connectedRelays), relayURLs)
+	}
+
 	// Handle case where no relays are connected yet - this is normal during startup
 	if len(connectedRelays) == 0 {
+		if debug := os.Getenv("DEBUG"); debug != "" {
+			log.Printf("[SUBSCRIPTION-DEBUG] No connected relays available, starting background relay wait")
+		}
 		// Start a background goroutine that will establish subscriptions when relays connect
 		go func() {
 			ticker := time.NewTicker(1 * time.Second)
 			defer ticker.Stop()
 
+			if debug := os.Getenv("DEBUG"); debug != "" {
+				log.Printf("[SUBSCRIPTION-DEBUG] Background relay monitor started")
+			}
+
 			for {
 				select {
 				case <-ctx.Done():
+					if debug := os.Getenv("DEBUG"); debug != "" {
+						log.Printf("[SUBSCRIPTION-DEBUG] Background relay monitor stopped")
+					}
 					return
 				case <-ticker.C:
 					currentRelays := c.connectionManager.GetConnectedRelays()
 					if len(currentRelays) > 0 {
+						if debug := os.Getenv("DEBUG"); debug != "" {
+							relayURLs := make([]string, len(currentRelays))
+							for i, relay := range currentRelays {
+								relayURLs[i] = relay.URL
+							}
+							log.Printf("[SUBSCRIPTION-DEBUG] Background relay monitor found %d relays: %v", len(currentRelays), relayURLs)
+						}
 						// Try to establish subscriptions now that we have connected relays
 						c.establishSubscriptions(ctx, currentRelays, filters, handler)
 						return
@@ -689,6 +716,9 @@ func (c *Client) GetPartnerProfiles(ctx context.Context, debug bool) (map[string
 
 // AddMailboxRelays adds mailbox relays to the connection manager
 func (c *Client) AddMailboxRelays(relayURLs []string) {
+	if debug := os.Getenv("DEBUG"); debug != "" {
+		log.Printf("[MAILBOX-RELAY-DEBUG] Adding %d mailbox relays: %v", len(relayURLs), relayURLs)
+	}
 	for _, relayURL := range relayURLs {
 		// Add all discovered relays (no more config filtering)
 		c.connectionManager.AddRelay(relayURL)

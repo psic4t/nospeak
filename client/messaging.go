@@ -61,6 +61,15 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	targetRelays = append(targetRelays, senderWriteRelays...)
 	targetRelays = append(targetRelays, recipientReadRelays...)
 
+	// Remove duplicates while preserving order
+	targetRelays = removeDuplicateRelays(targetRelays)
+
+	if debug {
+		log.Printf("Target relays for message delivery: %v (%d unique relays)", targetRelays, len(targetRelays))
+		log.Printf("Sender write relays: %v", senderWriteRelays)
+		log.Printf("Recipient read relays: %v", recipientReadRelays)
+	}
+
 	// Add all discovered relays to connection manager for persistent connection
 	c.AddMailboxRelays(targetRelays)
 
@@ -118,7 +127,64 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	return nil
 }
 
+// removeDuplicateRelays removes duplicate relay URLs while preserving order
+func removeDuplicateRelays(relays []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, relay := range relays {
+		if !seen[relay] {
+			seen[relay] = true
+			result = append(result, relay)
+		}
+	}
+	return result
+}
+
+// SetupMessageRelays ensures proper relays are connected for message reception
+func (c *Client) SetupMessageRelays(ctx context.Context, debug bool) error {
+	// Get sender's npub for NIP-65 discovery
+	senderNpub, err := nip19.EncodePublicKey(c.publicKey)
+	if err != nil {
+		return fmt.Errorf("failed to encode sender public key: %w", err)
+	}
+
+	// Discover sender's read relays (these are the relays where we should receive messages)
+	_, senderReadRelays, err := c.DiscoverUserRelays(ctx, senderNpub, debug)
+	if err != nil {
+		if debug {
+			log.Printf("Failed to discover sender read relays, using discovery relays: %v", err)
+		}
+		// Fallback to discovery relays
+		discovery := GetDiscoveryRelays()
+		senderReadRelays = discovery.Relays
+	}
+
+	// Also add default discovery relays to ensure we have coverage
+	discovery := GetDiscoveryRelays()
+	allRelays := removeDuplicateRelays(append(senderReadRelays, discovery.Relays...))
+
+	if debug {
+		log.Printf("Setting up message reception on %d relays: %v", len(allRelays), allRelays)
+		log.Printf("Sender read relays: %v", senderReadRelays)
+		log.Printf("Discovery relays: %v", discovery.Relays)
+	}
+
+	// Add these relays to connection manager for message reception
+	c.AddMailboxRelays(allRelays)
+
+	return nil
+}
+
 func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(senderNpub, message string), debug bool) error {
+	// First, ensure proper relays are connected for message reception
+	if err := c.SetupMessageRelays(ctx, debug); err != nil {
+		if debug {
+			log.Printf("Failed to setup message relays: %v", err)
+		}
+		// Continue anyway, as Subscribe() will handle the connection fallback
+	}
+
 	filters := nostr.Filters{{
 		Kinds: []int{nostr.KindGiftWrap},
 		Tags: nostr.TagMap{

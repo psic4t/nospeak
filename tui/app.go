@@ -871,8 +871,7 @@ func (a *App) handleCommand(command string) {
 	switch strings.ToLower(parts[0]) {
 	case "/quit":
 		a.Stop()
-	case "/help":
-		a.showHelp()
+
 	default:
 		timestamp := time.Now().Format("15:04:05")
 		a.messageView.Write([]byte(fmt.Sprintf("[%s] [red]Unknown command:[white] %s\n", timestamp, command)))
@@ -967,9 +966,7 @@ func (a *App) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 		// Switch to previous contact
 		a.switchContact(-1)
 		return nil
-	case tcell.KeyF1:
-		a.showHelp()
-		return nil
+
 	case tcell.KeyF2:
 		a.showSettings()
 		return nil
@@ -1016,7 +1013,7 @@ func (a *App) showHelp() {
   PgUp/PgDn      - Scroll message pane up/down
   Ctrl+k/j       - Switch between contacts (k=up, j=down)
   Ctrl+p         - Show profile information for current contact
-  F1             - Show this help
+
   F2             - Show settings
   F3             - Toggle contacts pane
 
@@ -1028,7 +1025,7 @@ Navigation:
 
 IRC-style Commands:
   /quit          - Quit application
-  /help          - Show this help
+
 
 Type commands in the input field and press Enter to execute.`
 
