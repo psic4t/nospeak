@@ -56,22 +56,34 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		senderWriteRelays = discovery.Relays
 	}
 
-	// Combine all target relays (sender write + recipient read)
-	var targetRelays []string
-	targetRelays = append(targetRelays, senderWriteRelays...)
-	targetRelays = append(targetRelays, recipientReadRelays...)
-
-	// Remove duplicates while preserving order
-	targetRelays = removeDuplicateRelays(targetRelays)
+	// Remove duplicates while preserving order for each relay set
+	senderWriteRelays = removeDuplicateRelays(senderWriteRelays)
+	recipientReadRelays = removeDuplicateRelays(recipientReadRelays)
 
 	if debug {
-		log.Printf("Target relays for message delivery: %v (%d unique relays)", targetRelays, len(targetRelays))
 		log.Printf("Sender write relays: %v", senderWriteRelays)
 		log.Printf("Recipient read relays: %v", recipientReadRelays)
 	}
 
-	// Add all discovered relays to connection manager for persistent connection
-	c.AddMailboxRelays(targetRelays)
+	// Add sender's write relays as persistent connections (these should already be connected)
+	for _, relayURL := range senderWriteRelays {
+		c.connectionManager.AddPersistentRelay(relayURL)
+	}
+
+	// Add recipient's read relays as temporary connections for message delivery
+	for _, relayURL := range recipientReadRelays {
+		c.connectionManager.AddTemporaryRelay(relayURL)
+	}
+
+	// Combine all target relays for publishing (sender write + recipient read)
+	var targetRelays []string
+	targetRelays = append(targetRelays, senderWriteRelays...)
+	targetRelays = append(targetRelays, recipientReadRelays...)
+	targetRelays = removeDuplicateRelays(targetRelays)
+
+	if debug {
+		log.Printf("Target relays for message delivery: %v (%d unique relays)", targetRelays, len(targetRelays))
+	}
 
 	rumor := nostr.Event{
 		PubKey:    c.publicKey,
@@ -114,7 +126,15 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 
 	successCount, err := c.PublishEvent(ctx, giftWrap, debug)
 	if err != nil {
+		// Cleanup temporary connections even on failure
+		c.connectionManager.CleanupTemporaryConnections()
 		return 0, fmt.Errorf("failed to publish gift wrap: %w", err)
+	}
+
+	// Cleanup temporary connections after successful message delivery
+	c.connectionManager.CleanupTemporaryConnections()
+	if debug {
+		log.Printf("Cleaned up temporary connections after message delivery")
 	}
 
 	messageCache := cache.GetCache()
@@ -150,29 +170,33 @@ func (c *Client) SetupMessageRelays(ctx context.Context, debug bool) error {
 		return fmt.Errorf("failed to encode sender public key: %w", err)
 	}
 
-	// Discover sender's read relays (these are the relays where we should receive messages)
-	_, senderReadRelays, err := c.DiscoverUserRelays(ctx, senderNpub, debug)
-	if err != nil {
-		if debug {
-			log.Printf("Failed to discover sender read relays, using discovery relays: %v", err)
-		}
-		// Fallback to discovery relays
-		discovery := GetDiscoveryRelays()
-		senderReadRelays = discovery.Relays
-	}
+	// Check for cached sender read relays first (selective connection behavior)
+	senderReadRelays, _, found := c.GetCachedUserRelays(senderNpub, debug)
 
-	// Also add default discovery relays to ensure we have coverage
-	discovery := GetDiscoveryRelays()
-	allRelays := removeDuplicateRelays(append(senderReadRelays, discovery.Relays...))
+	if !found || len(senderReadRelays) == 0 {
+		// Only discover from network if no cached relays available
+		_, senderReadRelays, err = c.DiscoverUserRelays(ctx, senderNpub, debug)
+		if err != nil {
+			if debug {
+				log.Printf("Failed to discover sender read relays, using discovery relays as fallback: %v", err)
+			}
+			// Fallback to discovery relays only when no cached relays available
+			discovery := GetDiscoveryRelays()
+			senderReadRelays = discovery.Relays
+		}
+	}
 
 	if debug {
-		log.Printf("Setting up message reception on %d relays: %v", len(allRelays), allRelays)
-		log.Printf("Sender read relays: %v", senderReadRelays)
-		log.Printf("Discovery relays: %v", discovery.Relays)
+		log.Printf("Setting up message reception on %d relays: %v", len(senderReadRelays), senderReadRelays)
+		if found {
+			log.Printf("Using cached sender read relays")
+		} else {
+			log.Printf("Using discovered/fallback sender read relays")
+		}
 	}
 
-	// Add these relays to connection manager for message reception
-	c.AddMailboxRelays(allRelays)
+	// Add only sender's read relays as persistent connections for message reception
+	c.AddMailboxRelays(senderReadRelays)
 
 	return nil
 }

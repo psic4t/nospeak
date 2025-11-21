@@ -116,13 +116,40 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.connectionManager.debug = debug
 	c.retryQueue.debug = debug
 
-	// Use discovery relays (no more configured relays)
-	discoveryRelays := GetDiscoveryRelays()
-	relayURLs := discoveryRelays.Relays
+	// Get user's npub for checking cached relays
+	userNpub, err := nip19.EncodePublicKey(c.publicKey)
+	if err != nil {
+		if debug {
+			log.Printf("Failed to encode user public key: %v", err)
+		}
+		return fmt.Errorf("failed to encode user public key: %w", err)
+	}
 
-	// Add relays to the connection manager
+	// Check for cached user read relays first
+	userReadRelays, _, found := c.GetCachedUserRelays(userNpub, debug)
+
+	var relayURLs []string
+	var useDiscoveryFallback bool
+
+	if found && len(userReadRelays) > 0 {
+		// Use cached user read relays as primary connection strategy
+		relayURLs = userReadRelays
+		if debug {
+			log.Printf("Using %d cached user read relays for startup: %v", len(userReadRelays), userReadRelays)
+		}
+	} else {
+		// Fallback to discovery relays when user relays are not cached
+		discoveryRelays := GetDiscoveryRelays()
+		relayURLs = discoveryRelays.Relays
+		useDiscoveryFallback = true
+		if debug {
+			log.Printf("No cached user read relays found, using %d discovery relays as fallback: %v", len(relayURLs), relayURLs)
+		}
+	}
+
+	// Add relays to the connection manager as persistent connections
 	for _, relayURL := range relayURLs {
-		c.connectionManager.AddRelay(relayURL)
+		c.connectionManager.AddPersistentRelay(relayURL)
 	}
 
 	// Start the connection manager and retry queue
@@ -133,12 +160,18 @@ func (c *Client) Connect(ctx context.Context, debug bool) error {
 	c.relays = c.connectionManager.GetConnectedRelays()
 
 	if debug {
-		log.Printf("Connection manager started with %d discovery relays", len(relayURLs))
+		if useDiscoveryFallback {
+			log.Printf("Connection manager started with %d discovery relays (fallback)", len(relayURLs))
+		} else {
+			log.Printf("Connection manager started with %d cached user read relays", len(relayURLs))
+		}
 		log.Printf("Initially connected to %d relays, background reconnection will continue", len(c.relays))
 	}
 
-	// Bootstrap user relays in background
-	go c.bootstrapUserRelays(relayURLs, debug)
+	// If using discovery fallback, bootstrap user relays in background to switch to them
+	if useDiscoveryFallback {
+		go c.bootstrapUserRelays(relayURLs, debug)
+	}
 
 	return nil
 }
@@ -192,9 +225,9 @@ func (c *Client) bootstrapUserRelays(discoveryRelays []string, debug bool) {
 	}
 
 	// Update connection manager
-	// 1. Add new relays
+	// 1. Add new user relays as persistent connections
 	for _, url := range readRelays {
-		c.connectionManager.AddRelay(url)
+		c.connectionManager.AddPersistentRelay(url)
 	}
 
 	// 2. Identify relays to remove (discovery relays NOT in user list)
@@ -637,61 +670,13 @@ func (c *Client) GetPartnerDisplayNames(ctx context.Context, debug bool) (map[st
 	return displayNames, nil
 }
 
-// ConnectToContactRelays ensures we are connected to relays for all partners
+// ConnectToContactRelays is deprecated with selective relay connections
+// Contact relays are now connected temporarily during message sending only
 func (c *Client) ConnectToContactRelays(ctx context.Context, debug bool) error {
-	// Check if we need discovery relays (if any partner is missing from cache)
-	needDiscovery := false
-	for _, partner := range c.config.Partners {
-		_, _, found := c.GetCachedUserRelays(partner, debug)
-		if !found {
-			needDiscovery = true
-			break
-		}
+	if debug {
+		log.Printf("ConnectToContactRelays is deprecated - using selective relay connections")
+		log.Printf("Contact relays will be connected temporarily during message sending only")
 	}
-
-	// If we need discovery, ensure discovery relays are connected
-	if needDiscovery {
-		if debug {
-			log.Printf("Missing cached relays for some partners, enabling discovery relays")
-		}
-		discovery := GetDiscoveryRelays()
-		c.AddMailboxRelays(discovery.Relays)
-		// Wait for connections to ensure query capability
-		_ = c.WaitForConnections(ctx, 1, 5*time.Second, debug)
-	}
-
-	// Iterate partners and connect to their relays
-	relaysAdded := false
-	for _, partner := range c.config.Partners {
-		// 1. Try cache
-		readRelays, _, found := c.GetCachedUserRelays(partner, debug)
-
-		if !found {
-			// 2. No cache - discover from network
-			var err error
-			// DiscoverUserRelays uses connected relays (now including discovery relays)
-			readRelays, _, err = c.DiscoverUserRelays(ctx, partner, debug)
-			if err != nil {
-				if debug {
-					log.Printf("Failed to discover relays for %s: %v", partner, err)
-				}
-				continue
-			}
-		}
-
-		// Connect to the contact's relays
-		if len(readRelays) > 0 {
-			c.AddMailboxRelays(readRelays)
-			relaysAdded = true
-		}
-	}
-
-	if relaysAdded {
-		// Give connection manager a moment to establish connections to the newly added relays
-		// This significantly improves success rate for subsequent operations
-		_ = c.WaitForConnections(ctx, 1, 2*time.Second, debug)
-	}
-
 	return nil
 }
 
@@ -720,8 +705,8 @@ func (c *Client) AddMailboxRelays(relayURLs []string) {
 		log.Printf("[MAILBOX-RELAY-DEBUG] Adding %d mailbox relays: %v", len(relayURLs), relayURLs)
 	}
 	for _, relayURL := range relayURLs {
-		// Add all discovered relays (no more config filtering)
-		c.connectionManager.AddRelay(relayURL)
+		// Add mailbox relays as persistent connections for message reception
+		c.connectionManager.AddPersistentRelay(relayURL)
 	}
 }
 
@@ -732,9 +717,28 @@ func (c *Client) GetConnectionStats() map[string]interface{} {
 	// Get connection manager stats
 	connectedRelays := c.connectionManager.GetConnectedRelays()
 	allRelays := c.connectionManager.GetAllRelays()
+	allRelayURLs := c.connectionManager.GetAllManagedRelayURLs()
+
+	// Count persistent vs temporary connections
+	persistentCount := 0
+	temporaryCount := 0
+	for _, relayURL := range allRelayURLs {
+		health := c.connectionManager.GetRelayHealth(relayURL)
+		if health != nil {
+			health.Mu.RLock()
+			if health.Type == PersistentConnection {
+				persistentCount++
+			} else {
+				temporaryCount++
+			}
+			health.Mu.RUnlock()
+		}
+	}
 
 	stats["connected_relays"] = len(connectedRelays)
 	stats["total_managed_relays"] = len(allRelays)
+	stats["persistent_connections"] = persistentCount
+	stats["temporary_connections"] = temporaryCount
 
 	// Get retry queue stats
 	retryStats := c.retryQueue.GetStats()
@@ -744,11 +748,15 @@ func (c *Client) GetConnectionStats() map[string]interface{} {
 
 	// Per-relay health information
 	relayHealth := make(map[string]interface{})
-	allRelayURLs := c.connectionManager.GetAllManagedRelayURLs()
 	for _, relayURL := range allRelayURLs {
 		health := c.connectionManager.GetRelayHealth(relayURL)
 		if health != nil {
 			health.Mu.RLock()
+			connectionType := "persistent"
+			if health.Type == TemporaryConnection {
+				connectionType = "temporary"
+			}
+
 			relayHealth[relayURL] = map[string]interface{}{
 				"connected":         health.IsConnected,
 				"success_count":     health.SuccessCount,
@@ -756,6 +764,7 @@ func (c *Client) GetConnectionStats() map[string]interface{} {
 				"consecutive_fails": health.ConsecutiveFails,
 				"last_connected":    health.LastConnected,
 				"last_attempt":      health.LastAttempt,
+				"connection_type":   connectionType,
 			}
 			health.Mu.RUnlock()
 		}

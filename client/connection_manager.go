@@ -10,6 +10,14 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+// ConnectionType defines whether a relay connection is persistent or temporary
+type ConnectionType int
+
+const (
+	PersistentConnection ConnectionType = iota
+	TemporaryConnection
+)
+
 // RelayHealth tracks the health and connection status of a relay
 type RelayHealth struct {
 	URL              string
@@ -20,6 +28,7 @@ type RelayHealth struct {
 	SuccessCount     int
 	FailureCount     int
 	ConsecutiveFails int
+	Type             ConnectionType
 	Mu               sync.RWMutex
 }
 
@@ -104,8 +113,13 @@ func (cm *ConnectionManager) Stop() {
 	}
 }
 
-// AddRelay adds a relay to be managed with persistent connection attempts
+// AddRelay adds a relay to be managed with persistent connection attempts (deprecated: use AddPersistentRelay)
 func (cm *ConnectionManager) AddRelay(relayURL string) {
+	cm.AddPersistentRelay(relayURL)
+}
+
+// AddPersistentRelay adds a relay to be managed with persistent connection attempts
+func (cm *ConnectionManager) AddPersistentRelay(relayURL string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -114,6 +128,7 @@ func (cm *ConnectionManager) AddRelay(relayURL string) {
 			URL:         relayURL,
 			IsConnected: false,
 			LastAttempt: time.Time{},
+			Type:        PersistentConnection,
 		}
 		cm.relays[relayURL] = health
 
@@ -121,7 +136,7 @@ func (cm *ConnectionManager) AddRelay(relayURL string) {
 		select {
 		case cm.reconnectChan <- relayURL:
 			if cm.debug {
-				log.Printf("Queued initial connection request for: %s", relayURL)
+				log.Printf("Queued initial persistent connection request for: %s", relayURL)
 			}
 		default:
 			if cm.debug {
@@ -130,7 +145,39 @@ func (cm *ConnectionManager) AddRelay(relayURL string) {
 		}
 
 		if cm.debug {
-			log.Printf("Added relay %s to connection manager", relayURL)
+			log.Printf("Added persistent relay %s to connection manager", relayURL)
+		}
+	}
+}
+
+// AddTemporaryRelay adds a relay for temporary connection without persistent management
+func (cm *ConnectionManager) AddTemporaryRelay(relayURL string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if _, exists := cm.relays[relayURL]; !exists {
+		health := &RelayHealth{
+			URL:         relayURL,
+			IsConnected: false,
+			LastAttempt: time.Time{},
+			Type:        TemporaryConnection,
+		}
+		cm.relays[relayURL] = health
+
+		// Trigger initial connection attempt
+		select {
+		case cm.reconnectChan <- relayURL:
+			if cm.debug {
+				log.Printf("Queued initial temporary connection request for: %s", relayURL)
+			}
+		default:
+			if cm.debug {
+				log.Printf("Reconnection channel full for: %s", relayURL)
+			}
+		}
+
+		if cm.debug {
+			log.Printf("Added temporary relay %s to connection manager", relayURL)
 		}
 	}
 }
@@ -150,12 +197,49 @@ func (cm *ConnectionManager) RemoveRelay(relayURL string) {
 		health.IsConnected = false
 		health.Mu.Unlock()
 
-		// Remove from map
 		delete(cm.relays, relayURL)
 
 		if cm.debug {
 			log.Printf("Removed relay %s from connection manager", relayURL)
 		}
+	}
+}
+
+// CleanupTemporaryConnections removes all temporary connections
+func (cm *ConnectionManager) CleanupTemporaryConnections() {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	var toRemove []string
+	for relayURL, health := range cm.relays {
+		health.Mu.RLock()
+		if health.Type == TemporaryConnection {
+			toRemove = append(toRemove, relayURL)
+		}
+		health.Mu.RUnlock()
+	}
+
+	for _, relayURL := range toRemove {
+		if health, exists := cm.relays[relayURL]; exists {
+			health.Mu.Lock()
+			// Close connection if active
+			if health.Relay != nil {
+				health.Relay.Close()
+				health.Relay = nil
+			}
+			health.IsConnected = false
+			health.Mu.Unlock()
+
+			delete(cm.relays, relayURL)
+
+			if cm.debug {
+				log.Printf("Cleaned up temporary relay %s", relayURL)
+			}
+		}
+	}
+
+	if cm.debug && len(toRemove) > 0 {
+		log.Printf("Cleaned up %d temporary connections", len(toRemove))
 	}
 }
 
@@ -444,7 +528,16 @@ func (cm *ConnectionManager) handleReconnection(relayURL string) {
 	health.Mu.RLock()
 	consecutiveFails := health.ConsecutiveFails
 	lastAttempt := health.LastAttempt
+	connectionType := health.Type
 	health.Mu.RUnlock()
+
+	// Only handle reconnections for persistent connections
+	if connectionType == TemporaryConnection {
+		if cm.debug {
+			log.Printf("Skipping reconnection for temporary relay: %s", relayURL)
+		}
+		return
+	}
 
 	// Calculate backoff delay based on consecutive failures
 	backoffDelay := cm.calculateBackoff(consecutiveFails)

@@ -522,10 +522,8 @@ func (a *App) loadContactsBasic() error {
 }
 
 func (a *App) loadContacts() error {
-	// Connect to contact relays first (Cache -> Discovery -> Connect)
-	if err := a.client.ConnectToContactRelays(a.ctx, a.config.Debug); err != nil {
-		a.logger.Debug("Error connecting to contact relays: %v", err)
-	}
+	// Selective relay connections: only user's read relays are persistently connected
+	// Contact relays will be connected temporarily during message sending
 
 	// Get full profiles (now with relay connections established)
 	profiles, err := a.client.GetPartnerProfiles(a.ctx, false)
