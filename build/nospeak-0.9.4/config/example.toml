@@ -1,0 +1,34 @@
+# Nostr Chat Configuration
+
+# List of relays to connect to
+relays = [
+    "wss://nostr.data.haus",
+    "wss://relay.damus.io",
+    "wss://auth.nostr1.com"
+]
+
+# Your Nostr keys (generate with: nsec1... and npub1...)
+npub = "npub1..."
+nsec = "nsec1..."
+
+# Chat partners (their npub keys)
+partners = [
+]
+
+# Enable debug mode to print generated events when sending messages
+debug = false
+
+# Cache type: "sqlite" (default) or "memory"
+cache = "sqlite"
+
+# Show contacts pane on startup (default: true)
+show_contacts = true
+
+# External notification command for new messages
+# %s will be replaced with sender's username
+# Examples:
+# Linux: notify_command = "notify-send \"New message from %s\""
+# macOS: notify_command = "osascript -e 'display notification \"New message from %s\"'"
+# Windows: notify_command = "powershell -Command \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('New message from %s', 'Nospeak')\""
+# Leave empty to disable notifications
+notify_command = ""

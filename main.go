@@ -11,7 +11,7 @@ import (
 	"github.com/data.haus/nospeak/tui"
 )
 
-const Version = "0.9.8"
+const Version = "0.9.9"
 
 // DiscoveryRelays contains predefined relays for NIP-65 discovery
 type DiscoveryRelays struct {
