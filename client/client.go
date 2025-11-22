@@ -609,7 +609,7 @@ func (c *Client) QueryEvents(ctx context.Context, filters nostr.Filters, debug b
 			}
 
 			var events []nostr.Event
-			timeout := time.After(5 * time.Second)
+			timeout := time.After(2 * time.Second) // Reduced from 5s to 2s for faster relay queries
 
 			for {
 				select {

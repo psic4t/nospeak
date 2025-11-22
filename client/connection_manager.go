@@ -50,7 +50,7 @@ func DefaultRetryConfig() RetryConfig {
 		MaxBackoff:          30 * time.Second,
 		BackoffMultiplier:   2.0,
 		HealthCheckInterval: 30 * time.Second,
-		ConnectionTimeout:   10 * time.Second,
+		ConnectionTimeout:   3 * time.Second, // Reduced from 10s to 3s for faster fail-over
 	}
 }
 

@@ -31,29 +31,47 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 
 	recipientHex := recipientPubKey.(string)
 
-	// Discover recipient's read relays (NIP-65)
-	recipientReadRelays, _, err := c.DiscoverUserRelays(ctx, recipientNpub, debug)
-	if err != nil {
+	// Get recipient's read relays (NIP-65) - Try cache first
+	recipientReadRelays, _, found := c.GetCachedUserRelays(recipientNpub, debug)
+	if !found {
 		if debug {
-			log.Printf("Failed to discover recipient relays, using fallback: %v", err)
+			log.Printf("Recipient relays not in cache, performing discovery...")
 		}
-		discovery := GetDiscoveryRelays()
-		recipientReadRelays = discovery.Relays
+		var err error
+		recipientReadRelays, _, err = c.DiscoverUserRelays(ctx, recipientNpub, debug)
+		if err != nil {
+			if debug {
+				log.Printf("Failed to discover recipient relays, using fallback: %v", err)
+			}
+			discovery := GetDiscoveryRelays()
+			recipientReadRelays = discovery.Relays
+		}
+	} else if debug {
+		log.Printf("Using cached recipient relays: %v", recipientReadRelays)
 	}
 
-	// Discover sender's write relays (NIP-65)
+	// Get sender's write relays (NIP-65) - Try cache first
 	senderNpub, err := nip19.EncodePublicKey(c.publicKey)
 	if err != nil {
 		return 0, fmt.Errorf("failed to encode sender public key: %w", err)
 	}
 
-	_, senderWriteRelays, err := c.DiscoverUserRelays(ctx, senderNpub, debug)
-	if err != nil {
+	_, senderWriteRelays, found := c.GetCachedUserRelays(senderNpub, debug)
+	if !found {
 		if debug {
-			log.Printf("Failed to discover sender relays, using fallback: %v", err)
+			log.Printf("Sender relays not in cache, performing discovery...")
 		}
-		discovery := GetDiscoveryRelays()
-		senderWriteRelays = discovery.Relays
+		var err error
+		_, senderWriteRelays, err = c.DiscoverUserRelays(ctx, senderNpub, debug)
+		if err != nil {
+			if debug {
+				log.Printf("Failed to discover sender relays, using fallback: %v", err)
+			}
+			discovery := GetDiscoveryRelays()
+			senderWriteRelays = discovery.Relays
+		}
+	} else if debug {
+		log.Printf("Using cached sender relays: %v", senderWriteRelays)
 	}
 
 	// Remove duplicates while preserving order for each relay set
@@ -133,7 +151,8 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		return 0, fmt.Errorf("failed to publish gift wrap: %w", err)
 	}
 
-	// Send copy to self (history)
+	// Create copy for self (history) synchronously so we can cache it
+	// But send it in background to avoid blocking UI
 	var selfGiftWrapID string
 	if debug {
 		log.Printf("Creating self-copy gift wrap for history...")
@@ -145,19 +164,37 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		}
 	} else {
 		selfGiftWrapID = selfGiftWrap.ID
-		// Publish to our write relays (which are currently connected as temporary or persistent)
-		_, err := c.PublishEvent(ctx, selfGiftWrap, debug)
-		if err != nil && debug {
-			log.Printf("Failed to publish self-copy: %v", err)
-		} else if debug {
-			log.Printf("Successfully published self-copy for history")
-		}
+
+		// Publish to our write relays in background
+		// We use a new background context so it completes even if the main context is cancelled
+		go func() {
+			bgCtx := context.Background()
+			if debug {
+				log.Printf("Publishing self-copy in background...")
+			}
+			// Publish to our write relays (which are currently connected as temporary or persistent)
+			_, err := c.PublishEvent(bgCtx, selfGiftWrap, debug)
+			if err != nil && debug {
+				log.Printf("Failed to publish self-copy: %v", err)
+			} else if debug {
+				log.Printf("Successfully published self-copy for history")
+			}
+
+			// Cleanup temporary connections after background work is done
+			c.connectionManager.CleanupTemporaryConnections()
+			if debug {
+				log.Printf("Cleaned up temporary connections after message delivery (background)")
+			}
+		}()
 	}
 
-	// Cleanup temporary connections after successful message delivery
-	c.connectionManager.CleanupTemporaryConnections()
-	if debug {
-		log.Printf("Cleaned up temporary connections after message delivery")
+	// Note: CleanupTemporaryConnections is now handled in the background goroutine above
+	// If self-creation failed, we need to cleanup here
+	if err != nil {
+		c.connectionManager.CleanupTemporaryConnections()
+		if debug {
+			log.Printf("Cleaned up temporary connections (self-creation failed)")
+		}
 	}
 
 	messageCache := cache.GetCache()
