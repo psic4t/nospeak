@@ -133,6 +133,27 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 		return 0, fmt.Errorf("failed to publish gift wrap: %w", err)
 	}
 
+	// Send copy to self (history)
+	var selfGiftWrapID string
+	if debug {
+		log.Printf("Creating self-copy gift wrap for history...")
+	}
+	selfGiftWrap, err := c.CreateGiftWrap(rumor, senderNpub, debug)
+	if err != nil {
+		if debug {
+			log.Printf("Failed to create self-copy gift wrap: %v", err)
+		}
+	} else {
+		selfGiftWrapID = selfGiftWrap.ID
+		// Publish to our write relays (which are currently connected as temporary or persistent)
+		_, err := c.PublishEvent(ctx, selfGiftWrap, debug)
+		if err != nil && debug {
+			log.Printf("Failed to publish self-copy: %v", err)
+		} else if debug {
+			log.Printf("Successfully published self-copy for history")
+		}
+	}
+
 	// Cleanup temporary connections after successful message delivery
 	c.connectionManager.CleanupTemporaryConnections()
 	if debug {
@@ -140,7 +161,13 @@ func (c *Client) SendChatMessage(ctx context.Context, recipientNpub, message str
 	}
 
 	messageCache := cache.GetCache()
-	if err := messageCache.AddMessage(recipientNpub, message, giftWrap.ID, "sent"); err != nil {
+	// Use self-copy ID if available to match what will be fetched from relays later
+	cacheID := giftWrap.ID
+	if selfGiftWrapID != "" {
+		cacheID = selfGiftWrapID
+	}
+
+	if err := messageCache.AddMessage(recipientNpub, message, cacheID, "sent"); err != nil {
 		if debug {
 			log.Printf("Failed to cache sent message: %v", err)
 		}
@@ -260,22 +287,51 @@ func (c *Client) ListenForMessages(ctx context.Context, messageHandler func(send
 			return
 		}
 
-		if debug {
-			log.Printf("Successfully decrypted message from %s: %q", senderNpub, rumor.Content)
+		var direction string
+		var partnerNpub string
+
+		if rumor.PubKey == c.publicKey {
+			direction = "sent"
+			// Extract actual recipient from p tag
+			var targetHex string
+			for _, tag := range rumor.Tags {
+				if len(tag) >= 2 && tag[0] == "p" {
+					targetHex = tag[1]
+					break
+				}
+			}
+			if targetHex != "" {
+				partnerNpub, _ = nip19.EncodePublicKey(targetHex)
+			} else {
+				// Fallback if no p tag found (should not happen for Kind 14)
+				partnerNpub = senderNpub
+			}
+		} else {
+			direction = "received"
+			partnerNpub = senderNpub
 		}
 
-		if err := messageCache.AddMessageWithTimestamp(senderNpub, rumor.Content, event.ID, "received", time.Unix(int64(rumor.CreatedAt), 0)); err != nil {
+		if debug {
+			log.Printf("Successfully decrypted message from %s: %q (direction: %s)", senderNpub, rumor.Content, direction)
+		}
+
+		if err := messageCache.AddMessageWithTimestamp(partnerNpub, rumor.Content, event.ID, direction, time.Unix(int64(rumor.CreatedAt), 0)); err != nil {
 			if debug {
-				log.Printf("Failed to cache received message: %v", err)
+				log.Printf("Failed to cache %s message: %v", direction, err)
 			}
 		} else if debug {
-			log.Printf("Cached received message from %s: %q", senderNpub[:8]+"...", rumor.Content)
+			log.Printf("Cached %s message with %s: %q", direction, partnerNpub[:8]+"...", rumor.Content)
 		}
 
-		if debug {
-			log.Printf("Calling messageHandler for %s: %q", senderNpub, rumor.Content)
+		// Only notify for received messages
+		if direction == "received" {
+			if debug {
+				log.Printf("Calling messageHandler for %s: %q", senderNpub, rumor.Content)
+			}
+			messageHandler(senderNpub, rumor.Content)
+		} else if debug {
+			log.Printf("Skipping messageHandler for sent message")
 		}
-		messageHandler(senderNpub, rumor.Content)
 	})
 }
 
@@ -539,4 +595,108 @@ func (c *Client) AddPartner(npub string) error {
 	c.config.Partners = append(c.config.Partners, npub)
 
 	return c.config.Save()
+}
+
+// FetchSentMessages fetches self-sent messages (Kind 1059) from relays
+func (c *Client) FetchSentMessages(ctx context.Context, limit int, debug bool) error {
+	// We can only query for messages sent TO us (p=me) because NIP-59 uses ephemeral keys for authors.
+	// But since we are now sending copies to ourselves, we can find sent messages by querying p=me
+	// and filtering for those where the inner rumor's pubkey is our own.
+
+	filters := nostr.Filters{{
+		Kinds: []int{nostr.KindGiftWrap},
+		Tags: nostr.TagMap{
+			"p": {c.publicKey},
+		},
+		Limit: limit,
+	}}
+
+	if debug {
+		log.Printf("Fetching history (Kind 1059) for %s", c.publicKey)
+	}
+
+	events, err := c.QueryEvents(ctx, filters, debug)
+	if err != nil {
+		return fmt.Errorf("failed to query events: %w", err)
+	}
+
+	messageCache := cache.GetCache()
+	count := 0
+
+	for _, event := range events {
+		// Check if message is already in cache
+		if messageCache.HasMessage(event.ID) {
+			continue
+		}
+
+		rumor, err := c.UnwrapGiftWrap(event, debug)
+		if err != nil {
+			continue
+		}
+
+		if rumor.Kind != 14 {
+			continue
+		}
+
+		// Check if the sender is ME
+		if rumor.PubKey == c.publicKey {
+			// This is a sent message (Send to Self)
+
+			// Find the actual recipient from the 'p' tag in the rumor
+			var targetHex string
+			for _, tag := range rumor.Tags {
+				if len(tag) >= 2 && tag[0] == "p" {
+					targetHex = tag[1]
+					break
+				}
+			}
+
+			if targetHex == "" {
+				continue
+			}
+
+			partnerNpub, err := nip19.EncodePublicKey(targetHex)
+			if err != nil {
+				continue
+			}
+
+			if debug {
+				log.Printf("Found sent message to %s: %q", partnerNpub, rumor.Content)
+			}
+
+			if err := messageCache.AddMessageWithTimestamp(partnerNpub, rumor.Content, event.ID, "sent", time.Unix(int64(rumor.CreatedAt), 0)); err != nil {
+				if debug {
+					log.Printf("Failed to cache sent message: %v", err)
+				}
+			} else {
+				count++
+			}
+		} else {
+			// This is a received message (from someone else)
+			// We can also cache it here since we fetched it!
+
+			senderNpub, err := nip19.EncodePublicKey(rumor.PubKey)
+			if err != nil {
+				continue
+			}
+
+			if debug {
+				log.Printf("Found received message from %s: %q", senderNpub, rumor.Content)
+			}
+
+			if err := messageCache.AddMessageWithTimestamp(senderNpub, rumor.Content, event.ID, "received", time.Unix(int64(rumor.CreatedAt), 0)); err != nil {
+				if debug {
+					log.Printf("Failed to cache received message: %v", err)
+				}
+			} else {
+				count++
+			}
+		}
+	}
+
+	if debug {
+		log.Printf("Fetched and cached %d new messages", count)
+	}
+
+	return nil
 }

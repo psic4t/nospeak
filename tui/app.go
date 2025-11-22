@@ -1229,6 +1229,23 @@ func (a *App) Start(debug bool) error {
 
 	a.updateStatusBar()
 
+	// Fetch sent messages history (background)
+	go func() {
+		// Give some time for connections to be established
+		time.Sleep(2 * time.Second)
+
+		if err := a.client.FetchSentMessages(a.ctx, 100, debug); err != nil {
+			if debug {
+				log.Printf("Failed to fetch sent messages history: %v", err)
+			}
+		} else {
+			// Refresh current view if we are looking at a chat
+			a.app.QueueUpdate(func() {
+				a.loadChatHistory()
+			})
+		}
+	}()
+
 	// Start listening for messages
 	go a.listenForMessages(debug)
 
