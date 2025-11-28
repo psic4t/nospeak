@@ -30,5 +30,9 @@
 />
 
 {#if isInitialized}
-    {@render children()}
+    <div class="min-h-screen bg-gray-100 dark:bg-gray-900 flex justify-center">
+        <div class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl">
+            {@render children()}
+        </div>
+    </div>
 {/if}

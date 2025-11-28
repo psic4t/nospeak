@@ -42,8 +42,8 @@
     }
 </script>
 
-<div class="flex flex-col items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
-    <div class="p-8 bg-white dark:bg-gray-800 rounded shadow-md w-96">
+<div class="flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="p-8 bg-white dark:bg-gray-800 rounded shadow-md w-full max-w-md">
         <h1 class="text-2xl font-bold mb-4 text-center dark:text-white">Nospeak Web</h1>
         
         {#if error}
