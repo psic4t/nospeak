@@ -61,11 +61,11 @@
     });
 </script>
 
-<div class="flex h-screen overflow-hidden bg-white dark:bg-gray-900 rounded-lg shadow-lg my-4">
-    <div class="w-80 flex-shrink-0 hidden md:block border-r border-gray-200 dark:border-gray-700 rounded-l-lg">
+<div class="flex h-full overflow-hidden bg-white dark:bg-gray-900">
+    <div class="w-80 flex-shrink-0 hidden md:block border-r border-gray-200 dark:border-gray-700">
         <ContactList />
     </div>
-    <div class="flex-1 flex flex-col min-w-0 rounded-r-lg">
+    <div class="flex-1 flex flex-col min-w-0">
         {@render children()}
     </div>
 </div>
