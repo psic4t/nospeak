@@ -77,6 +77,12 @@ export class NospeakDB extends Dexie {
             messages: '++id, [recipientNpub+sentAt], &eventId, sentAt'
         });
     }
+
+    public async clearAll(): Promise<void> {
+        await db.delete();
+        await db.open();
+        console.log('IndexedDB cleared');
+    }
 }
 
 export const db = new NospeakDB();

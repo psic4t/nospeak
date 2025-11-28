@@ -114,14 +114,13 @@ export class AuthService {
             }
         } catch (e) {
             console.error('Restoration failed:', e);
-            this.logout();
             return false;
         }
-        
+         
         return false;
     }
 
-    public logout() {
+    public async logout() {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(AUTH_METHOD_KEY);
         signer.set(null);
@@ -131,7 +130,35 @@ export class AuthService {
         // Clear NIP-07 cache to allow re-authentication
         Nip07Signer.clearCache();
         
+        // Clear IndexedDB data
+        const { db } = await import('$lib/db/db');
+        db.clearAll().catch(error => {
+            console.error('Failed to clear IndexedDB:', error);
+        });
+        
+        // Clear any additional localStorage items
+        this.clearAdditionalLocalStorage();
+        
         goto('/');
+    }
+
+    private clearAdditionalLocalStorage(): void {
+        // Clear any other app-specific localStorage items
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('nospeak:')) {
+                keysToRemove.push(key);
+            }
+        }
+        
+        keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+        });
+        
+        if (keysToRemove.length > 0) {
+            console.log(`Cleared ${keysToRemove.length} additional localStorage items`);
+        }
     }
 }
 
