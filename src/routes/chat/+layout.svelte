@@ -3,7 +3,9 @@
     import { signer } from '$lib/stores/auth';
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
+    import { page } from '$app/state';
     import ContactList from '$lib/components/ContactList.svelte';
+    import { messageRepo } from '$lib/db/MessageRepository';
 
     let { children } = $props();
 
@@ -36,6 +38,14 @@
         const setup = async () => {
             const pubkey = await s.getPublicKey();
             unsub = messagingService.listenForMessages(pubkey);
+            
+            // Auto-navigate to last message recipient if on chat root
+            if (page.url.pathname === '/chat') {
+                const lastRecipient = await messageRepo.getLastMessageRecipient();
+                if (lastRecipient) {
+                    goto(`/chat/${lastRecipient}`);
+                }
+            }
             
             // Backfill history
             setTimeout(() => {

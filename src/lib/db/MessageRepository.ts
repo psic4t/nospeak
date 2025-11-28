@@ -39,6 +39,11 @@ export class MessageRepository {
         const count = await db.messages.where('eventId').equals(eventId).count();
         return count > 0;
     }
+
+    public async getLastMessageRecipient(): Promise<string | null> {
+        const lastMessage = await db.messages.orderBy('sentAt').reverse().first();
+        return lastMessage?.recipientNpub || null;
+    }
 }
 
 export const messageRepo = new MessageRepository();

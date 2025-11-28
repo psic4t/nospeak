@@ -13,6 +13,7 @@
     let isProfileOpen = $state(false);
     let isSending = $state(false);
     let chatContainer: HTMLElement;
+    let inputElement: HTMLInputElement;
 
     // Resolve profile info
     $effect(() => {
@@ -31,6 +32,14 @@
         // Dependency on messages length to trigger scroll
         messages.length; 
         scrollToBottom();
+    });
+
+    // Auto-focus input
+    $effect(() => {
+        partnerNpub; // Trigger on chat switch
+        if (!isSending && inputElement) {
+            inputElement.focus();
+        }
     });
 
     function scrollToBottom() {
@@ -115,6 +124,7 @@
     <div class="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
         <form onsubmit={(e) => { e.preventDefault(); send(); }} class="flex gap-2">
             <input 
+                bind:this={inputElement}
                 bind:value={inputText} 
                 disabled={isSending}
                 class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
