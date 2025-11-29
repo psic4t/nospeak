@@ -55,8 +55,9 @@ export async function POST({ request }: { request: Request }) {
         const uniqueFilename = `${uuidv4()}.${fileExtension}`;
 
         // Ensure user_media directory exists
-        // Use absolute path to work in both development and production (Docker)
-        const userMediaDir = join(process.cwd(), 'static', 'user_media');
+        // In production, files are served from build/client, in development from static
+        const isProduction = process.env.NODE_ENV === 'production';
+        const userMediaDir = join(process.cwd(), isProduction ? 'build/client' : 'static', 'user_media');
         try {
             await mkdir(userMediaDir, { recursive: true });
         } catch (err) {
