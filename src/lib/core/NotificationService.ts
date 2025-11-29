@@ -16,8 +16,8 @@ export class NotificationService {
     private loadSettings() {
         try {
             // Check if we're in browser environment
-            if (typeof localStorage !== 'undefined') {
-                const saved = localStorage.getItem('nospeak-settings');
+            if (typeof window !== 'undefined' && window.localStorage) {
+                const saved = window.localStorage.getItem('nospeak-settings');
                 if (saved) {
                     const settings = JSON.parse(saved);
                     this.settings = { ...this.settings, ...settings };
@@ -61,9 +61,11 @@ export class NotificationService {
 
             // Click handler to focus the chat window
             notification.onclick = () => {
-                window.focus();
-                // Navigate to the sender's chat
-                window.location.href = `/chat/${senderNpub}`;
+                if (typeof window !== 'undefined') {
+                    window.focus();
+                    // Navigate to the sender's chat
+                    window.location.href = `/chat/${senderNpub}`;
+                }
                 notification.close();
             };
 
@@ -78,7 +80,7 @@ export class NotificationService {
     }
 
     public async requestPermission(): Promise<boolean> {
-        if ('Notification' in window) {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
             const permission = await Notification.requestPermission();
             return permission === 'granted';
         }
@@ -86,12 +88,42 @@ export class NotificationService {
     }
 
     public isSupported(): boolean {
-        return 'Notification' in window;
+        return typeof window !== 'undefined' && 'Notification' in window;
     }
 
     public isEnabled(): boolean {
-        return this.settings.notificationsEnabled && Notification.permission === 'granted';
+        return this.settings.notificationsEnabled && 
+               typeof window !== 'undefined' && 
+               'Notification' in window && 
+               Notification.permission === 'granted';
     }
 }
 
-export const notificationService = new NotificationService();
+let notificationServiceInstance: NotificationService | null = null;
+
+export const notificationService = {
+    showNewMessageNotification: (senderNpub: string, message: string) => {
+        if (!notificationServiceInstance) {
+            notificationServiceInstance = new NotificationService();
+        }
+        return notificationServiceInstance.showNewMessageNotification(senderNpub, message);
+    },
+    requestPermission: () => {
+        if (!notificationServiceInstance) {
+            notificationServiceInstance = new NotificationService();
+        }
+        return notificationServiceInstance.requestPermission();
+    },
+    isSupported: () => {
+        if (!notificationServiceInstance) {
+            notificationServiceInstance = new NotificationService();
+        }
+        return notificationServiceInstance.isSupported();
+    },
+    isEnabled: () => {
+        if (!notificationServiceInstance) {
+            notificationServiceInstance = new NotificationService();
+        }
+        return notificationServiceInstance.isEnabled();
+    }
+};
