@@ -1,6 +1,7 @@
 <script lang="ts">
     import { notificationService } from '$lib/core/NotificationService';
     import { relaySettingsService } from '$lib/core/RelaySettingsService';
+    import { profileService } from '$lib/core/ProfileService';
     import { currentUser } from '$lib/stores/auth';
     import { profileRepo } from '$lib/db/ProfileRepository';
     
@@ -10,8 +11,19 @@
     let isSupported = $state(false);
     let isLoaded = $state(false);
     
-    type Category = 'General' | 'Mailbox Relays';
+    type Category = 'General' | 'Profile' | 'Mailbox Relays';
     let activeCategory = $state<Category>('General');
+
+    // Profile settings
+    let profileName = $state('');
+    let profileAbout = $state('');
+    let profilePicture = $state('');
+    let profileBanner = $state('');
+    let profileNip05 = $state('');
+    let profileWebsite = $state('');
+    let profileDisplayName = $state('');
+    let profileLud16 = $state('');
+    let isSavingProfile = $state(false);
 
     // Relay settings
     type RelayConfig = {
@@ -21,6 +33,46 @@
     };
     let relays = $state<RelayConfig[]>([]);
     let newRelayUrl = $state('');
+
+    async function loadProfile() {
+        if ($currentUser?.npub) {
+            const profile = await profileRepo.getProfileIgnoreTTL($currentUser.npub);
+            if (profile?.metadata) {
+                profileName = profile.metadata.name || '';
+                profileAbout = profile.metadata.about || '';
+                profilePicture = profile.metadata.picture || '';
+                profileBanner = profile.metadata.banner || '';
+                profileNip05 = profile.metadata.nip05 || '';
+                profileWebsite = profile.metadata.website || '';
+                profileDisplayName = profile.metadata.display_name || '';
+                profileLud16 = profile.metadata.lud16 || '';
+            }
+        }
+    }
+
+    async function saveProfile() {
+        if (isSavingProfile) return;
+        isSavingProfile = true;
+        
+        try {
+            await profileService.updateProfile({
+                name: profileName,
+                about: profileAbout,
+                picture: profilePicture,
+                banner: profileBanner,
+                nip05: profileNip05,
+                website: profileWebsite,
+                display_name: profileDisplayName,
+                lud16: profileLud16
+            });
+            // Optional: Show success feedback
+        } catch (e) {
+            console.error('Failed to save profile:', e);
+            // Optional: Show error feedback
+        } finally {
+            isSavingProfile = false;
+        }
+    }
 
     async function loadRelaySettings() {
         let readRelays: string[] = [];
@@ -94,6 +146,7 @@
             }
             
             loadRelaySettings();
+            loadProfile();
             isLoaded = true;
         }
     });
@@ -159,6 +212,12 @@
                         General
                     </button>
                     <button 
+                        class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === 'Profile' ? 'bg-gray-200 dark:bg-gray-700 font-medium dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                        onclick={() => activeCategory = 'Profile'}
+                    >
+                        Profile
+                    </button>
+                    <button 
                         class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === 'Mailbox Relays' ? 'bg-gray-200 dark:bg-gray-700 font-medium dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                         onclick={() => activeCategory = 'Mailbox Relays'}
                     >
@@ -212,6 +271,116 @@
                                 {:else}
                                     <span class="text-sm text-gray-400 dark:text-gray-500">Not supported</span>
                                 {/if}
+                            </div>
+                        </div>
+                    {:else if activeCategory === 'Profile'}
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-1 gap-6">
+                                <div>
+                                    <label for="profile-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                                    <input 
+                                        id="profile-name"
+                                        bind:value={profileName}
+                                        type="text"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Your name"
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label for="profile-display-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Display Name</label>
+                                    <input 
+                                        id="profile-display-name"
+                                        bind:value={profileDisplayName}
+                                        type="text"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Display name"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label for="profile-about" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">About</label>
+                                    <textarea 
+                                        id="profile-about"
+                                        bind:value={profileAbout}
+                                        rows="3"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Tell us about yourself"
+                                    ></textarea>
+                                </div>
+
+                                <div>
+                                    <label for="profile-picture" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Picture URL</label>
+                                    <input 
+                                        id="profile-picture"
+                                        bind:value={profilePicture}
+                                        type="url"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="https://example.com/avatar.jpg"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label for="profile-banner" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Banner URL</label>
+                                    <input 
+                                        id="profile-banner"
+                                        bind:value={profileBanner}
+                                        type="url"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="https://example.com/banner.jpg"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label for="profile-nip05" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">NIP-05 (Username)</label>
+                                    <input 
+                                        id="profile-nip05"
+                                        bind:value={profileNip05}
+                                        type="text"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="name@domain.com"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label for="profile-website" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website</label>
+                                    <input 
+                                        id="profile-website"
+                                        bind:value={profileWebsite}
+                                        type="url"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="https://example.com"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label for="profile-lud16" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Lightning Address (LUD-16)</label>
+                                    <input 
+                                        id="profile-lud16"
+                                        bind:value={profileLud16}
+                                        type="text"
+                                        class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="user@provider.com"
+                                    />
+                                </div>
+
+                                <div class="pt-4 flex justify-end">
+                                    <button 
+                                        onclick={saveProfile}
+                                        disabled={isSavingProfile}
+                                        class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                        {#if isSavingProfile}
+                                            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Saving...
+                                        {:else}
+                                            Save Changes
+                                        {/if}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     {:else if activeCategory === 'Mailbox Relays'}
