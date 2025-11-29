@@ -190,7 +190,6 @@ Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 
 ### Core Protocol
 - **NIP-01**: Basic protocol flow and event structure
-- **NIP-04**: Encrypted direct messages (seal-based)
 - **NIP-05**: Mapping Nostr keys to DNS-based internet identifiers (nip05)
 - **NIP-19**: bech32-encoded entities for keys and identifiers
 
@@ -199,7 +198,6 @@ Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 - **NIP-40**: Reaction events for emoji responses
 
 ### Content & Media
-- **NIP-17**: Direct message encryption (versioned)
 - **NIP-44**: Outbox model for draft message management
 - **NIP-59**: Gift wrapper events for media sharing
 - **NIP-65**: Relay list filtering and management
