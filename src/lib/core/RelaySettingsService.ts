@@ -35,7 +35,9 @@ export class RelaySettingsService {
 
     private saveSettings(): void {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+            }
         } catch (e) {
             console.error('Failed to save relay settings:', e);
         }

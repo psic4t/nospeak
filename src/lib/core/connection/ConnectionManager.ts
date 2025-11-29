@@ -42,6 +42,7 @@ export class ConnectionManager {
     private isShutdown: boolean = false;
     private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
     private uiUpdateTimer: ReturnType<typeof setInterval> | null = null;
+    private onRelayListUpdate: ((relays: RelayHealth[]) => void) | null = null;
     
     private subscriptions: Set<{ filters: any[], onEvent: (event: any) => void, subMap: Map<string, any> }> = new Set();
 
@@ -182,6 +183,16 @@ export class ConnectionManager {
         }
     }
 
+    public clearAllRelays() {
+        const allUrls = Array.from(this.relays.keys());
+        for (const url of allUrls) {
+            this.removeRelay(url);
+        }
+        if (this.debug) {
+            console.log(`Cleared all ${allUrls.length} relays`);
+        }
+    }
+
     public getConnectedRelays(): Relay[] {
         const connected: Relay[] = [];
         for (const health of this.relays.values()) {
@@ -194,6 +205,10 @@ export class ConnectionManager {
 
     public getRelayHealth(url: string): RelayHealth | undefined {
         return this.relays.get(url);
+    }
+
+    public getAllRelayHealth(): RelayHealth[] {
+        return Array.from(this.relays.values());
     }
 
     public setUpdateCallback(callback: (relays: RelayHealth[]) => void) {

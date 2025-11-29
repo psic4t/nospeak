@@ -15,10 +15,13 @@ export class NotificationService {
 
     private loadSettings() {
         try {
-            const saved = localStorage.getItem('nospeak-settings');
-            if (saved) {
-                const settings = JSON.parse(saved);
-                this.settings = { ...this.settings, ...settings };
+            // Check if we're in browser environment
+            if (typeof localStorage !== 'undefined') {
+                const saved = localStorage.getItem('nospeak-settings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    this.settings = { ...this.settings, ...settings };
+                }
             }
         } catch (e) {
             console.error('Failed to load notification settings:', e);

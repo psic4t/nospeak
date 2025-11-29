@@ -51,8 +51,14 @@
         {/if}
 
         <div class="mb-4">
-            <label class="block text-sm font-medium mb-1 dark:text-gray-300">Login with nsec</label>
+            <label 
+                for="nsec-input" 
+                class="block text-sm font-medium mb-1 dark:text-gray-300"
+            >
+                Login with nsec
+            </label>
             <input 
+                id="nsec-input"
                 type="password" 
                 bind:value={nsec} 
                 class="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" 

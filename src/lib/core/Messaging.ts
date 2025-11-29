@@ -7,6 +7,7 @@ import { profileRepo } from '$lib/db/ProfileRepository';
 import { discoverUserRelays } from './connection/Discovery';
 import { notificationService } from './NotificationService';
 import { contactRepo } from '$lib/db/ContactRepository';
+import { profileResolver } from './ProfileResolver';
 
 export class MessagingService {
     private debug: boolean = true;
@@ -75,49 +76,100 @@ export class MessagingService {
         }
     }
 
+    private async processGiftWrapToMessage(event: NostrEvent): Promise<any | null> {
+        const s = get(signer);
+        const user = get(currentUser);
+        if (!s || !user) return null;
+
+        try {
+            // Step 1: Decrypt Gift Wrap
+            const decryptedGiftWrap = await s.decrypt(event.pubkey, event.content);
+            const seal = JSON.parse(decryptedGiftWrap) as NostrEvent;
+            
+            if (seal.kind !== 13) throw new Error(`Expected Seal (Kind 13), got ${seal.kind}`);
+            
+            // Step 2: Decrypt Seal
+            const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
+            const rumor = JSON.parse(decryptedSeal) as NostrEvent;
+            
+            if (rumor.kind !== 14) throw new Error(`Expected Rumor (Kind 14), got ${rumor.kind}`);
+            
+            // Validate p tag in rumor (must be for me)
+            const myPubkey = await s.getPublicKey();
+            const pTag = rumor.tags.find(t => t[0] === 'p');
+            if (!pTag || pTag[1] !== myPubkey) {
+                if (rumor.pubkey !== myPubkey) {
+                    throw new Error('Received rumor p tag does not match my public key');
+                }
+            }
+
+            return await this.createMessageFromRumor(rumor, event.id);
+
+        } catch (e) {
+            console.error('Failed to process gift wrap:', e);
+            return null;
+        }
+    }
+
+    private async createMessageFromRumor(rumor: NostrEvent, originalEventId: string): Promise<any | null> {
+        const s = get(signer);
+        if (!s) return null;
+
+        try {
+            // Determine direction and partner
+            let direction: 'sent' | 'received';
+            let partnerNpub: string;
+            
+            // My pubkey (hex)
+            const myPubkey = await s.getPublicKey();
+
+            if (rumor.pubkey === myPubkey) {
+                direction = 'sent';
+                // Find actual recipient from 'p' tag
+                const pTag = rumor.tags.find(t => t[0] === 'p');
+                const targetHex = pTag ? pTag[1] : myPubkey; // Fallback to self
+                partnerNpub = nip19.npubEncode(targetHex);
+            } else {
+                direction = 'received';
+                partnerNpub = nip19.npubEncode(rumor.pubkey);
+            }
+
+            return {
+                recipientNpub: partnerNpub,
+                message: rumor.content,
+                sentAt: rumor.created_at * 1000,
+                eventId: originalEventId,
+                direction,
+                createdAt: Date.now()
+            };
+        } catch (e) {
+            console.error('Failed to create message from rumor:', e);
+            return null;
+        }
+    }
+
     private async processRumor(rumor: NostrEvent, originalEventId: string) {
         const s = get(signer);
         const user = get(currentUser);
         if (!s || !user) return;
 
-        // Determine direction and partner
-        let direction: 'sent' | 'received';
-        let partnerNpub: string;
-        
-        // My pubkey (hex)
-        const myPubkey = await s.getPublicKey();
+        // Use the same async message creation method as history fetching
+        const message = await this.createMessageFromRumor(rumor, originalEventId);
+        if (!message) return;
 
-        if (rumor.pubkey === myPubkey) {
-            direction = 'sent';
-            // Find actual recipient from 'p' tag
-            const pTag = rumor.tags.find(t => t[0] === 'p');
-            const targetHex = pTag ? pTag[1] : myPubkey; // Fallback to self
-            partnerNpub = nip19.npubEncode(targetHex);
-        } else {
-            direction = 'received';
-            partnerNpub = nip19.npubEncode(rumor.pubkey);
-        }
+        if (this.debug) console.log(`Processed ${message.direction} message with ${message.recipientNpub}: ${message.message}`);
 
-        if (this.debug) console.log(`Processed ${direction} message with ${partnerNpub}: ${rumor.content}`);
-
-        await messageRepo.saveMessage({
-            recipientNpub: partnerNpub,
-            message: rumor.content,
-            sentAt: rumor.created_at * 1000,
-            eventId: originalEventId,
-            direction,
-            createdAt: Date.now()
-        });
+        await messageRepo.saveMessage(message);
 
         // Show notification for received messages (but not for history messages)
-        if (direction === 'received') {
+        if (message.direction === 'received') {
             // Don't show notifications for messages fetched during history sync
             if (!this.isFetchingHistory) {
-                await notificationService.showNewMessageNotification(partnerNpub, rumor.content);
+                await notificationService.showNewMessageNotification(message.recipientNpub, message.message);
             }
             
             // Auto-add unknown contacts
-            await this.autoAddContact(partnerNpub);
+            await this.autoAddContact(message.recipientNpub);
         }
     }
 
@@ -137,20 +189,15 @@ export class MessagingService {
         this.lastHistoryFetch = now;
         const myPubkey = await s.getPublicKey();
 
-        // 1. Get user relays
+        // 1. Use existing persistent connections - no need to create temporary ones
+        // User relays should already be connected from discovery process
         const relays = await this.getReadRelays(nip19.npubEncode(myPubkey));
         if (relays.length === 0) {
-            relays.push('wss://nostr.data.haus');
+            console.warn('No user relays found, history fetching may be incomplete');
         }
-
-        // 2. Connect to them temporarily for fetching
-        for (const url of relays) {
-            connectionManager.addTemporaryRelay(url);
-        }
-        await new Promise(r => setTimeout(r, 1000));
 
         // 3. Fetch in batches to get comprehensive history
-        const batchSize = 100;
+        const fetchBatchSize = 100;
         let allEvents: NostrEvent[] = [];
         let until = Math.floor(Date.now() / 1000);
         let hasMore = true;
@@ -160,7 +207,7 @@ export class MessagingService {
             const filters = [{
                 kinds: [1059],
                 '#p': [myPubkey],
-                limit: batchSize,
+                limit: fetchBatchSize,
                 until
             }];
 
@@ -181,7 +228,7 @@ export class MessagingService {
                 until = oldestEvent.created_at - 1;
                 
                 // If we got less than batch size, we might be at the end
-                if (events.length < batchSize) {
+                if (events.length < fetchBatchSize) {
                     hasMore = false;
                 }
             }
@@ -189,13 +236,38 @@ export class MessagingService {
 
         if (this.debug) console.log(`Fetched ${allEvents.length} total historical events`);
 
-        // 4. Process events (deduplication happens in handleGiftWrap)
-        let processedCount = 0;
-        for (const event of allEvents) {
-            if (await messageRepo.hasMessage(event.id)) continue;
-            await this.handleGiftWrap(event);
-            processedCount++;
+        // 4. Bulk process events for better performance
+        const existingEventIds = await messageRepo.hasMessages(allEvents.map(e => e.id));
+        const newEvents = allEvents.filter(event => !existingEventIds.has(event.id));
+        
+        if (this.debug) console.log(`Found ${newEvents.length} new events to process out of ${allEvents.length} total`);
+        
+        // Process new events in parallel batches
+        const batchSize = 10;
+        const messagesToSave: any[] = [];
+        
+        for (let i = 0; i < newEvents.length; i += 10) {
+            const batch = newEvents.slice(i, i + 10);
+            
+            // Process batch in parallel
+            const batchResults = await Promise.allSettled(
+                batch.map(event => this.processGiftWrapToMessage(event))
+            );
+            
+            // Collect successful results
+            for (const result of batchResults) {
+                if (result.status === 'fulfilled' && result.value) {
+                    messagesToSave.push(result.value);
+                }
+            }
         }
+        
+        // Bulk save all processed messages
+        if (messagesToSave.length > 0) {
+            await messageRepo.saveMessages(messagesToSave);
+        }
+        
+        const processedCount = messagesToSave.length;
 
         if (this.debug) console.log(`Processed ${processedCount} new historical messages`);
         
@@ -223,14 +295,12 @@ export class MessagingService {
 
         if (this.debug) console.log('Sending message to relays:', targetRelays);
 
-        // Connect temporarily
+        // Connect temporarily for message sending
         for (const url of targetRelays) {
             connectionManager.addTemporaryRelay(url);
         }
         
-        // Wait a bit for connections? (ConnectionManager handles queueing if we use it properly, but here we construct locally)
-        // Actually, we construct locally then publish.
-        // We might want to wait a split second for connection establishment if they are new.
+        // Wait a bit for connections
         await new Promise(r => setTimeout(r, 500));
 
         // 2. Create Rumor (Kind 14)
@@ -261,6 +331,11 @@ export class MessagingService {
         for (const url of senderRelays) {
             await retryQueue.enqueue(selfGiftWrap, url);
         }
+
+        // 6. Cleanup temporary relays after sending
+        setTimeout(() => {
+            connectionManager.cleanupTemporaryConnections();
+        }, 2000);
 
         // 6. Cache locally immediately
         await messageRepo.saveMessage({
@@ -336,6 +411,8 @@ export class MessagingService {
             const contactExists = existingContacts.some(contact => contact.npub === npub);
             
             if (!contactExists) {
+                // Fetch profile and relay info first (like manual addition)
+                await profileResolver.resolveProfile(npub, true);
                 await contactRepo.addContact(npub);
                 if (this.debug) console.log(`Auto-added new contact: ${npub}`);
             }

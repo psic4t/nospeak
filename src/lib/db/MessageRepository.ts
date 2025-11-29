@@ -34,10 +34,37 @@ export class MessageRepository {
             throw e;
         }
     }
+
+    public async saveMessages(messages: Message[]) {
+        try {
+            await db.messages.bulkPut(messages);
+        } catch (e: any) {
+            if (e.name === 'ConstraintError') {
+                // Ignore duplicates - bulkPut will fail if any duplicates exist
+                // Fall back to individual saves for mixed duplicate/new scenarios
+                for (const msg of messages) {
+                    try {
+                        await db.messages.put(msg);
+                    } catch (individualError: any) {
+                        if (individualError.name !== 'ConstraintError') {
+                            throw individualError;
+                        }
+                    }
+                }
+            } else {
+                throw e;
+            }
+        }
+    }
     
     public async hasMessage(eventId: string): Promise<boolean> {
         const count = await db.messages.where('eventId').equals(eventId).count();
         return count > 0;
+    }
+
+    public async hasMessages(eventIds: string[]): Promise<Set<string>> {
+        const messages = await db.messages.where('eventId').anyOf(eventIds).toArray();
+        return new Set(messages.map(msg => msg.eventId));
     }
 
     public async getLastMessageRecipient(): Promise<string | null> {

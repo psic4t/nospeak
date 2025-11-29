@@ -13,6 +13,9 @@ export const DEFAULT_DISCOVERY_RELAYS = [
 export async function discoverUserRelays(npub: string) {
     console.log('Starting relay discovery for', npub);
 
+    // 0. Clear all existing relays to ensure clean state
+    connectionManager.clearAllRelays();
+
     // 1. Connect to discovery relays (Temporary)
     for (const url of DEFAULT_DISCOVERY_RELAYS) {
         connectionManager.addTemporaryRelay(url);
@@ -27,25 +30,16 @@ export async function discoverUserRelays(npub: string) {
     // 3. Connect to user relays from cache
     const profile = await profileRepo.getProfile(npub);
     if (profile) {
-        // Add Read relays
+        // Only connect Read relays permanently for receiving messages
         if (profile.readRelays && profile.readRelays.length > 0) {
-            console.log('Connecting to read relays:', profile.readRelays);
             for (const url of profile.readRelays) {
-                connectionManager.addPersistentRelay(url);
-            }
-        }
-        
-        // Add Write relays? Usually we connect to read relays for listening.
-        // nospeak connects to read relays for receiving messages.
-        // It might connect to write relays for sending.
-        // The ConnectionManager manages all of them.
-        if (profile.writeRelays && profile.writeRelays.length > 0) {
-             console.log('Connecting to write relays:', profile.writeRelays);
-             for (const url of profile.writeRelays) {
                 connectionManager.addPersistentRelay(url);
             }
         }
     } else {
         console.log('No profile found after discovery');
     }
+
+    // 4. Cleanup discovery relays - they were only needed for profile resolution
+    connectionManager.cleanupTemporaryConnections();
 }

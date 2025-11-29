@@ -11,12 +11,13 @@ vi.mock('$lib/db/MessageRepository');
 vi.mock('./NotificationService');
 vi.mock('$lib/stores/auth');
 vi.mock('svelte/store');
+vi.mock('./ProfileResolver');
 
 describe('MessagingService - Auto-add Contacts', () => {
     let messagingService: MessagingService;
     let mockSigner: any;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
         messagingService = new MessagingService();
         
@@ -32,7 +33,13 @@ describe('MessagingService - Auto-add Contacts', () => {
         vi.mocked(contactRepo.addContact).mockResolvedValue();
         vi.mocked(messageRepo.hasMessage).mockResolvedValue(false);
         vi.mocked(messageRepo.saveMessage).mockResolvedValue();
+        
+        // Mock profileResolver
+        const { profileResolver } = await import('./ProfileResolver');
+        vi.mocked(profileResolver.resolveProfile).mockResolvedValue();
     });
+
+
 
     describe('autoAddContact method', () => {
         it('should add unknown contact', async () => {

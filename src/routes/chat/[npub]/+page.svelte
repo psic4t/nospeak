@@ -7,6 +7,8 @@
     import { messagingService } from '$lib/core/Messaging';
     import { liveQuery } from 'dexie';
     import { page } from '$app/state';
+    import { db } from '$lib/db/db';
+    import Dexie from 'dexie';
     
     let messages = $state<Message[]>([]);
     let currentPartner = $derived(page.params.npub);
@@ -31,10 +33,24 @@
             messagingService.fetchHistory().catch(console.error);
             
             // Subscribe to DB changes for SPECIFIC partner
-            subDb = liveQuery(async () => {
-                 return await messageRepo.getMessages(currentPartner, 50); 
+            subDb = liveQuery(() => {
+                if (currentPartner === 'ALL') {
+                    return db.messages.orderBy('sentAt').reverse().limit(50).toArray();
+                } else {
+                    return db.messages
+                        .where('[recipientNpub+sentAt]')
+                        .between(
+                            [currentPartner, Dexie.minKey],
+                            [currentPartner, Dexie.maxKey],
+                            true, // include lower
+                            false // exclude upper
+                        )
+                        .reverse()
+                        .limit(50)
+                        .toArray();
+                }
             }).subscribe(msgs => {
-                messages = msgs;
+                messages = msgs.reverse(); // Reverse to chronological order
             });
         };
 

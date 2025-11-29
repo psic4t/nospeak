@@ -106,7 +106,7 @@ export class Nip07Signer implements Signer {
             // Remove from cache after completion to allow memory cleanup
             setTimeout(() => {
                 Nip07Signer.encryptionCache.delete(cacheKey);
-            }, 5000);
+            }, 1000); // Reduced from 5000ms
         }
     }
 
@@ -142,7 +142,7 @@ export class Nip07Signer implements Signer {
             // Remove from cache after completion to allow memory cleanup
             setTimeout(() => {
                 Nip07Signer.decryptionCache.delete(cacheKey);
-            }, 5000);
+            }, 1000); // Reduced from 5000ms
         }
     }
 
@@ -153,8 +153,8 @@ export class Nip07Signer implements Signer {
             const now = Date.now();
             const timeSinceLastOp = now - Nip07Signer.lastOperationTime;
             
-            if (timeSinceLastOp < 1000) { // 1 second between operations
-                const delay = 1000 - timeSinceLastOp;
+            if (timeSinceLastOp < 200) { // 200ms between operations (reduced from 1s)
+                const delay = 200 - timeSinceLastOp;
                 console.log(`[NIP-07] Delaying operation for ${delay}ms to prevent overwhelming user`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
