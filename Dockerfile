@@ -30,7 +30,7 @@ RUN npm ci --only=production
 COPY --from=builder /app/build ./build
 
 # Create user_media directory and set permissions
-RUN mkdir -p ./static/user_media && chown -R node:node ./static
+RUN mkdir -p ./build/client/user_media && chown -R node:node ./build
 
 # Switch to non-root user
 USER node
@@ -43,4 +43,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
 # Start the SvelteKit server
-CMD ["node", "build"]
+CMD ["node", "build/index.js"]
