@@ -20,6 +20,21 @@
             return false;
         }
     }
+
+    function parseMarkdown(text: string) {
+        // Process strikethrough first (~~text~~)
+        text = text.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+        
+        // Process bold (**text** or __text__)
+        text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        
+        // Process italic (*text* or _text_)
+        text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
+        
+        return text;
+    }
     
     let parts = $derived(content.split(urlRegex));
     
@@ -45,7 +60,7 @@
                 <a href={part} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">{part}</a>
             {/if}
         {:else}
-            <span>{part}</span>
+            <span>{@html parseMarkdown(part)}</span>
         {/if}
     {/each}
 </div>
