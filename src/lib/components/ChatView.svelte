@@ -17,7 +17,7 @@
     let profileModalNpub = $state<string | undefined>(undefined);
     let isSending = $state(false);
     let chatContainer: HTMLElement;
-    let inputElement: HTMLInputElement;
+    let inputElement: HTMLTextAreaElement;
     let currentTime = $state(Date.now());
 
     // Emoji picker state
@@ -31,7 +31,12 @@
     );
 
     function handleInput(e: Event) {
-        const input = e.target as HTMLInputElement;
+        const input = e.target as HTMLTextAreaElement;
+        
+        // Auto-resize
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+        
         const cursorPosition = input.selectionStart || 0;
         const textBeforeCursor = inputText.slice(0, cursorPosition);
         
@@ -52,15 +57,24 @@
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 emojiSelectedIndex = (emojiSelectedIndex - 1 + filteredEmojis.length) % filteredEmojis.length;
+                return;
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 emojiSelectedIndex = (emojiSelectedIndex + 1) % filteredEmojis.length;
+                return;
             } else if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
                 selectEmoji(filteredEmojis[emojiSelectedIndex]);
+                return;
             } else if (e.key === 'Escape') {
                 showEmojiPicker = false;
+                return;
             }
+        }
+
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            send();
         }
     }
 
@@ -174,6 +188,9 @@
         
         const text = inputText;
         inputText = ''; // Clear immediately for UX
+        if (inputElement) {
+            inputElement.style.height = 'auto';
+        }
         isSending = true;
         
         try {
@@ -271,15 +288,16 @@
                 </button>
             {/if}
             <div class="flex-1 flex gap-2">
-                <input 
+                <textarea 
                     bind:this={inputElement}
                     bind:value={inputText}
                     oninput={handleInput}
                     onkeydown={handleKeydown} 
                     disabled={isSending}
-                    class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="1"
+                    class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden min-h-[42px]"
                     placeholder="Type a message..."
-                />
+                ></textarea>
                 <button 
                     type="submit" 
                     disabled={isSending || !inputText.trim()}
