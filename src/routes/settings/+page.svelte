@@ -1,6 +1,7 @@
 <script lang="ts">
     import { connectionManager } from '$lib/core/connection/instance';
     import { relayHealths } from '$lib/stores/connection';
+    import packageInfo from '../../../package.json';
     
     let newRelay = $state('');
 
@@ -44,6 +45,22 @@
                     </div>
                 </div>
             {/each}
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 p-4 rounded shadow mt-4">
+        <h2 class="text-xl font-semibold mb-4 dark:text-white">About</h2>
+        
+        <div class="flex items-center gap-4">
+            <img 
+                src="/nospeak.png" 
+                alt="Nospeak Logo" 
+                class="w-16 h-16 rounded-lg"
+            />
+            <div>
+                <h3 class="text-lg font-medium dark:text-white">Nospeak</h3>
+                <p class="text-gray-600 dark:text-gray-400">Version {packageInfo.version}</p>
+            </div>
         </div>
     </div>
 </div>

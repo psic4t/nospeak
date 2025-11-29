@@ -209,14 +209,9 @@ Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 
 ## Support
 
-- 📖 [Documentation](https://docs.nospeak.org)
-- 🐛 [Issues](https://github.com/your-org/nospeak/issues)
-- 💬 [Discussions](https://github.com/your-org/nospeak/discussions)
+- 🐛 [Issues](https://github.com/psic4t/nospeak/issues)
 
 ## License
 
 GPL v3 License - see [LICENSE](LICENSE) file for details.
 
----
-
-**Built with ❤️ for the decentralized web**
