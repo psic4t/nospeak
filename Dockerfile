@@ -15,30 +15,25 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage with nginx
-FROM nginx:alpine
+# Production stage with Node.js
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install only production dependencies
+RUN npm ci --only=production
 
 # Copy the built application
-COPY --from=builder /app/build /usr/share/nginx/html
+COPY --from=builder /app/build ./build
 
-# Copy nginx configuration for SPA
-COPY <<EOF /etc/nginx/conf.d/default.conf
-server {
-    listen 3000;
-    server_name localhost;
-    root /usr/share/nginx/html;
-    index index.html;
+# Create user_media directory and set permissions
+RUN mkdir -p ./static/user_media && chown -R node:node ./static
 
-    # Handle SPA routing - fallback to index.html for non-file requests
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    # Enable gzip compression
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-}
-EOF
+# Switch to non-root user
+USER node
 
 # Expose the port the app runs on
 EXPOSE 3000
@@ -47,5 +42,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start the SvelteKit server
+CMD ["node", "build"]
