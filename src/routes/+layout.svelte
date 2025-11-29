@@ -57,6 +57,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+    <title>nospeak</title>
 </svelte:head>
 
 <svelte:window 
@@ -66,7 +67,8 @@
 
 {#if isInitialized}
     <div class="h-screen bg-gray-100 dark:bg-gray-900 flex justify-center overflow-hidden">
-        <div class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl h-full">
+        <div class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl h-full relative">
+            <div class="absolute top-3 right-4 font-bold z-50 pointer-events-none" style="color: #e1aa5d;">nospeak</div>
             {@render children()}
         </div>
     </div>

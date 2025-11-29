@@ -119,6 +119,12 @@
     }
 </script>
 
+<svelte:head>
+    {#if partnerNpub}
+        <title>nospeak: chat with {partnerName || partnerNpub.slice(0, 10) + '...'}</title>
+    {/if}
+</svelte:head>
+
 <div class="flex flex-col h-full">
     {#if partnerNpub}
         <div class="p-3 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800 flex-shrink-0">

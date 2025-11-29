@@ -90,7 +90,10 @@ export class RetryQueue {
                 // Backoff
                 const backoff = this.calculateBackoff(item.attempt);
                 item.nextAttempt = Date.now() + backoff;
-                if (item.id) await db.retryQueue.update(item.id, item);
+                if (item.id) await db.retryQueue.update(item.id, {
+                    attempt: item.attempt,
+                    nextAttempt: item.nextAttempt
+                });
                 if (this.debug) console.log(`Retry failed for ${item.targetRelay}, next attempt in ${backoff}ms`);
             }
         }

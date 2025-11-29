@@ -5,9 +5,9 @@ const mockContactRepo = {
     getContacts: vi.fn().mockResolvedValue([])
 };
 
-const mockDiscoverUserRelays = vi.fn().mockResolvedValue();
+const mockDiscoverUserRelays = vi.fn().mockResolvedValue(undefined);
 const mockProfileResolver = {
-    resolveProfile: vi.fn().mockResolvedValue()
+    resolveProfile: vi.fn().mockResolvedValue(undefined)
 };
 
 vi.mock('$lib/db/ContactRepository', () => ({
@@ -67,7 +67,7 @@ describe('Profile Refresh on Page Load', () => {
 
         // Mock errors for second contact
         mockDiscoverUserRelays
-            .mockResolvedValueOnce()
+            .mockResolvedValueOnce(undefined)
             .mockRejectedValueOnce(new Error('Network error'));
 
         // Test error handling logic exists
