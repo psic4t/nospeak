@@ -35,6 +35,9 @@ RUN mkdir -p ./build/client/user_media && chown -R node:node ./build
 # Switch to non-root user
 USER node
 
+# Set environment variable for larger body size limit (50MB for video uploads)
+ENV BODY_SIZE_LIMIT=52428800
+
 # Expose the port the app runs on
 EXPOSE 3000
 
