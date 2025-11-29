@@ -10,6 +10,7 @@
     let inputText = $state('');
     let partnerName = $state('');
     let partnerPicture = $state<string | undefined>(undefined);
+    let myPicture = $state<string | undefined>(undefined);
     let isProfileOpen = $state(false);
     let isSending = $state(false);
     let chatContainer: HTMLElement;
@@ -23,6 +24,17 @@
                 if (p && p.metadata) {
                     partnerName = p.metadata.name || p.metadata.display_name || p.metadata.displayName;
                     partnerPicture = p.metadata.picture;
+                }
+            });
+        }
+    });
+
+    // Fetch current user's profile picture
+    $effect(() => {
+        if ($currentUser) {
+            profileRepo.getProfileIgnoreTTL($currentUser.npub).then(p => {
+                if (p && p.metadata) {
+                    myPicture = p.metadata.picture;
                 }
             });
         }
@@ -147,7 +159,7 @@
 
                 {#if msg.direction === 'sent' && $currentUser}
                     <div class="mb-1">
-                        <Avatar npub={$currentUser.npub} size="sm" />
+                        <Avatar npub={$currentUser.npub} src={myPicture} size="sm" />
                     </div>
                 {/if}
             </div>
@@ -155,21 +167,28 @@
     </div>
 
     <div class="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
-        <form onsubmit={(e) => { e.preventDefault(); send(); }} class="flex gap-2">
-            <input 
-                bind:this={inputElement}
-                bind:value={inputText} 
-                disabled={isSending}
-                class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Type a message..."
-            />
-            <button 
-                type="submit" 
-                disabled={isSending || !inputText.trim()}
-                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500 transition-colors"
-            >
-                {isSending ? '...' : 'Send'}
-            </button>
+        <form onsubmit={(e) => { e.preventDefault(); send(); }} class="flex gap-3 items-end">
+            {#if $currentUser}
+                <div class="flex-shrink-0 h-10">
+                    <Avatar npub={$currentUser.npub} src={myPicture} size="md" />
+                </div>
+            {/if}
+            <div class="flex-1 flex gap-2">
+                <input 
+                    bind:this={inputElement}
+                    bind:value={inputText} 
+                    disabled={isSending}
+                    class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Type a message..."
+                />
+                <button 
+                    type="submit" 
+                    disabled={isSending || !inputText.trim()}
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500 transition-colors"
+                >
+                    {isSending ? '...' : 'Send'}
+                </button>
+            </div>
         </form>
     </div>
 </div>
