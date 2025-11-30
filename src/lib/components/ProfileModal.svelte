@@ -33,9 +33,9 @@
 </script>
 
 {#if isOpen}
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 md:p-4">
         <!-- Close on click outside could be added here -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg w-full max-w-xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden relative">
+        <div class="bg-white dark:bg-gray-800 w-full h-full rounded-none md:max-w-xl md:h-auto md:max-h-[85vh] md:rounded-lg flex flex-col shadow-xl overflow-hidden relative">
             
             <button onclick={close} aria-label="Close modal" class="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

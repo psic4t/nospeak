@@ -39,7 +39,7 @@
 
 {#if isOpen}
     <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg w-96 max-h-[80vh] flex flex-col shadow-xl">
+        <div class="bg-white dark:bg-gray-800 p-6 w-full h-full rounded-none md:w-96 md:h-auto md:max-h-[80vh] md:rounded-lg flex flex-col shadow-xl">
             <h2 class="text-xl font-bold mb-4 dark:text-white">Manage Contacts</h2>
             
             <div class="flex gap-2 mb-4">

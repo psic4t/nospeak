@@ -142,8 +142,13 @@
     }
   }
 
+  let showMobileContent = $state(false);
+
   // Load settings from localStorage
   $effect(() => {
+    if (isOpen) {
+      showMobileContent = false;
+    }
     if (isOpen && !isLoaded) {
       isSupported = notificationService.isSupported();
       const saved = localStorage.getItem("nospeak-settings");
@@ -207,41 +212,52 @@
     tabindex="-1"
   >
     <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl mx-4 h-[600px] flex overflow-hidden"
+      class="bg-white dark:bg-gray-800 w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-lg shadow-xl flex overflow-hidden"
     >
       <!-- Sidebar -->
       <div
-        class="w-64 bg-gray-50 dark:bg-gray-900 border-r dark:border-gray-700 p-4 flex flex-col"
+        class={`w-full md:w-64 bg-gray-50 dark:bg-gray-900 border-r dark:border-gray-700 p-4 flex-col ${showMobileContent ? 'hidden md:flex' : 'flex'}`}
       >
-        <h2
-          id="settings-title"
-          class="text-xl font-bold mb-6 dark:text-white px-2"
-        >
-          Settings
-        </h2>
+        <div class="flex items-center gap-2 mb-6 px-2">
+            <button
+                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                onclick={close}
+                aria-label="Close settings"
+            >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </button>
+            <h2
+            id="settings-title"
+            class="text-xl font-bold dark:text-white"
+            >
+            Settings
+            </h2>
+        </div>
 
         <nav class="space-y-1">
           <button
             class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "General" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-            onclick={() => (activeCategory = "General")}
+            onclick={() => { activeCategory = "General"; showMobileContent = true; }}
           >
             General
           </button>
           <button
             class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "Profile" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-            onclick={() => (activeCategory = "Profile")}
+            onclick={() => { activeCategory = "Profile"; showMobileContent = true; }}
           >
             Profile
           </button>
           <button
             class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "Mailbox Relays" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-            onclick={() => (activeCategory = "Mailbox Relays")}
+            onclick={() => { activeCategory = "Mailbox Relays"; showMobileContent = true; }}
           >
             Mailbox Relays
           </button>
           <button
             class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "About" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-            onclick={() => (activeCategory = "About")}
+            onclick={() => { activeCategory = "About"; showMobileContent = true; }}
           >
             About
           </button>
@@ -249,16 +265,27 @@
       </div>
 
       <!-- Content -->
-      <div class="flex-1 flex flex-col min-w-0">
+      <div class={`flex-1 flex-col min-w-0 ${showMobileContent ? 'flex' : 'hidden md:flex'}`}>
         <div
           class="p-6 flex justify-between items-center border-b dark:border-gray-700"
         >
-          <h3 class="text-lg font-semibold dark:text-white">
-            {activeCategory}
-          </h3>
+          <div class="flex items-center gap-2">
+            <button
+                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                onclick={() => showMobileContent = false}
+                aria-label="Back to categories"
+            >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </button>
+            <h3 class="text-lg font-semibold dark:text-white">
+              {activeCategory}
+            </h3>
+          </div>
           <button
             onclick={close}
-            class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            class="hidden md:block text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             aria-label="Close settings"
           >
             <svg

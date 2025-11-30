@@ -12,10 +12,10 @@
 
 {#if isOpen}
     <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg w-[600px] max-h-[80vh] flex flex-col shadow-xl">
+        <div class="bg-white dark:bg-gray-800 p-6 w-full h-full rounded-none md:w-[600px] md:h-auto md:max-h-[80vh] md:rounded-lg flex flex-col shadow-xl">
             <div class="flex justify-between items-center mb-4 border-b dark:border-gray-700 pb-2">
                 <h2 class="text-xl font-bold dark:text-white">Relay Connections</h2>
-                <button onclick={close} class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <button onclick={close} class="hidden md:block text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                     ✕
                 </button>
             </div>
