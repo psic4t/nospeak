@@ -9,6 +9,7 @@
   import MediaUploadButton from "./MediaUploadButton.svelte";
   import { currentUser } from "$lib/stores/auth";
   import { emojis } from "$lib/utils/emojis";
+  import { goto } from '$app/navigation';
 
   let { messages = [], partnerNpub } = $props<{
     messages: Message[];
@@ -316,12 +317,23 @@
     <div
       class="p-3 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800 flex-shrink-0"
     >
-      <button
-        onclick={() => partnerNpub && openProfile(partnerNpub)}
-        class="font-bold hover:underline dark:text-white text-left"
-      >
-        {partnerName || partnerNpub.slice(0, 10) + "..."}
-      </button>
+      <div class="flex items-center gap-3">
+        <button 
+            onclick={() => goto('/chat')}
+            class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            aria-label="Back to contacts"
+        >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+        </button>
+        <button
+            onclick={() => partnerNpub && openProfile(partnerNpub)}
+            class="font-bold hover:underline dark:text-white text-left"
+        >
+            {partnerName || partnerNpub.slice(0, 10) + "..."}
+        </button>
+      </div>
       <img
         src="/nospeak.png"
         alt="nospeak"
