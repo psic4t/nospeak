@@ -1,11 +1,13 @@
 <script lang="ts">
     import { authService } from '$lib/core/AuthService';
     import { onMount } from 'svelte';
+    import AmberLoginModal from '$lib/components/AmberLoginModal.svelte';
 
     let nsec = $state('');
     let error = $state('');
     let isLoading = $state(false);
     let hasExtension = $state(false);
+    let amberUri = $state('');
 
     onMount(() => {
         // Check for extension
@@ -33,8 +35,7 @@
     async function loginAmber() {
         try {
             isLoading = true;
-            const uri = await authService.loginWithAmber();
-            window.location.href = uri;
+            amberUri = await authService.loginWithAmber();
         } catch (e) {
             error = (e as Error).message;
             isLoading = false;
@@ -111,3 +112,10 @@
         {/if}
     </div>
 </div>
+
+{#if amberUri}
+    <AmberLoginModal 
+        uri={amberUri} 
+        onClose={() => { amberUri = ''; isLoading = false; }} 
+    />
+{/if}

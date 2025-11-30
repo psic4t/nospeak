@@ -62,12 +62,16 @@ export class AuthService {
             const localPubkey = getPublicKey(localSecret);
             const relays = ['wss://relay.nsecbunker.com', 'wss://relay.damus.io', 'wss://nos.lol'];
             
+            // Generate a random 16-byte hex secret for the connection
+            const secret = bytesToHex(generateSecretKey()).substring(0, 32);
+
             const params: NostrConnectParams = {
                 clientPubkey: localPubkey,
                 relays,
                 name: 'Nospeak Web',
                 url: window.location.origin,
                 perms: 'sign_event:1,nip04_encrypt,nip04_decrypt',
+                secret,
             } as any;
 
             const uri = createNostrConnectURI(params);
