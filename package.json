@@ -31,7 +31,9 @@
 		"vitest": "^4.0.14"
 	},
 	"dependencies": {
+		"@types/chokidar": "^1.7.5",
 		"@types/uuid": "^10.0.0",
+		"chokidar": "^5.0.0",
 		"dexie": "^4.2.1",
 		"nostr-tools": "^2.18.2",
 		"uuid": "^13.0.0"
