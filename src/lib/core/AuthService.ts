@@ -70,9 +70,9 @@ export class AuthService {
                 relays,
                 name: 'Nospeak Web',
                 url: window.location.origin,
-                perms: 'sign_event:1,nip04_encrypt,nip04_decrypt',
+                perms: ['sign_event:1', 'nip04_encrypt', 'nip04_decrypt'],
                 secret,
-            } as any;
+            };
 
             const uri = createNostrConnectURI(params);
             
