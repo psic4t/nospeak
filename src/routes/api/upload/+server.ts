@@ -69,7 +69,7 @@ export async function POST({ request }: { request: Request }) {
         const arrayBuffer = await file.arrayBuffer();
         await writeFile(filePath, new Uint8Array(arrayBuffer));
 
-        // Return the file URL
+        // Return the file URL - use the dynamic route instead of static file serving
         const fileUrl = `${baseUrl}/user_media/${uniqueFilename}`;
         
         return json({
