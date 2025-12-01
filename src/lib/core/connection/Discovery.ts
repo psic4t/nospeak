@@ -10,11 +10,13 @@ export const DEFAULT_DISCOVERY_RELAYS = [
     'wss://purplepag.es'
 ];
 
-export async function discoverUserRelays(npub: string) {
-    console.log('Starting relay discovery for', npub);
+export async function discoverUserRelays(npub: string, isCurrentUser: boolean = false) {
+    console.log(`Starting relay discovery for ${npub} (isCurrentUser: ${isCurrentUser})`);
 
-    // 0. Clear all existing relays to ensure clean state
-    connectionManager.clearAllRelays();
+    // 0. Only clear all existing relays if this is the current user initializing
+    if (isCurrentUser) {
+        connectionManager.clearAllRelays();
+    }
 
     // 1. Connect to discovery relays (Temporary)
     for (const url of DEFAULT_DISCOVERY_RELAYS) {
@@ -30,10 +32,17 @@ export async function discoverUserRelays(npub: string) {
     // 3. Connect to user relays from cache
     const profile = await profileRepo.getProfile(npub);
     if (profile) {
-        // Only connect Read relays permanently for receiving messages
+        // Only connect Read relays permanently if it is the current user
         if (profile.readRelays && profile.readRelays.length > 0) {
             for (const url of profile.readRelays) {
-                connectionManager.addPersistentRelay(url);
+                if (isCurrentUser) {
+                    connectionManager.addPersistentRelay(url);
+                } else {
+                    // For contacts, we rely on ProfileResolver to have fetched what we need.
+                    // If we need to connect to their relays, we should do it explicitly elsewhere
+                    // or use addTemporaryRelay here if the intention was to spy on them.
+                    // But given the bug report, we should NOT make them persistent.
+                }
             }
         }
     } else {

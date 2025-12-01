@@ -69,7 +69,7 @@
             batch.map(async (contact) => {
               try {
                 console.log(`Refreshing profile for ${contact.npub}`);
-                await discoverUserRelays(contact.npub);
+                await discoverUserRelays(contact.npub, false);
                 await profileResolver.resolveProfile(contact.npub, true); // force refresh
               } catch (error) {
                 console.error(

@@ -391,7 +391,7 @@ export class MessagingService {
         let profile = await profileRepo.getProfile(npub);
         if (!profile) {
             // Try to resolve
-            await discoverUserRelays(npub);
+            await discoverUserRelays(npub, false);
             profile = await profileRepo.getProfile(npub);
         }
         return profile?.readRelays || [];
