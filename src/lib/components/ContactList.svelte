@@ -4,6 +4,7 @@
     import { authService } from '$lib/core/AuthService';
     import ManageContactsModal from './ManageContactsModal.svelte';
     import { contactRepo } from '$lib/db/ContactRepository';
+    import { messageRepo } from '$lib/db/MessageRepository';
     import { liveQuery } from 'dexie';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { goto } from '$app/navigation';
@@ -23,6 +24,9 @@
             // Map with async profile resolution
             const contactsData = await Promise.all(dbContacts.map(async (c) => {
                 const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
+                const lastMsgs = await messageRepo.getMessages(c.npub, 1);
+                const lastMsgTime = lastMsgs.length > 0 ? lastMsgs[0].sentAt : 0;
+
                 let name = c.npub.slice(0, 10) + '...';
                 let picture = undefined;
                 
@@ -36,11 +40,11 @@
                     name: name,
                     picture: picture,
                     hasUnread: false, // TODO: Implement unread logic
-                    lastMessageTime: 0
+                    lastMessageTime: lastMsgTime
                 };
             }));
             
-            return contactsData;
+            return contactsData.sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
         }).subscribe(mapped => {
             contactsStore.set(mapped);
         });
