@@ -5,7 +5,7 @@ import {
 } from './theme';
 import type { ThemeMode } from './theme';
 
-let currentThemeMode = $state<ThemeMode>(getStoredThemeMode());
+let currentThemeMode: ThemeMode = getStoredThemeMode();
 
 export function getCurrentThemeMode(): ThemeMode {
 	return currentThemeMode;
@@ -20,3 +20,4 @@ export function setThemeMode(mode: ThemeMode) {
 if (typeof window !== 'undefined') {
 	applyThemeMode(currentThemeMode);
 }
+
