@@ -7,9 +7,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { softVibrate } from "$lib/utils/haptics";
+  import { currentUser } from "$lib/stores/auth";
 
   let { children } = $props();
   let isInitialized = $state(false);
+  let showProfileRefreshBanner = $state(false);
+  let profileRefreshMessage = $state("");
 
   // Global click handler for link vibration
   function handleGlobalClick(e: MouseEvent) {
@@ -51,11 +54,34 @@
           "$lib/core/connection/Discovery"
         );
         const { profileResolver } = await import("$lib/core/ProfileResolver");
+        const { profileRepo } = await import("$lib/db/ProfileRepository");
 
         const contacts = await contactRepo.getContacts();
         console.log(
           `Refreshing profiles for ${contacts.length} contacts after delay`,
         );
+
+        // Refresh current user profile/relays if TTL has expired
+        const user = $currentUser;
+        if (user?.npub) {
+          const freshProfile = await profileRepo.getProfile(user.npub);
+          if (!freshProfile) {
+            showProfileRefreshBanner = true;
+            profileRefreshMessage = "Refreshing profile…";
+
+            try {
+              await discoverUserRelays(user.npub, true);
+              profileRefreshMessage = "Profile refresh completed";
+            } catch (error) {
+              console.error("Failed to refresh current user profile:", error);
+              profileRefreshMessage = "Profile refresh failed";
+            } finally {
+              setTimeout(() => {
+                showProfileRefreshBanner = false;
+              }, 3000);
+            }
+          }
+        }
 
         // Refresh profiles for all contacts in parallel with some concurrency control
         const BATCH_SIZE = 5;
@@ -105,6 +131,12 @@
   >
     <div class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl h-full relative">
       {@render children()}
+
+      {#if showProfileRefreshBanner}
+        <div class="fixed bottom-3 right-3 z-50 px-3 py-2 text-xs rounded bg-gray-800 text-white shadow">
+          {profileRefreshMessage}
+        </div>
+      {/if}
     </div>
   </div>
 {/if}

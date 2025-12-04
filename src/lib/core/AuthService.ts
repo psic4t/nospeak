@@ -9,6 +9,7 @@ import { BunkerSigner, createNostrConnectURI, type NostrConnectParams } from 'no
 import { goto } from '$app/navigation';
 import { connectionManager } from './connection/instance';
 import { messagingService } from './Messaging';
+import { profileRepo } from '$lib/db/ProfileRepository';
 
 // Helper for hex conversion
 function bytesToHex(bytes: Uint8Array): string {
@@ -158,86 +159,102 @@ export class AuthService {
 
     public async restore(): Promise<boolean> {
         const method = localStorage.getItem(AUTH_METHOD_KEY);
-        
+
+        const ensureRelaysAndHistory = async (npub: string, historyContext: string) => {
+            try {
+                const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                const hasCachedRelays = !!profile && (
+                    (profile.readRelays && profile.readRelays.length > 0) ||
+                    (profile.writeRelays && profile.writeRelays.length > 0)
+                );
+
+                if (hasCachedRelays) {
+                    if (profile && profile.readRelays && profile.readRelays.length > 0) {
+                        for (const url of profile.readRelays) {
+                            connectionManager.addPersistentRelay(url);
+                        }
+                    }
+
+                    messagingService
+                        .fetchHistory()
+                        .catch(e => console.error(`${historyContext} history fetch failed:`, e));
+                } else {
+                    await discoverUserRelays(npub, true);
+                    messagingService
+                        .fetchHistory()
+                        .catch(e => console.error(`${historyContext} history fetch failed:`, e));
+                }
+            } catch (e) {
+                console.error(`${historyContext} relay initialization failed:`, e);
+            }
+        };
+
         try {
             if (method === 'local') {
                 const nsec = localStorage.getItem(STORAGE_KEY);
                 if (!nsec) return false;
-                
+
                 const s = new LocalSigner(nsec);
                 const pubkey = await s.getPublicKey();
                 const npub = nip19.npubEncode(pubkey);
-                
+
                 signer.set(s);
                 currentUser.set({ npub });
-                
-                try {
-                    await discoverUserRelays(npub, true);
-                } catch (e) {
-                    console.error('Restoration discovery failed:', e);
-                }
-                
-                // Fetch message history after restoration
-                messagingService.fetchHistory().catch(e => console.error('Restoration history fetch failed:', e));
-                
+
+                await ensureRelaysAndHistory(npub, 'Restoration');
+
                 return true;
             } else if (method === 'nip07') {
                 if (!window.nostr) {
                     // Wait a bit? Or fail.
                 }
-                
+
                 const s = new Nip07Signer();
-                const pubkey = await s.getPublicKey(); 
+                const pubkey = await s.getPublicKey();
                 const npub = nip19.npubEncode(pubkey);
 
                 await s.requestNip44Permissions();
 
                 signer.set(s);
                 currentUser.set({ npub });
- 
-                try {
-                    await discoverUserRelays(npub, true);
-                } catch (e) {
-                    console.error('Restoration discovery failed:', e);
-                }
-                messagingService.fetchHistory().catch(e => console.error('Restoration history fetch failed:', e));
-                
+
+                await ensureRelaysAndHistory(npub, 'Restoration');
+
                 return true;
             } else if (method === 'nip46') {
                 const secretHex = localStorage.getItem(NIP46_SECRET_KEY);
                 const bunkerPubkey = localStorage.getItem(NIP46_BUNKER_PUBKEY_KEY);
                 const bunkerRelaysCsv = localStorage.getItem(NIP46_BUNKER_RELAYS_KEY);
-                
+
                 if (!secretHex || !bunkerPubkey || !bunkerRelaysCsv) return false;
 
                 const localSecret = hexToBytes(secretHex);
                 const relays = bunkerRelaysCsv.split(',').map(r => r.trim()).filter(Boolean);
                 if (relays.length === 0) return false;
                 const pool = new SimplePool();
-                
-                const s = BunkerSigner.fromBunker(localSecret, { pubkey: bunkerPubkey, relays, secret: null }, {
-                    pool,
-                    onauth: (url: string) => {
-                        try {
-                            window.open(url, '_blank');
-                        } catch (e) {
-                            console.warn('Failed to open NIP-46 auth URL', e, url);
+
+                const s = BunkerSigner.fromBunker(
+                    localSecret,
+                    { pubkey: bunkerPubkey, relays, secret: null },
+                    {
+                        pool,
+                        onauth: (url: string) => {
+                            try {
+                                window.open(url, '_blank');
+                            } catch (e) {
+                                console.warn('Failed to open NIP-46 auth URL', e, url);
+                            }
                         }
                     }
-                });
-                
+                );
+
                 const pubkey = await s.getPublicKey();
                 const npub = nip19.npubEncode(pubkey);
 
                 signer.set(new Nip46Signer(s));
                 currentUser.set({ npub });
-                 
-                try {
-                    await discoverUserRelays(npub, true);
-                } catch (e) {
-                    console.error('Restoration discovery failed:', e);
-                }
-                messagingService.fetchHistory().catch(e => console.error('Restoration history fetch failed:', e));
+
+                await ensureRelaysAndHistory(npub, 'Restoration');
 
                 return true;
             }
@@ -245,7 +262,7 @@ export class AuthService {
             console.error('Restoration failed:', e);
             return false;
         }
-         
+
         return false;
     }
 

@@ -128,6 +128,37 @@ The system SHALL handle application startup navigation differently based on the 
 - **THEN** the system restores the same conversation view
 - **AND** does not redirect to a different conversation or the contact list
 
+### Requirement: Startup Relay Initialization and Profile Refresh
+The system SHALL initialize relay connections for returning authenticated users using cached relay configuration when available, and SHALL refresh the current user's profile and relay configuration in the background when the cached profile has expired.
+
+#### Scenario: Returning user uses cached relays
+- **GIVEN** the user is already authenticated
+- **AND** a cached profile for the user exists with at least one relay URL
+- **WHEN** the application restores the session on startup
+- **THEN** it connects to the cached relays without performing full relay discovery
+- **AND** the main chat interface becomes usable without waiting for relay discovery to complete
+
+#### Scenario: First-time or missing relays still trigger discovery
+- **GIVEN** the user is already authenticated
+- **AND** no cached profile with relay information exists for the user
+- **WHEN** the application restores the session on startup
+- **THEN** it performs relay discovery for the user before initializing messaging
+- **AND** uses the discovered relays for subsequent cached startups
+
+#### Scenario: Background refresh on expired profile
+- **GIVEN** the user is authenticated and the application has finished initial startup
+- **AND** a cached profile exists for the user whose TTL has expired
+- **WHEN** the delayed background refresh runs after startup
+- **THEN** the system performs relay discovery for the user without blocking the UI
+- **AND** updates the cached profile and relay configuration
+
+#### Scenario: Profile refresh status indicator
+- **GIVEN** the delayed background refresh is running for the current user
+- **WHEN** the system begins refreshing the current user's profile and relays
+- **THEN** a transient status indicator is shown in the UI to inform the user that a profile refresh is in progress
+- **AND** the indicator updates to confirm completion or failure
+- **AND** the indicator automatically hides after a short period
+
 ### Requirement: First-Time Sync Progress Indicator
 The system SHALL display a progress indicator during first-time message synchronization to inform users of sync status and prevent interaction until complete.
 
