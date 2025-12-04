@@ -5,6 +5,8 @@
   import { authService } from "$lib/core/AuthService";
   import { currentUser } from "$lib/stores/auth";
   import { profileRepo } from "$lib/db/ProfileRepository";
+  import { getCurrentThemeMode, setThemeMode } from "$lib/stores/theme.svelte";
+  import type { ThemeMode } from "$lib/stores/theme";
   import MediaUploadButton from './MediaUploadButton.svelte';
   const packageVersion = "0.6.1";
 
@@ -19,6 +21,8 @@
 
   type Category = "General" | "Profile" | "Mailbox Relays" | "About";
   let activeCategory = $state<Category>("General");
+
+  let themeMode = $state<ThemeMode>("system");
 
   // Profile settings
   let profileName = $state("");
@@ -172,6 +176,8 @@
         notificationsEnabled = settings.notificationsEnabled || false;
       }
 
+      themeMode = getCurrentThemeMode();
+
       loadRelaySettings();
       loadProfile();
       isLoaded = true;
@@ -201,6 +207,12 @@
     } else {
       notificationsEnabled = false;
     }
+  }
+
+  function handleThemeModeChange(event: Event) {
+    const value = (event.target as HTMLSelectElement).value as ThemeMode;
+    themeMode = value;
+    setThemeMode(value);
   }
 
   function handleOverlayClick(e: MouseEvent) {
@@ -322,6 +334,29 @@
         <div class="flex-1 overflow-y-auto p-6">
           {#if activeCategory === "General"}
             <div class="space-y-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label
+                    for="theme-mode"
+                    class="font-medium dark:text-white"
+                    >Appearance</label
+                  >
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    Choose whether to follow System, Light, or Dark mode.
+                  </p>
+                </div>
+                <select
+                  id="theme-mode"
+                  bind:value={themeMode}
+                  onchange={handleThemeModeChange}
+                  class="ml-4 px-3 py-2 border rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                >
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </div>
+
               <div class="flex items-center justify-between">
                 <div>
                   <label

@@ -1,18 +1,22 @@
-import { getStoredTheme, setTheme as baseSetTheme, applyTheme } from './theme';
-import type { Theme } from './theme';
+import {
+	getStoredThemeMode,
+	setThemeMode as baseSetThemeMode,
+	applyThemeMode
+} from './theme';
+import type { ThemeMode } from './theme';
 
-let currentTheme = $state<Theme>(getStoredTheme());
+let currentThemeMode = $state<ThemeMode>(getStoredThemeMode());
 
-export function getCurrentTheme(): Theme {
-	return currentTheme;
+export function getCurrentThemeMode(): ThemeMode {
+	return currentThemeMode;
 }
 
-export function setTheme(theme: Theme) {
-	currentTheme = theme;
-	baseSetTheme(theme);
+export function setThemeMode(mode: ThemeMode) {
+	currentThemeMode = mode;
+	baseSetThemeMode(mode);
 }
 
-// Apply theme on initialization
+// Apply theme mode on initialization
 if (typeof window !== 'undefined') {
-	applyTheme(getCurrentTheme());
+	applyThemeMode(currentThemeMode);
 }

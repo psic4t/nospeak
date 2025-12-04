@@ -1,4 +1,5 @@
 export type Theme = 'latte' | 'frappe' | 'macchiato' | 'mocha';
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface ThemeColors {
 	rosewater: string;
@@ -152,6 +153,7 @@ export const themeNames: Record<Theme, string> = {
 };
 
 const STORAGE_KEY = 'nospeak-theme';
+const THEME_MODE_STORAGE_KEY = 'nospeak-theme-mode';
 
 export function getStoredTheme(): Theme {
 	if (typeof window === 'undefined') return 'mocha';
@@ -159,21 +161,86 @@ export function getStoredTheme(): Theme {
 	return (stored as Theme) || 'mocha';
 }
 
-export function setTheme(theme: Theme) {
+export function setStoredTheme(theme: Theme) {
 	if (typeof window !== 'undefined') {
 		localStorage.setItem(STORAGE_KEY, theme);
-		applyTheme(theme);
 	}
+}
+
+export function getStoredThemeMode(): ThemeMode {
+	if (typeof window === 'undefined') return 'system';
+	const stored = localStorage.getItem(THEME_MODE_STORAGE_KEY) as ThemeMode | null;
+	return stored ?? 'system';
+}
+
+export function setThemeMode(mode: ThemeMode) {
+	if (typeof window !== 'undefined') {
+		localStorage.setItem(THEME_MODE_STORAGE_KEY, mode);
+		applyThemeMode(mode);
+	}
+}
+
+export function getEffectiveThemeForMode(mode: ThemeMode): Theme {
+	if (typeof window === 'undefined') {
+		return mode === 'dark' ? 'frappe' : 'latte';
+	}
+
+	const prefersDark =
+		window.matchMedia &&
+		window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+	if (mode === 'light') return 'latte';
+	if (mode === 'dark') return 'frappe';
+
+	return prefersDark ? 'frappe' : 'latte';
 }
 
 export function applyTheme(theme: Theme) {
 	const colors = catppuccinThemes[theme];
 	const root = document.documentElement;
-	
+		
 	Object.entries(colors).forEach(([key, value]) => {
 		root.style.setProperty(`--color-${key}`, value);
 	});
-	
+		
 	// Set data attribute for CSS targeting
 	root.setAttribute('data-theme', theme);
+
+	const isDark = theme === 'frappe' || theme === 'macchiato' || theme === 'mocha';
+
+	if (isDark) {
+		root.classList.add('dark');
+	} else {
+		root.classList.remove('dark');
+	}
+}
+
+export function applyThemeMode(mode: ThemeMode) {
+	const theme = getEffectiveThemeForMode(mode);
+	setStoredTheme(theme);
+	applyTheme(theme);
+
+	if (typeof window === 'undefined') {
+		return;
+	}
+
+	if (!window.matchMedia) {
+		return;
+	}
+
+	const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+	const handleChange = (event: MediaQueryListEvent) => {
+		if (mode !== 'system') {
+			return;
+		}
+
+		const nextTheme: Theme = event.matches ? 'frappe' : 'latte';
+		setStoredTheme(nextTheme);
+		applyTheme(nextTheme);
+	};
+
+	if (mode === 'system') {
+		mediaQuery.addEventListener('change', handleChange);
+	}
 }
