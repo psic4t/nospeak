@@ -5,18 +5,26 @@
     import { profileResolver } from '$lib/core/ProfileResolver';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import Avatar from './Avatar.svelte';
-
-    let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
-    
-    let newNpub = $state('');
-    let contacts = $state<ContactItem[]>([]);
-    let isAdding = $state(false);
-    let displayContacts = $state<{
-        npub: string;
-        name: string;
-        picture?: string;
-        shortNpub: string;
-    }[]>([]);
+    import { searchProfiles, type UserSearchResult } from '$lib/core/SearchProfiles';
+ 
+     let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
+     
+     let newNpub = $state('');
+     let contacts = $state<ContactItem[]>([]);
+     let isAdding = $state(false);
+     let displayContacts = $state<{
+         npub: string;
+         name: string;
+         picture?: string;
+         shortNpub: string;
+     }[]>([]);
+     let searchResults = $state<UserSearchResult[]>([]);
+     let isSearching = $state(false);
+     let searchError = $state<string | null>(null);
+     let searchToken = 0;
+     let searchDebounceId: ReturnType<typeof setTimeout> | null = null;
+ 
+     const isNpubMode = $derived(newNpub.trim().startsWith('npub'));
 
     function shortenNpub(npub: string): string {
         if (npub.length <= 20) {
@@ -50,29 +58,81 @@
     }
 
     $effect(() => {
-        const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
-            contacts = c;
-            await refreshDisplayContacts(c);
-        });
-        return () => sub.unsubscribe();
-    });
-
-    async function add() {
-        if (newNpub.startsWith('npub')) {
-            isAdding = true;
-            try {
-                await profileResolver.resolveProfile(newNpub, true);
-                await contactRepo.addContact(newNpub);
-                newNpub = '';
-            } catch (e) {
-                console.error('Failed to add contact:', e);
-            } finally {
-                isAdding = false;
-            }
-        }
-    }
-
-    function remove(npub: string) {
+         const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
+             contacts = c;
+             await refreshDisplayContacts(c);
+         });
+         return () => sub.unsubscribe();
+     });
+ 
+     $effect(() => {
+         const query = newNpub.trim();
+ 
+         if (searchDebounceId) {
+             clearTimeout(searchDebounceId);
+             searchDebounceId = null;
+         }
+ 
+         if (!query || isNpubMode || query.length < 3) {
+             isSearching = false;
+             searchResults = [];
+             searchError = null;
+             return;
+         }
+ 
+         searchDebounceId = setTimeout(async () => {
+             const currentToken = ++searchToken;
+             isSearching = true;
+             searchError = null;
+ 
+             try {
+                 const results = await searchProfiles(query, 20);
+ 
+                 if (currentToken !== searchToken) {
+                     return;
+                 }
+ 
+                 searchResults = results;
+             } catch (e) {
+                 if (currentToken !== searchToken) {
+                     return;
+                 }
+                 console.error('Contact search failed:', e);
+                 searchError = 'Search failed';
+                 searchResults = [];
+             } finally {
+                 if (currentToken === searchToken) {
+                     isSearching = false;
+                 }
+             }
+         }, 300);
+     });
+ 
+     async function add() {
+         if (newNpub.startsWith('npub')) {
+             isAdding = true;
+             try {
+                 await profileResolver.resolveProfile(newNpub, true);
+                 await contactRepo.addContact(newNpub);
+                 newNpub = '';
+                 searchResults = [];
+                 searchError = null;
+             } catch (e) {
+                 console.error('Failed to add contact:', e);
+             } finally {
+                 isAdding = false;
+             }
+         }
+     }
+ 
+     function selectSearchResult(result: UserSearchResult) {
+         newNpub = result.npub;
+         searchResults = [];
+         searchError = null;
+         isSearching = false;
+     }
+ 
+     function remove(npub: string) {
         contactRepo.removeContact(npub);
     }
 </script>
@@ -82,19 +142,69 @@
         <div class="bg-white dark:bg-gray-800 p-6 w-full h-full rounded-none md:w-96 md:h-auto md:maxh-[80vh] md:rounded-lg flex flex-col shadow-xl">
             <h2 class="text-xl font-bold mb-4 dark:text-white">Manage Contacts</h2>
             
-            <div class="flex gap-2 mb-4">
-                <input 
-                    bind:value={newNpub}
-                    placeholder="npub1..." 
-                    class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                />
-                <button 
-                    onclick={add}
-                    disabled={isAdding}
-                    class="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
-                >
-                    {isAdding ? 'Adding...' : 'Add'}
-                </button>
+            <div class="mb-4">
+                <div class="flex gap-2 relative">
+                    <input 
+                        bind:value={newNpub}
+                        placeholder="npub or search term" 
+                        class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                    <button 
+                        onclick={add}
+                        disabled={isAdding}
+                        class="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+                    >
+                        {#if isNpubMode}
+                            {isAdding ? 'Adding...' : 'Add'}
+                        {:else}
+                            {isSearching ? 'Searching...' : 'Search'}
+                        {/if}
+                    </button>
+
+                    {#if !isNpubMode && newNpub.trim().length >= 3 && (isSearching || searchResults.length > 0 || searchError)}
+                        <div class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg max-h-64 overflow-y-auto z-10">
+                            {#if isSearching}
+                                <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                    Searching...
+                                </div>
+                            {:else if searchError}
+                                <div class="px-3 py-2 text-sm text-red-500">
+                                    {searchError}
+                                </div>
+                            {:else if searchResults.length === 0}
+                                <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                    No results
+                                </div>
+                            {:else}
+                                {#each searchResults as result (result.npub)}
+                                    <button
+                                        type="button"
+                                        class="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-left"
+                                        onclick={() => selectSearchResult(result)}
+                                    >
+                                        <Avatar
+                                            npub={result.npub}
+                                            src={result.picture}
+                                            size="sm"
+                                            class="!w-8 !h-8 flex-shrink-0"
+                                        />
+                                        <div class="flex flex-col min-w-0">
+                                            <span class="font-medium dark:text-gray-100 truncate">
+                                                {result.name}
+                                            </span>
+                                            <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                {shortenNpub(result.npub)}
+                                                {#if result.nip05}
+                                                    {' · '}{result.nip05}
+                                                {/if}
+                                            </span>
+                                        </div>
+                                    </button>
+                                {/each}
+                            {/if}
+                        </div>
+                    {/if}
+                </div>
             </div>
 
             <div class="flex-1 overflow-y-auto space-y-2 mb-4 min-h-[200px]">
