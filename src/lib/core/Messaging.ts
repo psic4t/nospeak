@@ -18,12 +18,14 @@ export class MessagingService {
 
   // Listen for incoming messages
   public listenForMessages(publicKey: string): () => void {
-    // Use `since` to only receive NEW messages from now on
-    // Historical messages are loaded via fetchHistory() and fetchOlderMessages()
+    // Subscribe to all gift-wraps for this user.
+    // We intentionally omit `since` because gift-wrap events
+    // use randomized created_at timestamps (NIP-59 style),
+    // which can place new messages in the past. We rely on
+    // messageRepo.hasMessage() for deduplication.
     const filters = [{
       kinds: [1059], // Kind 1059 Gift Wrap
-      '#p': [publicKey],
-      since: Math.floor(Date.now() / 1000)
+      '#p': [publicKey]
     }];
 
     if (this.debug) console.log('Listening for messages...', filters);

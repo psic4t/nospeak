@@ -4,6 +4,7 @@ import { contactRepo } from '$lib/db/ContactRepository';
 import { messageRepo } from '$lib/db/MessageRepository';
 import { signer } from '$lib/stores/auth';
 import { get } from 'svelte/store';
+import { connectionManager } from './connection/instance';
 
 // Mock dependencies
 vi.mock('$lib/db/ContactRepository');
@@ -107,6 +108,26 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect((messagingService as any).isFetchingHistory).toBeDefined();
             expect((messagingService as any).lastHistoryFetch).toBeDefined();
             expect((messagingService as any).HISTORY_FETCH_DEBOUNCE).toBe(5000);
+        });
+    });
+
+    describe('listenForMessages', () => {
+        it('subscribes without a since filter', () => {
+            const unsubscribeMock = vi.fn();
+            vi.mocked(connectionManager.subscribe).mockReturnValue(unsubscribeMock);
+
+            const pubkey = 'test-pubkey';
+            const unsubscribe = messagingService.listenForMessages(pubkey);
+
+            expect(connectionManager.subscribe).toHaveBeenCalledTimes(1);
+            const [filters] = vi.mocked(connectionManager.subscribe).mock.calls[0];
+
+            expect(Array.isArray(filters)).toBe(true);
+            expect(filters).toHaveLength(1);
+            expect(filters[0].kinds).toEqual([1059]);
+            expect(filters[0]['#p']).toEqual([pubkey]);
+            expect(filters[0].since).toBeUndefined();
+            expect(unsubscribe).toBe(unsubscribeMock);
         });
     });
 
