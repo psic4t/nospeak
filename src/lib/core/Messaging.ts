@@ -6,6 +6,7 @@ import { get } from 'svelte/store';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { discoverUserRelays } from './connection/Discovery';
 import { notificationService } from './NotificationService';
+import { initRelaySendStatus } from '$lib/stores/sending';
 import { contactRepo } from '$lib/db/ContactRepository';
 import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
@@ -400,7 +401,11 @@ export class MessagingService {
     // 3. Create Gift Wrap for Recipient
     const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
 
-    // 4. Publish to Recipient's Read Relays + My Write Relays
+    // Initialize ephemeral relay send status for UI (do not persist)
+    initRelaySendStatus(giftWrap.id, recipientNpub, targetRelays.length);
+ 
+     // 4. Publish to Recipient's Read Relays + My Write Relays
+
     // Actually, logic is: Send to Recipient Read + My Write.
     // We already combined them in targetRelays.
     // RetryQueue handles publishing.

@@ -11,6 +11,7 @@
   import { emojis } from "$lib/utils/emojis";
   import { goto } from '$app/navigation';
   import { softVibrate } from '$lib/utils/haptics';
+  import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
 
   let { messages = [], partnerNpub, onLoadMore, isFetchingHistory = false } = $props<{
     messages: Message[];
@@ -28,9 +29,11 @@
   let chatContainer: HTMLElement;
   let inputElement: HTMLTextAreaElement;
   let currentTime = $state(Date.now());
-  
+  let relayStatusTimeout: number | null = null;
+   
   let previousScrollHeight = 0;
   let isLoadingMore = false;
+
 
   // Context menu state
   let contextMenu = $state({
@@ -158,6 +161,47 @@
         }
       });
     }
+  });
+
+  function getLastSentIndex(): number {
+    let index = -1;
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].direction === "sent") {
+        index = i;
+      }
+    }
+    return index;
+  }
+
+  // Auto-clear relay status after a short time
+  $effect(() => {
+    const status = $lastRelaySendStatus;
+    if (!status) {
+      return;
+    }
+
+    if (relayStatusTimeout) {
+      clearTimeout(relayStatusTimeout);
+      relayStatusTimeout = null;
+    }
+
+    relayStatusTimeout = window.setTimeout(() => {
+      clearRelayStatus();
+      relayStatusTimeout = null;
+    }, 8000);
+
+    return () => {
+      if (relayStatusTimeout) {
+        clearTimeout(relayStatusTimeout);
+        relayStatusTimeout = null;
+      }
+    };
+  });
+
+  // Clear relay status when switching conversations
+  $effect(() => {
+    partnerNpub;
+    clearRelayStatus();
   });
 
   // Auto-scroll to bottom on new messages
@@ -383,7 +427,7 @@
       <div class="text-center text-gray-400 mt-10">No messages yet</div>
     {/if}
 
-    {#each messages as msg}
+    {#each messages as msg, i}
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
       >
@@ -422,6 +466,11 @@
           >
             {getRelativeTime(msg.sentAt)}
           </div>
+          {#if msg.direction === "sent" && i === getLastSentIndex() && $lastRelaySendStatus && $lastRelaySendStatus.recipientNpub === partnerNpub}
+            <div class="text-[10px] mt-0.5 text-right text-blue-100">
+              sent to {$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays
+            </div>
+          {/if}
         </div>
 
         {#if msg.direction === "sent" && $currentUser}

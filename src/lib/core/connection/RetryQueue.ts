@@ -1,6 +1,7 @@
 import { db, type RetryItem } from '$lib/db/db';
 import type { ConnectionManager } from './ConnectionManager';
 import type { NostrEvent } from 'nostr-tools';
+import { registerRelaySuccess } from '$lib/stores/sending';
 
 export class RetryQueue {
     private connectionManager: ConnectionManager;
@@ -73,11 +74,14 @@ export class RetryQueue {
 
         try {
             if (health.relay && health.isConnected) {
-                await health.relay.publish(item.event);
-                // Success
-                 if (this.debug) console.log(`Retry successful for ${item.targetRelay}`);
-                 if (item.id) await db.retryQueue.delete(item.id);
-            } else {
+                 await health.relay.publish(item.event);
+                 // Success
+                  if (this.debug) console.log(`Retry successful for ${item.targetRelay}`);
+                  if (item.id) await db.retryQueue.delete(item.id);
+
+                  // Notify UI about per-relay publish success for this event
+                  registerRelaySuccess(item.event.id, item.targetRelay);
+             } else {
                 throw new Error('Relay not connected');
             }
         } catch (e) {
