@@ -81,7 +81,7 @@
   async function saveProfile() {
     if (isSavingProfile) return;
     isSavingProfile = true;
-
+ 
     try {
       await profileService.updateProfile({
         name: profileName,
@@ -93,8 +93,10 @@
         display_name: profileDisplayName,
         lud16: profileLud16,
       });
+      await loadProfile();
       // Optional: Show success feedback
     } catch (e) {
+
       console.error("Failed to save profile:", e);
       // Optional: Show error feedback
     } finally {
@@ -171,6 +173,9 @@
   $effect(() => {
     if (isOpen) {
       showMobileContent = false;
+      // Always refresh profile and relay settings when the modal opens
+      loadRelaySettings();
+      loadProfile();
     }
     if (isOpen && !isLoaded) {
       isSupported = notificationService.isSupported();
@@ -179,14 +184,12 @@
         const settings = JSON.parse(saved);
         notificationsEnabled = settings.notificationsEnabled || false;
       }
-
+ 
       themeMode = getCurrentThemeMode();
-
-      loadRelaySettings();
-      loadProfile();
       isLoaded = true;
     }
   });
+
 
   // Save notification settings
   $effect(() => {
@@ -517,6 +520,7 @@
                      type="text"
                      class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                      placeholder="name@domain.com"
+                     oninput={() => (profileNip05Status = "unknown")}
                    />
                    {#if profileNip05}
                      {#if profileNip05Status === "valid"}
