@@ -519,9 +519,10 @@
         </div>
       {/if}
 
-
-      <MediaUploadButton onFileSelect={handleFileSelect} />
-      <div class="flex-1 flex gap-2">
+      <div
+        class="flex-1 flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-0.5 gap-2"
+      >
+        <MediaUploadButton onFileSelect={handleFileSelect} inline={true} />
         <textarea
           bind:this={inputElement}
           bind:value={inputText}
@@ -529,16 +530,31 @@
           onkeydown={handleKeydown}
           disabled={isSending}
           rows="1"
-          class="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden min-h-[42px]"
+          class="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-sm md:text-base dark:text-white disabled:opacity-50 resize-none overflow-hidden placeholder:text-gray-400 dark:placeholder:text-gray-500"
           placeholder="Type a message..."
         ></textarea>
-        <button
-          type="submit"
-          disabled={isSending || !inputText.trim()}
-          class="hidden md:block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500 transition-colors"
-        >
-          {isSending ? "..." : "Send"}
-        </button>
+
+        {#if inputText.trim().length > 0}
+          <button
+            type="submit"
+            class="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-full text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+            style="background-color: var(--color-green);"
+            disabled={isSending}
+            aria-label="Send message"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 6 15 12 9 18"></polyline>
+            </svg>
+          </button>
+        {/if}
       </div>
     </form>
   </div>

@@ -4,7 +4,7 @@
 Define requirements for chat messaging functionality including text communication and media sharing between users.
 ## Requirements
 ### Requirement: Message Input Interface
-The message input area SHALL provide a media upload button instead of displaying the user's profile picture. The media upload button SHALL open a dropdown menu to select between Image and Video file types before opening the file selection dialog.
+The message input area SHALL provide a media upload button instead of displaying the user's profile picture. The media upload button SHALL open a dropdown menu to select between Image and Video file types before opening the file selection dialog. On desktop devices, the message input area SHALL render the media upload button and a circular send button inside a single input bar. The send button SHALL be styled using the active Catppuccin theme green color and SHALL only be visible when the input contains non-whitespace text; on mobile devices, the inline send button SHALL be hidden and sending SHALL occur via the keyboard action instead.
 
 #### Scenario: Media upload button interaction
 - **WHEN** user clicks the media upload button
@@ -13,6 +13,19 @@ The message input area SHALL provide a media upload button instead of displaying
 - **THEN** the file selection dialog opens for image files only
 - **WHEN** user selects "Video" from dropdown  
 - **THEN** the file selection dialog opens for video files only
+
+#### Scenario: Desktop inline send button visibility
+- **GIVEN** the user is on a desktop device (screen width > 768px)
+- **WHEN** the message input is empty or contains only whitespace
+- **THEN** the inline circular send button is not displayed inside the input bar
+- **WHEN** the message input contains non-whitespace text
+- **THEN** the inline circular send button appears inside the input bar, styled using the active Catppuccin theme green color
+
+#### Scenario: Mobile send behavior
+- **GIVEN** the user is on a mobile device (screen width <= 768px)
+- **WHEN** the user types a message in the input
+- **THEN** no inline send button is shown inside the input bar
+- **AND** sending the message occurs via the mobile keyboard's send/enter action
 
 ### Requirement: Media Upload Support
 The system SHALL allow users to upload images and videos to include in chat messages.
@@ -229,4 +242,3 @@ The Manage Contacts modal SHALL display each contact using their profile picture
 - **THEN** Contact C appears in the modal with their profile picture avatar when available
 - **AND** Contact C's username is displayed as the primary text when available
 - **AND** Contact C's shortened npub remains visible as secondary text
-
