@@ -5,10 +5,7 @@
     import { onMount } from 'svelte';
     import type { Message } from '$lib/db/db';
     import { messagingService } from '$lib/core/Messaging';
-    import { liveQuery } from 'dexie';
     import { page } from '$app/state';
-    import { db } from '$lib/db/db';
-    import Dexie from 'dexie';
     import { contactRepo } from '$lib/db/ContactRepository';
     
     let messages = $state<Message[]>([]);
@@ -33,45 +30,52 @@
         }
     }
 
-    // Effect to update subscription when partner changes or component mounts
+    async function refreshMessagesForCurrentPartner() {
+        const s = $signer;
+        const partner = currentPartner;
+        if (!s || !partner) return;
+
+        const msgs = await messageRepo.getAllMessagesFor(partner);
+        const filtered =
+            partner === 'ALL'
+                ? msgs
+                : msgs.filter((m) => m.recipientNpub === partner);
+
+        messages = filtered;
+
+        if (partner && partner !== 'ALL') {
+            contactRepo.markAsRead(partner).catch(console.error);
+        }
+    }
+
+    // Effect to update messages when partner or signer changes
     $effect(() => {
         const s = $signer;
         const partner = currentPartner;
         if (!s || !partner) return;
-        
-        // Subscribe to DB changes for SPECIFIC partner
-        // Query ALL messages for this partner - no limit, so newly fetched older messages are included
-        const sub = liveQuery(() => {
-            if (partner === 'ALL') {
-                return db.messages.orderBy('sentAt').toArray();
-            } else {
-                return db.messages
-                    .where('[recipientNpub+sentAt]')
-                    .between(
-                        [partner, Dexie.minKey],
-                        [partner, Dexie.maxKey],
-                        true, // include lower
-                        true // include upper
-                    )
-                    .toArray();
+        refreshMessagesForCurrentPartner();
+    });
+
+    onMount(() => {
+        const handleNewMessage = (event: Event) => {
+            const custom = event as CustomEvent<{ recipientNpub?: string }>;
+            const partner = currentPartner;
+            if (!partner) return;
+
+            // For ALL, always refresh; otherwise only refresh when this conversation is affected
+            if (partner === 'ALL' || !custom.detail || custom.detail.recipientNpub === partner) {
+                refreshMessagesForCurrentPartner();
             }
-        }).subscribe({
-            next: (msgs) => {
-                // Sort by sentAt in chronological order
-                messages = msgs.sort((a, b) => a.sentAt - b.sentAt);
-                
-                // Mark as read
-                if (partner && partner !== 'ALL') {
-                    contactRepo.markAsRead(partner).catch(console.error);
-                }
-            },
-            error: (err) => {
-                console.error('liveQuery error:', err);
-            }
-        });
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('nospeak:new-message', handleNewMessage);
+        }
 
         return () => {
-            sub.unsubscribe();
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('nospeak:new-message', handleNewMessage);
+            }
         };
     });
 </script>

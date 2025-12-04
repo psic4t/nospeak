@@ -7,6 +7,7 @@
     import { messageRepo } from '$lib/db/MessageRepository';
     import { liveQuery } from 'dexie';
     import { profileRepo } from '$lib/db/ProfileRepository';
+    import type { ContactItem } from '$lib/db/db';
     import { goto } from '$app/navigation';
     import { page } from '$app/state';
     import Avatar from './Avatar.svelte';
@@ -17,50 +18,68 @@
     let isModalOpen = $state(false);
     let isSettingsOpen = $state(false);
 
+    async function refreshContacts(dbContacts: ContactItem[]): Promise<void> {
+        console.log('ContactList: Processing contacts from DB:', dbContacts.length);
+        
+        const contactsData = await Promise.all(dbContacts.map(async (c) => {
+            const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
+            const lastMsgs = await messageRepo.getMessages(c.npub, 1);
+            const lastMsgTime = lastMsgs.length > 0 ? lastMsgs[0].sentAt : 0;
+
+            let name = c.npub.slice(0, 10) + '...';
+            let picture = undefined;
+            
+            if (profile && profile.metadata) {
+                 // Prioritize name fields
+                 name = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || name;
+                 picture = profile.metadata.picture;
+            }
+            return {
+                npub: c.npub,
+                name: name,
+                picture: picture,
+                hasUnread: (lastMsgTime || 0) > (c.lastReadAt || 0),
+                lastMessageTime: lastMsgTime
+            };
+        }));
+        
+        const sortedContacts = contactsData.sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
+        console.log('ContactList: Updating store with', sortedContacts.length, 'contacts');
+        contactsStore.set(sortedContacts);
+    }
+
     // Sync contacts from DB to store
     // Use onMount instead of $effect to avoid infinite loop when updating store
     onMount(() => {
         console.log('ContactList: Setting up liveQuery subscription');
         
-        // Only watch contacts table changes for reactivity
-        // IMPORTANT: liveQuery callback must be SYNCHRONOUS for proper table tracking
+        // Watch contacts table changes for reactivity
         const sub = liveQuery(() => {
             console.log('ContactList: liveQuery triggered - contacts table changed');
             return contactRepo.getContacts();
         }).subscribe(async (dbContacts) => {
-            console.log('ContactList: Processing contacts from DB:', dbContacts.length);
-            
-            // Handle async data enrichment separately in subscribe callback
-            const contactsData = await Promise.all(dbContacts.map(async (c) => {
-                const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
-                const lastMsgs = await messageRepo.getMessages(c.npub, 1);
-                const lastMsgTime = lastMsgs.length > 0 ? lastMsgs[0].sentAt : 0;
-
-                let name = c.npub.slice(0, 10) + '...';
-                let picture = undefined;
-                
-                if (profile && profile.metadata) {
-                     // Prioritize name fields
-                     name = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || name;
-                     picture = profile.metadata.picture;
-                }
-                return {
-                    npub: c.npub,
-                    name: name,
-                    picture: picture,
-                    hasUnread: (lastMsgTime || 0) > (c.lastReadAt || 0),
-                    lastMessageTime: lastMsgTime
-                };
-            }));
-            
-            const sortedContacts = contactsData.sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
-            console.log('ContactList: Updating store with', sortedContacts.length, 'contacts');
-            contactsStore.set(sortedContacts);
+            await refreshContacts(dbContacts as ContactItem[]);
         });
+
+        const handleNewMessage = async () => {
+            try {
+                const dbContacts = await contactRepo.getContacts();
+                await refreshContacts(dbContacts as ContactItem[]);
+            } catch (e) {
+                console.error('ContactList: Failed to refresh after new message', e);
+            }
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('nospeak:new-message', handleNewMessage as EventListener);
+        }
         
         return () => {
             console.log('ContactList: Cleaning up liveQuery subscription');
             sub.unsubscribe();
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('nospeak:new-message', handleNewMessage as EventListener);
+            }
         };
     });
 

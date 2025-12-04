@@ -13,6 +13,12 @@ The system SHALL synchronize message history efficiently by downloading only mis
 - **THEN** the system decrypts and saves them immediately
 - **AND** the UI updates to show them (if within view) before the next batch is requested
 
+#### Scenario: Real-time subscription compatibility with NIP-59
+- **GIVEN** gift-wrap events may use randomized `created_at` timestamps (NIP-59 style)
+- **WHEN** optimizing history sync and live subscriptions together
+- **THEN** the system SHALL avoid using a strict "since now" filter on the real-time subscription that would exclude valid backdated gift-wraps
+- **AND** it SHALL rely on event ID-based deduplication so that messages fetched via history sync and messages delivered via live subscription do not appear twice
+
 ### Requirement: Message History Display
 The chat interface SHALL implement infinite scrolling to handle large message histories without performance degradation.
 

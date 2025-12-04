@@ -30,9 +30,22 @@ export class MessageRepository {
         return items.reverse(); // Return in chronological order
     }
 
+    private emitMessageSaved(msg: Message) {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('nospeak:new-message', {
+                detail: {
+                    recipientNpub: msg.recipientNpub,
+                    direction: msg.direction,
+                    eventId: msg.eventId,
+                }
+            }));
+        }
+    }
+
     public async saveMessage(msg: Message) {
         try {
             await db.messages.put(msg);
+            this.emitMessageSaved(msg);
         } catch (e: any) {
             if (e.name === 'ConstraintError') {
                 // Ignore duplicate
@@ -45,6 +58,9 @@ export class MessageRepository {
     public async saveMessages(messages: Message[]) {
         try {
             await db.messages.bulkPut(messages);
+            for (const msg of messages) {
+                this.emitMessageSaved(msg);
+            }
         } catch (e: any) {
             if (e.name === 'ConstraintError') {
                 // Ignore duplicates - bulkPut will fail if any duplicates exist
@@ -52,6 +68,7 @@ export class MessageRepository {
                 for (const msg of messages) {
                     try {
                         await db.messages.put(msg);
+                        this.emitMessageSaved(msg);
                     } catch (individualError: any) {
                         if (individualError.name !== 'ConstraintError') {
                             throw individualError;
@@ -87,6 +104,35 @@ export class MessageRepository {
             [recipientNpub, Dexie.minKey],
             [recipientNpub, Dexie.maxKey]
         ).count();
+    }
+
+    public async getAllMessagesFor(recipientNpub: string): Promise<Message[]> {
+        if (recipientNpub === 'ALL') {
+            const items = await db.messages.orderBy('sentAt').toArray();
+            return items.sort((a, b) => a.sentAt - b.sentAt);
+        }
+
+        const items = await db.messages
+            .where('[recipientNpub+sentAt]')
+            .between(
+                [recipientNpub, Dexie.minKey],
+                [recipientNpub, Dexie.maxKey],
+                true,
+                true
+            )
+            .toArray();
+
+        const filtered = items.filter((m) => m.recipientNpub === recipientNpub);
+
+        if (filtered.length !== items.length) {
+            console.warn('getAllMessagesFor: filtered out mismatched recipient messages', {
+                requested: recipientNpub,
+                total: items.length,
+                kept: filtered.length,
+            });
+        }
+
+        return filtered.sort((a, b) => a.sentAt - b.sentAt);
     }
 }
 

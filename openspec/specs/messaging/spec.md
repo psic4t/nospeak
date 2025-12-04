@@ -91,6 +91,7 @@ The system SHALL synchronize message history efficiently by downloading only mis
 - **WHEN** a batch of historical messages is received
 - **THEN** the system decrypts and saves them immediately
 - **AND** the UI updates to show them (if within view) before the next batch is requested
+- **AND** any messages fetched via history sync that are later delivered again via the real-time subscription SHALL be identified by event ID and ignored to prevent duplication
 
 ### Requirement: Message History Display
 The chat interface SHALL implement infinite scrolling to handle large message histories without performance degradation.
@@ -151,17 +152,25 @@ The system SHALL display a progress indicator during first-time message synchron
 - **THEN** the progress indicator is removed
 - **AND** on desktop, the application navigates to the contact with the newest message
 
-### Requirement: Real-Time Message Subscription
-The real-time message subscription SHALL only receive new messages sent after the subscription starts, not historical messages.
+### Requirement: Real-Time Message Subscription and Deduplication
+The real-time message subscription SHALL subscribe to all encrypted gift-wrapped messages for the current user, MAY receive both historical and new messages from relays, and MUST rely on local deduplication to avoid processing the same message more than once.
 
-#### Scenario: Subscription receives only new messages
+#### Scenario: Subscription receives incoming messages in real time
 - **GIVEN** the user is logged in and the message subscription is active
-- **WHEN** a new message is sent to the user after the subscription started
-- **THEN** the message is received and processed in real-time
+- **WHEN** a new message is sent to the user
+- **THEN** the corresponding gift-wrap event is received via the subscription
+- **AND** the message is decrypted, saved to the local database, and displayed in the appropriate conversation without requiring a page reload
 
-#### Scenario: Historical messages excluded from subscription
-- **GIVEN** the user is logged in and the message subscription is active
-- **WHEN** the subscription connects to a relay
-- **THEN** the relay does NOT send historical messages through the subscription
-- **AND** historical messages are only fetched via explicit history sync
+#### Scenario: Subscription tolerates backdated gift-wrap timestamps
+- **GIVEN** the system uses NIP-59 style gift-wraps with randomized `created_at` timestamps
+- **WHEN** the subscription connects or reconnects to a relay
+- **THEN** it does NOT restrict events by a strict "since now" filter that would exclude backdated gift-wraps
+- **AND** it allows relays to send any matching gift-wrap events for the user
+
+#### Scenario: Historical messages deduplicated across sync and subscription
+- **GIVEN** the user has already fetched some message history via explicit history sync
+- **AND** the real-time subscription is active
+- **WHEN** a relay sends a gift-wrap event that corresponds to a message already stored locally
+- **THEN** the system SHALL skip decrypting and saving that message again
+- **AND** the UI SHALL NOT display duplicate copies of the same message
 
