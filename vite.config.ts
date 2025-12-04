@@ -10,7 +10,7 @@ export default defineConfig({
 			srcDir: 'src',
 			filename: 'service-worker.ts',
 			registerType: 'autoUpdate',
-			includeAssets: ['favicon.svg', 'robots.txt', 'favicons/*.png', 'favicons/*.ico'],
+			includeAssets: ['robots.txt', 'favicons/*.png', 'favicons/*.ico'],
 			manifest: {
 				name: 'nospeak-web',
 				short_name: 'nospeak',

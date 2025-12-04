@@ -1,5 +1,4 @@
 <script lang="ts">
-  import favicon from "$lib/assets/favicon.svg";
   import "../app.css";
   import { isOnline } from "$lib/stores/connection";
   import { authService } from "$lib/core/AuthService";
@@ -115,7 +114,6 @@
 </script>
 
 <svelte:head>
-  <link rel="icon" href={favicon} />
   <title>nospeak</title>
 </svelte:head>
 
