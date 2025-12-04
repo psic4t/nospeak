@@ -56,36 +56,12 @@
 
 <div class="flex flex-col items-center justify-center h-full p-4">
     <div class="p-8 bg-white dark:bg-gray-800 w-full max-w-md">
+        <img src="/nospeak.svg" alt="nospeak logo" class="mx-auto mb-2 h-16 app-logo" />
         <h1 class="text-2xl font-bold mb-4 text-center dark:text-white">nospeak</h1>
         
         {#if error}
             <div class="text-red-500 mb-4 text-sm">{error}</div>
         {/if}
-
-        <div class="mb-4">
-            <label 
-                for="nsec-input" 
-                class="block text-sm font-medium mb-1 dark:text-gray-300"
-            >
-                Login with nsec
-            </label>
-            <input 
-                id="nsec-input"
-                type="password" 
-                bind:value={nsec} 
-                class="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" 
-                placeholder="nsec1..." 
-            />
-            <button 
-                onclick={loginNsec} 
-                disabled={isLoading}
-                class="w-full mt-2 bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
-            >
-                {isLoading ? 'Connecting...' : 'Login'}
-            </button>
-        </div>
-
-        <div class="text-center my-4 text-gray-500 dark:text-gray-400">OR</div>
 
         <div>
             <button 
@@ -110,6 +86,31 @@
                 </button>
             </div>
         {/if}
+
+        <div class="text-center my-4 text-gray-500 dark:text-gray-400">OR</div>
+
+        <div class="mb-4">
+            <label 
+                for="nsec-input" 
+                class="block text-sm font-medium mb-1 dark:text-gray-300"
+            >
+                Login with nsec
+            </label>
+            <input 
+                id="nsec-input"
+                type="password" 
+                bind:value={nsec} 
+                class="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" 
+                placeholder="nsec1..." 
+            />
+            <button 
+                onclick={loginNsec} 
+                disabled={isLoading}
+                class="w-full mt-2 bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
+            >
+                {isLoading ? 'Connecting...' : 'Login'}
+            </button>
+        </div>
     </div>
 </div>
 
