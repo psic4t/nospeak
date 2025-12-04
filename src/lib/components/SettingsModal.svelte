@@ -676,10 +676,10 @@
             <div class="space-y-6">
               <div class="flex items-center gap-6">
                 <img
-                  src="/nospeak.png"
-                  alt="Nospeak Logo"
-                  class="w-32 h-32 rounded-lg"
-                />
+                   src="/nospeak.svg"
+                   alt="Nospeak Logo"
+                   class="w-32 h-32 rounded-lg app-logo"
+                 />
                 <div>
                   <h3 class="text-2xl font-medium dark:text-white">Nospeak</h3>
                   <p class="text-gray-600 dark:text-gray-400">

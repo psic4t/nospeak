@@ -409,11 +409,11 @@
         </button>
       </div>
       <img
-        src="/nospeak.png"
-        alt="nospeak"
-        class="absolute right-4 z-50 pointer-events-none rounded-lg p-3"
-        style="width: 38px; height: 38px; padding: 0rem; filter: brightness(0) saturate(100%) invert(13%) sepia(98%) saturate(4475%) hue-rotate(268deg) brightness(87%) contrast(153%);"
-      />
+         src="/nospeak.svg"
+         alt="nospeak"
+         class="absolute right-4 z-50 pointer-events-none rounded-lg p-3 app-logo"
+         style="width: 38px; height: 38px; padding: 0rem;"
+       />
     </div>
   {/if}
 

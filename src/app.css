@@ -1,14 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+ 
+ /* Global tap feedback */
+ a:active, button:active {
+     opacity: 0.7;
+     transition: opacity 0.1s;
+ }
+ 
+ /* Ensure better touch handling */
+ a, button {
+     touch-action: manipulation;
+ }
+ 
+ /* Theme-aware app logo coloring */
+ .app-logo {
+     /* Approximate Catppuccin Latte Text from white logo */
+     filter: brightness(0) saturate(100%) invert(29%) sepia(10%) saturate(894%) hue-rotate(213deg) brightness(95%) contrast(91%);
+ }
+ 
+ .dark .app-logo {
+     /* Keep logo white on dark backgrounds (Frappe text-like) */
+     filter: none;
+ }
 
-/* Global tap feedback */
-a:active, button:active {
-    opacity: 0.7;
-    transition: opacity 0.1s;
-}
-
-/* Ensure better touch handling */
-a, button {
-    touch-action: manipulation;
-}

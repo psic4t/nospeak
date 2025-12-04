@@ -68,8 +68,8 @@ export class NotificationService {
             if (swRegistration) {
                 await swRegistration.showNotification(`New message from ${senderName}`, {
                     body: message,
-                    icon: senderPicture || '/favicon.svg',
-                    badge: '/favicon.svg',
+                    icon: senderPicture || '/favicons/favicon-192x192.png',
+                    badge: '/favicons/favicon-192x192.png',
                     tag: `message-${senderNpub}`, // Group notifications by sender
                     requireInteraction: false,
                     silent: false,
@@ -81,8 +81,8 @@ export class NotificationService {
                 // Fallback for non-SW environments
                 const notification = new Notification(`New message from ${senderName}`, {
                     body: message,
-                    icon: senderPicture || '/favicon.svg',
-                    badge: '/favicon.svg',
+                    icon: senderPicture || '/favicons/favicon-192x192.png',
+                    badge: '/favicons/favicon-192x192.png',
                     tag: `message-${senderNpub}`, // Group notifications by sender
                     requireInteraction: false,
                     silent: false
