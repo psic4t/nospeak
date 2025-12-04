@@ -1,5 +1,7 @@
 import { profileRepo } from '$lib/db/ProfileRepository';
 
+const DEFAULT_NOTIFICATION_ICON = '/nospeak.svg';
+
 export interface NotificationSettings {
     notificationsEnabled: boolean;
 }
@@ -68,8 +70,8 @@ export class NotificationService {
             if (swRegistration) {
                 await swRegistration.showNotification(`New message from ${senderName}`, {
                     body: message,
-                    icon: senderPicture || '/favicons/favicon-192x192.png',
-                    badge: '/favicons/favicon-192x192.png',
+                    icon: senderPicture || DEFAULT_NOTIFICATION_ICON,
+                    badge: DEFAULT_NOTIFICATION_ICON,
                     tag: `message-${senderNpub}`, // Group notifications by sender
                     requireInteraction: false,
                     silent: false,
@@ -81,8 +83,8 @@ export class NotificationService {
                 // Fallback for non-SW environments
                 const notification = new Notification(`New message from ${senderName}`, {
                     body: message,
-                    icon: senderPicture || '/favicons/favicon-192x192.png',
-                    badge: '/favicons/favicon-192x192.png',
+                    icon: senderPicture || DEFAULT_NOTIFICATION_ICON,
+                    badge: DEFAULT_NOTIFICATION_ICON,
                     tag: `message-${senderNpub}`, // Group notifications by sender
                     requireInteraction: false,
                     silent: false
