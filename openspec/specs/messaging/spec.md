@@ -91,7 +91,7 @@ The system SHALL synchronize message history efficiently by downloading only mis
 #### Scenario: Returning user sync (existing cache)
 - **GIVEN** the user has existing messages in local cache
 - **WHEN** the application starts
-- **THEN** it fetches only the most recent batch of messages (100)
+- **THEN** it fetches only the most recent batch of messages (50)
 - **AND** stops fetching when it encounters known messages
 
 #### Scenario: Incremental history fetch
@@ -115,11 +115,26 @@ The chat interface SHALL implement infinite scrolling to handle large message hi
 - **THEN** only the most recent 50 messages are loaded and rendered
 - **AND** the application is responsive immediately
 
-#### Scenario: Load older messages
+#### Scenario: Load older messages from cache first
 - **GIVEN** the user is viewing the chat
+- **AND** additional older messages for this conversation exist in the local database
 - **WHEN** the user scrolls to the top of the message list
-- **THEN** the next batch of older messages is loaded from the database
+- **THEN** the next batch of older messages is loaded from the database only
 - **AND** inserted at the top of the list without disrupting the scroll position
+- **AND** no network history fetch is triggered for this scroll action.
+
+#### Scenario: Fallback to network when cache is exhausted
+- **GIVEN** the user is viewing the chat
+- **AND** the local database has no additional older messages for this conversation (or fewer than the configured page size, indicating potential gaps)
+- **WHEN** the user requests older history (for example, by clicking a "Fetch older messages from relays" control shown at the top of the conversation)
+- **THEN** the system MAY trigger a targeted history backfill using `fetchOlderMessages` to request older messages from relays
+- **AND** any newly fetched messages are saved into the local database and then appended to the top of the visible history without creating duplicate entries.
+
+#### Scenario: Status when no more relay history exists
+- **GIVEN** the user has requested older history from relays for a conversation whose local cache is already exhausted
+- **WHEN** the targeted history backfill completes and returns no additional messages from any connected relay
+- **THEN** the system SHALL display a non-intrusive status near the top of the message list indicating that no more messages are available from relays for this conversation
+- **AND** the UI SHALL avoid offering further relay history fetch actions for that conversation unless the user explicitly refreshes or reconnects.
 
 ### Requirement: Startup Navigation
 The system SHALL handle application startup navigation differently based on the device form factor to optimize user experience.

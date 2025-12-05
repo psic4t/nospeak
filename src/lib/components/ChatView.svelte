@@ -13,12 +13,24 @@
   import { softVibrate } from '$lib/utils/haptics';
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
 
-  let { messages = [], partnerNpub, onLoadMore, isFetchingHistory = false } = $props<{
+  let {
+    messages = [],
+    partnerNpub,
+    onLoadMore,
+    isFetchingHistory = false,
+    canRequestNetworkHistory = false,
+    onRequestNetworkHistory,
+    networkHistoryStatus = 'idle'
+  } = $props<{
     messages: Message[];
     partnerNpub?: string;
     onLoadMore?: () => void;
     isFetchingHistory?: boolean;
+    canRequestNetworkHistory?: boolean;
+    onRequestNetworkHistory?: () => void;
+    networkHistoryStatus?: 'idle' | 'loading' | 'no-more' | 'error';
   }>();
+
   let inputText = $state("");
   let partnerName = $state("");
   let partnerPicture = $state<string | undefined>(undefined);
@@ -421,16 +433,38 @@
   {/if}
 
   <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-4 space-y-4" onscroll={handleScroll}>
+    {#if canRequestNetworkHistory && messages.length > 0}
+      <div class="flex justify-center p-2">
+        <button
+          class="text-xs px-3 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
+          type="button"
+          onclick={() => onRequestNetworkHistory && onRequestNetworkHistory()}
+        >
+          Fetch older messages from relays
+        </button>
+      </div>
+    {:else if networkHistoryStatus === 'no-more' && messages.length > 0}
+      <div class="flex justify-center p-2 text-xs text-gray-400">
+        No more messages available from relays
+      </div>
+    {:else if networkHistoryStatus === 'error' && messages.length > 0}
+      <div class="flex justify-center p-2 text-xs text-red-500">
+        Failed to fetch older messages. Try again later.
+      </div>
+    {/if}
+
     {#if isFetchingHistory}
       <div class="flex justify-center p-2">
           <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
       </div>
     {/if}
+
     {#if messages.length === 0 && !isFetchingHistory}
       <div class="text-center text-gray-400 mt-10">No messages yet</div>
     {/if}
 
     {#each messages as msg, i}
+
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
       >

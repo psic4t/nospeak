@@ -30,6 +30,15 @@ export class MessageRepository {
         return items.reverse(); // Return in chronological order
     }
 
+    public async getConversationPage(recipientNpub: string, pageSize: number = 50, beforeTimestamp?: number): Promise<Message[]> {
+        return this.getMessages(recipientNpub, pageSize, beforeTimestamp);
+    }
+
+    public async getMessageByEventId(eventId: string): Promise<Message | undefined> {
+        const message = await db.messages.where('eventId').equals(eventId).first();
+        return message || undefined;
+    }
+
     private emitMessageSaved(msg: Message) {
         if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
             window.dispatchEvent(new CustomEvent('nospeak:new-message', {
