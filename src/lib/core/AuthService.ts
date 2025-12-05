@@ -271,6 +271,9 @@ export class AuthService {
         localStorage.removeItem(AUTH_METHOD_KEY);
         localStorage.removeItem(NIP46_SECRET_KEY);
         localStorage.removeItem(NIP46_URI_KEY);
+        localStorage.removeItem('nospeak-settings');
+        localStorage.removeItem('nospeak-theme');
+        localStorage.removeItem('nospeak-theme-mode');
         signer.set(null);
         currentUser.set(null);
         connectionManager.stop();
@@ -295,7 +298,7 @@ export class AuthService {
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith('nospeak:')) {
+            if (key && (key.startsWith('nospeak:') || key.startsWith('nospeak-'))) {
                 keysToRemove.push(key);
             }
         }
