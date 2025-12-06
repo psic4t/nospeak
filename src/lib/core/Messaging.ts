@@ -208,7 +208,7 @@ export class MessagingService {
 
       // Check if this is first-time sync (empty cache)
       const isFirstSync = await this.isFirstTimeSync();
-      
+
       // Start sync state for UI
       startSync(isFirstSync);
 
@@ -296,13 +296,13 @@ export class MessagingService {
 
       if (this.debug) console.log(`Fetching batch ${batchCount}... (until: ${until}, total: ${totalFetched})`);
 
-      const events = await connectionManager.fetchEvents(filters, 10000);
+      const events = await connectionManager.fetchEvents(filters, 30000);
 
       if (events.length === 0) {
         hasMore = false;
       } else {
         totalFetched += events.length;
-        
+
         // Update sync progress for UI
         updateSyncProgress(totalFetched);
 
@@ -336,7 +336,7 @@ export class MessagingService {
           if (messagesToSave.length > 0) {
             await messageRepo.saveMessages(messagesToSave);
             if (this.debug) console.log(`Saved ${messagesToSave.length} messages from batch`);
-            
+
             // Auto-add contacts from historical messages (both sent and received)
             // For received: recipientNpub is the sender
             // For sent: recipientNpub is the recipient
@@ -403,8 +403,8 @@ export class MessagingService {
 
     // Initialize ephemeral relay send status for UI (do not persist)
     initRelaySendStatus(giftWrap.id, recipientNpub, targetRelays.length);
- 
-     // 4. Publish to Recipient's Read Relays + My Write Relays
+
+    // 4. Publish to Recipient's Read Relays + My Write Relays
 
     // Actually, logic is: Send to Recipient Read + My Write.
     // We already combined them in targetRelays.
