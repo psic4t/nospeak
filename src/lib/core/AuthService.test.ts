@@ -11,12 +11,13 @@ vi.mock('$lib/stores/auth', () => {
         currentUser: { set: vi.fn() }
     };
 });
-
+ 
 vi.mock('./connection/instance', () => ({
     connectionManager: {
         stop: vi.fn(),
         addPersistentRelay: vi.fn(),
         addTemporaryRelay: vi.fn(),
+        clearAllRelays: vi.fn(),
         fetchEvents: vi.fn(),
         subscribe: vi.fn(),
         getConnectedRelays: vi.fn(),
@@ -26,8 +27,9 @@ vi.mock('./connection/instance', () => ({
         enqueue: vi.fn()
     }
 }));
-
+ 
 vi.mock('$lib/db/db', () => ({
+
     db: {
         clearAll: vi.fn().mockResolvedValue(undefined)
     }
@@ -41,29 +43,57 @@ vi.mock('$lib/db/ProfileRepository', () => ({
     }
 }));
 
+vi.mock('$lib/db/MessageRepository', () => ({
+    messageRepo: {
+        countMessages: vi.fn().mockResolvedValue(0)
+    }
+}));
+
+vi.mock('$lib/db/ContactRepository', () => ({
+    contactRepo: {
+        getContacts: vi.fn().mockResolvedValue([])
+    }
+}));
+
+vi.mock('./ProfileResolver', () => ({
+    profileResolver: {
+        resolveProfile: vi.fn().mockResolvedValue(undefined)
+    }
+}));
+ 
 vi.mock('./Messaging', () => ({
     messagingService: {
         fetchHistory: vi.fn().mockResolvedValue({ totalFetched: 0, processed: 0 })
     }
 }));
-
+ 
 vi.mock('$lib/core/signer/LocalSigner', () => ({
-    LocalSigner: vi.fn()
+    LocalSigner: class {
+        getPublicKey = vi.fn().mockResolvedValue('local-pubkey');
+    }
 }));
+
 
 vi.mock('$lib/core/signer/Nip07Signer', () => ({
     Nip07Signer: {
         clearCache: vi.fn()
     }
 }));
-
+ 
 vi.mock('$lib/core/signer/Nip46Signer', () => ({
     Nip46Signer: vi.fn()
 }));
 
+vi.mock('$lib/stores/sync', () => ({
+    beginLoginSyncFlow: vi.fn(),
+    setLoginSyncActiveStep: vi.fn(),
+    completeLoginSyncFlow: vi.fn()
+}));
+ 
 vi.mock('nostr-tools', () => ({
     nip19: {
         npubEncode: vi.fn()
+
     },
     generateSecretKey: vi.fn(),
     getPublicKey: vi.fn(),
@@ -146,7 +176,7 @@ describe('AuthService.logout localStorage cleanup', () => {
 
     it('clears all nospeak auth and settings keys but preserves unrelated keys', async () => {
         await authService.logout();
-
+ 
         expect(localStorage.getItem('nospeak:nsec')).toBeNull();
         expect(localStorage.getItem('nospeak:auth_method')).toBeNull();
         expect(localStorage.getItem('nospeak:nip46_secret')).toBeNull();
@@ -156,7 +186,72 @@ describe('AuthService.logout localStorage cleanup', () => {
         expect(localStorage.getItem('nospeak-theme-mode')).toBeNull();
         expect(localStorage.getItem('nospeak:custom')).toBeNull();
         expect(localStorage.getItem('nospeak-custom-dash')).toBeNull();
-
+ 
         expect(localStorage.getItem('unrelated-key')).toBe('keep');
     });
 });
+
+describe('AuthService ordered login history flow integration', () => {
+    let authService: AuthService;
+ 
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        const storageData: Record<string, string> = {};
+        const storageImpl: any = {
+            get length() {
+                return Object.keys(storageData).length;
+            },
+            key(index: number) {
+                const keys = Object.keys(storageData);
+                return keys[index] ?? null;
+            },
+            getItem(key: string) {
+                return Object.prototype.hasOwnProperty.call(storageData, key) ? storageData[key] : null;
+            },
+            setItem(key: string, value: string) {
+                storageData[key] = String(value);
+            },
+            removeItem(key: string) {
+                delete storageData[key];
+            },
+            clear() {
+                Object.keys(storageData).forEach((key) => delete storageData[key]);
+            }
+        };
+
+        Object.defineProperty(globalThis, 'localStorage', {
+            value: storageImpl,
+            configurable: true
+        });
+
+        if (typeof window !== 'undefined') {
+            Object.defineProperty(window, 'localStorage', {
+                value: storageImpl,
+                configurable: true
+            });
+        }
+ 
+        const module = await import('./AuthService');
+        authService = new module.AuthService();
+ 
+        const { nip19 } = await import('nostr-tools');
+        (nip19.npubEncode as any).mockReturnValue('npub1test');
+    });
+
+
+    it('login navigates to /chat and starts ordered login history flow', async () => {
+        const module = await import('./AuthService');
+        const runFlowSpy = vi
+            .spyOn(module.AuthService.prototype as any, 'runLoginHistoryFlow')
+            .mockResolvedValue(undefined);
+
+        const { goto } = await import('$app/navigation');
+
+        await authService.login('nsec1test');
+
+        expect(goto).toHaveBeenCalledWith('/chat');
+        expect(runFlowSpy).toHaveBeenCalledWith('npub1test', 'Login');
+    });
+});
+

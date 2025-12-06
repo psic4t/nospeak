@@ -8,7 +8,6 @@
     import { messageRepo } from '$lib/db/MessageRepository';
     import { syncState } from '$lib/stores/sync';
     import SyncProgressModal from '$lib/components/SyncProgressModal.svelte';
-    import { untrack } from 'svelte';
 
     let { children } = $props();
     
@@ -25,9 +24,11 @@
             }
         }
 
-        let unsub: () => void;
+        let unsub: (() => void) | null = null;
+        let setupStarted = false;
 
         const setup = async () => {
+            setupStarted = true;
             const pubkey = await s.getPublicKey();
             unsub = messagingService.listenForMessages(pubkey);
             
@@ -41,10 +42,15 @@
             }
         };
 
-        setup();
+        const stopSyncSubscription = syncState.subscribe(state => {
+            if (!setupStarted && !state.flowActive) {
+                setup();
+            }
+        });
 
         return () => {
             if (unsub) unsub();
+            stopSyncSubscription();
         };
     });
     
@@ -86,6 +92,6 @@
     </div>
 </div>
 
-{#if $syncState.isSyncing && $syncState.isFirstSync}
+{#if $syncState.flowActive}
     <SyncProgressModal progress={$syncState.progress} />
 {/if}

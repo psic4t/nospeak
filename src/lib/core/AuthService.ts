@@ -1,15 +1,18 @@
-import { get } from 'svelte/store';
 import { signer, currentUser } from '$lib/stores/auth';
 import { LocalSigner } from '$lib/core/signer/LocalSigner';
 import { Nip07Signer } from '$lib/core/signer/Nip07Signer';
 import { Nip46Signer } from '$lib/core/signer/Nip46Signer';
-import { discoverUserRelays } from '$lib/core/connection/Discovery';
+import { DEFAULT_DISCOVERY_RELAYS, discoverUserRelays } from '$lib/core/connection/Discovery';
 import { nip19, generateSecretKey, getPublicKey, SimplePool } from 'nostr-tools';
 import { BunkerSigner, createNostrConnectURI, type NostrConnectParams } from 'nostr-tools/nip46';
 import { goto } from '$app/navigation';
 import { connectionManager } from './connection/instance';
 import { messagingService } from './Messaging';
 import { profileRepo } from '$lib/db/ProfileRepository';
+import { contactRepo } from '$lib/db/ContactRepository';
+import { profileResolver } from './ProfileResolver';
+import { messageRepo } from '$lib/db/MessageRepository';
+import { beginLoginSyncFlow, completeLoginSyncFlow, setLoginSyncActiveStep } from '$lib/stores/sync';
 
 // Helper for hex conversion
 function bytesToHex(bytes: Uint8Array): string {
@@ -46,13 +49,9 @@ export class AuthService {
                 localStorage.setItem(AUTH_METHOD_KEY, 'local');
             }
 
-            // Start discovery
-            await discoverUserRelays(npub, true);
-            
-            // Fetch message history to fill cache gaps
-            messagingService.fetchHistory().catch(console.error);
-            
+            // Navigate to chat and start ordered login history flow in background
             goto('/chat');
+            this.runLoginHistoryFlow(npub, 'Login').catch(console.error);
         } catch (e) {
             console.error('Login failed:', e);
             throw e;
@@ -121,12 +120,9 @@ export class AuthService {
         localStorage.setItem(NIP46_BUNKER_PUBKEY_KEY, s.bp.pubkey);
         localStorage.setItem(NIP46_BUNKER_RELAYS_KEY, s.bp.relays.join(','));
 
-            await discoverUserRelays(npub, true);
-            
-            // Fetch message history to fill cache gaps
-            messagingService.fetchHistory().catch(console.error);
-            
-            goto('/chat');
+        // Navigate to chat and start ordered login history flow in background
+        goto('/chat');
+        this.runLoginHistoryFlow(npub, 'NIP-46 login').catch(console.error);
     }
 
     public async loginWithExtension(remember: boolean = true) {
@@ -145,15 +141,84 @@ export class AuthService {
                 localStorage.setItem(AUTH_METHOD_KEY, 'nip07');
             }
 
-            await discoverUserRelays(npub, true);
-            
-            // Fetch message history to fill cache gaps
-            messagingService.fetchHistory().catch(console.error);
-            
+            // Navigate to chat and start ordered login history flow in background
             goto('/chat');
+            this.runLoginHistoryFlow(npub, 'Extension login').catch(console.error);
         } catch (e) {
             console.error('Extension login failed:', e);
             throw e;
+        }
+    }
+
+    private async runLoginHistoryFlow(npub: string, context: string): Promise<void> {
+        try {
+            const existingProfile = await profileRepo.getProfileIgnoreTTL(npub);
+            const hasCachedRelays = !!existingProfile && (
+                (existingProfile.readRelays && existingProfile.readRelays.length > 0) ||
+                (existingProfile.writeRelays && existingProfile.writeRelays.length > 0)
+            );
+
+            const totalMessages = await messageRepo.countMessages('ALL');
+            const isFirstSync = totalMessages === 0;
+
+            beginLoginSyncFlow(isFirstSync);
+
+            if (!hasCachedRelays) {
+                // 1. Connect to discovery relays
+                setLoginSyncActiveStep('connect-discovery-relays');
+                connectionManager.clearAllRelays();
+                for (const url of DEFAULT_DISCOVERY_RELAYS) {
+                    connectionManager.addTemporaryRelay(url);
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // 2. Fetch and cache the user's messaging relays
+                setLoginSyncActiveStep('fetch-messaging-relays');
+                await profileResolver.resolveProfile(npub, true);
+            } else {
+                // Treat discovery and relay fetching as effectively complete
+                setLoginSyncActiveStep('connect-discovery-relays');
+                setLoginSyncActiveStep('fetch-messaging-relays');
+            }
+
+            const profile = await profileRepo.getProfileIgnoreTTL(npub);
+            const readRelays = profile?.readRelays || [];
+
+            // 3. Connect to user's read relays
+            setLoginSyncActiveStep('connect-read-relays');
+            for (const url of readRelays) {
+                connectionManager.addPersistentRelay(url);
+            }
+
+            // Cleanup discovery relays used during this flow
+            connectionManager.cleanupTemporaryConnections();
+
+            // 4. Fetch and cache history items from relays
+            setLoginSyncActiveStep('fetch-history');
+            await messagingService.fetchHistory();
+
+            // 5. Fetch and cache profile and relay infos for created contacts
+            setLoginSyncActiveStep('fetch-contact-profiles');
+            const contacts = await contactRepo.getContacts();
+            for (const contact of contacts) {
+                try {
+                    await profileResolver.resolveProfile(contact.npub, false);
+                } catch (error) {
+                    console.error(`${context} contact profile refresh failed for ${contact.npub}:`, error);
+                }
+            }
+
+            // 6. Fetch and cache user profile
+            setLoginSyncActiveStep('fetch-user-profile');
+            try {
+                await profileResolver.resolveProfile(npub, false);
+            } catch (error) {
+                console.error(`${context} user profile refresh failed:`, error);
+            }
+        } catch (error) {
+            console.error(`${context} login history flow failed:`, error);
+        } finally {
+            completeLoginSyncFlow();
         }
     }
 
