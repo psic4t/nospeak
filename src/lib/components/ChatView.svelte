@@ -12,6 +12,8 @@
   import { softVibrate } from '$lib/utils/haptics';
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
   import { openProfileModal } from '$lib/stores/modals';
+  import { fly, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
 
   let {
     messages = [],
@@ -395,10 +397,10 @@
   {/if}
 </svelte:head>
 
-<div class="flex flex-col h-full overflow-hidden bg-white/30 dark:bg-gray-900/30 backdrop-blur-sm">
+<div class="flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm">
   {#if partnerNpub}
     <div
-      class="p-2 h-16 border-b border-gray-200/50 dark:border-gray-800/50 flex justify-between items-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex-shrink-0 z-10 shadow-sm"
+      class="p-2 h-16 border-b border-gray-200/50 dark:border-slate-800/50 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex-shrink-0 z-10 shadow-sm"
     >
       <div class="flex items-center gap-3">
         <button 
@@ -447,7 +449,7 @@
     {#if canRequestNetworkHistory && messages.length > 0}
       <div class="flex justify-center p-2">
         <button
-          class="text-xs px-4 py-1.5 rounded-full bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all shadow-sm font-medium"
+          class="text-xs px-4 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50 text-gray-600 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-all shadow-sm font-medium"
           type="button"
           onclick={() => onRequestNetworkHistory && onRequestNetworkHistory()}
         >
@@ -474,10 +476,11 @@
       <div class="text-center text-gray-400 mt-10">No messages yet</div>
     {/if}
 
-    {#each messages as msg, i}
+    {#each messages as msg, i (msg.id || i)}
 
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
+        in:fly={{ y: 20, duration: 300, easing: cubicOut }}
       >
         {#if msg.direction === "received" && partnerNpub}
           <button
@@ -500,7 +503,7 @@
                          ${
                            msg.direction === "sent"
                              ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-none hover:shadow-md"
-                             : "bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm dark:text-white border border-gray-100 dark:border-gray-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-gray-800"
+                             : "bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-slate-800"
                          }`}
           oncontextmenu={(e) => handleContextMenu(e, msg.message)}
           onmousedown={(e) => handleMouseDown(e, msg.message)}
@@ -539,7 +542,7 @@
   </div>
 
   <div
-    class="p-4 border-t border-gray-200/50 dark:border-gray-800/50 bg-white/60 dark:bg-gray-900/60 backdrop-blur-md flex-shrink-0"
+    class="p-4 border-t border-gray-200/50 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md flex-shrink-0"
   >
     <form
       onsubmit={(e) => {
@@ -550,16 +553,16 @@
     >
       {#if showEmojiPicker && filteredEmojis.length > 0}
         <div
-          class="absolute bottom-full mb-2 left-12 bg-white dark:bg-gray-800 border dark:border-gray-700 shadow-lg rounded-lg overflow-hidden w-64 z-50"
+          class="absolute bottom-full mb-2 left-12 bg-white dark:bg-slate-800 border dark:border-slate-700 shadow-lg rounded-lg overflow-hidden w-64 z-50"
         >
           {#each filteredEmojis as emoji, i}
             <button
               type="button"
-              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${i === emojiSelectedIndex ? "bg-blue-50 dark:bg-gray-700" : ""}`}
+              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${i === emojiSelectedIndex ? "bg-blue-50 dark:bg-slate-700" : ""}`}
               onclick={() => selectEmoji(emoji)}
             >
               <span class="text-xl">{emoji.char}</span>
-              <span class="text-sm text-gray-600 dark:text-gray-300"
+              <span class="text-sm text-gray-600 dark:text-slate-300"
                 >:{emoji.name}:</span
               >
             </button>
@@ -568,7 +571,7 @@
       {/if}
 
       <div
-        class="flex-1 flex items-center bg-white/90 dark:bg-gray-800/90 border border-gray-200 dark:border-gray-700 rounded-3xl px-4 py-1.5 gap-2 shadow-inner focus-within:ring-2 focus-within:ring-blue-500/50 transition-all"
+        class="flex-1 flex items-center bg-white/90 dark:bg-slate-800/90 border border-gray-200 dark:border-slate-700 rounded-3xl px-4 py-1.5 gap-2 shadow-inner focus-within:ring-2 focus-within:ring-blue-500/50 transition-all"
       >
         <MediaUploadButton onFileSelect={handleFileSelect} inline={true} />
         <textarea
@@ -578,7 +581,7 @@
           onkeydown={handleKeydown}
           disabled={isSending}
           rows="1"
-          class="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-sm md:text-base dark:text-white disabled:opacity-50 resize-none overflow-hidden placeholder:text-gray-400 dark:placeholder:text-gray-500 py-1"
+          class="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-sm md:text-base dark:text-white disabled:opacity-50 resize-none overflow-hidden placeholder:text-gray-400 dark:placeholder:text-slate-500 py-1"
           placeholder="Type a message..."
         ></textarea>
 

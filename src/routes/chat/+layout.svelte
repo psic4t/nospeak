@@ -6,8 +6,8 @@
     import { page } from '$app/state';
     import ContactList from '$lib/components/ContactList.svelte';
     import { messageRepo } from '$lib/db/MessageRepository';
+    import { fade } from 'svelte/transition';
     import { syncState } from '$lib/stores/sync';
-    import SyncProgressModal from '$lib/components/SyncProgressModal.svelte';
 
     let { children } = $props();
     
@@ -87,11 +87,12 @@
     <div class={`${isChatOpen ? 'hidden md:block' : 'block'} w-full md:w-80 flex-shrink-0 border-r border-gray-200/50 dark:border-gray-800/50`}>
         <ContactList />
     </div>
-    <div class={`${!isChatOpen ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0 h-full overflow-hidden`}>
-        {@render children()}
-    </div>
+    {#key page.url.pathname}
+        <div 
+            in:fade={{ duration: 150 }}
+            class={`${!isChatOpen ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0 h-full overflow-hidden`}
+        >
+            {@render children()}
+        </div>
+    {/key}
 </div>
-
-{#if $syncState.flowActive}
-    <SyncProgressModal progress={$syncState.progress} />
-{/if}

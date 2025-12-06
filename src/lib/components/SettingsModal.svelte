@@ -246,15 +246,15 @@
     tabindex="-1"
   >
     <div
-      class="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl shadow-2xl border border-white/20 dark:border-white/10 flex overflow-hidden"
+      class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl shadow-2xl border border-white/20 dark:border-white/10 flex overflow-hidden"
     >
       <!-- Sidebar -->
       <div
-        class={`w-full md:w-64 bg-gray-50/50 dark:bg-gray-900/50 border-r border-gray-200/50 dark:border-gray-800/50 p-4 flex-col ${showMobileContent ? 'hidden md:flex' : 'flex'}`}
+        class={`w-full md:w-64 bg-gray-50/50 dark:bg-slate-900/50 border-r border-gray-200/50 dark:border-slate-800/50 p-4 flex-col ${showMobileContent ? 'hidden md:flex' : 'flex'}`}
       >
         <div class="flex items-center gap-2 mb-6 px-2">
             <button
-                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
                 onclick={close}
                 aria-label="Close settings"
             >
@@ -272,25 +272,25 @@
 
         <nav class="space-y-1">
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "General" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "General" ? "bg-gray-200 dark:bg-slate-700 font-medium dark:text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
             onclick={() => { activeCategory = "General"; showMobileContent = true; }}
           >
             General
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "Profile" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "Profile" ? "bg-gray-200 dark:bg-slate-700 font-medium dark:text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
             onclick={() => { activeCategory = "Profile"; showMobileContent = true; }}
           >
             Profile
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "Mailbox Relays" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "Mailbox Relays" ? "bg-gray-200 dark:bg-slate-700 font-medium dark:text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
             onclick={() => { activeCategory = "Mailbox Relays"; showMobileContent = true; }}
           >
             Mailbox Relays
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "About" ? "bg-gray-200 dark:bg-gray-700 font-medium dark:text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${activeCategory === "About" ? "bg-gray-200 dark:bg-slate-700 font-medium dark:text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
             onclick={() => { activeCategory = "About"; showMobileContent = true; }}
           >
             About
@@ -301,11 +301,11 @@
       <!-- Content -->
       <div class={`flex-1 flex-col min-w-0 ${showMobileContent ? 'flex' : 'hidden md:flex'}`}>
         <div
-          class="p-6 flex justify-between items-center border-b border-gray-200/50 dark:border-gray-800/50"
+          class="p-6 flex justify-between items-center border-b border-gray-200/50 dark:border-slate-800/50"
         >
           <div class="flex items-center gap-2">
             <button
-                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
                 onclick={() => showMobileContent = false}
                 aria-label="Back to categories"
             >
@@ -319,7 +319,7 @@
           </div>
           <button
             onclick={close}
-            class="hidden md:block text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            class="hidden md:block text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
             aria-label="Close settings"
           >
             <svg
@@ -348,7 +348,7 @@
                     class="font-medium dark:text-white"
                     >Appearance</label
                   >
-                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                  <p class="text-sm text-gray-500 dark:text-slate-400">
                     Choose whether to follow System, Light, or Dark mode.
                   </p>
                 </div>
@@ -356,7 +356,7 @@
                   id="theme-mode"
                   bind:value={themeMode}
                   onchange={handleThemeModeChange}
-                  class="ml-4 px-3 py-2 border rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                  class="ml-4 px-3 py-2 border rounded-md bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-sm"
                 >
                   <option value="system">System</option>
                   <option value="light">Light</option>
@@ -371,7 +371,7 @@
                     class="font-medium dark:text-white"
                     >Browser Notifications</label
                   >
-                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                  <p class="text-sm text-gray-500 dark:text-slate-400">
                     {isSupported
                       ? "Get notified when you receive new messages"
                       : "Browser notifications not supported in this browser"}
@@ -384,7 +384,7 @@
                     class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       notificationsEnabled
                         ? "bg-blue-500"
-                        : "bg-gray-200 dark:bg-gray-600"
+                        : "bg-gray-200 dark:bg-slate-600"
                     }`}
                     aria-label={notificationsEnabled
                       ? "Disable notifications"
@@ -397,13 +397,13 @@
                     ></span>
                   </button>
                 {:else}
-                  <span class="text-sm text-gray-400 dark:text-gray-500"
+                  <span class="text-sm text-gray-400 dark:text-slate-500"
                     >Not supported</span
                   >
                 {/if}
               </div>
 
-              <div class="pt-6 border-t dark:border-gray-700">
+              <div class="pt-6 border-t dark:border-slate-700">
                 <h4
                   class="text-sm font-medium text-red-600 dark:text-red-400 mb-2"
                 >
@@ -430,14 +430,14 @@
                 <div>
                   <label
                     for="profile-name"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Name</label
                   >
                   <input
                     id="profile-name"
                     bind:value={profileName}
                     type="text"
-                    class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Your name"
                   />
                 </div>
@@ -445,14 +445,14 @@
                 <div>
                   <label
                     for="profile-display-name"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Display Name</label
                   >
                   <input
                     id="profile-display-name"
                     bind:value={profileDisplayName}
                     type="text"
-                    class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Display name"
                   />
                 </div>
@@ -460,14 +460,14 @@
                 <div>
                   <label
                     for="profile-about"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >About</label
                   >
                   <textarea
                     id="profile-about"
                     bind:value={profileAbout}
                     rows="3"
-                    class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Tell us about yourself"
                   ></textarea>
                 </div>
@@ -475,7 +475,7 @@
                 <div>
                   <label
                     for="profile-picture"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Picture URL</label
                   >
                   <div class="flex gap-2">
@@ -484,7 +484,7 @@
                       id="profile-picture"
                       bind:value={profilePicture}
                       type="url"
-                      class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="https://example.com/avatar.jpg"
                     />
                   </div>
@@ -493,7 +493,7 @@
                 <div>
                   <label
                     for="profile-banner"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Banner URL</label
                   >
                   <div class="flex gap-2">
@@ -502,7 +502,7 @@
                       id="profile-banner"
                       bind:value={profileBanner}
                       type="url"
-                      class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="https://example.com/banner.jpg"
                     />
                   </div>
@@ -511,14 +511,14 @@
                  <div>
                    <label
                      for="profile-nip05"
-                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                     class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                      >NIP-05 (Username)</label
                    >
                    <input
                      id="profile-nip05"
                      bind:value={profileNip05}
                      type="text"
-                     class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                     class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                      placeholder="name@domain.com"
                      oninput={() => (profileNip05Status = "unknown")}
                    />
@@ -572,14 +572,14 @@
                 <div>
                   <label
                     for="profile-website"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Website</label
                   >
                   <input
                     id="profile-website"
                     bind:value={profileWebsite}
                     type="url"
-                    class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="https://example.com"
                   />
                 </div>
@@ -587,14 +587,14 @@
                 <div>
                   <label
                     for="profile-lud16"
-                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Lightning Address (LUD-16)</label
                   >
                   <input
                     id="profile-lud16"
                     bind:value={profileLud16}
                     type="text"
-                    class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="user@provider.com"
                   />
                 </div>
@@ -636,7 +636,7 @@
             </div>
           {:else if activeCategory === "Mailbox Relays"}
             <div class="space-y-6">
-              <p class="text-sm text-gray-500 dark:text-gray-400">
+              <p class="text-sm text-gray-500 dark:text-slate-400">
                 Configure your NIP-65 Mailbox Relays. These relays inform others
                 where to send you messages (Read) and where to find your
                 messages (Write).
@@ -646,7 +646,7 @@
                 <input
                   bind:value={newRelayUrl}
                   placeholder="wss://relay.example.com"
-                  class="flex-1 px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="flex-1 px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   onkeydown={(e) => e.key === "Enter" && addRelay()}
                 />
                 <button
@@ -658,11 +658,11 @@
               </div>
 
               <div
-                class="space-y-2 border rounded-md dark:border-gray-700 divide-y dark:divide-gray-700"
+                class="space-y-2 border rounded-md dark:border-slate-700 divide-y dark:divide-slate-700"
               >
                 {#each relays as relay}
                   <div
-                    class="p-3 flex items-center justify-between bg-white dark:bg-gray-800"
+                    class="p-3 flex items-center justify-between bg-white dark:bg-slate-800"
                   >
                     <div class="flex-1 min-w-0 pr-4">
                       <p
@@ -681,7 +681,7 @@
                             toggleRelayPermission(relay.url, "read")}
                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
-                        <span class="text-sm text-gray-600 dark:text-gray-400"
+                        <span class="text-sm text-gray-600 dark:text-slate-400"
                           >Read</span
                         >
                       </label>
@@ -693,7 +693,7 @@
                             toggleRelayPermission(relay.url, "write")}
                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
-                        <span class="text-sm text-gray-600 dark:text-gray-400"
+                        <span class="text-sm text-gray-600 dark:text-slate-400"
                           >Write</span
                         >
                       </label>
@@ -719,7 +719,7 @@
                     </div>
                   </div>
                 {:else}
-                  <div class="p-4 text-center text-gray-500 dark:text-gray-400">
+                  <div class="p-4 text-center text-gray-500 dark:text-slate-400">
                     No relays configured
                   </div>
                 {/each}
@@ -735,23 +735,23 @@
                  />
                 <div>
                   <h3 class="text-2xl font-medium dark:text-white">Nospeak</h3>
-                  <p class="text-gray-600 dark:text-gray-400">
+                  <p class="text-gray-600 dark:text-slate-400">
                     Version {packageVersion}
                   </p>
                 </div>
               </div>
 
-              <div class="space-y-4 pt-4 border-t dark:border-gray-700">
+              <div class="space-y-4 pt-4 border-t dark:border-slate-700">
                 <div>
                   <h4
-                    class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                    class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
                   >
                     License
                   </h4>
-                  <p class="text-sm text-gray-600 dark:text-gray-400">
+                  <p class="text-sm text-gray-600 dark:text-slate-400">
                     GPL
                   </p>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p class="text-sm text-gray-600 dark:text-slate-400 mt-1">
                     CC by-nc-nd psic4t
                   </p>
                 </div>

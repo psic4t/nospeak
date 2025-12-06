@@ -104,8 +104,8 @@
     }
 </script>
 
-<div class="flex flex-col h-full bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm border-r border-gray-200/50 dark:border-gray-800/50">
-    <div class="p-2 h-14 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between bg-white/60 dark:bg-gray-900/60 backdrop-blur-md sticky top-0 z-10">
+<div class="flex flex-col h-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border-r border-gray-200/50 dark:border-slate-800/50">
+    <div class="p-2 h-14 border-b border-gray-200/50 dark:border-slate-800/50 flex items-center justify-between bg-white/60 dark:bg-slate-900/60 backdrop-blur-md sticky top-0 z-10">
         {#if $currentUser}
             <button 
                 onclick={() => {
@@ -128,7 +128,7 @@
                 softVibrate();
                 showSettingsModal.set(true);
             }} 
-            class="text-xs text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300"
+            class="text-xs text-gray-500 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-300"
             aria-label="Open settings"
         >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,14 +137,14 @@
             </svg>
         </button>
     </div>
-    <div class="p-4 border-b border-gray-200/50 dark:border-gray-800/50 flex justify-between items-center bg-white/30 dark:bg-gray-900/30">
+    <div class="p-4 border-b border-gray-200/50 dark:border-slate-800/50 flex justify-between items-center bg-white/30 dark:bg-slate-900/30">
         <div class="font-bold dark:text-white text-xl tracking-tight">Contacts</div>
         <button 
             onclick={() => {
                 softVibrate();
                 showManageContactsModal.set(true);
             }}
-            class="text-xs px-4 py-2 rounded-full bg-white/50 dark:bg-gray-800/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold shadow-sm transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800"
+            class="text-xs px-4 py-2 rounded-full bg-white/50 dark:bg-slate-800/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold shadow-sm transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800"
         >
             Manage
         </button>
@@ -152,9 +152,19 @@
     
     <div class="flex-1 overflow-y-auto custom-scrollbar">
         {#if $contactsStore.length === 0}
-            <div class="text-gray-500 text-center py-10 text-sm">
-                No contacts yet.<br/>
-                Click Manage to add.
+            <div class="space-y-3 p-3 animate-pulse">
+                {#each Array(5) as _}
+                    <div class="flex items-center gap-3 p-3 rounded-2xl bg-white/20 dark:bg-slate-800/20">
+                        <div class="w-12 h-12 rounded-full bg-gray-200/50 dark:bg-slate-700/50"></div>
+                        <div class="flex-1 space-y-2">
+                            <div class="h-4 bg-gray-200/50 dark:bg-slate-700/50 rounded w-2/3"></div>
+                            <div class="h-3 bg-gray-200/50 dark:bg-slate-700/50 rounded w-1/3"></div>
+                        </div>
+                    </div>
+                {/each}
+                <div class="text-center text-sm text-gray-500 mt-4">
+                    If no contacts appear,<br/>click Manage to add some.
+                </div>
             </div>
         {/if}
         {#each $contactsStore as contact}
@@ -165,7 +175,7 @@
                 class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-colors duration-200 group ${
                     page.url.pathname.includes(contact.npub) 
                     ? 'bg-blue-100/80 dark:bg-blue-900/40' 
-                    : 'hover:bg-gray-100/80 dark:hover:bg-gray-800/90'
+                    : 'hover:bg-gray-100/80 dark:hover:bg-slate-800/90'
                 }`}
             >
                 <Avatar 
@@ -177,7 +187,7 @@
                 
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-1 min-w-0">
-                        <span class="font-bold text-gray-800 dark:text-gray-100 truncate text-[15px]">{contact.name}</span>
+                        <span class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]">{contact.name}</span>
                         {#if contact.nip05Status === 'valid'}
                             <svg
                                 class="shrink-0 text-green-500"

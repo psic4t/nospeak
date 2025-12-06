@@ -29,7 +29,7 @@
     };
 </script>
 
-<div class={`${sizeClasses[size as keyof typeof sizeClasses]} ${className} rounded-full ring-2 ring-white/50 dark:ring-white/10 overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-700 shadow-sm`}>
+<div class={`${sizeClasses[size as keyof typeof sizeClasses]} ${className} rounded-full ring-2 ring-white/50 dark:ring-white/10 overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-slate-700 shadow-sm`}>
     <img 
         src={finalSrc} 
         alt="Avatar" 

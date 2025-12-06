@@ -12,6 +12,8 @@
   import ManageContactsModal from "$lib/components/ManageContactsModal.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
   import { showSettingsModal, showManageContactsModal, profileModalState, closeProfileModal } from "$lib/stores/modals";
+  import SyncProgressModal from "$lib/components/SyncProgressModal.svelte";
+  import { syncState } from "$lib/stores/sync";
 
   let { children } = $props();
   let isInitialized = $state(false);
@@ -26,6 +28,16 @@
         softVibrate();
     }
   }
+
+  // Close all modals when user logs out
+  $effect(() => {
+    if (!$currentUser) {
+        showSettingsModal.set(false);
+        showManageContactsModal.set(false);
+        showRelayStatusModal.set(false);
+        closeProfileModal();
+    }
+  });
 
   onMount(async () => {
     // Register PWA Service Worker
@@ -130,24 +142,28 @@
 
 {#if isInitialized}
   <div
-    class="h-dvh bg-gray-50 dark:bg-gray-950 flex justify-center overflow-hidden relative lg:p-4"
+    class="h-dvh bg-gray-50 dark:bg-slate-950 flex justify-center overflow-hidden relative lg:p-4"
   >
     <!-- Background Elements for Glassmorphism Context -->
     <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-400/20 dark:bg-blue-900/20 rounded-full blur-[100px] pointer-events-none"></div>
     <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/20 dark:bg-purple-900/20 rounded-full blur-[100px] pointer-events-none"></div>
 
-    <div 
-      class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl h-full relative z-10 shadow-2xl overflow-hidden lg:rounded-2xl lg:border lg:border-white/20 lg:dark:border-white/10 bg-white/70 dark:bg-gray-900/70 backdrop-blur-xl isolate transform-gpu"
-      style="mask-image: linear-gradient(black, black); -webkit-mask-image: linear-gradient(black, black);"
-    >
+    {#if page.url.pathname === '/'}
       {@render children()}
+    {:else}
+      <div 
+        class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl h-full relative z-10 shadow-2xl overflow-hidden lg:rounded-2xl lg:border lg:border-white/20 lg:dark:border-white/10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl isolate transform-gpu"
+        style="mask-image: linear-gradient(black, black); -webkit-mask-image: linear-gradient(black, black);"
+      >
+        {@render children()}
 
-      {#if showProfileRefreshBanner}
-        <div class="fixed bottom-3 right-3 z-50 px-3 py-2 text-xs rounded bg-gray-800 text-white shadow">
-          {profileRefreshMessage}
-        </div>
-      {/if}
-    </div>
+        {#if showProfileRefreshBanner}
+          <div class="fixed bottom-3 right-3 z-50 px-3 py-2 text-xs rounded bg-gray-800 text-white shadow">
+            {profileRefreshMessage}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Modals Layer (Outside Glass Container) -->
     <RelayStatusModal 
@@ -171,6 +187,10 @@
         close={closeProfileModal}
         npub={$profileModalState.npub}
       />
+    {/if}
+
+    {#if $syncState.flowActive}
+        <SyncProgressModal progress={$syncState.progress} />
     {/if}
   </div>
 {/if}

@@ -211,7 +211,7 @@
         onclick={(e) => { if(e.target === e.currentTarget) close(); }}
         onkeydown={(e) => { if(e.key === 'Escape') close(); }}
     >
-        <div class="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl p-6 w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden outline-none">
+        <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-6 w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden outline-none">
             <h2 class="text-xl font-bold mb-4 dark:text-white px-1">Manage Contacts</h2>
             
             <div class="mb-6">
@@ -219,7 +219,7 @@
                     <input 
                         bind:value={newNpub}
                         placeholder="npub or search term" 
-                        class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                        class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                     />
                     <button 
                         onclick={add}
@@ -234,9 +234,9 @@
                     </button>
 
                     {#if !isNpubMode && newNpub.trim().length >= 3 && (isSearching || searchResults.length > 0 || searchError)}
-                        <div class="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl max-h-64 overflow-y-auto z-10 custom-scrollbar">
+                        <div class="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl shadow-xl max-h-64 overflow-y-auto z-10 custom-scrollbar">
                             {#if isSearching}
-                                <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                <div class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">
                                     Searching...
                                 </div>
                             {:else if searchError}
@@ -244,14 +244,14 @@
                                     {searchError}
                                 </div>
                             {:else if searchResults.length === 0}
-                                <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                <div class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">
                                     No results
                                 </div>
                             {:else}
                                 {#each searchResults as result (result.npub)}
                                     <button
                                         type="button"
-                                        class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-left transition-colors border-b border-gray-50 dark:border-gray-800 last:border-0"
+                                        class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 text-left transition-colors border-b border-gray-50 dark:border-slate-800 last:border-0"
                                         onclick={() => selectSearchResult(result)}
                                     >
                                         <Avatar
@@ -264,7 +264,7 @@
                                             <span class="font-medium dark:text-gray-100 truncate">
                                                 {result.name}
                                             </span>
-                                            <span class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                            <span class="text-xs text-gray-500 dark:text-slate-400 truncate">
                                                 {shortenNpub(result.npub)}
                                                 {#if result.nip05}
                                                     {' · '}
@@ -322,12 +322,12 @@
 
             <div class="flex-1 overflow-y-auto space-y-2 mb-6 min-h-[200px] custom-scrollbar pr-1">
                 {#if contacts.length === 0}
-                    <div class="text-gray-500 text-center py-8 bg-gray-50/50 dark:bg-gray-800/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                    <div class="text-gray-500 text-center py-8 bg-gray-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
                         No contacts added
                     </div>
                 {/if}
                 {#each displayContacts as contact}
-                    <div class="flex justify-between items-center p-3 border border-gray-100 dark:border-gray-800 rounded-xl bg-white/50 dark:bg-gray-800/40 hover:bg-white dark:hover:bg-gray-800 transition-colors shadow-sm">
+                    <div class="flex justify-between items-center p-3 border border-gray-100 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm">
                         <div class="flex items-center gap-3 min-w-0">
                             <Avatar 
                                 npub={contact.npub}
@@ -337,7 +337,7 @@
                             />
                             <div class="flex flex-col min-w-0">
                                 <span class="font-medium dark:text-gray-200 truncate">{contact.name}</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate font-mono opacity-75">{contact.shortNpub}</span>
+                                <span class="text-xs text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">{contact.shortNpub}</span>
                             </div>
                         </div>
                         <button 
@@ -353,7 +353,7 @@
 
             <button 
                 onclick={close}
-                class="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 font-medium transition-colors"
+                class="w-full bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-700 font-medium transition-colors"
             >
                 Close
             </button>

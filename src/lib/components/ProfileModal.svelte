@@ -42,18 +42,43 @@
         onclick={(e) => { if(e.target === e.currentTarget) close(); }}
         onkeydown={(e) => { if(e.key === 'Escape') close(); }}
     >
-        <div class="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl w-full h-full rounded-none md:max-w-xl md:h-auto md:max-h-[85vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none">
+        <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl w-full h-full rounded-none md:max-w-xl md:h-auto md:max-h-[85vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none">
             
             <button onclick={close} aria-label="Close modal" class="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             
             {#if loading}
-                <div class="p-8 text-center dark:text-gray-300">Loading...</div>
+                <div class="p-6 animate-pulse flex-1 overflow-y-auto">
+                    <!-- Banner Skeleton -->
+                    <div class="w-full h-32 bg-gray-200 dark:bg-slate-800 rounded-xl mb-12"></div>
+                    
+                    <!-- Header Skeleton -->
+                    <div class="px-2 mb-8 relative">
+                        <div class="absolute -top-16 left-2 w-24 h-24 bg-gray-300 dark:bg-slate-700 rounded-full border-4 border-white dark:border-slate-900"></div>
+                        <div class="mt-10 space-y-3">
+                            <div class="h-8 bg-gray-200 dark:bg-slate-800 rounded-lg w-3/4"></div>
+                            <div class="h-4 bg-gray-200 dark:bg-slate-800 rounded w-1/3"></div>
+                        </div>
+                    </div>
+
+                    <!-- Content Skeleton -->
+                    <div class="px-2 space-y-6">
+                        <div class="space-y-2">
+                            <div class="h-4 bg-gray-200 dark:bg-slate-800 rounded w-16"></div>
+                            <div class="h-20 bg-gray-200 dark:bg-slate-800 rounded-xl w-full"></div>
+                        </div>
+                        <div class="h-12 bg-gray-200 dark:bg-slate-800 rounded-xl w-full"></div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="h-24 bg-gray-200 dark:bg-slate-800 rounded-xl w-full"></div>
+                            <div class="h-24 bg-gray-200 dark:bg-slate-800 rounded-xl w-full"></div>
+                        </div>
+                    </div>
+                </div>
             {:else if profile}
                 <div class="overflow-y-auto flex-1 custom-scrollbar">
                     <!-- Banner -->
-                    <div class="w-full h-32 bg-gray-200 dark:bg-gray-700 relative">
+                    <div class="w-full h-32 bg-gray-200 dark:bg-slate-700 relative">
                         {#if profile.metadata?.banner}
                             <img src={profile.metadata.banner} alt="Banner" class="w-full h-full object-cover" />
                         {/if}
@@ -61,7 +86,7 @@
 
                     <!-- Profile Header -->
                     <div class="px-6 relative">
-                        <div class="-mt-16 mb-3 inline-block rounded-2xl p-1 bg-white dark:bg-gray-800 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                        <div class="-mt-16 mb-3 inline-block rounded-2xl p-1 bg-white dark:bg-slate-800 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
                              <Avatar npub={npub} src={profile.metadata?.picture} size="2xl" class="rounded-xl" />
                         </div>
 
@@ -115,7 +140,7 @@
                         <!-- About -->
                         {#if profile.metadata?.about}
                             <div>
-                                <h4 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">About</h4>
+                                <h4 class="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">About</h4>
                                 <div class="dark:text-gray-200 whitespace-pre-wrap text-sm leading-relaxed break-words">
                                     {profile.metadata.about}
                                 </div>
@@ -124,7 +149,7 @@
 
                         <!-- Links & Info -->
                         {#if profile.metadata?.website || profile.metadata?.lud16}
-                            <div class="grid grid-cols-1 gap-3 pt-6 border-t border-gray-100 dark:border-gray-800/50">
+                            <div class="grid grid-cols-1 gap-3 pt-6 border-t border-gray-100 dark:border-slate-800/50">
                                 {#if profile.metadata?.website}
                                     <div class="flex items-center gap-2 overflow-hidden group">
                                         <div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0">
@@ -148,24 +173,24 @@
                         {/if}
 
                         <!-- Technical Details -->
-                        <div class="pt-6 border-t border-gray-100 dark:border-gray-800/50 space-y-5">
+                        <div class="pt-6 border-t border-gray-100 dark:border-slate-800/50 space-y-5">
                             <div>
-                                <div class="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Public Key</div>
-                                <div class="dark:text-gray-300 font-mono text-xs break-all bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-100 dark:border-gray-800 select-all text-gray-600 shadow-inner">
+                                <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">Public Key</div>
+                                <div class="dark:text-slate-300 font-mono text-xs break-all bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-100 dark:border-slate-800 select-all text-gray-600 shadow-inner">
                                     {npub}
                                 </div>
                             </div>
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <div class="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Read Relays</div>
-                                    <div class="text-xs text-gray-600 dark:text-gray-300 break-words leading-relaxed bg-gray-50 dark:bg-gray-800/30 p-3 rounded-xl border border-gray-100 dark:border-gray-800/50">
+                                    <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">Read Relays</div>
+                                    <div class="text-xs text-gray-600 dark:text-slate-300 break-words leading-relaxed bg-gray-50 dark:bg-slate-800/30 p-3 rounded-xl border border-gray-100 dark:border-slate-800/50">
                                         {formatRelays(profile.readRelays)}
                                     </div>
                                 </div>
                                 <div>
-                                    <div class="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Write Relays</div>
-                                    <div class="text-xs text-gray-600 dark:text-gray-300 break-words leading-relaxed bg-gray-50 dark:bg-gray-800/30 p-3 rounded-xl border border-gray-100 dark:border-gray-800/50">
+                                    <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">Write Relays</div>
+                                    <div class="text-xs text-gray-600 dark:text-slate-300 break-words leading-relaxed bg-gray-50 dark:bg-slate-800/30 p-3 rounded-xl border border-gray-100 dark:border-slate-800/50">
                                         {formatRelays(profile.writeRelays)}
                                     </div>
                                 </div>
@@ -174,7 +199,7 @@
                     </div>
                 </div>
             {:else}
-                 <div class="p-8 text-center dark:text-gray-300">Profile not found</div>
+                 <div class="p-8 text-center dark:text-slate-300">Profile not found</div>
             {/if}
         </div>
     </div>
