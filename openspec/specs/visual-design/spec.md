@@ -15,13 +15,17 @@ The application follows a "Glass & Slate" aesthetic, prioritizing depth, motion,
 *   **Background:** Ambient, blurred gradient blobs (Blue/Purple) provide depth behind the glass layers.
 
 ### Color Palette
-*   **Dark Mode Base:** `Slate` (Tailwind colors).
-    *   Background: `bg-slate-950`
-    *   Surface: `bg-slate-900`
-    *   Text: `text-slate-100`, `text-slate-300`, `text-slate-400`
-    *   Rationale: Provides a richer, cooler tone than neutral gray, complementing the blue accents.
+*   **Theme:** Catppuccin (Mocha/Latte).
+*   **Dark Mode Base (Mocha):** Overrides `slate` palette.
+    *   Background: `#11111b` (Crust)
+    *   Surface: `#1e1e2e` (Base)
+    *   Sidebar: `#181825` (Mantle)
+    *   Text: `#cdd6f4` (Text)
+*   **Light Mode Base (Latte):** Overrides `gray` palette.
+    *   Background: `#eff1f5` (Base)
+    *   Surface: `#ffffff` (Base/White)
 *   **Accents:**
-    *   Primary: `Blue-500` to `Blue-600` gradients.
+    *   Primary: **Lavender** (`#7287fd` -> `#5b6ee1`) overriding `blue` palette.
     *   Success: `Green-500`
     *   Error: `Red-500`
 
