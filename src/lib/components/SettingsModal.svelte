@@ -17,8 +17,10 @@
   }>();
 
   let notificationsEnabled = $state(false);
+  let urlPreviewsEnabled = $state(true);
   let isSupported = $state(false);
   let isLoaded = $state(false);
+
 
   type Category = "General" | "Profile" | "Mailbox Relays" | "About";
   let activeCategory = $state<Category>("General");
@@ -177,17 +179,22 @@
       loadRelaySettings();
       loadProfile();
     }
-    if (isOpen && !isLoaded) {
-      isSupported = notificationService.isSupported();
-      const saved = localStorage.getItem("nospeak-settings");
-      if (saved) {
-        const settings = JSON.parse(saved);
-        notificationsEnabled = settings.notificationsEnabled || false;
-      }
+      if (isOpen && !isLoaded) {
+        isSupported = notificationService.isSupported();
+        const saved = localStorage.getItem("nospeak-settings");
+        if (saved) {
+          const settings = JSON.parse(saved) as { notificationsEnabled?: boolean; urlPreviewsEnabled?: boolean };
+          notificationsEnabled = settings.notificationsEnabled || false;
+          urlPreviewsEnabled = typeof settings.urlPreviewsEnabled === "boolean" ? settings.urlPreviewsEnabled : true;
+        } else {
+          notificationsEnabled = false;
+          urlPreviewsEnabled = true;
+        }
  
-      themeMode = getCurrentThemeMode();
-      isLoaded = true;
-    }
+        themeMode = getCurrentThemeMode();
+        isLoaded = true;
+      }
+
   });
 
 
@@ -199,6 +206,7 @@
       const settings = {
         ...existingSettings,
         notificationsEnabled,
+        urlPreviewsEnabled,
       };
       localStorage.setItem("nospeak-settings", JSON.stringify(settings));
     }
@@ -403,7 +411,39 @@
                 {/if}
               </div>
 
+              <div class="flex items-center justify-between">
+                <div>
+                  <label
+                    for="url-previews-toggle"
+                    class="font-medium dark:text-white"
+                    >URL Previews</label
+                  >
+                  <p class="text-sm text-gray-500 dark:text-slate-400">
+                    Show preview cards for non-media links in messages.
+                  </p>
+                </div>
+                <button
+                  id="url-previews-toggle"
+                  onclick={() => (urlPreviewsEnabled = !urlPreviewsEnabled)}
+                  class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    urlPreviewsEnabled
+                      ? "bg-blue-500"
+                      : "bg-gray-200 dark:bg-slate-600"
+                  }`}
+                  aria-label={urlPreviewsEnabled
+                    ? "Disable URL previews"
+                    : "Enable URL previews"}
+                >
+                  <span
+                    class={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      urlPreviewsEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  ></span>
+                </button>
+              </div>
+ 
               <div class="pt-6 border-t dark:border-slate-700">
+
                 <h4
                   class="text-sm font-medium text-red-600 dark:text-red-400 mb-2"
                 >

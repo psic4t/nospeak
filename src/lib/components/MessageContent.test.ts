@@ -84,3 +84,41 @@ describe('MessageContent Markdown parsing', () => {
         expect(parseMarkdown('plain text')).toBe('plain text');
     });
 });
+
+describe('MessageContent URL handling', () => {
+    it('detects non-media URLs separately from media URLs', () => {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+        const isImage = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const isVideo = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.(mp4|webm|mov|ogg)$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const getFirstNonMediaUrl = (text: string): string | null => {
+            const matches = text.match(urlRegex) ?? [];
+            for (const candidate of matches) {
+                if (!isImage(candidate) && !isVideo(candidate)) {
+                    return candidate;
+                }
+            }
+            return null;
+        };
+
+        const text = 'Check this image https://example.com/photo.jpg and this site https://example.com/page';
+        const firstNonMedia = getFirstNonMediaUrl(text);
+        expect(firstNonMedia).toBe('https://example.com/page');
+    });
+});

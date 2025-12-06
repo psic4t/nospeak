@@ -509,9 +509,10 @@
           onmousedown={(e) => handleMouseDown(e, msg.message)}
           onmouseup={handleMouseUp}
           onmouseleave={handleMouseUp}
-        >
-          <MessageContent content={msg.message} />
-          <div
+          >
+            <MessageContent content={msg.message} isOwn={msg.direction === "sent"} />
+            <div
+
             class={`text-[10px] mt-1 text-right ${msg.direction === "sent" ? "text-blue-100" : "text-gray-400"} cursor-help`}
             title={new Date(msg.sentAt).toLocaleString()}
           >
