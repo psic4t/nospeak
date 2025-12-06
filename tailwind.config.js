@@ -7,7 +7,7 @@ export default {
       colors: {
         // Catppuccin Mocha (Dark Mode) mapping for 'slate'
         slate: {
-          50: '#f5f5f5', 
+          50: '#f5f5f5',
           100: '#cdd6f4', // Text
           200: '#bac2de', // Subtext1
           300: '#a6adc8', // Subtext0
@@ -31,20 +31,6 @@ export default {
           700: '#6c6f85', // Subtext0
           800: '#5c5f77', // Subtext1
           900: '#4c4f69', // Text
-        },
-        // Lavender Accent (Blue Override)
-        blue: {
-          50: '#eaedff', // Very light lavender
-          100: '#dce1ff',
-          200: '#c2caff',
-          300: '#9eaaff',
-          400: '#b4befe', // Mocha Lavender (Light)
-          500: '#7287fd', // Latte Lavender (Main Button)
-          600: '#5b6ee1', // Darker Lavender (Hover/Gradient)
-          700: '#4a5bd2',
-          800: '#3d4bb0',
-          900: '#35418b',
-          950: '#232955',
         }
       }
     },
