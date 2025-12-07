@@ -31,6 +31,20 @@ export default {
           700: '#6c6f85', // Subtext0
           800: '#5c5f77', // Subtext1
           900: '#4c4f69', // Text
+        },
+        // Catppuccin blue override for Tailwind 'blue' using active theme
+        blue: {
+          50: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          100: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          200: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          300: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          400: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          500: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          600: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          700: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          800: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          900: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+          950: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
         }
       }
     },

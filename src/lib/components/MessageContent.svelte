@@ -172,7 +172,7 @@
                 </div>
                 <div class="min-w-0">
                     {#if preview.title}
-                        <h1 class={`m-0 text-lg leading-tight font-semibold truncate ${isOwn ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+                        <h1 class="m-0 text-lg leading-tight font-semibold truncate text-black dark:text-white">
                             {preview.title}
                         </h1>
                     {/if}

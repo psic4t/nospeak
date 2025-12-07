@@ -174,7 +174,7 @@
                 onclick={() => selectContact(contact.npub)}
                 class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-colors duration-200 group ${
                     page.url.pathname.includes(contact.npub) 
-                    ? 'bg-blue-100/80 dark:bg-blue-900/40' 
+                    ? 'bg-blue-50/10 dark:bg-blue-900/40' 
                     : 'hover:bg-gray-100/80 dark:hover:bg-slate-800/90'
                 }`}
             >

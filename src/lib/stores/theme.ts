@@ -152,6 +152,21 @@ export const themeNames: Record<Theme, string> = {
 	mocha: 'Catppuccin Mocha'
 };
 
+function hexToRgb(hex: string): string | null {
+	const normalized = hex.replace('#', '');
+
+	if (normalized.length !== 6) {
+		return null;
+	}
+
+	const numeric = parseInt(normalized, 16);
+	const r = (numeric >> 16) & 255;
+	const g = (numeric >> 8) & 255;
+	const b = numeric & 255;
+
+	return `${r} ${g} ${b}`;
+}
+
 const STORAGE_KEY = 'nospeak-theme';
 const THEME_MODE_STORAGE_KEY = 'nospeak-theme-mode';
 
@@ -198,13 +213,20 @@ export function getEffectiveThemeForMode(mode: ThemeMode): Theme {
 export function applyTheme(theme: Theme) {
 	const colors = catppuccinThemes[theme];
 	const root = document.documentElement;
-		
+
 	Object.entries(colors).forEach(([key, value]) => {
 		root.style.setProperty(`--color-${key}`, value);
+
+		const rgb = hexToRgb(value);
+
+		if (rgb) {
+			root.style.setProperty(`--color-${key}-rgb`, rgb);
+		}
 	});
-		
+
 	// Set data attribute for CSS targeting
 	root.setAttribute('data-theme', theme);
+
 
 	const isDark = theme === 'frappe' || theme === 'macchiato' || theme === 'mocha';
 

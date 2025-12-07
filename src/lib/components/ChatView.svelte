@@ -501,8 +501,8 @@
           tabindex="0"
           class={`max-w-[70%] p-3 shadow-sm cursor-pointer transition-all duration-200
                          ${
-                           msg.direction === "sent"
-                             ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-none hover:shadow-md"
+                             msg.direction === "sent"
+                             ? "bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/40 dark:border-blue-400/80 rounded-2xl rounded-br-none hover:shadow-md"
                              : "bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-slate-800"
                          }`}
           oncontextmenu={(e) => handleContextMenu(e, msg.message)}
