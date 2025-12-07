@@ -20,6 +20,7 @@
 		"@capacitor/dialog": "^7.0.2",
 		"@capacitor/haptics": "^7.0.2",
 		"@capacitor/share": "^7.0.2",
+		"@capacitor/status-bar": "^7.0.3",
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-node": "^5.2.9",
 		"@sveltejs/adapter-static": "^3.0.10",

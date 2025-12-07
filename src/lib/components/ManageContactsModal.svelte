@@ -7,9 +7,12 @@
     import Avatar from './Avatar.svelte';
     import { searchProfiles, type UserSearchResult } from '$lib/core/SearchProfiles';
     import { verifyNip05ForNpub, type Nip05Status } from '$lib/core/Nip05Verifier';
-    import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+     import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+     import { isAndroidNative } from "$lib/core/NativeDialogs";
  
      let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
+     const isAndroidApp = isAndroidNative();
+
      
      let newNpub = $state('');
      let contacts = $state<ContactItem[]>([]);
@@ -204,7 +207,7 @@
 
 {#if isOpen}
     <div 
-        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 {isAndroidApp ? 'pt-10' : ''}"
         role="dialog"
         aria-modal="true"
         tabindex="-1"

@@ -1,10 +1,13 @@
 <script lang="ts">
     import { profileRepo } from '$lib/db/ProfileRepository';
     import type { Profile } from '$lib/db/db';
-    import Avatar from './Avatar.svelte';
-    import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+     import Avatar from './Avatar.svelte';
+     import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+     import { isAndroidNative } from "$lib/core/NativeDialogs";
+ 
+     let { isOpen, close, npub } = $props<{ isOpen: boolean, close: () => void, npub: string }>();
+     const isAndroidApp = isAndroidNative();
 
-    let { isOpen, close, npub } = $props<{ isOpen: boolean, close: () => void, npub: string }>();
     
     let profile = $state<Profile | undefined>(undefined);
     let loading = $state(false);
@@ -35,7 +38,7 @@
 
 {#if isOpen}
     <div 
-        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 {isAndroidApp ? 'pt-10' : ''}"
         role="dialog"
         aria-modal="true"
         tabindex="-1"

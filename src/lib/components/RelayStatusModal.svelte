@@ -1,8 +1,11 @@
 <script lang="ts">
-    import { relayHealths } from '$lib/stores/connection';
-    import { ConnectionType } from '$lib/core/connection/ConnectionManager';
+     import { relayHealths } from '$lib/stores/connection';
+     import { ConnectionType } from '$lib/core/connection/ConnectionManager';
+     import { isAndroidNative } from "$lib/core/NativeDialogs";
+ 
+     let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
+     const isAndroidApp = isAndroidNative();
 
-    let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
 
     function formatTime(timestamp: number) {
         if (timestamp === 0) return 'Never';
@@ -12,7 +15,7 @@
 
 {#if isOpen}
     <div 
-        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 {isAndroidApp ? 'pt-10' : ''}"
         role="dialog"
         aria-modal="true"
         tabindex="-1"

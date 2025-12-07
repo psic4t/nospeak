@@ -9,12 +9,16 @@
   import { getCurrentThemeMode, setThemeMode } from "$lib/stores/theme.svelte";
   import type { ThemeMode } from "$lib/stores/theme";
   import MediaUploadButton from './MediaUploadButton.svelte';
+  import { isAndroidNative } from "$lib/core/NativeDialogs";
   const packageVersion = __APP_VERSION__;
 
   let { isOpen = false, close = () => {} } = $props<{
-    isOpen: boolean;
-    close: () => void;
-  }>();
+     isOpen: boolean;
+     close: () => void;
+   }>();
+
+  const isAndroidApp = isAndroidNative();
+
 
   let notificationsEnabled = $state(false);
   let urlPreviewsEnabled = $state(true);
@@ -245,7 +249,7 @@
 
 {#if isOpen}
   <div
-    class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+    class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 {isAndroidApp ? 'pt-10' : ''}"
     onclick={handleOverlayClick}
     onkeydown={handleKeydown}
     role="dialog"

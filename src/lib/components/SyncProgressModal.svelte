@@ -1,10 +1,13 @@
 <script lang="ts">
-    import { syncState } from '$lib/stores/sync';
+     import { syncState } from '$lib/stores/sync';
+     import { isAndroidNative } from "$lib/core/NativeDialogs";
+ 
+     let { progress = 0 } = $props<{ progress: number }>();
+     const isAndroidApp = isAndroidNative();
 
-    let { progress = 0 } = $props<{ progress: number }>();
 </script>
  
-<div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+<div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 {isAndroidApp ? 'pt-10' : ''}">
     <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10 outline-none">
         <div class="flex flex-col items-center gap-6 w-full">
             <div class="relative">

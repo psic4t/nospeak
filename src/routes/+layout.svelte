@@ -14,11 +14,14 @@
   import { showSettingsModal, showManageContactsModal, profileModalState, closeProfileModal } from "$lib/stores/modals";
   import SyncProgressModal from "$lib/components/SyncProgressModal.svelte";
   import { syncState } from "$lib/stores/sync";
+  import { configureAndroidStatusBar } from "$lib/core/StatusBar";
+  import { isAndroidNative } from "$lib/core/NativeDialogs";
 
   let { children } = $props();
   let isInitialized = $state(false);
   let showProfileRefreshBanner = $state(false);
   let profileRefreshMessage = $state("");
+  let isAndroidApp = $state(false);
 
   // Global click handler for link vibration
   function handleGlobalClick(e: MouseEvent) {
@@ -40,6 +43,14 @@
   });
 
   onMount(async () => {
+    configureAndroidStatusBar().catch((error) => {
+      console.warn('Android status bar configuration failed', error);
+    });
+
+    if (isAndroidNative()) {
+      isAndroidApp = true;
+    }
+
     // Register PWA Service Worker
     const { registerSW } = await import('virtual:pwa-register');
     registerSW({
@@ -142,7 +153,7 @@
 
 {#if isInitialized}
   <div
-    class="h-dvh bg-gray-50 dark:bg-slate-950 flex justify-center overflow-hidden relative lg:p-4"
+    class="h-dvh bg-gray-50 dark:bg-slate-950 flex justify-center overflow-hidden relative lg:p-4 {isAndroidApp ? 'pt-10' : ''}"
   >
     <!-- Background Elements for Glassmorphism Context -->
     <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-400/20 dark:bg-blue-900/20 rounded-full blur-[100px] pointer-events-none"></div>
