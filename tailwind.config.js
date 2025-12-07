@@ -28,9 +28,9 @@ export default {
           400: '#acb0be', // Surface2
           500: '#9ca0b0', // Overlay0
           600: '#8c8fa1', // Overlay1
-          700: '#6c6f85', // Subtext0
-          800: '#5c5f77', // Subtext1
-          900: '#4c4f69', // Text
+          700: '#374151', // Subtext0 -> darker
+          800: '#1f2937', // Subtext1 -> darker
+          900: '#111827', // Text -> almost black
         },
         // Catppuccin blue override for Tailwind 'blue' using active theme
         blue: {
