@@ -222,7 +222,7 @@
                         {/if}
                     </div>
                     {#if contact.lastMessageText}
-                        <div class="text-xs text-gray-500 dark:text-slate-300 truncate md:hidden">
+                        <div class="text-xs text-gray-800 dark:text-slate-300 truncate md:hidden">
                             {contact.lastMessageText}
                         </div>
                     {/if}
