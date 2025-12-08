@@ -9,7 +9,8 @@
   import { getCurrentThemeMode, setThemeMode } from "$lib/stores/theme.svelte";
   import type { ThemeMode } from "$lib/stores/theme";
   import MediaUploadButton from './MediaUploadButton.svelte';
-  import { isAndroidNative } from "$lib/core/NativeDialogs";
+  import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
+  import { enableAndroidBackgroundMessaging, disableAndroidBackgroundMessaging } from "$lib/core/BackgroundMessaging";
   const packageVersion = __APP_VERSION__;
 
   let { isOpen = false, close = () => {} } = $props<{
@@ -22,6 +23,7 @@
 
   let notificationsEnabled = $state(false);
   let urlPreviewsEnabled = $state(true);
+  let backgroundMessagingEnabled = $state(false);
   let isSupported = $state(false);
   let isLoaded = $state(false);
 
@@ -187,12 +189,14 @@
         isSupported = notificationService.isSupported();
         const saved = localStorage.getItem("nospeak-settings");
         if (saved) {
-          const settings = JSON.parse(saved) as { notificationsEnabled?: boolean; urlPreviewsEnabled?: boolean };
+          const settings = JSON.parse(saved) as { notificationsEnabled?: boolean; urlPreviewsEnabled?: boolean; backgroundMessagingEnabled?: boolean };
           notificationsEnabled = settings.notificationsEnabled || false;
           urlPreviewsEnabled = typeof settings.urlPreviewsEnabled === "boolean" ? settings.urlPreviewsEnabled : true;
+          backgroundMessagingEnabled = settings.backgroundMessagingEnabled === true;
         } else {
           notificationsEnabled = false;
           urlPreviewsEnabled = true;
+          backgroundMessagingEnabled = false;
         }
  
         themeMode = getCurrentThemeMode();
@@ -211,6 +215,7 @@
         ...existingSettings,
         notificationsEnabled,
         urlPreviewsEnabled,
+        backgroundMessagingEnabled,
       };
       localStorage.setItem("nospeak-settings", JSON.stringify(settings));
     }
@@ -225,6 +230,35 @@
       }
     } else {
       notificationsEnabled = false;
+    }
+  }
+
+  async function toggleBackgroundMessaging() {
+    if (!isAndroidApp) {
+      return;
+    }
+
+    if (!backgroundMessagingEnabled) {
+      backgroundMessagingEnabled = true;
+
+      await nativeDialogService.alert({
+        title: "Background messaging",
+        message:
+          "Nospeak will stay connected to your read relays and show a persistent notification while running in the background. You may need to allow background activity or disable battery optimizations for reliable delivery in Android settings.",
+      });
+
+      try {
+        await enableAndroidBackgroundMessaging();
+      } catch (e) {
+        console.error("Failed to enable Android background messaging:", e);
+      }
+    } else {
+      backgroundMessagingEnabled = false;
+      try {
+        await disableAndroidBackgroundMessaging();
+      } catch (e) {
+        console.error("Failed to disable Android background messaging:", e);
+      }
     }
   }
 
@@ -415,6 +449,41 @@
                 {/if}
               </div>
 
+              {#if isAndroidApp}
+                <div class="flex items-center justify-between">
+                  <div>
+                    <label
+                      for="background-messaging-toggle"
+                      class="font-medium dark:text-white"
+                      >Background Messaging (Android)</label
+                    >
+                    <p class="text-sm text-gray-500 dark:text-slate-400">
+                      Keep nospeak connected to your read relays and receive new message
+                      notifications while the app is in the background. Android will show a
+                      persistent notification when this is enabled.
+                    </p>
+                  </div>
+                  <button
+                    id="background-messaging-toggle"
+                    onclick={toggleBackgroundMessaging}
+                    class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      backgroundMessagingEnabled
+                        ? "bg-blue-500"
+                        : "bg-gray-200 dark:bg-slate-600"
+                    }`}
+                    aria-label={backgroundMessagingEnabled
+                      ? "Disable Android background messaging"
+                      : "Enable Android background messaging"}
+                  >
+                    <span
+                      class={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        backgroundMessagingEnabled ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    ></span>
+                  </button>
+                </div>
+              {/if}
+
               <div class="flex items-center justify-between">
                 <div>
                   <label
@@ -519,7 +588,7 @@
                 <div>
                   <label
                     for="profile-picture"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >Picture URL</label
                   >
                   <div class="flex gap-2">
@@ -552,66 +621,65 @@
                   </div>
                 </div>
 
-                 <div>
-                   <label
-                     for="profile-nip05"
-                     class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
-                     >NIP-05 (Username)</label
-                   >
-                   <input
-                     id="profile-nip05"
-                     bind:value={profileNip05}
-                     type="text"
-                     class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                     placeholder="name@domain.com"
-                     oninput={() => (profileNip05Status = "unknown")}
-                   />
-                   {#if profileNip05}
-                     {#if profileNip05Status === "valid"}
-                       <div class="mt-1 text-xs text-green-600 flex items-center gap-1">
-                         <svg
-                           class="shrink-0"
-                           xmlns="http://www.w3.org/2000/svg"
-                           width="12"
-                           height="12"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           stroke-width="2"
-                           stroke-linecap="round"
-                           stroke-linejoin="round">
-                           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                           <path d="m9 12 2 2 4-4"></path>
-                         </svg>
-                         <span>Verified for this key ({getDisplayedNip05(profileNip05)})</span>
-                       </div>
-                     {:else if profileNip05Status === "invalid"}
-                       <div class="mt-1 text-xs text-yellow-600 flex items-center gap-1">
-                         <svg
-                           class="shrink-0"
-                           xmlns="http://www.w3.org/2000/svg"
-                           width="12"
-                           height="12"
-                           viewBox="0 0 24 24"
-                           fill="none"
-                           stroke="currentColor"
-                           stroke-width="2"
-                           stroke-linecap="round"
-                           stroke-linejoin="round">
-                           <circle cx="12" cy="12" r="10"></circle>
-                           <line x1="12" y1="8" x2="12" y2="12"></line>
-                           <circle cx="12" cy="16" r="1"></circle>
-                         </svg>
-                         <span>NIP-05 not verified for this key</span>
-                       </div>
-                     {:else}
-                       <div class="mt-1 text-xs text-gray-500">
-                         Verification status unknown for {getDisplayedNip05(profileNip05)}
-                       </div>
-                     {/if}
-                   {/if}
-                 </div>
-
+                <div>
+                  <label
+                    for="profile-nip05"
+                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >NIP-05 (Username)</label
+                  >
+                  <input
+                    id="profile-nip05"
+                    bind:value={profileNip05}
+                    type="text"
+                    class="w-full px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="name@domain.com"
+                    oninput={() => (profileNip05Status = "unknown")}
+                  />
+                  {#if profileNip05}
+                    {#if profileNip05Status === "valid"}
+                      <div class="mt-1 text-xs text-green-600 flex items-center gap-1">
+                        <svg
+                          class="shrink-0"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                          <path d="m9 12 2 2 4-4"></path>
+                        </svg>
+                        <span>Verified for this key ({getDisplayedNip05(profileNip05)})</span>
+                      </div>
+                    {:else if profileNip05Status === "invalid"}
+                      <div class="mt-1 text-xs text-yellow-600 flex items-center gap-1">
+                        <svg
+                          class="shrink-0"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <line x1="12" y1="8" x2="12" y2="12"></line>
+                          <circle cx="12" cy="16" r="1"></circle>
+                        </svg>
+                        <span>NIP-05 not verified for this key</span>
+                      </div>
+                    {:else}
+                      <div class="mt-1 text-xs text-gray-500">
+                        Verification status unknown for {getDisplayedNip05(profileNip05)}
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
 
                 <div>
                   <label

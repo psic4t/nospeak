@@ -63,7 +63,9 @@ vi.mock('./ProfileResolver', () => ({
  
 vi.mock('./Messaging', () => ({
     messagingService: {
-        fetchHistory: vi.fn().mockResolvedValue({ totalFetched: 0, processed: 0 })
+        fetchHistory: vi.fn().mockResolvedValue({ totalFetched: 0, processed: 0 }),
+        startSubscriptionsForCurrentUser: vi.fn().mockResolvedValue(undefined),
+        stopSubscriptions: vi.fn()
     }
 }));
  

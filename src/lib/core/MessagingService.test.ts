@@ -124,11 +124,41 @@ describe('MessagingService - Auto-add Contacts', () => {
 
             expect(Array.isArray(filters)).toBe(true);
             expect(filters).toHaveLength(1);
-            expect(filters[0].kinds).toEqual([1059]);
-            expect(filters[0]['#p']).toEqual([pubkey]);
-            expect(filters[0].since).toBeUndefined();
-            expect(unsubscribe).toBe(unsubscribeMock);
-        });
+             expect(filters[0].kinds).toEqual([1059]);
+             expect(filters[0]['#p']).toEqual([pubkey]);
+             expect(filters[0].since).toBeUndefined();
+             expect(unsubscribe).toBe(unsubscribeMock);
+         });
+ 
+         it('startSubscriptionsForCurrentUser starts a single global subscription', async () => {
+              const unsubscribeMock = vi.fn();
+              vi.mocked(connectionManager.subscribe).mockReturnValue(unsubscribeMock);
+ 
+              const s: any = {
+                  getPublicKey: vi.fn().mockResolvedValue('test-pubkey')
+              };
+ 
+              // First call to get() returns signer, second call returns currentUser
+              vi.mocked(get).mockImplementation((store: any) => {
+                  if (store === signer) return s;
+                  if (store === (currentUser as any)) return { npub: 'npub1test' };
+                  return null;
+              });
+ 
+              await (messagingService as any).startSubscriptionsForCurrentUser();
+ 
+              expect(connectionManager.subscribe).toHaveBeenCalledTimes(1);
+ 
+              // Calling again with same user should be idempotent
+              await (messagingService as any).startSubscriptionsForCurrentUser();
+              expect(connectionManager.subscribe).toHaveBeenCalledTimes(1);
+ 
+              // Stopping should call underlying unsubscribe once
+              (messagingService as any).stopSubscriptions();
+              expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+          });
+
+
     });
 
     describe('notification suppression for history messages', () => {

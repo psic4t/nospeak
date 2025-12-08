@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { messagingService } from '$lib/core/Messaging';
     import { signer } from '$lib/stores/auth';
-    import { onMount } from 'svelte';
+     import { onMount } from 'svelte';
+
     import { goto } from '$app/navigation';
     import { page } from '$app/state';
     import ContactList from '$lib/components/ContactList.svelte';
@@ -15,44 +15,41 @@
     let previousSyncState = { isSyncing: false, isFirstSync: false };
 
     onMount(() => {
-        const s = $signer;
-        if (!s) {
-            // Double check:
-            if (!s) {
-                 goto('/');
-                 return;
-            }
-        }
+         const s = $signer;
+         if (!s) {
+             // Double check:
+             if (!s) {
+                  goto('/');
+                  return;
+             }
+         }
+ 
+         let setupStarted = false;
+ 
+         const setup = async () => {
+             setupStarted = true;
+ 
+             // Auto-navigate to last message recipient if on chat root AND on desktop
+             const isDesktop = window.innerWidth >= 768;
+             if (page.url.pathname === '/chat' && isDesktop) {
+                 const lastRecipient = await messageRepo.getLastMessageRecipient();
+                 if (lastRecipient) {
+                     goto(`/chat/${lastRecipient}`);
+                 }
+             }
+         };
+ 
+         const stopSyncSubscription = syncState.subscribe(state => {
+             if (!setupStarted && !state.flowActive) {
+                 setup();
+             }
+         });
+ 
+         return () => {
+             stopSyncSubscription();
+         };
+     });
 
-        let unsub: (() => void) | null = null;
-        let setupStarted = false;
-
-        const setup = async () => {
-            setupStarted = true;
-            const pubkey = await s.getPublicKey();
-            unsub = messagingService.listenForMessages(pubkey);
-            
-            // Auto-navigate to last message recipient if on chat root AND on desktop
-            const isDesktop = window.innerWidth >= 768;
-            if (page.url.pathname === '/chat' && isDesktop) {
-                const lastRecipient = await messageRepo.getLastMessageRecipient();
-                if (lastRecipient) {
-                    goto(`/chat/${lastRecipient}`);
-                }
-            }
-        };
-
-        const stopSyncSubscription = syncState.subscribe(state => {
-            if (!setupStarted && !state.flowActive) {
-                setup();
-            }
-        });
-
-        return () => {
-            if (unsub) unsub();
-            stopSyncSubscription();
-        };
-    });
     
     // Watch for sync completion to auto-navigate on desktop
     $effect(() => {

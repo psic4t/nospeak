@@ -13,12 +13,16 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 
 export class MessagingService {
   private debug: boolean = true;
-  private isFetchingHistory: boolean = false;
-  private lastHistoryFetch: number = 0;
-  private readonly HISTORY_FETCH_DEBOUNCE = 5000; // 5 seconds
+   private isFetchingHistory: boolean = false;
+   private lastHistoryFetch: number = 0;
+   private readonly HISTORY_FETCH_DEBOUNCE = 5000; // 5 seconds
+ 
+   private activeSubscriptionUnsub: (() => void) | null = null;
+   private activeSubscriptionPubkey: string | null = null;
+ 
+   // Listen for incoming messages
+   public listenForMessages(publicKey: string): () => void {
 
-  // Listen for incoming messages
-  public listenForMessages(publicKey: string): () => void {
     // Subscribe to all gift-wraps for this user.
     // We intentionally omit `since` because gift-wrap events
     // use randomized created_at timestamps (NIP-59 style),
@@ -42,9 +46,60 @@ export class MessagingService {
 
       await this.handleGiftWrap(event);
     });
+ 
+     return unsub;
+   }
+ 
+   public async startSubscriptionsForCurrentUser(): Promise<void> {
+     const s = get(signer);
+     const user = get(currentUser);
+ 
+     if (!s || !user) {
+       if (this.debug) console.warn('Cannot start subscriptions: missing signer or user');
+       return;
+     }
+ 
+     const pubkey = await s.getPublicKey();
+ 
+     // If already subscribed for this pubkey, do nothing
+     if (this.activeSubscriptionUnsub && this.activeSubscriptionPubkey === pubkey) {
+       if (this.debug) console.log('Subscriptions already active for current user, skipping start');
+       return;
+     }
+ 
+     // Stop previous subscription if pubkey changed
+     if (this.activeSubscriptionUnsub) {
+       try {
+         this.activeSubscriptionUnsub();
+       } catch (e) {
+         console.error('Error while stopping previous subscription:', e);
+       }
+       this.activeSubscriptionUnsub = null;
+       this.activeSubscriptionPubkey = null;
+     }
+ 
+     const unsub = this.listenForMessages(pubkey);
+     this.activeSubscriptionUnsub = unsub;
+     this.activeSubscriptionPubkey = pubkey;
+ 
+     if (this.debug) console.log('Started app-global message subscriptions for current user');
+   }
+ 
+   public stopSubscriptions(): void {
+     if (this.activeSubscriptionUnsub) {
+       try {
+         this.activeSubscriptionUnsub();
+       } catch (e) {
+         console.error('Error while stopping subscriptions:', e);
+       }
+     }
+ 
+     this.activeSubscriptionUnsub = null;
+     this.activeSubscriptionPubkey = null;
+ 
+     if (this.debug) console.log('Stopped app-global message subscriptions');
+   }
 
-    return unsub;
-  }
 
   private async handleGiftWrap(event: NostrEvent) {
     const s = get(signer);

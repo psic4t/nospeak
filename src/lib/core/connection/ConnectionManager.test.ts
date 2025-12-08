@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConnectionManager, DefaultRetryConfig } from './ConnectionManager';
-import { Relay } from 'nostr-tools';
 
 vi.mock('nostr-tools', () => {
     return {
@@ -33,8 +32,6 @@ describe('ConnectionManager', () => {
     });
 
     it('should track consecutive failures', () => {
-        // Access private method or simulate failure?
-        // We can't easily access private methods in TS tests unless we cast to any
         const cmAny = cm as any;
         const url = 'wss://fail.com';
         cm.addPersistentRelay(url);
@@ -44,5 +41,17 @@ describe('ConnectionManager', () => {
         
         cmAny.markRelayFailure(url);
         expect(cm.getRelayHealth(url)?.consecutiveFails).toBe(2);
+    });
+
+    it('applies more conservative backoff in background mode', () => {
+        const cmAny = cm as any;
+        const normalBackoff = cmAny.calculateBackoff(3);
+        cmAny.setBackgroundModeEnabled(true);
+        const backgroundBackoff = cmAny.calculateBackoff(3);
+        expect(backgroundBackoff).toBeGreaterThanOrEqual(normalBackoff);
+        
+        cmAny.setBackgroundModeEnabled(false);
+        const restoredBackoff = cmAny.calculateBackoff(3);
+        expect(restoredBackoff).toBe(normalBackoff);
     });
 });

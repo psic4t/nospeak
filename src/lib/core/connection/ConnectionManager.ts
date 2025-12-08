@@ -38,8 +38,11 @@ export const DefaultRetryConfig: RetryConfig = {
 export class ConnectionManager {
     private relays: Map<string, RelayHealth>;
     private config: RetryConfig;
+    private defaultConfig!: RetryConfig;
     private debug: boolean;
     private isShutdown: boolean = false;
+    private backgroundModeEnabled: boolean = false;
+
     private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
     private uiUpdateTimer: ReturnType<typeof setInterval> | null = null;
     private onRelayListUpdate: ((relays: RelayHealth[]) => void) | null = null;
@@ -48,7 +51,8 @@ export class ConnectionManager {
 
     constructor(config: RetryConfig = DefaultRetryConfig, debug: boolean = false) {
         this.relays = new Map();
-        this.config = config;
+        this.defaultConfig = { ...config };
+        this.config = { ...config };
         this.debug = debug;
     }
 
@@ -233,10 +237,34 @@ export class ConnectionManager {
     public getAllRelayHealth(): RelayHealth[] {
         return Array.from(this.relays.values());
     }
-
+ 
     public setUpdateCallback(callback: (relays: RelayHealth[]) => void) {
         this.onRelayListUpdate = callback;
     }
+ 
+    public setBackgroundModeEnabled(enabled: boolean) {
+        this.backgroundModeEnabled = enabled;
+ 
+        if (!enabled) {
+            this.config = { ...this.defaultConfig };
+            if (this.debug) {
+                console.log('Background mode disabled, restored default retry config');
+            }
+            return;
+        }
+ 
+        // In background mode, use more conservative backoff settings to reduce energy usage.
+        this.config = {
+            ...this.config,
+            initialBackoff: Math.max(this.config.initialBackoff, 2000),
+            maxBackoff: Math.max(this.config.maxBackoff, 60000)
+        };
+ 
+        if (this.debug) {
+            console.log('Background mode enabled, applying conservative retry config', this.config);
+        }
+    }
+
 
     private markRelayFailure(url: string) {
         const health = this.relays.get(url);
