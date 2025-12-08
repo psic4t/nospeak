@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { onMount } from 'svelte';
+    import { getUrlPreviewApiUrl } from '$lib/core/UrlPreviewApi';
+
     let { content, isOwn = false } = $props<{ content: string; isOwn?: boolean }>();
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -84,26 +87,65 @@
     } | null;
 
     let preview = $state<UrlPreviewState>(null);
-
     let previewUrl = $derived(getFirstNonMediaUrl(content));
 
+    let container: HTMLElement | null = null;
+    let isVisible = $state(false);
+    let lastPreviewUrl: string | null = null;
+
+    onMount(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        if (!('IntersectionObserver' in window) || !container) {
+            // Fallback: treat as visible so web behavior remains unchanged
+            isVisible = true;
+            return;
+        }
+
+        const observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target === container) {
+                    isVisible = entry.isIntersecting;
+                }
+            }
+        });
+
+        observer.observe(container);
+
+        return () => {
+            observer.disconnect();
+        };
+    });
+ 
     $effect(() => {
         if (!previewUrl) {
             preview = null;
+            lastPreviewUrl = null;
             return;
         }
         if (!getUrlPreviewsEnabled()) {
             preview = null;
+            lastPreviewUrl = null;
             return;
         }
         if (typeof window === 'undefined') {
             preview = null;
             return;
         }
+        if (!isVisible) {
+            return;
+        }
+        if (lastPreviewUrl === previewUrl) {
+            return;
+        }
 
+        lastPreviewUrl = previewUrl;
+ 
         (async () => {
             try {
-                const response = await fetch(`/api/url-preview?url=${encodeURIComponent(previewUrl)}`);
+                const response = await fetch(getUrlPreviewApiUrl(previewUrl));
                 if (!response.ok || response.status === 204) {
                     preview = null;
                     return;
@@ -114,14 +156,14 @@
                     description?: string;
                     image?: string;
                 };
-
+ 
                 if (!data || (!data.title && !data.description)) {
                     preview = null;
                     return;
                 }
-
+ 
                 const parsedUrl = new URL(previewUrl);
-
+ 
                 preview = {
                     url: data.url ?? previewUrl,
                     title: data.title ?? parsedUrl.hostname,
@@ -135,8 +177,9 @@
         })();
     });
 </script>
+ 
+<div bind:this={container} class={`whitespace-pre-wrap break-words leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
 
-<div class={`whitespace-pre-wrap break-words leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
     {#each parts as part}
         {#if part.match(/^https?:\/\//)}
             {#if isImage(part)}
