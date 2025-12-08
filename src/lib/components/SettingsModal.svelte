@@ -175,10 +175,18 @@
     }
   }
 
-  let showMobileContent = $state(false);
+   let showMobileContent = $state(false);
+ 
+   $effect(() => {
+     if (!isOpen) {
+       activeCategory = "General";
+       showMobileContent = false;
+     }
+   });
+ 
+   // Load settings from localStorage
+   $effect(() => {
 
-  // Load settings from localStorage
-  $effect(() => {
     if (isOpen) {
       showMobileContent = false;
       // Always refresh profile and relay settings when the modal opens

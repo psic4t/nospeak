@@ -31,7 +31,23 @@
      let nip05VerifyToken = 0;
      let searchDebounceId: ReturnType<typeof setTimeout> | null = null;
  
-     const isNpubMode = $derived(newNpub.trim().startsWith('npub'));
+      function resetState() {
+          if (searchDebounceId) {
+              clearTimeout(searchDebounceId);
+              searchDebounceId = null;
+          }
+ 
+          newNpub = '';
+          isAdding = false;
+          isSearching = false;
+          searchResults = [];
+          searchError = null;
+          searchToken = 0;
+          nip05VerifyToken = 0;
+      }
+ 
+ 	     const isNpubMode = $derived(newNpub.trim().startsWith('npub'));
+
 
     function shortenNpub(npub: string): string {
         if (npub.length <= 20) {
@@ -123,18 +139,29 @@
         displayContacts = data;
     }
 
-    $effect(() => {
-         const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
-             contacts = c;
-             await refreshDisplayContacts(c);
-         });
-         return () => sub.unsubscribe();
-     });
- 
      $effect(() => {
-         const query = newNpub.trim();
+ 	         const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
+ 	             contacts = c;
+ 	             await refreshDisplayContacts(c);
+ 	         });
+ 	         return () => sub.unsubscribe();
+ 	     });
+ 	 
+      $effect(() => {
+          if (!isOpen) {
+              resetState();
+          }
+      });
  
-         if (searchDebounceId) {
+ 	     $effect(() => {
+
+          if (!isOpen) {
+              return;
+          }
+ 	         const query = newNpub.trim();
+ 	 
+ 	         if (searchDebounceId) {
+
              clearTimeout(searchDebounceId);
              searchDebounceId = null;
          }
