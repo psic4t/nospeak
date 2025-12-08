@@ -778,11 +778,11 @@
               </div>
 
               <div
-                class="space-y-2 border rounded-md dark:border-slate-700 divide-y dark:divide-slate-700"
+                class="border border-gray-200/60 dark:border-slate-700/70 rounded-2xl bg-white/80 dark:bg-slate-900/60 overflow-hidden shadow-sm divide-y divide-gray-200/60 dark:divide-slate-700/70"
               >
                 {#each relays as relay}
                   <div
-                    class="p-3 flex items-center justify-between bg-white dark:bg-slate-800"
+                    class="px-4 py-3 flex items-center justify-between"
                   >
                     <div class="flex-1 min-w-0 pr-4">
                       <p
@@ -839,7 +839,7 @@
                     </div>
                   </div>
                 {:else}
-                  <div class="p-4 text-center text-gray-500 dark:text-slate-400">
+                  <div class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
                     No relays configured
                   </div>
                 {/each}
