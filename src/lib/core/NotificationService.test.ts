@@ -234,17 +234,45 @@ describe('NotificationService (web notifications)', () => {
     it('does not schedule when Android permission is denied', async () => {
         isAndroidNativeMock.mockReturnValue(true);
         getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Carol' } });
-
+ 
         if (typeof window !== 'undefined' && window.localStorage) {
             window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
         }
-
+ 
         checkPermissionsMock.mockResolvedValueOnce({ display: 'denied' });
-
+ 
         const { notificationService } = await import('./NotificationService');
-
+ 
         await notificationService.showNewMessageNotification('npub1carol', 'Hi');
-
+ 
+        expect(scheduleMock).not.toHaveBeenCalled();
+    });
+ 
+    it('suppresses Android notification when same conversation is active and visible', async () => {
+        isAndroidNativeMock.mockReturnValue(true);
+        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Dave' } });
+ 
+        if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
+        }
+ 
+        if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', '/chat/npub1dave');
+        }
+ 
+        if (typeof document !== 'undefined') {
+            Object.defineProperty(document, 'visibilityState', {
+                value: 'visible',
+                configurable: true
+            });
+            (document as any).hasFocus = vi.fn().mockReturnValue(true);
+        }
+ 
+        const { notificationService } = await import('./NotificationService');
+ 
+        await notificationService.showNewMessageNotification('npub1dave', 'Hi from Dave');
+ 
         expect(scheduleMock).not.toHaveBeenCalled();
     });
 });
+

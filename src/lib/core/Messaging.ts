@@ -11,44 +11,55 @@ import { contactRepo } from '$lib/db/ContactRepository';
 import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 
-export class MessagingService {
-  private debug: boolean = true;
-   private isFetchingHistory: boolean = false;
-   private lastHistoryFetch: number = 0;
-   private readonly HISTORY_FETCH_DEBOUNCE = 5000; // 5 seconds
+ export class MessagingService {
+   private debug: boolean = true;
+    private isFetchingHistory: boolean = false;
+    private lastHistoryFetch: number = 0;
+    private readonly HISTORY_FETCH_DEBOUNCE = 5000; // 5 seconds
+    private liveSeenEventIds: Set<string> = new Set();
  
-   private activeSubscriptionUnsub: (() => void) | null = null;
-   private activeSubscriptionPubkey: string | null = null;
+    private activeSubscriptionUnsub: (() => void) | null = null;
+    private activeSubscriptionPubkey: string | null = null;
  
-   // Listen for incoming messages
-   public listenForMessages(publicKey: string): () => void {
-
-    // Subscribe to all gift-wraps for this user.
-    // We intentionally omit `since` because gift-wrap events
-    // use randomized created_at timestamps (NIP-59 style),
-    // which can place new messages in the past. We rely on
-    // messageRepo.hasMessage() for deduplication.
-    const filters = [{
-      kinds: [1059], // Kind 1059 Gift Wrap
-      '#p': [publicKey]
-    }];
-
-    if (this.debug) console.log('Listening for messages...', filters);
-
-    const unsub = connectionManager.subscribe(filters, async (event) => {
-      if (this.debug) console.log('Received gift wrap event:', event);
-
-      // Deduplicate? (ConnectionManager might not dedupe if multiple relays send same event)
-      if (await messageRepo.hasMessage(event.id)) {
-        if (this.debug) console.log('Message already in cache, skipping');
-        return;
-      }
-
-      await this.handleGiftWrap(event);
-    });
+    // Listen for incoming messages
+    public listenForMessages(publicKey: string): () => void {
  
-     return unsub;
-   }
+     // Subscribe to all gift-wraps for this user.
+     // We intentionally omit `since` because gift-wrap events
+     // use randomized created_at timestamps (NIP-59 style),
+     // which can place new messages in the past. We rely on
+     // messageRepo.hasMessage() for deduplication.
+     const filters = [{
+       kinds: [1059], // Kind 1059 Gift Wrap
+       '#p': [publicKey]
+     }];
+ 
+     if (this.debug) console.log('Listening for messages...', filters);
+ 
+     const unsub = connectionManager.subscribe(filters, async (event) => {
+       if (this.debug) console.log('Received gift wrap event:', event);
+ 
+       if (this.liveSeenEventIds.has(event.id)) {
+         if (this.debug) console.log('Event already processed in live subscription, skipping');
+         return;
+       }
+       this.liveSeenEventIds.add(event.id);
+       if (this.liveSeenEventIds.size > 5000) {
+         this.liveSeenEventIds.clear();
+         this.liveSeenEventIds.add(event.id);
+       }
+ 
+       if (await messageRepo.hasMessage(event.id)) {
+         if (this.debug) console.log('Message already in cache, skipping');
+         return;
+       }
+ 
+       await this.handleGiftWrap(event);
+     });
+ 
+      return unsub;
+    }
+
  
    public async startSubscriptionsForCurrentUser(): Promise<void> {
      const s = get(signer);

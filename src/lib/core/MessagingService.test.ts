@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessagingService } from './Messaging';
 import { contactRepo } from '$lib/db/ContactRepository';
 import { messageRepo } from '$lib/db/MessageRepository';
-import { signer } from '$lib/stores/auth';
+import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { connectionManager } from './connection/instance';
 
@@ -115,13 +115,13 @@ describe('MessagingService - Auto-add Contacts', () => {
         it('subscribes without a since filter', () => {
             const unsubscribeMock = vi.fn();
             vi.mocked(connectionManager.subscribe).mockReturnValue(unsubscribeMock);
-
+ 
             const pubkey = 'test-pubkey';
             const unsubscribe = messagingService.listenForMessages(pubkey);
-
+ 
             expect(connectionManager.subscribe).toHaveBeenCalledTimes(1);
             const [filters] = vi.mocked(connectionManager.subscribe).mock.calls[0];
-
+ 
             expect(Array.isArray(filters)).toBe(true);
             expect(filters).toHaveLength(1);
              expect(filters[0].kinds).toEqual([1059]);
@@ -157,9 +157,35 @@ describe('MessagingService - Auto-add Contacts', () => {
               (messagingService as any).stopSubscriptions();
               expect(unsubscribeMock).toHaveBeenCalledTimes(1);
           });
+ 
+         it('deduplicates live events across multiple relays by id', async () => {
+             const unsubscribeMock = vi.fn();
+             let handler: any = null;
+ 
+             vi.mocked(connectionManager.subscribe).mockImplementation((filters: any[], onEvent: (event: any) => void) => {
+                 handler = onEvent as any;
+                 return unsubscribeMock;
+             });
+ 
+             const pubkey = 'test-pubkey';
+             messagingService.listenForMessages(pubkey);
+ 
+             const event = { id: 'event-id-1', pubkey: 'sender', content: 'cipher', created_at: 1, tags: [] } as any;
+ 
+             const hasMessageSpy = vi.mocked(messageRepo.hasMessage);
+             hasMessageSpy.mockResolvedValue(false);
+ 
+             const handleGiftWrapSpy = vi.spyOn(messagingService as any, 'handleGiftWrap').mockResolvedValue(undefined);
+ 
+             await handler?.(event);
+             await handler?.(event);
+ 
+             expect(handleGiftWrapSpy).toHaveBeenCalledTimes(1);
+         });
+ 
+ 
+     });
 
-
-    });
 
     describe('notification suppression for history messages', () => {
         it('should have isFetchingHistory property', () => {

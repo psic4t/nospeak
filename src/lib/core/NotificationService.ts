@@ -86,13 +86,10 @@ export class NotificationService {
             return;
         }
 
-        // On web, avoid spamming notifications while the app is active.
-        // On Android native, always allow notifications so the OS can surface them
-        // even if the WebView reports itself as visible.
-        if (!this.isAndroidNativeEnv && typeof document !== 'undefined') {
+        if (typeof document !== 'undefined') {
             const hasFocus = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
             const isVisible = document.visibilityState === 'visible';
-
+ 
             let isSameConversation = false;
             if (typeof window !== 'undefined') {
                 const path = window.location.pathname;
@@ -101,13 +98,14 @@ export class NotificationService {
                     isSameConversation = currentNpub === senderNpub;
                 }
             }
-
+ 
             const shouldSuppress = isVisible && hasFocus && isSameConversation;
-
+ 
             if (shouldSuppress) {
                 return;
             }
         }
+
 
         let senderName = senderNpub.slice(0, 10) + '...';
         let senderPicture: string | undefined;
