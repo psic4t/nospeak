@@ -133,8 +133,8 @@ export class NotificationService {
                         title: `New message from ${senderName}`,
                         body: message,
                         channelId: ANDROID_MESSAGE_CHANNEL_ID,
-                        smallIcon: 'ic_launcher_foreground',
-                        extra: {
+                        smallIcon: 'ic_stat_nospeak',
+                         extra: {
                             url: `/chat/${senderNpub}`
                         }
                     }

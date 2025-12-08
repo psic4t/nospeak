@@ -19,7 +19,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     LocalNotifications: {
-      smallIcon: 'ic_launcher_foreground',
+      smallIcon: 'ic_stat_nospeak',
     },
   },
 };
