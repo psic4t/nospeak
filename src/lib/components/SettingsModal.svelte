@@ -410,8 +410,8 @@
                 </select>
               </div>
 
-              <div class="flex items-center justify-between">
-                <div>
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
                   <label
                     for="notifications-toggle"
                     class="font-medium dark:text-white"
@@ -427,7 +427,7 @@
                   <button
                     id="notifications-toggle"
                     onclick={toggleNotifications}
-                    class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    class={`ml-4 flex-shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       notificationsEnabled
                         ? "bg-blue-500"
                         : "bg-gray-200 dark:bg-slate-600"
@@ -450,12 +450,12 @@
               </div>
 
               {#if isAndroidApp}
-                <div class="flex items-center justify-between">
-                  <div>
+                <div class="flex items-start justify-between gap-4">
+                  <div class="flex-1 min-w-0">
                     <label
                       for="background-messaging-toggle"
                       class="font-medium dark:text-white"
-                      >Background Messaging (Android)</label
+                      >Background Messaging</label
                     >
                     <p class="text-sm text-gray-500 dark:text-slate-400">
                       Keep nospeak connected to your read relays and receive new message
@@ -466,7 +466,7 @@
                   <button
                     id="background-messaging-toggle"
                     onclick={toggleBackgroundMessaging}
-                    class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    class={`ml-4 flex-shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       backgroundMessagingEnabled
                         ? "bg-blue-500"
                         : "bg-gray-200 dark:bg-slate-600"
@@ -484,8 +484,8 @@
                 </div>
               {/if}
 
-              <div class="flex items-center justify-between">
-                <div>
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
                   <label
                     for="url-previews-toggle"
                     class="font-medium dark:text-white"
@@ -498,7 +498,7 @@
                 <button
                   id="url-previews-toggle"
                   onclick={() => (urlPreviewsEnabled = !urlPreviewsEnabled)}
-                  class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  class={`ml-4 flex-shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     urlPreviewsEnabled
                       ? "bg-blue-500"
                       : "bg-gray-200 dark:bg-slate-600"
