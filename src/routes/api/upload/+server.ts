@@ -50,7 +50,7 @@ function jsonError(status: number, message: string): Response {
     });
 }
 
-export async function validateNip98(request: Request): Promise<Response | null> {
+export async function _validateNip98(request: Request): Promise<Response | null> {
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Nostr ')) {
         return jsonError(401, 'Missing NIP-98 Authorization header');
@@ -95,7 +95,7 @@ export async function validateNip98(request: Request): Promise<Response | null> 
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-    const authError = await validateNip98(request);
+    const authError = await _validateNip98(request);
     if (authError) {
         return authError;
     }

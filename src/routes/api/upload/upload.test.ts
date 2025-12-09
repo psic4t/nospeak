@@ -6,7 +6,7 @@ vi.mock('nostr-tools', () => {
     };
 });
 
-import { POST, OPTIONS, validateNip98 } from './+server';
+import { POST, OPTIONS, _validateNip98 } from './+server';
 
 function toBase64Url(input: string): string {
     const b64 = Buffer.from(input, 'utf8').toString('base64');
@@ -55,7 +55,7 @@ describe('api/upload NIP-98 auth and CORS', () => {
             }
         });
 
-        const authError = await validateNip98(request);
+        const authError = await _validateNip98(request);
         expect(authError).toBeNull();
     });
 
@@ -83,7 +83,7 @@ describe('api/upload NIP-98 auth and CORS', () => {
             }
         });
 
-        const authError = await validateNip98(request);
+        const authError = await _validateNip98(request);
         expect(authError).not.toBeNull();
         expect(authError!.status).toBe(401);
         expect(authError!.headers.get('Access-Control-Allow-Origin')).toBe('*');
