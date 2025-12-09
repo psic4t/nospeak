@@ -401,10 +401,10 @@
   {/if}
 </svelte:head>
 
-<div class="flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm">
+<div class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm">
   {#if partnerNpub}
     <div
-      class="p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex-shrink-0 z-10 shadow-sm"
+      class="absolute top-0 left-0 right-0 z-20 p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl shadow-sm transition-all duration-200"
     >
       <div class="flex items-center gap-3">
         <button 
@@ -449,7 +449,7 @@
     </div>
   {/if}
 
-  <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar" onscroll={handleScroll}>
+  <div bind:this={chatContainer} class="flex-1 overflow-y-auto px-4 pb-28 pt-20 space-y-4 custom-scrollbar" onscroll={handleScroll}>
     {#if canRequestNetworkHistory && messages.length > 0}
       <div class="flex justify-center p-2">
         <button
@@ -547,7 +547,7 @@
   </div>
 
   <div
-    class="p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md flex-shrink-0"
+    class="absolute bottom-0 left-0 right-0 z-20 p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl shadow-lg transition-all duration-200"
   >
     <form
       onsubmit={(e) => {
@@ -558,12 +558,12 @@
     >
       {#if showEmojiPicker && filteredEmojis.length > 0}
         <div
-          class="absolute bottom-full mb-2 left-12 bg-white dark:bg-slate-800 border dark:border-slate-700 shadow-lg rounded-lg overflow-hidden w-64 z-50"
+          class="absolute bottom-full mb-2 left-12 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-64 z-50"
         >
           {#each filteredEmojis as emoji, i}
             <button
               type="button"
-              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${i === emojiSelectedIndex ? "bg-blue-50 dark:bg-slate-700" : ""}`}
+              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors ${i === emojiSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
               onclick={() => selectEmoji(emoji)}
             >
               <span class="text-xl">{emoji.char}</span>

@@ -200,32 +200,40 @@
     {/each}
 
     {#if preview}
-        <div class="mt-1 mb-1 border-t border-gray-200/70 dark:border-slate-800/70"></div>
-        <a
-            href={preview.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="block focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500/70"
-        >
-            <div class="flex gap-3 items-start">
-                <div class="shrink-0 w-28 h-28 rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
-                    {#if preview.image}
-                        <img src={preview.image} alt="" class="w-full h-full object-cover" loading="lazy" />
-                    {/if}
+        <div class="mt-2 mb-1">
+            <a
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="block focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500/70 overflow-hidden rounded-xl bg-white/10 dark:bg-slate-800/30 backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50 hover:bg-white/20 dark:hover:bg-slate-800/50 transition-colors"
+            >
+                <div class="flex flex-col sm:flex-row gap-0 sm:gap-0 h-auto sm:h-28">
+                    <div class="shrink-0 w-full sm:w-28 h-32 sm:h-full bg-gray-100/50 dark:bg-slate-800/50 flex items-center justify-center overflow-hidden">
+                        {#if preview.image}
+                            <img src={preview.image} alt="" class="w-full h-full object-cover" loading="lazy" />
+                        {:else}
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                            </svg>
+                        {/if}
+                    </div>
+                    <div class="min-w-0 p-3 flex flex-col justify-center">
+                        {#if preview.title}
+                            <h1 class="m-0 text-sm font-semibold truncate text-gray-900 dark:text-white leading-tight mb-1">
+                                {preview.title}
+                            </h1>
+                        {/if}
+                        {#if preview.description}
+                            <p class={`m-0 text-xs leading-snug line-clamp-2 ${isOwn ? 'text-blue-100' : 'text-gray-600 dark:text-slate-300'}`}>
+                                {preview.description}
+                            </p>
+                        {/if}
+                        <div class={`text-[10px] mt-1.5 opacity-70 truncate ${isOwn ? 'text-blue-200' : 'text-gray-400 dark:text-slate-500'}`}>
+                            {preview.domain}
+                        </div>
+                    </div>
                 </div>
-                <div class="min-w-0">
-                    {#if preview.title}
-                        <h1 class="m-0 text-lg leading-tight font-semibold truncate text-black dark:text-white">
-                            {preview.title}
-                        </h1>
-                    {/if}
-                    {#if preview.description}
-                        <p class={`mt-0 text-xs leading-snug overflow-hidden max-h-16 ${isOwn ? 'text-blue-50' : 'text-gray-600 dark:text-slate-300'}`}>
-                            {preview.description}
-                        </p>
-                    {/if}
-                </div>
-            </div>
-        </a>
+            </a>
+        </div>
     {/if}
 </div>
