@@ -8,6 +8,7 @@ node_modules
 /.svelte-kit
 /build
 build-android.sh
+push-and-deploy.sh
  
  # OS
 

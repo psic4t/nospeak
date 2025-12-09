@@ -17,6 +17,99 @@ function extractBetween(html: string, regex: RegExp): string | undefined {
     return value.length > 0 ? value : undefined;
 }
 
+function getCharsetFromContentType(contentType: string | null): string {
+    if (!contentType) {
+        return 'utf-8';
+    }
+
+    const lower = contentType.toLowerCase();
+    const match = lower.match(/charset\s*=\s*([^;]+)/);
+
+    if (!match || !match[1]) {
+        return 'utf-8';
+    }
+
+    const charset = match[1].trim();
+
+    if (!charset) {
+        return 'utf-8';
+    }
+
+    if (charset === 'utf8') {
+        return 'utf-8';
+    }
+
+    return charset;
+}
+
+function decodeHtmlEntities(input: string): string {
+    if (!input) {
+        return input;
+    }
+
+    const named: Record<string, string> = {
+        amp: '&',
+        lt: '<',
+        gt: '>',
+        quot: '"',
+        apos: '\'',
+        nbsp: '\u00a0',
+        auml: 'ä',
+        ouml: 'ö',
+        uuml: 'ü',
+        Auml: 'Ä',
+        Ouml: 'Ö',
+        Uuml: 'Ü',
+        szlig: 'ß'
+    };
+
+    let result = input;
+
+    // Numeric decimal entities
+    result = result.replace(/&#(\d+);/g, (match, num) => {
+        const code = Number(num);
+        if (!Number.isFinite(code)) {
+            return match;
+        }
+        try {
+            return String.fromCodePoint(code);
+        } catch {
+            return match;
+        }
+    });
+
+    // Numeric hex entities
+    result = result.replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+        const code = parseInt(hex, 16);
+        if (!Number.isFinite(code)) {
+            return match;
+        }
+        try {
+            return String.fromCodePoint(code);
+        } catch {
+            return match;
+        }
+    });
+
+    // Common named entities (including German umlauts)
+    result = result.replace(/&([a-zA-Z]+);/g, (match, name) => {
+        if (Object.prototype.hasOwnProperty.call(named, name)) {
+            return named[name];
+        }
+        return match;
+    });
+
+    return result;
+}
+
+function absolutizeUrl(maybeRelative: string, baseUrl: string): string {
+    try {
+        return new URL(maybeRelative, baseUrl).toString();
+    } catch {
+        return maybeRelative;
+    }
+}
+
 export async function fetchUrlPreviewMetadata(url: string, fetchImpl: typeof fetch = fetch): Promise<UrlPreviewMetadata | null> {
     let parsed: URL;
     try {
@@ -50,42 +143,77 @@ export async function fetchUrlPreviewMetadata(url: string, fetchImpl: typeof fet
             return null;
         }
 
-        let received = 0;
-        const chunks: Uint8Array[] = [];
+        const contentType = 'headers' in response && response.headers ? response.headers.get('content-type') : null;
+        const charset = getCharsetFromContentType(contentType);
 
-        while (received < MAX_CONTENT_LENGTH) {
+        const chunks: Uint8Array[] = [];
+        let totalLength = 0;
+
+        while (totalLength < MAX_CONTENT_LENGTH) {
             const { done, value } = await reader.read();
             if (done || !value) {
                 break;
             }
-            received += value.length;
-            chunks.push(value.subarray(0, Math.min(value.length, MAX_CONTENT_LENGTH - (received - value.length))));
-            if (received >= MAX_CONTENT_LENGTH) {
+
+            let chunk = value as Uint8Array;
+            if (totalLength + chunk.length > MAX_CONTENT_LENGTH) {
+                chunk = chunk.subarray(0, MAX_CONTENT_LENGTH - totalLength);
+            }
+
+            chunks.push(chunk);
+            totalLength += chunk.length;
+
+            if (totalLength >= MAX_CONTENT_LENGTH) {
                 break;
             }
         }
 
-        const decoder = new TextDecoder('utf-8', { fatal: false });
-        const combined = new Uint8Array(received);
+        if (totalLength === 0) {
+            return null;
+        }
+
+        const combined = new Uint8Array(totalLength);
         let offset = 0;
         for (const chunk of chunks) {
             combined.set(chunk, offset);
             offset += chunk.length;
         }
+
+        let decoder: TextDecoder;
+        try {
+            decoder = new TextDecoder(charset, { fatal: false });
+        } catch {
+            decoder = new TextDecoder('utf-8', { fatal: false });
+        }
+
         const html = decoder.decode(combined);
 
-        const title =
+        const rawTitle =
             extractBetween(html, /<meta[^>]+property=["']og:title["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<meta[^>]+name=["']twitter:title["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<meta[^>]+name=["']title["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
             extractBetween(html, /<title[^>]*>([^<]{1,200})<\/title>/i);
 
-        const description =
+        const rawDescription =
             extractBetween(html, /<meta[^>]+property=["']og:description["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<meta[^>]+name=["']twitter:description["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
             extractBetween(html, /<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["'][^>]*>/i);
 
-        const image = extractBetween(
-            html,
-            /<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i
-        );
+        const rawImage =
+            extractBetween(html, /<meta[^>]+property=["']og:image:secure_url["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<meta[^>]+name=["']twitter:image:src["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<meta[^>]+name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractBetween(html, /<link[^>]+rel=["']image_src["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+
+        const title = rawTitle ? decodeHtmlEntities(rawTitle) : undefined;
+        const description = rawDescription ? decodeHtmlEntities(rawDescription) : undefined;
+
+        let image: string | undefined;
+        if (rawImage) {
+            const decodedImage = decodeHtmlEntities(rawImage);
+            image = absolutizeUrl(decodedImage, url);
+        }
 
         if (!title && !description) {
             return null;

@@ -109,12 +109,13 @@ When running inside the Android Capacitor app shell, the messaging experience SH
 - **AND** a visible message bubble contains at least one non-media HTTP(S) URL
 - **WHEN** the system attempts to fetch URL preview metadata for that message
 - **THEN** it SHALL call a remote server-side preview API endpoint (for example, the existing `/api/url-preview` route on the deployed SvelteKit instance) rather than relying on a local in-app implementation at the app's origin
-- **AND** it SHALL apply the same viewport-based and single-request-per-message semantics defined by the `messaging` URL preview requirements.
+- **AND** it SHALL apply the same viewport-based and single-request-per-message semantics defined by the `messaging` URL preview requirements
+- **AND** it SHALL benefit from the same HTML entity decoding and expanded metadata detection behavior defined in the updated messaging URL preview requirements so that Android preview cards render correctly decoded titles, descriptions, and images when metadata is available.
 
 #### Scenario: Android preview failure does not break messaging
 - **GIVEN** the user is running nospeak inside the Android Capacitor app shell
 - **AND** a visible message bubble contains at least one non-media HTTP(S) URL
-- **WHEN** the remote server-side preview API is unavailable, slow, or returns incomplete metadata
+- **WHEN** the remote server-side preview API is unavailable, slow, or returns incomplete metadata (including the case where only generic consent or cookie-wall content is visible)
 - **THEN** the message text and its links SHALL still render and remain clickable
 - **AND** the system MAY omit the URL preview card entirely without surfacing blocking or noisy error UI
 - **AND** all other messaging features (including sending, receiving, history scrolling, and media rendering) SHALL continue to function according to the existing `messaging` specification.
