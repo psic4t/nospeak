@@ -56,7 +56,7 @@
         aria-labelledby="keypair-modal-title"
         tabindex="-1"
     >
-        <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-6 max-w-md w-full shadow-2xl border border-white/20 dark:border-white/10">
+        <div class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl rounded-3xl p-6 max-w-md w-full shadow-2xl border border-white/20 dark:border-white/10">
             <div class="flex justify-between items-center mb-4">
                 <h2 id="keypair-modal-title" class="text-lg font-bold dark:text-white">Generate new keypair</h2>
                 <button

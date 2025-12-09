@@ -8,7 +8,7 @@
 </script>
  
 <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 {isAndroidApp ? 'pt-10' : ''}">
-    <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10 outline-none">
+    <div class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10 outline-none">
         <div class="flex flex-col items-center gap-6 w-full">
             <div class="relative">
                 <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-500/30 border-t-blue-500"></div>

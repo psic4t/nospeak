@@ -404,7 +404,7 @@
 <div class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm">
   {#if partnerNpub}
     <div
-      class="absolute top-0 left-0 right-0 z-20 p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl shadow-sm transition-all duration-200"
+      class="absolute top-0 left-0 right-0 z-20 p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-sm transition-all duration-200"
     >
       <div class="flex items-center gap-3">
         <button 
@@ -547,7 +547,7 @@
   </div>
 
   <div
-    class="absolute bottom-0 left-0 right-0 z-20 p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl shadow-lg transition-all duration-200"
+    class="absolute bottom-0 left-0 right-0 z-20 p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-lg transition-all duration-200"
   >
     <form
       onsubmit={(e) => {
@@ -558,7 +558,7 @@
     >
       {#if showEmojiPicker && filteredEmojis.length > 0}
         <div
-          class="absolute bottom-full mb-2 left-12 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-64 z-50"
+          class="absolute bottom-full mb-2 left-12 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-64 z-50"
         >
           {#each filteredEmojis as emoji, i}
             <button

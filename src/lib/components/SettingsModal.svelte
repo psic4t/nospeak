@@ -317,7 +317,7 @@
     tabindex="-1"
   >
     <div
-      class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl shadow-2xl border border-white/20 dark:border-white/10 flex overflow-hidden"
+      class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl shadow-2xl border border-white/20 dark:border-white/10 flex overflow-hidden"
     >
       <!-- Sidebar -->
       <div

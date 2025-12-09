@@ -4,6 +4,9 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      opacity: {
+        85: '0.85',
+      },
       colors: {
         // Catppuccin Mocha (Dark Mode) mapping for 'slate'
         slate: {

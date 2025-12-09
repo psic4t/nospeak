@@ -28,7 +28,7 @@
 </script>
 
 <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10 outline-none">
+    <div class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10 outline-none">
         <h2 class="text-xl font-bold mb-6 text-center dark:text-white">Login with Amber</h2>
         
         <div class="flex justify-center mb-6 bg-white p-2 rounded-xl shadow-inner">

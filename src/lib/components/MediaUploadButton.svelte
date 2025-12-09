@@ -180,7 +180,7 @@
   {#if showDropdown}
     <div 
       bind:this={dropdownElement}
-      class="absolute bottom-full mb-2 left-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden z-50 min-w-[120px]"
+      class="absolute bottom-full mb-2 left-0 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden z-50 min-w-[120px]"
     >
       <FileTypeDropdown onFileTypeSelect={handleFileTypeSelect} />
     </div>

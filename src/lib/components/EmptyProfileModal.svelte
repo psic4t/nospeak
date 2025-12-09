@@ -80,7 +80,7 @@
         aria-labelledby="empty-profile-modal-title"
         tabindex="-1"
     >
-        <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10">
+        <div class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10">
             <div class="flex flex-col gap-4 w-full">
                 <div class="flex items-start gap-3">
                     <div class="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">

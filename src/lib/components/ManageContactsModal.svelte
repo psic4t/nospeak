@@ -241,7 +241,7 @@
         onclick={(e) => { if(e.target === e.currentTarget) close(); }}
         onkeydown={(e) => { if(e.key === 'Escape') close(); }}
     >
-        <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-6 w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden outline-none">
+        <div class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl p-6 w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden outline-none">
             <h2 class="text-xl font-bold mb-4 dark:text-white px-1">Manage Contacts</h2>
             
             <div class="mb-6">
