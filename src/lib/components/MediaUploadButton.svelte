@@ -1,5 +1,6 @@
 <script lang="ts">
   import FileTypeDropdown from './FileTypeDropdown.svelte';
+  import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from '$lib/core/Nip98Auth';
 
   let { onFileSelect, inline = false } = $props<{
     onFileSelect: (file: File, type: 'image' | 'video', url?: string) => void;
@@ -33,6 +34,11 @@
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', type);
+
+      const authHeader = await buildUploadAuthHeader();
+      if (!authHeader) {
+        throw new Error('You must be logged in to upload media');
+      }
 
       const xhr = new XMLHttpRequest();
 
@@ -84,7 +90,8 @@
         };
       });
 
-      xhr.open('POST', '/api/upload');
+      xhr.open('POST', CANONICAL_UPLOAD_URL);
+      xhr.setRequestHeader('Authorization', authHeader);
       xhr.send(formData);
 
       const fileUrl = await uploadPromise;
