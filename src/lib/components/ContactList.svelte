@@ -133,7 +133,7 @@
                         npub={$currentUser.npub}
                         src={myPicture}
                         size="sm"
-                        class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-200"
+                        class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
                     />
                 </button>
             {/if}
@@ -190,7 +190,7 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
                 onclick={() => selectContact(contact.npub)}
-                class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-colors duration-200 group ${
+                class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-150 ease-out group ${
                     page.url.pathname.includes(contact.npub) 
                     ? 'bg-blue-50/10 dark:bg-blue-900/40' 
                     : 'hover:bg-gray-100/80 dark:hover:bg-slate-800/90'
@@ -200,7 +200,7 @@
                     npub={contact.npub} 
                     src={contact.picture} 
                     size="md" 
-                    class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
+                    class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
                 />
                 
                 <div class="flex-1 min-w-0">

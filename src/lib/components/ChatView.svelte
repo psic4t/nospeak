@@ -497,7 +497,7 @@
 <div class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm">
   {#if partnerNpub}
     <div
-      class="absolute top-0 left-0 right-0 z-20 p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-sm transition-all duration-200"
+      class="absolute top-0 left-0 right-0 z-20 p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-sm transition-all duration-150 ease-out"
     >
       <div class="flex items-center gap-3">
         <button 
@@ -505,7 +505,7 @@
                 softVibrate();
                 goto('/chat');
             }}
-            class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-150 ease-out"
             aria-label="Back to contacts"
         >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -514,7 +514,7 @@
         </button>
         {#if partnerNpub}
           <button
-              class="hover:opacity-80 transition-opacity cursor-pointer"
+              class="hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
               onclick={() => partnerNpub && openProfile(partnerNpub)}
               aria-label="Open contact profile"
           >
@@ -522,7 +522,7 @@
                   npub={partnerNpub} 
                   src={partnerPicture} 
                   size="sm" 
-                  class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-200"
+                  class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
               />
           </button>
         {/if}
@@ -609,14 +609,14 @@
       >
         {#if msg.direction === "received" && partnerNpub}
           <button
-            class="mb-1 hover:opacity-80 transition-opacity cursor-pointer"
+            class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
             onclick={() => partnerNpub && openProfile(partnerNpub)}
           >
             <Avatar
               npub={partnerNpub}
               src={partnerPicture}
               size="md"
-              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
+              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
             />
           </button>
         {/if}
@@ -624,7 +624,7 @@
         <div
           role="button"
           tabindex="0"
-          class={`max-w-[70%] p-3 shadow-sm cursor-pointer transition-all duration-200
+          class={`max-w-[70%] p-3 shadow-sm cursor-pointer transition-all duration-150 ease-out
                          ${
                            msg.direction === "sent"
                              ? "bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none hover:shadow-md"
@@ -655,14 +655,14 @@
 
         {#if msg.direction === "sent" && $currentUser}
           <button
-            class="mb-1 hover:opacity-80 transition-opacity cursor-pointer"
+            class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
             onclick={() => $currentUser && openProfile($currentUser.npub)}
           >
             <Avatar
               npub={$currentUser.npub}
               src={myPicture}
               size="md"
-              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
+              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
             />
           </button>
         {/if}
@@ -671,7 +671,7 @@
   </div>
 
   <div
-    class="absolute bottom-0 left-0 right-0 z-20 p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-lg transition-all duration-200"
+    class="absolute bottom-0 left-0 right-0 z-20 p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-lg transition-all duration-150 ease-out"
   >
     <form
       onsubmit={(e) => {
@@ -687,7 +687,7 @@
           {#each filteredEmojis as emoji, i}
             <button
               type="button"
-              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors ${i === emojiSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
+              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors duration-150 ease-out ${i === emojiSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
               onclick={() => selectEmoji(emoji)}
             >
               <span class="text-xl">{emoji.char}</span>
@@ -717,7 +717,7 @@
         {#if inputText.trim().length > 0}
           <button
             type="submit"
-            class="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-full text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+            class="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-full text-white shadow-sm transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
             style="background-color: var(--color-green);"
             disabled={isSending}
             aria-label="Send message"
