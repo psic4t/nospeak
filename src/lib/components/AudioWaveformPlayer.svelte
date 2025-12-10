@@ -98,12 +98,12 @@
 ></audio>
 
 <div
-    class={`mt-1 inline-flex items-center gap-3 px-3 py-2 rounded-lg border text-[11px] min-w-[220px] max-w-full ${
-        isOwn
-            ? 'bg-blue-900/50 border-blue-700/70 text-blue-50'
-            : 'bg-white/90 dark:bg-slate-900/80 border-gray-200/80 dark:border-slate-700/80 text-gray-900 dark:text-slate-100'
+    class={`flex items-center gap-3 px-3 py-2 rounded-xl border text-[11px] min-w-[220px] max-w-full bg-white/20 dark:bg-slate-800/50 md:bg-white/10 md:dark:bg-slate-800/30 md:backdrop-blur-sm border-gray-200/50 dark:border-slate-700/50 transition-colors ${
+        isOwn ? 'text-blue-50' : 'text-gray-900 dark:text-slate-100'
     }`}
 >
+
+
     <button
         type="button"
         onclick={togglePlay}

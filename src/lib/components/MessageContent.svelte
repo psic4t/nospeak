@@ -219,10 +219,13 @@
                     <video controls src={part} class="max-w-full rounded max-h-[300px]" preload="metadata"></video>
                 </div>
             {:else if isAudio(part)}
-                <div class="my-1">
+                <div class="mt-2 mb-1">
                     <AudioWaveformPlayer url={part} isOwn={isOwn} />
                 </div>
             {:else}
+
+
+
                 <a href={part} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">{part}</a>
             {/if}
         {:else}
