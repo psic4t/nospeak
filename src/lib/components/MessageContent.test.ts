@@ -121,4 +121,35 @@ describe('MessageContent URL handling', () => {
         const firstNonMedia = getFirstNonMediaUrl(text);
         expect(firstNonMedia).toBe('https://example.com/page');
     });
+
+    it('classifies image and video URLs correctly', () => {
+        const isImage = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const isVideo = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.(mp4|webm|mov|ogg)$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const imageUrl = 'https://example.com/photo.webp';
+        const videoUrl = 'https://example.com/clip.mp4';
+        const pageUrl = 'https://example.com/page';
+
+        expect(isImage(imageUrl)).toBe(true);
+        expect(isVideo(imageUrl)).toBe(false);
+        expect(isImage(videoUrl)).toBe(false);
+        expect(isVideo(videoUrl)).toBe(true);
+        expect(isImage(pageUrl)).toBe(false);
+        expect(isVideo(pageUrl)).toBe(false);
+    });
 });

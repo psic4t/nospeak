@@ -12,6 +12,7 @@
   import { softVibrate } from '$lib/utils/haptics';
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
   import { openProfileModal } from '$lib/stores/modals';
+  import { openImageViewer } from '$lib/stores/imageViewer';
   import { fly, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { nativeDialogService } from '$lib/core/NativeDialogs';
@@ -514,7 +515,11 @@
           onmouseup={handleMouseUp}
           onmouseleave={handleMouseUp}
           >
-            <MessageContent content={msg.message} isOwn={msg.direction === "sent"} />
+            <MessageContent 
+                content={msg.message} 
+                isOwn={msg.direction === "sent"} 
+                onImageClick={openImageViewer}
+            />
             <div
 
             class={`text-[10px] mt-1 text-right ${msg.direction === "sent" ? "text-blue-100" : "text-gray-400"} cursor-help`}

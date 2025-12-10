@@ -28,17 +28,19 @@ The message input area SHALL provide a media upload button instead of displaying
 - **AND** sending the message occurs via the mobile keyboard's send/enter action
 
 ### Requirement: Media Upload Support
-The system SHALL allow users to upload images and videos to include in chat messages.
+The system SHALL allow users to upload images and videos to include in chat messages. Media uploads SHALL be performed via HTTPS POST requests to the canonical nospeak upload endpoint `https://nospeak.chat/api/upload`. Each media upload request SHALL include a valid NIP-98 Authorization header proving control of a Nostr key for the current session; the server SHALL reject uploads that are missing, expired, or invalid according to the NIP-98 verification rules. Uploaded media files SHALL continue to be stored under a `user_media` directory using UUID-based filenames, and message content SHALL reference the resulting URLs for rendering.
 
 #### Scenario: User uploads image
 - **WHEN** user clicks media upload button and selects "Image"
 - **AND** user selects a valid image file
+- **AND** the client includes a valid NIP-98 Authorization header targeting `https://nospeak.chat/api/upload`
 - **THEN** the image is uploaded to user_media directory with UUID filename
 - **AND** the image URL is inserted into the message input field
 
 #### Scenario: User uploads video
 - **WHEN** user clicks media upload button and selects "Video"  
 - **AND** user selects a valid video file
+- **AND** the client includes a valid NIP-98 Authorization header targeting `https://nospeak.chat/api/upload`
 - **THEN** the video is uploaded to user_media directory with UUID filename
 - **AND** the video URL is inserted into the message input field
 
@@ -52,6 +54,12 @@ The system SHALL allow users to upload images and videos to include in chat mess
 - **WHEN** user selects an invalid file type or oversized file
 - **THEN** an error message is displayed
 - **AND** no upload occurs
+
+#### Scenario: Unauthorized media upload is rejected
+- **WHEN** a client attempts to upload an image or video without a NIP-98 Authorization header, with an Authorization header that does not target `https://nospeak.chat/api/upload`, or with an Authorization header that fails signature or freshness validation
+- **THEN** the server SHALL reject the upload request with an error status
+- **AND** no file is stored in the `user_media` directory
+- **AND** the client SHALL surface a non-blocking error message in the messaging UI.
 
 ### Requirement: Unread Message Indicator
 The system SHALL display a visual indicator for contacts with unread messages.
@@ -606,4 +614,29 @@ After a successful login and completion of the ordered login history flow, the m
 - **AND** the modal SHALL require the user to enter a non-empty name before continuing
 - **AND** upon confirmation, the client SHALL persist the default relays as the user's read/write relays, update the profile metadata with the provided name, and publish both the relay list (NIP-65) and profile metadata (kind 0) to all known relays including the blaster relay
 - **AND** the modal SHALL be shown again on subsequent logins while the profile continues to have no messaging relays and no username-like metadata (for example, if the user dismisses the modal or later removes all relays and name from their profile).
+
+### Requirement: In-App Image Viewer for Messages
+The messaging interface SHALL provide an in-app image viewer for inline message images so that tapping an image opens a full-screen viewer overlay instead of navigating to a separate browser tab or window. The viewer SHALL preserve the existing media rendering semantics in message bubbles while adding richer viewing controls on top.
+
+#### Scenario: Tapping inline image opens in-app viewer
+- **GIVEN** a message bubble that renders an inline image based on a media URL in the message content
+- **WHEN** the user taps or clicks the image inside the message bubble
+- **THEN** the system SHALL open a full-screen in-app image viewer overlay on top of the current messaging UI
+- **AND** the underlying conversation view SHALL remain loaded in the background without navigating the browser or Android WebView to a different origin or tab.
+
+#### Scenario: Viewer supports fit-to-screen and full-size panning
+- **GIVEN** the in-app image viewer is open for a particular image
+- **WHEN** the user activates the "full size" control in the viewer
+- **THEN** the system SHALL render the image at full resolution subject to device memory and layout constraints
+- **AND** the viewer content area SHALL be scrollable so that the user can pan around the image when it is larger than the viewport
+- **AND** the user SHALL be able to toggle back to a fit-to-screen mode that keeps the entire image visible without requiring scrolling.
+
+#### Scenario: Viewer provides close and download controls
+- **GIVEN** the in-app image viewer is open for a particular image
+- **WHEN** the user activates the close control
+- **THEN** the system SHALL dismiss the viewer overlay and return focus to the underlying conversation view
+- **AND** the message list and scroll position SHALL remain unchanged.
+- **WHEN** the user activates the download control
+- **THEN** the system SHALL initiate a download or save flow for the current image using the platform-appropriate download behavior
+- **AND** this download action SHALL NOT navigate away from the nospeak messaging UI.
 

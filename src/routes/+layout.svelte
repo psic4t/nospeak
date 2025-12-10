@@ -17,6 +17,7 @@
   import { syncState } from "$lib/stores/sync";
   import { configureAndroidStatusBar } from "$lib/core/StatusBar";
   import { isAndroidNative } from "$lib/core/NativeDialogs";
+  import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
 
   let { children } = $props();
   let isInitialized = $state(false);
@@ -208,5 +209,7 @@
     {#if $showEmptyProfileModal}
         <EmptyProfileModal isOpen={$showEmptyProfileModal} />
     {/if}
+
+    <ImageViewerOverlay />
   </div>
 {/if}

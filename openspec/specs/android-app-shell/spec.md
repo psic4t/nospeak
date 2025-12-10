@@ -133,3 +133,62 @@ When running inside the Android Capacitor app shell, the messaging experience SH
 - **THEN** the app SHALL still load the main chat interface shell from local assets as defined by the existing Android Capacitor App Shell requirements
 - **AND** the system SHALL treat URL previews as unavailable, rendering only the message text and clickable links without preview cards.
 
+### Requirement: Android Media Upload via Remote NIP-98 Authenticated Endpoint
+When running inside the Android Capacitor app shell, the messaging experience SHALL upload selected image and video attachments to the canonical nospeak media upload endpoint `https://nospeak.chat/api/upload` using HTTPS POST requests rather than relying on a local WebView origin. Each Android media upload request SHALL include a NIP-98 Authorization header that matches the semantics defined by the `messaging` Media Upload Support requirement, and the Android client SHALL treat server rejections due to missing or invalid NIP-98 authorization as recoverable errors that do not impact other messaging behaviors.
+
+#### Scenario: Android app uploads media via remote endpoint
+- **GIVEN** the user is running nospeak inside the Android Capacitor app
+- **AND** the user taps the media upload button and selects an image or video using the preferred picker flow
+- **WHEN** the upload is initiated
+- **THEN** the Android client SHALL send an HTTPS POST request to `https://nospeak.chat/api/upload` that includes a valid NIP-98 Authorization header for the current Nostr session
+- **AND** upon successful upload, the returned media URL SHALL be inserted into the message input field and rendered according to the messaging Media Upload Support requirement.
+
+#### Scenario: Android upload failure does not break messaging
+- **GIVEN** the user is running nospeak inside the Android Capacitor app
+- **AND** the user attempts to upload media while the remote endpoint is unreachable or the NIP-98 Authorization header is missing or invalid
+- **WHEN** the upload request fails or is rejected by the server
+- **THEN** the Android client SHALL display a non-blocking error message indicating that the media upload failed
+- **AND** the rest of the messaging UI (including text sending, history scrolling, and media rendering for previously uploaded content) SHALL continue to function normally.
+
+#### Scenario: Web behavior remains unchanged outside Android shell
+- **GIVEN** the user is accessing nospeak via a standard web browser (not inside the Android Capacitor app)
+- **WHEN** they upload media using the web messaging UI
+- **THEN** the client MAY share an origin with `https://nospeak.chat` and SHALL still perform media uploads in accordance with the updated `messaging` Media Upload Support requirement, including use of the canonical upload endpoint and NIP-98 Authorization headers.
+
+### Requirement: Android Native Dialog Integration for Messaging
+When running inside the Android Capacitor app shell, the messaging experience SHALL use Android-native dialogs and sheets via Capacitor plugins where appropriate for confirmations, media selection, error states, and sharing, while preserving the existing messaging semantics defined in `specs/messaging/spec.md`.
+
+#### Scenario: Native media picker for message attachments on Android
+- **GIVEN** the user is running nospeak inside the Android Capacitor app
+- **AND** the user taps the media upload button in the message input area
+- **WHEN** the user chooses to attach an image or video
+- **THEN** the app SHOULD prefer an Android-native picker or gallery selection flow exposed by Capacitor (for example, Camera or Filesystem plugins)
+- **AND** upon successful selection, the chosen media SHALL be uploaded and referenced in the message content according to the existing Media Upload Support requirements.
+
+#### Scenario: Native confirmation dialogs for irreversible messaging actions
+- **GIVEN** the user is running nospeak inside the Android Capacitor app
+- **AND** the user initiates an irreversible or destructive messaging-related action (for example, clearing cached data or removing a contact)
+- **WHEN** a confirmation is required by the UI
+- **THEN** the app SHOULD present an Android-native confirmation dialog using Capacitor's Dialog or ActionSheet plugins
+- **AND** the accepted or cancelled result from the native dialog SHALL be treated identically to the equivalent confirmation in the web UI.
+
+#### Scenario: Native share sheet for sharing links or invites
+- **GIVEN** the user is running nospeak inside the Android Capacitor app
+- **AND** the user invokes a "Share" action from within the messaging experience (for example, sharing an invite link or conversation URL)
+- **WHEN** the share action is triggered
+- **THEN** the app SHALL open the Android-native share sheet via Capacitor's Share plugin when available
+- **AND** SHALL fall back to a web-based share mechanism when native sharing is not available or fails.
+
+#### Scenario: Native share sheet for sharing images from in-app viewer
+- **GIVEN** the user is running nospeak inside the Android Capacitor app
+- **AND** the in-app image viewer for a message image is currently open as defined by the messaging specification
+- **WHEN** the user invokes the viewer's share control for the active image
+- **THEN** the app SHALL open the Android-native share sheet via Capacitor's Share plugin with the image URL or content as the share target
+- **AND** SHALL fall back to a web-based share mechanism or no-op behavior when native sharing is not available or fails, without dismissing the viewer prematurely.
+
+#### Scenario: Web behavior remains unchanged outside Android shell
+- **GIVEN** the user is accessing nospeak via a standard web browser (not inside the Android Capacitor app)
+- **WHEN** they perform actions that would use native dialogs on Android (media upload, confirmations, share)
+- **THEN** the system SHALL continue to use the existing web-based modals, file pickers, and share mechanisms defined in the web implementation
+- **AND** messaging semantics and acceptance criteria from existing `messaging` requirements SHALL continue to apply.
+

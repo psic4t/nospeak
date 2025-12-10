@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { getUrlPreviewApiUrl } from '$lib/core/UrlPreviewApi';
 
-    let { content, isOwn = false } = $props<{ content: string; isOwn?: boolean }>();
+    let { content, isOwn = false, onImageClick } = $props<{ content: string; isOwn?: boolean; onImageClick?: (url: string) => void }>();
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
 
@@ -88,12 +88,14 @@
 
     let preview = $state<UrlPreviewState>(null);
     let previewUrl = $derived(getFirstNonMediaUrl(content));
+ 
+     let container: HTMLElement | null = null;
+     let isVisible = $state(false);
+     let lastPreviewUrl: string | null = null;
+ 
+     onMount(() => {
 
-    let container: HTMLElement | null = null;
-    let isVisible = $state(false);
-    let lastPreviewUrl: string | null = null;
 
-    onMount(() => {
         if (typeof window === 'undefined') {
             return;
         }
@@ -183,9 +185,19 @@
     {#each parts as part}
         {#if part.match(/^https?:\/\//)}
             {#if isImage(part)}
-                <a href={part} target="_blank" rel="noopener noreferrer" class="block my-1">
-                    <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
-                </a>
+                {#if onImageClick}
+                    <button
+                        type="button"
+                        class="block my-1 cursor-zoom-in"
+                        onclick={() => onImageClick?.(part)}
+                    >
+                        <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
+                    </button>
+                {:else}
+                    <a href={part} target="_blank" rel="noopener noreferrer" class="block my-1">
+                        <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
+                    </a>
+                {/if}
             {:else if isVideo(part)}
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <div class="my-1">
