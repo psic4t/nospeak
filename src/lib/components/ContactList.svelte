@@ -155,13 +155,15 @@
             </button>
         </div>
         <div class="px-4 pb-3 flex justify-between items-center">
-            <div class="font-bold dark:text-white text-xl tracking-tight">Contacts</div>
+            <div class="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">
+                Contacts
+            </div>
             <button 
                 onclick={() => {
                     softVibrate();
                     showManageContactsModal.set(true);
                 }}
-                class="text-xs px-4 py-2 rounded-full bg-slate-100/50 dark:bg-slate-700 hover:bg-slate-200/50 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 font-semibold shadow-sm transition-all"
+                class="text-xs px-3 py-1.5 rounded-full bg-slate-100/70 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700 text-blue-600 dark:text-blue-400 font-semibold shadow-sm transition-all"
             >
                 Manage
             </button>

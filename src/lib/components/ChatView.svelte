@@ -341,7 +341,7 @@
     const weeks = Math.floor(days / 7);
     const months = Math.floor(days / 30);
     const years = Math.floor(days / 365);
-
+ 
     if (seconds < 60) return "just now";
     if (minutes < 60) return `${minutes} min${minutes !== 1 ? "s" : ""} ago`;
     if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
@@ -350,6 +350,40 @@
     if (months < 12) return `${months} month${months !== 1 ? "s" : ""} ago`;
     return `${years} year${years !== 1 ? "s" : ""} ago`;
   }
+
+  function isSameDay(a: number, b: number): boolean {
+    const da = new Date(a);
+    const db = new Date(b);
+    return (
+      da.getFullYear() === db.getFullYear() &&
+      da.getMonth() === db.getMonth() &&
+      da.getDate() === db.getDate()
+    );
+  }
+
+  function formatDateLabel(timestamp: number): string {
+    const now = new Date(currentTime);
+    const target = new Date(timestamp);
+
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+    const diffDays = Math.round((startOfToday - startOfTarget) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return "Today";
+    }
+
+    if (diffDays === 1) {
+      return "Yesterday";
+    }
+
+    return target.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
 
   async function send() {
     if (!partnerNpub || !inputText.trim()) return;
@@ -516,7 +550,7 @@
     {#if canRequestNetworkHistory && messages.length > 0}
       <div class="flex justify-center p-2">
         <button
-          class="text-xs px-4 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50 text-gray-600 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-all shadow-sm font-medium"
+          class="text-xs px-4 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-sm border border-gray-200/60 dark:border-slate-700/60 text-gray-700 dark:text-slate-200 hover:bg-white/90 dark:hover:bg-slate-700/90 transition-all shadow-sm font-medium"
           type="button"
           onclick={() => onRequestNetworkHistory && onRequestNetworkHistory()}
         >
@@ -524,26 +558,51 @@
         </button>
       </div>
     {:else if networkHistoryStatus === 'no-more' && messages.length > 0}
-      <div class="flex justify-center p-2 text-xs text-gray-400">
-        No more messages available from relays
+      <div class="flex justify-center p-2">
+        <div class="px-3 py-1 rounded-full text-[11px] font-medium tracking-wide bg-white/70 dark:bg-slate-800/80 border border-gray-200/70 dark:border-slate-700/70 text-gray-500 dark:text-slate-300 shadow-sm backdrop-blur-sm">
+          No more messages available from relays
+        </div>
       </div>
     {:else if networkHistoryStatus === 'error' && messages.length > 0}
-      <div class="flex justify-center p-2 text-xs text-red-500">
-        Failed to fetch older messages. Try again later.
+      <div class="flex justify-center p-2">
+        <div class="px-3 py-1 rounded-full text-[11px] font-medium tracking-wide bg-red-50/80 dark:bg-red-900/40 border border-red-200/80 dark:border-red-500/70 text-red-600 dark:text-red-200 shadow-sm backdrop-blur-sm">
+          Failed to fetch older messages. Try again later.
+        </div>
       </div>
     {/if}
-
+ 
     {#if isFetchingHistory}
       <div class="flex justify-center p-2">
         <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
       </div>
     {/if}
-
+ 
     {#if messages.length === 0 && !isFetchingHistory}
-      <div class="text-center text-gray-400 mt-10">No messages yet</div>
+      <div class="flex justify-center mt-10">
+        <div class="max-w-sm px-4 py-3 rounded-2xl bg-white/80 dark:bg-slate-900/85 border border-gray-200/70 dark:border-slate-700/70 shadow-md backdrop-blur-xl text-center space-y-1">
+          <div class="text-xs font-semibold tracking-wide uppercase text-gray-500 dark:text-slate-400">
+            No messages yet
+          </div>
+          <div class="text-sm text-gray-600 dark:text-slate-200">
+            {#if partnerNpub}
+              Start the conversation with {partnerName || partnerNpub.slice(0, 10) + "..."}.
+            {:else}
+              Select a contact to start chatting.
+            {/if}
+          </div>
+        </div>
+      </div>
     {/if}
 
+
     {#each messages as msg, i (msg.id || i)}
+      {#if i === 0 || !isSameDay(msg.sentAt, messages[i - 1].sentAt)}
+        <div class="flex justify-center my-2">
+          <div class="px-3 py-1 rounded-full text-[11px] font-medium tracking-wide bg-white/70 dark:bg-slate-800/80 border border-gray-200/70 dark:border-slate-700/70 text-gray-600 dark:text-slate-200 shadow-sm backdrop-blur-sm">
+            {formatDateLabel(msg.sentAt)}
+          </div>
+        </div>
+      {/if}
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={{ y: 20, duration: 300, easing: cubicOut }}
