@@ -11,8 +11,11 @@
    import MediaUploadButton from './MediaUploadButton.svelte';
    import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
    import { applyAndroidBackgroundMessaging } from "$lib/core/BackgroundMessaging";
+   import { fade } from 'svelte/transition';
+   import { glassModal } from '$lib/utils/transitions';
+ 
+   const packageVersion = __APP_VERSION__;
 
-  const packageVersion = __APP_VERSION__;
 
   let { isOpen = false, close = () => {} } = $props<{
      isOpen: boolean;
@@ -308,7 +311,9 @@
 
 {#if isOpen}
   <div
-    class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 {isAndroidApp ? 'pt-10' : ''}"
+    in:fade={{ duration: 130 }}
+    out:fade={{ duration: 110 }}
+    class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 {isAndroidApp ? 'pt-10' : ''} transition-colors duration-150 ease-out"
     onclick={handleOverlayClick}
     onkeydown={handleKeydown}
     role="dialog"
@@ -317,7 +322,9 @@
     tabindex="-1"
   >
     <div
-      class="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl shadow-2xl border border-white/20 dark:border-white/10 flex overflow-hidden relative"
+      in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }}
+      out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
+      class="bg-white/95 dark:bg-slate-900/85 backdrop-blur-xl w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl shadow-2xl border border-white/20 dark:border-white/10 flex overflow-hidden relative transform-gpu will-change-transform will-change-filter transition-all duration-150 ease-out"
     >
       <button onclick={close} aria-label="Close modal" class="hidden md:block absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
