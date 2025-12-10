@@ -88,4 +88,56 @@ describe('api/upload NIP-98 auth and CORS', () => {
         expect(authError!.status).toBe(401);
         expect(authError!.headers.get('Access-Control-Allow-Origin')).toBe('*');
     });
+
+    it('accepts a valid MP3 audio upload via POST', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const event = {
+            id: 'id',
+            sig: 'sig',
+            pubkey: 'pubkey',
+            kind: 27235,
+            created_at: now,
+            tags: [
+                ['u', 'https://nospeak.chat/api/upload'],
+                ['method', 'POST']
+            ],
+            content: '',
+            __valid: true
+        };
+
+        const token = toBase64Url(JSON.stringify(event));
+        const headers = new Headers({
+            Authorization: `Nostr ${token}`
+        });
+
+        const fakeFile = {
+            size: 1024,
+            type: 'audio/mpeg',
+            async arrayBuffer() {
+                return new Uint8Array([1, 2, 3, 4]).buffer;
+            }
+        } as any;
+
+        const formData = {
+            get(name: string) {
+                if (name === 'file') return fakeFile;
+                if (name === 'type') return 'audio';
+                return null;
+            }
+        } as any;
+
+        const request = {
+            url: 'https://nospeak.chat/api/upload',
+            headers,
+            formData: async () => formData
+        } as any;
+
+        const response = await POST({ request } as any);
+        expect(response.status).toBe(200);
+        const body = await response.json() as any;
+        expect(body.success).toBe(true);
+        expect(typeof body.url).toBe('string');
+        expect(body.filename).toMatch(/\.mp3$/);
+        expect(body.type).toBe('audio/mpeg');
+    });
 });

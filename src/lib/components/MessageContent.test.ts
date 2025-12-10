@@ -88,7 +88,7 @@ describe('MessageContent Markdown parsing', () => {
 describe('MessageContent URL handling', () => {
     it('detects non-media URLs separately from media URLs', () => {
         const urlRegex = /(https?:\/\/[^\s]+)/g;
-
+ 
         const isImage = (url: string) => {
             try {
                 const u = new URL(url);
@@ -97,7 +97,7 @@ describe('MessageContent URL handling', () => {
                 return false;
             }
         };
-
+ 
         const isVideo = (url: string) => {
             try {
                 const u = new URL(url);
@@ -107,22 +107,31 @@ describe('MessageContent URL handling', () => {
             }
         };
 
+        const isAudio = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.mp3$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+ 
         const getFirstNonMediaUrl = (text: string): string | null => {
             const matches = text.match(urlRegex) ?? [];
             for (const candidate of matches) {
-                if (!isImage(candidate) && !isVideo(candidate)) {
+                if (!isImage(candidate) && !isVideo(candidate) && !isAudio(candidate)) {
                     return candidate;
                 }
             }
             return null;
         };
-
-        const text = 'Check this image https://example.com/photo.jpg and this site https://example.com/page';
+ 
+        const text = 'Check this image https://example.com/photo.jpg and this song https://example.com/audio.mp3 and this site https://example.com/page';
         const firstNonMedia = getFirstNonMediaUrl(text);
         expect(firstNonMedia).toBe('https://example.com/page');
     });
-
-    it('classifies image and video URLs correctly', () => {
+ 
+    it('classifies image, video, and audio URLs correctly', () => {
         const isImage = (url: string) => {
             try {
                 const u = new URL(url);
@@ -131,7 +140,7 @@ describe('MessageContent URL handling', () => {
                 return false;
             }
         };
-
+ 
         const isVideo = (url: string) => {
             try {
                 const u = new URL(url);
@@ -141,15 +150,35 @@ describe('MessageContent URL handling', () => {
             }
         };
 
+        const isAudio = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.mp3$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+ 
         const imageUrl = 'https://example.com/photo.webp';
         const videoUrl = 'https://example.com/clip.mp4';
+        const audioUrl = 'https://example.com/song.mp3';
         const pageUrl = 'https://example.com/page';
-
+ 
         expect(isImage(imageUrl)).toBe(true);
         expect(isVideo(imageUrl)).toBe(false);
+        expect(isAudio(imageUrl)).toBe(false);
+
         expect(isImage(videoUrl)).toBe(false);
         expect(isVideo(videoUrl)).toBe(true);
+        expect(isAudio(videoUrl)).toBe(false);
+
+        expect(isImage(audioUrl)).toBe(false);
+        expect(isVideo(audioUrl)).toBe(false);
+        expect(isAudio(audioUrl)).toBe(true);
+
         expect(isImage(pageUrl)).toBe(false);
         expect(isVideo(pageUrl)).toBe(false);
+        expect(isAudio(pageUrl)).toBe(false);
     });
+
 });

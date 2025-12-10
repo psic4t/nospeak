@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import { getUrlPreviewApiUrl } from '$lib/core/UrlPreviewApi';
     import { IntersectionObserverManager } from '$lib/utils/observers';
+    import AudioWaveformPlayer from './AudioWaveformPlayer.svelte';
 
     let { content, isOwn = false, onImageClick } = $props<{ content: string; isOwn?: boolean; onImageClick?: (url: string) => void }>();
 
@@ -25,7 +26,17 @@
         }
     }
 
+    function isAudio(url: string) {
+        try {
+            const u = new URL(url);
+            return /\.mp3$/i.test(u.pathname);
+        } catch {
+            return false;
+        }
+    }
+ 
     function parseMarkdown(text: string) {
+
         // Process citations (> text)
         text = text.replace(/^> (.+)$/gm, '<div class="border-l-2 border-gray-300 pl-3 italic">$1</div>');
         
@@ -46,7 +57,7 @@
     function getFirstNonMediaUrl(text: string): string | null {
         const matches = text.match(urlRegex) ?? [];
         for (const candidate of matches) {
-            if (!isImage(candidate) && !isVideo(candidate)) {
+            if (!isImage(candidate) && !isVideo(candidate) && !isAudio(candidate)) {
                 return candidate;
             }
         }
@@ -206,6 +217,10 @@
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <div class="my-1">
                     <video controls src={part} class="max-w-full rounded max-h-[300px]" preload="metadata"></video>
+                </div>
+            {:else if isAudio(part)}
+                <div class="my-1">
+                    <AudioWaveformPlayer url={part} isOwn={isOwn} />
                 </div>
             {:else}
                 <a href={part} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">{part}</a>

@@ -10,7 +10,8 @@ const EXTENSION_TO_MIME: Record<string, string> = {
     webp: 'image/webp',
     mp4: 'video/mp4',
     webm: 'video/webm',
-    mov: 'video/quicktime'
+    mov: 'video/quicktime',
+    mp3: 'audio/mpeg'
 };
 
 function getMimeType(filename: string): string {

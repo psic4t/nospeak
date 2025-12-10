@@ -61,14 +61,14 @@
   let relays = $state<RelayConfig[]>([]);
   let newRelayUrl = $state("");
 
-  function handlePictureUpload(file: File, type: 'image' | 'video', url?: string) {
+  function handlePictureUpload(file: File, type: 'image' | 'video' | 'audio', url?: string) {
     if (url) {
       profilePicture = url;
       saveProfile();
     }
   }
 
-  function handleBannerUpload(file: File, type: 'image' | 'video', url?: string) {
+  function handleBannerUpload(file: File, type: 'image' | 'video' | 'audio', url?: string) {
     if (url) {
       profileBanner = url;
       saveProfile();
@@ -588,7 +588,8 @@
                     >Picture URL</label
                   >
                   <div class="flex gap-2">
-                    <MediaUploadButton onFileSelect={handlePictureUpload} />
+                     <MediaUploadButton onFileSelect={handlePictureUpload} allowedTypes={["image"]} />
+
                     <input
                       id="profile-picture"
                       bind:value={profilePicture}
@@ -606,7 +607,8 @@
                     >Banner URL</label
                   >
                   <div class="flex gap-2">
-                    <MediaUploadButton onFileSelect={handleBannerUpload} />
+                     <MediaUploadButton onFileSelect={handleBannerUpload} allowedTypes={["image"]} />
+
                     <input
                       id="profile-banner"
                       bind:value={profileBanner}

@@ -7,8 +7,10 @@ import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 // File type validation
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg'];
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_AUDIO_SIZE = 20 * 1024 * 1024; // 20MB
 
 const CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',
@@ -28,7 +30,8 @@ function getFileExtension(mimeType: string): string {
         'image/webp': 'webp',
         'video/mp4': 'mp4',
         'video/webm': 'webm',
-        'video/quicktime': 'mov'
+        'video/quicktime': 'mov',
+        'audio/mpeg': 'mp3'
     };
     return mimeToExt[mimeType] || 'bin';
 }
@@ -106,24 +109,36 @@ export const POST: RequestHandler = async ({ request }) => {
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File | null;
-        const type = formData.get('type') as string | null; // 'image' or 'video'
+        const type = formData.get('type') as string | null; // 'image', 'video', or 'audio'
 
         if (!file) {
             return jsonError(400, 'No file provided');
         }
 
-        if (!type || (type !== 'image' && type !== 'video')) {
+        if (!type || (type !== 'image' && type !== 'video' && type !== 'audio')) {
             return jsonError(400, 'Invalid file type specified');
         }
 
         // Validate file type
-        const allowedTypes = type === 'image' ? ALLOWED_IMAGE_TYPES : ALLOWED_VIDEO_TYPES;
+        let allowedTypes: readonly string[];
+        let maxSize: number;
+
+        if (type === 'image') {
+            allowedTypes = ALLOWED_IMAGE_TYPES;
+            maxSize = MAX_IMAGE_SIZE;
+        } else if (type === 'video') {
+            allowedTypes = ALLOWED_VIDEO_TYPES;
+            maxSize = MAX_VIDEO_SIZE;
+        } else {
+            allowedTypes = ALLOWED_AUDIO_TYPES;
+            maxSize = MAX_AUDIO_SIZE;
+        }
+
         if (!allowedTypes.includes(file.type)) {
             return jsonError(400, `Invalid ${type} file type. Allowed types: ${allowedTypes.join(', ')}`);
         }
 
         // Validate file size
-        const maxSize = type === 'image' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
         if (file.size > maxSize) {
             return jsonError(400, `File too large. Maximum size for ${type}s: ${maxSize / (1024 * 1024)}MB`);
         }

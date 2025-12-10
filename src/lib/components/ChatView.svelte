@@ -432,7 +432,7 @@
     openContextMenu(e, messageContent);
   }
 
-  function handleFileSelect(file: File, type: 'image' | 'video', url?: string) {
+  function handleFileSelect(file: File, type: 'image' | 'video' | 'audio', url?: string) {
     if (url) {
       // Insert the full file URL into the message input (no markdown)
       inputText = (inputText ? inputText + '\n' : '') + url;
@@ -643,7 +643,7 @@
       <div
         class="flex-1 flex items-center bg-white/90 dark:bg-slate-800/90 border border-gray-200 dark:border-slate-700 rounded-3xl px-4 py-1.5 gap-2 shadow-inner focus-within:ring-2 focus-within:ring-blue-500/50 transition-all"
       >
-        <MediaUploadButton onFileSelect={handleFileSelect} inline={true} />
+        <MediaUploadButton onFileSelect={handleFileSelect} inline={true} allowedTypes={["image", "video", "audio"]} />
         <textarea
           bind:this={inputElement}
           bind:value={inputText}

@@ -3,9 +3,10 @@
     import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from '$lib/core/Nip98Auth';
     import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
 
-    let { onFileSelect, inline = false } = $props<{
-        onFileSelect: (file: File, type: 'image' | 'video', url?: string) => void;
+    let { onFileSelect, inline = false, allowedTypes = ['image', 'video'] } = $props<{
+        onFileSelect: (file: File, type: 'image' | 'video' | 'audio', url?: string) => void;
         inline?: boolean;
+        allowedTypes?: ('image' | 'video' | 'audio')[];
     }>();
 
     let showDropdown = $state(false);
@@ -29,12 +30,12 @@
         showDropdown = false;
     }
 
-    function handleFileTypeSelect(type: 'image' | 'video') {
+    function handleFileTypeSelect(type: 'image' | 'video' | 'audio') {
         closeDropdown();
         openFileSelector(type);
     }
 
-    async function uploadFile(file: File, type: 'image' | 'video') {
+    async function uploadFile(file: File, type: 'image' | 'video' | 'audio') {
         isUploading = true;
         uploadProgress = 0;
 
@@ -175,12 +176,17 @@
         });
     }
 
-    async function openFileSelector(type: 'image' | 'video') {
+    async function openFileSelector(type: 'image' | 'video' | 'audio') {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = type === 'image'
-            ? 'image/jpeg,image/png,image/gif,image/webp'
-            : 'video/mp4,video/webm,video/quicktime';
+
+        if (type === 'image') {
+            input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+        } else if (type === 'video') {
+            input.accept = 'video/mp4,video/webm,video/quicktime';
+        } else {
+            input.accept = 'audio/mpeg';
+        }
 
         input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
@@ -339,6 +345,7 @@
                 onFileTypeSelect={handleFileTypeSelect}
                 showCameraOption={isAndroidNativeEnv || isMobileWebEnv}
                 onTakePhoto={handleTakePhoto}
+                allowedTypes={allowedTypes}
             />
         </div>
     {/if}

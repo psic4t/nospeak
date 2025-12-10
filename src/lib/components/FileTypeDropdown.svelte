@@ -2,12 +2,18 @@
     let {
         onFileTypeSelect,
         showCameraOption = false,
-        onTakePhoto
+        onTakePhoto,
+        allowedTypes = ['image', 'video']
     } = $props<{
-        onFileTypeSelect: (type: 'image' | 'video') => void;
+        onFileTypeSelect: (type: 'image' | 'video' | 'audio') => void;
         showCameraOption?: boolean;
         onTakePhoto?: () => void;
+        allowedTypes?: ('image' | 'video' | 'audio')[];
     }>();
+
+    const showImage = allowedTypes.includes('image');
+    const showVideo = allowedTypes.includes('video');
+    const showAudio = allowedTypes.includes('audio');
 
     function handleImageClick() {
         onFileTypeSelect('image');
@@ -15,6 +21,10 @@
 
     function handleVideoClick() {
         onFileTypeSelect('video');
+    }
+
+    function handleAudioClick() {
+        onFileTypeSelect('audio');
     }
 
     function handleTakePhotoClick() {
@@ -48,6 +58,7 @@
             <span>Take photo</span>
         </button>
     {/if}
+    {#if showImage}
     <button
         type="button"
         onclick={handleImageClick}
@@ -70,6 +81,8 @@
         </svg>
         <span>Image</span>
     </button>
+    {/if}
+    {#if showVideo}
     <button
         type="button"
         onclick={handleVideoClick}
@@ -91,4 +104,29 @@
         </svg>
         <span>Video</span>
     </button>
+    {/if}
+    {#if showAudio}
+    <button
+        type="button"
+        onclick={handleAudioClick}
+        class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+    >
+        <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-gray-600 dark:text-gray-300"
+        >
+            <path d="M9 18V5l12-2v13" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+        </svg>
+        <span>Music</span>
+    </button>
+    {/if}
 </div>
