@@ -27,7 +27,7 @@ const config = {
 					static: true
 				}),
 			csrf: {
-				checkOrigin: false
+				trustedOrigins: ['*']
 			}
 		}
 
