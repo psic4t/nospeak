@@ -450,7 +450,11 @@
     </div>
   {/if}
 
-  <div bind:this={chatContainer} class="flex-1 overflow-y-auto px-4 pb-28 pt-20 space-y-4 custom-scrollbar" onscroll={handleScroll}>
+  <div
+    bind:this={chatContainer}
+    class="flex-1 overflow-y-auto px-4 pb-28 pt-20 space-y-4 custom-scrollbar"
+    onscroll={handleScroll}
+  >
     {#if canRequestNetworkHistory && messages.length > 0}
       <div class="flex justify-center p-2">
         <button
@@ -473,7 +477,7 @@
 
     {#if isFetchingHistory}
       <div class="flex justify-center p-2">
-          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
       </div>
     {/if}
 
@@ -482,7 +486,6 @@
     {/if}
 
     {#each messages as msg, i (msg.id || i)}
-
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={{ y: 20, duration: 300, easing: cubicOut }}
@@ -492,11 +495,11 @@
             class="mb-1 hover:opacity-80 transition-opacity cursor-pointer"
             onclick={() => partnerNpub && openProfile(partnerNpub)}
           >
-            <Avatar 
-                npub={partnerNpub} 
-                src={partnerPicture} 
-                size="md" 
-                class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
+            <Avatar
+              npub={partnerNpub}
+              src={partnerPicture}
+              size="md"
+              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
             />
           </button>
         {/if}
@@ -506,22 +509,21 @@
           tabindex="0"
           class={`max-w-[70%] p-3 shadow-sm cursor-pointer transition-all duration-200
                          ${
-                             msg.direction === "sent"
+                           msg.direction === "sent"
                              ? "bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none hover:shadow-md"
-                             : "bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-slate-800"
+                             : "bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-slate-800"
                          }`}
           oncontextmenu={(e) => handleContextMenu(e, msg.message)}
           onmousedown={(e) => handleMouseDown(e, msg.message)}
           onmouseup={handleMouseUp}
           onmouseleave={handleMouseUp}
-          >
-            <MessageContent 
-                content={msg.message} 
-                isOwn={msg.direction === "sent"} 
-                onImageClick={openImageViewer}
-            />
-            <div
-
+        >
+          <MessageContent
+            content={msg.message}
+            isOwn={msg.direction === "sent"}
+            onImageClick={openImageViewer}
+          />
+          <div
             class={`text-[10px] mt-1 text-right ${msg.direction === "sent" ? "text-blue-100" : "text-gray-400"} cursor-help`}
             title={new Date(msg.sentAt).toLocaleString()}
           >
@@ -539,11 +541,11 @@
             class="mb-1 hover:opacity-80 transition-opacity cursor-pointer"
             onclick={() => $currentUser && openProfile($currentUser.npub)}
           >
-            <Avatar 
-                npub={$currentUser.npub} 
-                src={myPicture} 
-                size="md" 
-                class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
+            <Avatar
+              npub={$currentUser.npub}
+              src={myPicture}
+              size="md"
+              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-200"
             />
           </button>
         {/if}

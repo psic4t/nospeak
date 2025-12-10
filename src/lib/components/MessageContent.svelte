@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { getUrlPreviewApiUrl } from '$lib/core/UrlPreviewApi';
+    import { IntersectionObserverManager } from '$lib/utils/observers';
 
     let { content, isOwn = false, onImageClick } = $props<{ content: string; isOwn?: boolean; onImageClick?: (url: string) => void }>();
 
@@ -92,32 +93,24 @@
      let container: HTMLElement | null = null;
      let isVisible = $state(false);
      let lastPreviewUrl: string | null = null;
+     let fetchTimeout: number | null = null;
  
      onMount(() => {
-
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        if (!('IntersectionObserver' in window) || !container) {
+        if (typeof window === 'undefined') return;
+        if (!container) {
             // Fallback: treat as visible so web behavior remains unchanged
             isVisible = true;
             return;
         }
 
-        const observer = new IntersectionObserver((entries) => {
-            for (const entry of entries) {
-                if (entry.target === container) {
-                    isVisible = entry.isIntersecting;
-                }
-            }
+        const manager = IntersectionObserverManager.getInstance();
+        manager.observe(container, (entry) => {
+            isVisible = entry.isIntersecting;
         });
 
-        observer.observe(container);
-
         return () => {
-            observer.disconnect();
+            if (container) manager.unobserve(container);
+            if (fetchTimeout) clearTimeout(fetchTimeout);
         };
     });
  
@@ -125,11 +118,13 @@
         if (!previewUrl) {
             preview = null;
             lastPreviewUrl = null;
+            if (fetchTimeout) clearTimeout(fetchTimeout);
             return;
         }
         if (!getUrlPreviewsEnabled()) {
             preview = null;
             lastPreviewUrl = null;
+            if (fetchTimeout) clearTimeout(fetchTimeout);
             return;
         }
         if (typeof window === 'undefined') {
@@ -137,46 +132,55 @@
             return;
         }
         if (!isVisible) {
+            if (fetchTimeout) {
+                clearTimeout(fetchTimeout);
+                fetchTimeout = null;
+            }
             return;
         }
         if (lastPreviewUrl === previewUrl) {
             return;
         }
 
-        lastPreviewUrl = previewUrl;
- 
-        (async () => {
-            try {
-                const response = await fetch(getUrlPreviewApiUrl(previewUrl));
-                if (!response.ok || response.status === 204) {
+        // Debounce the fetch
+        if (fetchTimeout) clearTimeout(fetchTimeout);
+        
+        fetchTimeout = window.setTimeout(() => {
+            lastPreviewUrl = previewUrl;
+    
+            (async () => {
+                try {
+                    const response = await fetch(getUrlPreviewApiUrl(previewUrl));
+                    if (!response.ok || response.status === 204) {
+                        preview = null;
+                        return;
+                    }
+                    const data = (await response.json()) as {
+                        url: string;
+                        title?: string;
+                        description?: string;
+                        image?: string;
+                    };
+    
+                    if (!data || (!data.title && !data.description)) {
+                        preview = null;
+                        return;
+                    }
+    
+                    const parsedUrl = new URL(previewUrl);
+    
+                    preview = {
+                        url: data.url ?? previewUrl,
+                        title: data.title ?? parsedUrl.hostname,
+                        description: data.description,
+                        image: data.image,
+                        domain: parsedUrl.hostname
+                    };
+                } catch {
                     preview = null;
-                    return;
                 }
-                const data = (await response.json()) as {
-                    url: string;
-                    title?: string;
-                    description?: string;
-                    image?: string;
-                };
- 
-                if (!data || (!data.title && !data.description)) {
-                    preview = null;
-                    return;
-                }
- 
-                const parsedUrl = new URL(previewUrl);
- 
-                preview = {
-                    url: data.url ?? previewUrl,
-                    title: data.title ?? parsedUrl.hostname,
-                    description: data.description,
-                    image: data.image,
-                    domain: parsedUrl.hostname
-                };
-            } catch {
-                preview = null;
-            }
-        })();
+            })();
+        }, 300); // 300ms debounce
     });
 </script>
  
@@ -217,7 +221,7 @@
                 href={preview.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="block focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500/70 overflow-hidden rounded-xl bg-white/10 dark:bg-slate-800/30 backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50 hover:bg-white/20 dark:hover:bg-slate-800/50 transition-colors"
+                class="block focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500/70 overflow-hidden rounded-xl bg-white/20 dark:bg-slate-800/50 md:bg-white/10 md:dark:bg-slate-800/30 md:backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50 hover:bg-white/20 dark:hover:bg-slate-800/50 transition-colors"
             >
                 <div class="flex flex-col sm:flex-row gap-0 sm:gap-0 h-auto sm:h-28">
                     <div class="shrink-0 w-full sm:w-28 h-32 sm:h-full bg-gray-100/50 dark:bg-slate-800/50 flex items-center justify-center overflow-hidden">
