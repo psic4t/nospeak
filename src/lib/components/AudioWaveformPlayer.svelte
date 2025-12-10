@@ -142,8 +142,9 @@
 
     <div class="flex-1 flex flex-col gap-1 min-w-0">
         <div class="text-[11px] font-semibold truncate tracking-wide">
-            Audio message
-        </div>
+            Audio
+         </div>
+
 
         <!-- Equalizer -->
         <div class="flex items-end gap-[4px] h-8 w-full">
