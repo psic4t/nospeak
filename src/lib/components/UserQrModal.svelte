@@ -14,7 +14,7 @@
 
     const isAndroidApp = isAndroidNative();
 
-    let canvas: HTMLCanvasElement | null = null;
+    let canvas = $state<HTMLCanvasElement | null>(null);
     let qrValue = $state<string>('');
     let displayName = $state<string>('');
     let picture = $state<string | undefined>(undefined);
