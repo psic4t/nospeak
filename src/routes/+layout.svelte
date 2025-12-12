@@ -19,6 +19,7 @@
   import { syncState } from "$lib/stores/sync";
   import { configureAndroidStatusBar } from "$lib/core/StatusBar";
   import { isAndroidNative } from "$lib/core/NativeDialogs";
+  import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
   import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
 
   let { children } = $props();
@@ -53,6 +54,7 @@
 
     if (isAndroidNative()) {
       isAndroidApp = true;
+      initAndroidBackNavigation();
     }
 
     // Register PWA Service Worker

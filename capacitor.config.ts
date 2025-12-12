@@ -1,4 +1,5 @@
 /// <reference types="@capacitor/local-notifications" />
+/// <reference types="@capacitor/app" />
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
@@ -20,6 +21,9 @@ const config: CapacitorConfig = {
   plugins: {
     LocalNotifications: {
       smallIcon: 'ic_stat_nospeak',
+    },
+    App: {
+      disableBackButtonHandler: false,
     },
   },
 };

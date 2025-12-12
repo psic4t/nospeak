@@ -17,6 +17,7 @@
 		"@capacitor/android": "^7.4.4",
 		"@capacitor/cli": "^7.4.4",
 		"@capacitor/core": "^7.4.4",
+		"@capacitor/app": "^7.0.3",
 		"@capacitor/dialog": "^7.0.2",
 		"@capacitor/haptics": "^7.0.2",
 		"@capacitor/local-notifications": "^7.0.3",
