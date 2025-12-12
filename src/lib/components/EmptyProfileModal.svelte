@@ -77,7 +77,7 @@
      <div
          in:fade={{ duration: 130 }}
          out:fade={{ duration: 110 }}
-         class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-colors duration-150 ease-out"
+         class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
          onclick={handleOverlayClick}
          onkeydown={handleKeydown}
          role="dialog"
@@ -88,7 +88,7 @@
          <div 
              in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
              out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-             class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10 transform-gpu will-change-transform will-change-filter transition-all duration-150 ease-out">
+             class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-white/20 dark:border-white/10">
 
             <div class="flex flex-col gap-4 w-full">
                 <div class="flex items-start gap-3">

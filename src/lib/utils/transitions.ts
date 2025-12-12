@@ -12,23 +12,17 @@ import { quintOut } from 'svelte/easing';
  export function glassModal(_node: Element, options: GlassModalOptions = {}) {
      const {
          duration = 150,
-         easing = quintOut,
-         scaleFrom = 0.98,
-         blurFrom = 2
+         easing = quintOut
      } = options;
  
      return {
          duration,
          css: (t: number) => {
              const eased = easing(t);
-             const scale = scaleFrom + (1 - scaleFrom) * eased;
-             const blur = blurFrom * (1 - eased);
              const opacity = eased;
  
              return `
                  opacity: ${opacity};
-                 transform: scale(${scale});
-                 ${blurFrom > 0 ? `filter: blur(${blur}px);` : ''}
              `;
          }
      };

@@ -86,7 +86,7 @@
     <div
         in:fade={{ duration: 130 }}
         out:fade={{ duration: 110 }}
-        class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 {isAndroidApp ? 'pt-10' : ''} transition-colors duration-150 ease-out"
+        class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 {isAndroidApp ? 'pt-10' : ''}"
         role="dialog"
         aria-modal="true"
         tabindex="-1"
@@ -96,7 +96,7 @@
         <div
             in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }}
             out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-            class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl w-full max-w-sm rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none transform-gpu will-change-transform will-change-filter transition-all duration-150 ease-out p-6"
+            class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl w-full max-w-sm rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none p-6"
         >
             <button
                 onclick={close}
