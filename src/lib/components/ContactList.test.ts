@@ -89,13 +89,16 @@ describe('ContactList header QR button', () => {
 });
 
 describe('ContactList header scan QR button', () => {
-    it('renders an Android-only scan QR trigger next to the contacts title', () => {
+    it('renders a camera-capable scan QR trigger next to the contacts title', () => {
         const filePath = join(__dirname, 'ContactList.svelte');
         const content = readFileSync(filePath, 'utf8');
-
+ 
         expect(content).toContain('contacts.scanQrAria');
         expect(content).toContain('showScanContactQrModal');
+        expect(content).toContain('canScanQr');
+        expect(content).toContain('navigator.mediaDevices.getUserMedia');
     });
 });
+
  
 

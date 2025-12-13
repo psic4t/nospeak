@@ -27,15 +27,11 @@
 
 
     async function startCamera(): Promise<void> {
-        if (!isAndroidApp) {
-            status = 'camera-error';
-            return;
-        }
-
         if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             status = 'camera-error';
             return;
         }
+
 
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -160,15 +156,11 @@
             status = 'idle';
             return;
         }
-
-        if (!isAndroidApp) {
-            status = 'camera-error';
-            return;
-        }
-
+ 
         if (!scanActive && status !== 'added' && status !== 'add-error') {
             startCamera();
         }
+
     });
 </script>
 

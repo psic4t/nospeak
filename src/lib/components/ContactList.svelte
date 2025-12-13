@@ -24,6 +24,7 @@
  
      const isAndroidApp = isAndroidNative();
      let myPicture = $state<string | undefined>(undefined);
+     let canScanQr = $state(false);
 
 
     $effect(() => {
@@ -109,6 +110,10 @@
 
         if (typeof window !== 'undefined') {
             window.addEventListener('nospeak:new-message', handleNewMessage as EventListener);
+        }
+
+        if (typeof navigator !== 'undefined' && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+            canScanQr = true;
         }
         
         return () => {
@@ -202,7 +207,7 @@
              <div class="flex items-center gap-2">
                  <div class="typ-section dark:text-white">{$t('contacts.title')}</div>
 
-                 {#if isAndroidApp}
+                 {#if canScanQr}
                      <button
                          onclick={() => {
                              softVibrate();
