@@ -189,7 +189,7 @@
             </button>
         </div>
         <div class="px-4 pb-3 flex justify-between items-center">
-            <div class="font-bold dark:text-white text-xl tracking-tight">Contacts</div>
+            <div class="typ-section dark:text-white">Contacts</div>
             <button 
                 onclick={() => {
                     softVibrate();
