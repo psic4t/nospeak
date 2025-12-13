@@ -12,10 +12,10 @@ const config: CapacitorConfig = {
   android: {
     // Automatisches Signing für Release-Builds
     buildOptions: {
-      keystorePath: './nospeak-key.jks',
-      keystorePassword: 'Ruberg-123',
+      keystorePath: './nospeak-release.jks',
+      keystorePassword: process.env.ANDROID_KEYSTORE_PASSWORD,
       keystoreAlias: 'nospeak-key',
-      keystoreAliasPassword: 'Ruberg-123',
+      keystoreAliasPassword: process.env.ANDROID_KEYSTORE_ALIAS_PASSWORD,
     },
   },
   plugins: {

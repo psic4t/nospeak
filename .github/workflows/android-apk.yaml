@@ -1,0 +1,44 @@
+name: Android Release APK
+on:
+  release:
+    types: [published]
+jobs:
+  build-signed-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to upload assets to the release
+    env:
+      # Gradle signing config expects these
+      RELEASE_STORE_FILE: android/release.keystore
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: "34.0.0"
+      - name: Restore release keystore from secret
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      - name: Make Gradle wrapper executable
+        run: chmod +x android/gradlew
+      - name: Build signed release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+      - name: Attach APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release' && github.event.action == 'published'
+        with:
+          files: android/app/build/outputs/apk/release/*.apk
