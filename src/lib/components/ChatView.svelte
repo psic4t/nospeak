@@ -5,6 +5,7 @@
   import Avatar from "./Avatar.svelte";
   import MessageContent from "./MessageContent.svelte";
   import ContextMenu from "./ContextMenu.svelte";
+  import MessageReactions from "./MessageReactions.svelte";
   import MediaUploadButton from "./MediaUploadButton.svelte";
   import { currentUser } from "$lib/stores/auth";
   import { emojis } from "$lib/utils/emojis";
@@ -56,7 +57,7 @@
     isOpen: false,
     x: 0,
     y: 0,
-    messageContent: "",
+    message: null as Message | null,
   });
   let longPressTimer: number | null = null;
 
@@ -439,13 +440,13 @@
     }
   }
 
-  function openContextMenu(e: MouseEvent, messageContent: string) {
+  function openContextMenu(e: MouseEvent, message: Message) {
     e.preventDefault();
     contextMenu = {
       isOpen: true,
       x: e.clientX,
       y: e.clientY,
-      messageContent,
+      message,
     };
   }
 
@@ -454,7 +455,8 @@
   }
 
   function citeMessage() {
-    const citedContent = contextMenu.messageContent
+    if (!contextMenu.message) return;
+    const citedContent = contextMenu.message.message
       .split("\n")
       .map((line) => "> " + line)
       .join("\n");
@@ -474,10 +476,10 @@
     }, 0);
   }
 
-  function handleMouseDown(e: MouseEvent, messageContent: string) {
+  function handleMouseDown(e: MouseEvent, message: Message) {
     // Start long press timer for touch devices
     longPressTimer = window.setTimeout(() => {
-      openContextMenu(e, messageContent);
+      openContextMenu(e, message);
       longPressTimer = null; // Clear timer after opening menu
     }, 500);
   }
@@ -490,8 +492,35 @@
     }
   }
 
-  function handleContextMenu(e: MouseEvent, messageContent: string) {
-    openContextMenu(e, messageContent);
+  function handleContextMenu(e: MouseEvent, message: Message) {
+    openContextMenu(e, message);
+  }
+
+  async function reactToMessage(emoji: '👍' | '👎' | '❤️' | '😂') {
+    if (!contextMenu.message || !partnerNpub) return;
+
+    if (!contextMenu.message.rumorId) {
+      await nativeDialogService.alert({
+        title: 'Cannot React',
+        message: 'This message is too old to support reactions.'
+      });
+      return;
+    }
+
+    try {
+      await messagingService.sendReaction(partnerNpub, {
+        recipientNpub: contextMenu.message.recipientNpub,
+        eventId: contextMenu.message.eventId,
+        rumorId: contextMenu.message.rumorId,
+        direction: contextMenu.message.direction
+      }, emoji);
+    } catch (e) {
+      console.error('Failed to send reaction:', e);
+      await nativeDialogService.alert({
+        title: 'Reaction failed',
+        message: 'Failed to send reaction: ' + (e as Error).message
+      });
+    }
   }
 
   function handleFileSelect(file: File, type: 'image' | 'video' | 'audio', url?: string) {
@@ -656,22 +685,29 @@
         <div
           role="button"
           tabindex="0"
-          class={`max-w-[70%] p-3 shadow-sm cursor-pointer transition-all duration-150 ease-out
+          class={`max-w-[70%] p-3 shadow-sm cursor-pointer transition-all duration-150 ease-out relative
                          ${
                            msg.direction === "sent"
                              ? "bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none hover:shadow-md"
                              : "bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-slate-800"
-                         }`}
-          oncontextmenu={(e) => handleContextMenu(e, msg.message)}
-          onmousedown={(e) => handleMouseDown(e, msg.message)}
+                          }`}
+           oncontextmenu={(e) => handleContextMenu(e, msg)}
+           onmousedown={(e) => handleMouseDown(e, msg)}
+
           onmouseup={handleMouseUp}
           onmouseleave={handleMouseUp}
         >
-          <MessageContent
-            content={msg.message}
-            isOwn={msg.direction === "sent"}
-            onImageClick={openImageViewer}
-          />
+           <MessageContent
+             content={msg.message}
+             isOwn={msg.direction === "sent"}
+             onImageClick={openImageViewer}
+           />
+
+           <MessageReactions
+             targetEventId={msg.rumorId || ''}
+             isOwn={msg.direction === "sent"}
+           />
+
           <div
             class={`typ-meta mt-1 text-right ${msg.direction === "sent" ? "text-blue-100" : "text-gray-400"} cursor-help`}
             title={new Date(msg.sentAt).toLocaleString()}
@@ -778,4 +814,5 @@
   y={contextMenu.y}
   onClose={closeContextMenu}
   onCite={citeMessage}
+  onReact={reactToMessage}
 />

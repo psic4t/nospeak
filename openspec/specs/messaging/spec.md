@@ -808,3 +808,54 @@ The system SHALL allow users to scan contact QR codes using the device camera fr
 - **THEN** the Scan Contact QR trigger SHALL NOT be shown in the header
 - **OR** if shown due to partial capability detection, activating it SHALL result in a non-blocking camera-error state in the scanning modal without crashing the application.
 
+### Requirement: NIP-25 Message Reactions for Encrypted DMs
+The messaging experience SHALL support NIP-25 `kind 7` reactions for individual messages inside the existing NIP-17 encrypted direct message flow.
+
+#### Scenario: Reaction Targeting using Rumor ID
+- **GIVEN** a NIP-17 encrypted message (Kind 14 Rumor wrapped in Kind 1059 Gift Wrap)
+- **WHEN** a user reacts to this message
+- **THEN** the reaction event (Kind 7) SHALL reference the **Rumor ID** (the hash of the inner Kind 14 event) in its `e` tag, NOT the Gift Wrap ID.
+- **AND** the system SHALL calculate this Rumor ID deterministically upon sending and receiving to ensure both parties share the same target ID.
+
+#### Scenario: Storing Rumor ID
+- **WHEN** a message is saved to the local database (whether sent or received)
+- **THEN** the system SHALL calculate the hash of the inner Rumor event and store it as `rumorId`.
+- **AND** the UI SHALL use this `rumorId` to associate and display reactions.
+
+### Requirement: Message Interaction Menu Shows Standard Reactions
+The message interaction menu for each chat message SHALL expose a fixed set of standard reactions: thumb up, thumb down, heart, and laugh. The interaction menu SHALL be accessible via context menu or long-press interactions on a message bubble, SHALL clearly present these reaction options with touch-friendly targets, and SHALL invoke the NIP-25 reaction send path when a reaction is chosen.
+
+#### Scenario: Desktop user opens interaction menu and chooses a reaction
+- **GIVEN** the user is viewing a one-to-one conversation on a desktop or laptop device
+- **WHEN** the user right-clicks or otherwise invokes the context menu on a message bubble
+- **THEN** the message interaction menu SHALL appear near the pointer and display the thumb up, thumb down, heart, and laugh reactions as selectable options
+- **AND** when the user selects one of these reactions, the client SHALL call the NIP-25 reaction send path for that message and close the interaction menu.
+
+#### Scenario: Mobile user long-presses a message to react
+- **GIVEN** the user is viewing a one-to-one conversation on a touch device
+- **WHEN** the user long-presses a message bubble for at least a short threshold duration
+- **THEN** the message interaction menu SHALL appear anchored to that bubble and display the thumb up, thumb down, heart, and laugh reactions as selectable options
+- **AND** when the user taps one of these reactions, the client SHALL send the corresponding NIP-25 reaction for that message and dismiss the menu.
+
+### Requirement: Reactions Render Under Messages with Viewport-Aware Hydration
+The messaging interface SHALL render reactions as aggregated emoji chips directly under the corresponding message bubble and SHALL only hydrate and render reaction summaries for messages that are currently within the visible scroll viewport. For each message, the client SHALL group reactions by emoji, display a count when more than one participant has used the same emoji, and visually distinguish emojis that include at least one reaction from the current user.
+
+#### Scenario: Reactions appear as chips under a visible message
+- **GIVEN** a message in a one-to-one conversation has at least one stored reaction associated with its DM gift-wrap event id
+- **AND** that message bubble is currently visible within the scroll viewport of the conversation
+- **WHEN** the message list is rendered
+- **THEN** the UI SHALL display a compact row of emoji chips directly under the message content representing each distinct reaction emoji
+- **AND** each chip SHALL show the emoji and, when more than one reaction exists for that emoji, a numeric count.
+
+#### Scenario: Current user’s reactions are visually highlighted
+- **GIVEN** the current user has reacted to a particular message with one or more emojis
+- **AND** the message bubble is visible within the scroll viewport
+- **WHEN** the reaction chips are rendered under that message
+- **THEN** any chip that includes at least one reaction from the current user SHALL be visually distinguished from chips with only the other participant’s reactions (for example, by a different border or background intensity).
+
+#### Scenario: Reaction hydration is limited to messages in the viewport
+- **GIVEN** a conversation with a long message history that includes many messages with stored reactions
+- **WHEN** the user scrolls the message list so that only a subset of messages are within the visible viewport
+- **THEN** the client SHALL only query, aggregate, and subscribe to reaction data for message bubbles that are currently within or entering the viewport
+- **AND** SHALL avoid performing reaction aggregation work for messages that are scrolled far above or below the current view, while still preserving stored reaction data for those messages.
+

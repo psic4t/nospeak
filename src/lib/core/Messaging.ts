@@ -1,6 +1,6 @@
 import { connectionManager } from './connection/instance';
 import { messageRepo } from '$lib/db/MessageRepository';
-import { nip19, type NostrEvent, generateSecretKey, getPublicKey, finalizeEvent, nip44 } from 'nostr-tools';
+import { nip19, type NostrEvent, generateSecretKey, getPublicKey, finalizeEvent, nip44, getEventHash } from 'nostr-tools';
 import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { profileRepo } from '$lib/db/ProfileRepository';
@@ -10,7 +10,9 @@ import { initRelaySendStatus } from '$lib/stores/sending';
 import { contactRepo } from '$lib/db/ContactRepository';
 import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
-
+import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
+import { reactionsStore } from '$lib/stores/reactions';
+ 
  export class MessagingService {
    private debug: boolean = true;
     private isFetchingHistory: boolean = false;
@@ -127,23 +129,27 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
       const rumor = JSON.parse(decryptedSeal) as NostrEvent;
 
-      // Support both legacy Kind 15 and current Kind 14 rumors
-      if (rumor.kind !== 14 && rumor.kind !== 15) throw new Error(`Expected Rumor (Kind 14 or 15), got ${rumor.kind}`);
+      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
+        throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
+      }
 
-      // Validate p tag in rumor (must be for me)
+      // Validate p tag in rumor (must be for me), except for self-sent cases
       const myPubkey = await s.getPublicKey();
       const pTag = rumor.tags.find(t => t[0] === 'p');
       if (!pTag || pTag[1] !== myPubkey) {
-        // If it's a self-wrap (from me to me), p tag might be recipient's key?
-        // NIP-59 says: "The inner event (kind 14) MUST contain a p tag with the recipient's public key."
-        // For received messages (from others), p=ME.
-        // For self-wrapped messages (from me to me), p=RECIPIENT.
         if (rumor.pubkey !== myPubkey) {
           throw new Error('Received rumor p tag does not match my public key');
         }
       }
 
+      if (rumor.kind === 7) {
+        await this.processReactionRumor(rumor, event.id);
+        return;
+      }
+
       this.processRumor(rumor, event.id);
+
 
     } catch (e) {
       console.error('Failed to unwrap/decrypt message:', e);
@@ -166,10 +172,12 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
       const rumor = JSON.parse(decryptedSeal) as NostrEvent;
 
-      // Support both legacy Kind 15 and current Kind 14 rumors
-      if (rumor.kind !== 14 && rumor.kind !== 15) throw new Error(`Expected Rumor (Kind 14 or 15), got ${rumor.kind}`);
+      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
+        throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
+      }
 
-      // Validate p tag in rumor (must be for me)
+      // Validate p tag in rumor (must be for me), except for self-sent cases
       const myPubkey = await s.getPublicKey();
       const pTag = rumor.tags.find(t => t[0] === 'p');
       if (!pTag || pTag[1] !== myPubkey) {
@@ -178,7 +186,13 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
         }
       }
 
+      if (rumor.kind === 7) {
+        await this.processReactionRumor(rumor, event.id);
+        return null;
+      }
+
       return await this.createMessageFromRumor(rumor, event.id);
+
 
     } catch (e) {
       console.error('Failed to process gift wrap:', e);
@@ -214,6 +228,7 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
         message: rumor.content,
         sentAt: rumor.created_at * 1000,
         eventId: originalEventId,
+        rumorId: getEventHash(rumor),
         direction,
         createdAt: Date.now()
       };
@@ -247,6 +262,52 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
       await this.autoAddContact(message.recipientNpub, true);
     }
   }
+
+  private async processReactionRumor(rumor: NostrEvent, originalEventId: string): Promise<void> {
+    const s = get(signer);
+    const user = get(currentUser);
+    if (!s || !user) return;
+
+    try {
+      const myPubkey = await s.getPublicKey();
+      const pTag = rumor.tags.find(t => t[0] === 'p');
+      if (!pTag || (pTag[1] !== myPubkey && rumor.pubkey !== myPubkey)) {
+        return;
+      }
+
+      const eTag = rumor.tags.find(t => t[0] === 'e');
+      if (!eTag || !eTag[1]) {
+        return;
+      }
+
+      let content = (rumor.content || '').trim();
+      if (!content) {
+        return;
+      }
+
+      if (content === '+') {
+        content = '👍';
+      } else if (content === '-') {
+        content = '👎';
+      }
+
+      const targetEventId = eTag[1];
+      const authorNpub = nip19.npubEncode(rumor.pubkey);
+      const reaction: Omit<Reaction, 'id'> = {
+        targetEventId,
+        reactionEventId: originalEventId,
+        authorNpub,
+        emoji: content,
+        createdAt: rumor.created_at * 1000
+      };
+
+      await reactionRepo.upsertReaction(reaction);
+      reactionsStore.applyReactionUpdate(reaction);
+    } catch (e) {
+      console.error('Failed to process reaction rumor:', e);
+    }
+  }
+
 
   // Check if this is a first-time sync (empty message cache)
   private async isFirstTimeSync(): Promise<boolean> {
@@ -456,16 +517,20 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
     await new Promise(r => setTimeout(r, 500));
 
     // 2. Create Rumor (Kind 14)
-    const rumor: Partial<NostrEvent> = {
-      kind: 14,
-      pubkey: senderPubkey,
-      created_at: Math.floor(Date.now() / 1000),
-      content: text,
-      tags: [['p', recipientPubkey as string]]
-    };
+      const rumor: Partial<NostrEvent> = {
+        kind: 14,
+        pubkey: senderPubkey,
+        created_at: Math.floor(Date.now() / 1000),
+        content: text,
+        tags: [['p', recipientPubkey as string]]
+      };
 
-    // 3. Create Gift Wrap for Recipient
-    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+      // Calculate stable rumor ID for reactions
+      const rumorId = getEventHash(rumor as NostrEvent);
+
+      // 3. Create Gift Wrap for Recipient
+      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
 
     // Initialize ephemeral relay send status for UI (do not persist)
     initRelaySendStatus(giftWrap.id, recipientNpub, targetRelays.length);
@@ -499,6 +564,7 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
       message: text,
       sentAt: (rumor.created_at || 0) * 1000,
       eventId: selfGiftWrap.id, // Save SELF-WRAP ID to match incoming
+      rumorId, // Save stable rumor ID
       direction: 'sent',
       createdAt: Date.now()
     });
@@ -507,7 +573,87 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
     await this.autoAddContact(recipientNpub);
   }
 
-  private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any): Promise<NostrEvent> {
+  public async sendReaction(
+    recipientNpub: string,
+    targetMessage: { recipientNpub: string; eventId: string; rumorId?: string; direction: 'sent' | 'received' },
+    emoji: '👍' | '👎' | '❤️' | '😂'
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    // Reaction requires a stable rumor ID (NIP-17)
+    if (!targetMessage.rumorId) {
+        console.warn('Cannot react to message without rumorId (likely old message)');
+        return;
+    }
+    const targetId = targetMessage.rumorId;
+
+    const senderPubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(senderPubkey);
+    const { data: recipientPubkey } = nip19.decode(recipientNpub);
+
+    const recipientRelays = await this.getReadRelays(recipientNpub);
+    const senderRelays = await this.getWriteRelays(senderNpub);
+    const targetRelays = [...new Set([...recipientRelays, ...senderRelays])];
+    if (targetRelays.length === 0) {
+      targetRelays.push('wss://nostr.data.haus');
+    }
+
+    if (this.debug) console.log('Sending reaction to relays:', targetRelays);
+
+    for (const url of targetRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    const myPubkey = senderPubkey;
+    let targetAuthorPubkey: string;
+    if (targetMessage.direction === 'received') {
+      targetAuthorPubkey = recipientPubkey as string;
+    } else {
+      targetAuthorPubkey = myPubkey;
+    }
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 7,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: emoji,
+      tags: [
+        ['p', targetAuthorPubkey],
+        ['e', targetId, '', targetAuthorPubkey]
+      ]
+    };
+
+    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+
+    for (const url of targetRelays) {
+      await retryQueue.enqueue(giftWrap, url);
+    }
+    for (const url of senderRelays) {
+      await retryQueue.enqueue(selfGiftWrap, url);
+    }
+
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 2000);
+
+    const authorNpub = senderNpub;
+    const reaction: Omit<Reaction, 'id'> = {
+      targetEventId: targetId,
+      reactionEventId: selfGiftWrap.id,
+      authorNpub,
+      emoji,
+      createdAt: Date.now()
+    };
+
+    await reactionRepo.upsertReaction(reaction);
+    reactionsStore.applyReactionUpdate(reaction);
+  }
+ 
+   private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any): Promise<NostrEvent> {
     // 1. Encrypt Rumor -> Seal
     const rumorJson = JSON.stringify(rumor);
     const encryptedRumor = await s.encrypt(recipientPubkey, rumorJson);

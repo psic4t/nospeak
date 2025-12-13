@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Event, NostrEvent } from 'nostr-tools';
+import type { NostrEvent } from 'nostr-tools';
 
 export interface Message {
     id?: number; // Auto-increment
@@ -7,6 +7,7 @@ export interface Message {
     message: string;
     sentAt: number; // timestamp
     eventId: string;
+    rumorId?: string; // Stable ID of the inner rumor
     direction: 'sent' | 'received';
     createdAt: number;
 }
@@ -40,12 +41,22 @@ export interface ContactItem {
     lastReadAt?: number;
 }
 
+export interface Reaction {
+    id?: number;
+    targetEventId: string;
+    reactionEventId: string;
+    authorNpub: string;
+    emoji: string;
+    createdAt: number;
+}
+ 
 export class NospeakDB extends Dexie {
     messages!: Table<Message, number>;
     profiles!: Table<Profile, string>; // npub as primary key
     contacts!: Table<ContactItem, string>; // npub as primary key
     retryQueue!: Table<RetryItem, number>;
-
+    reactions!: Table<Reaction, number>;
+ 
     constructor() {
         super('NospeakDB');
         this.version(1).stores({
@@ -85,6 +96,16 @@ export class NospeakDB extends Dexie {
         // Version 5: Add lastReadAt to contacts
         this.version(5).stores({
             contacts: 'npub'
+        });
+
+        // Version 6: Add reactions table
+        this.version(6).stores({
+            reactions: '++id, targetEventId, reactionEventId, [targetEventId+authorNpub+emoji]'
+        });
+
+        // Version 7: Add rumorId to messages
+        this.version(7).stores({
+            messages: '++id, [recipientNpub+sentAt], &eventId, sentAt, rumorId'
         });
     }
 

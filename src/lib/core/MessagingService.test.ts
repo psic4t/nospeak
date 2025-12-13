@@ -6,6 +6,14 @@ import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { connectionManager } from './connection/instance';
 
+vi.mock('nostr-tools', async (importOriginal) => {
+    const actual = await importOriginal() as any;
+    return {
+        ...actual,
+        getEventHash: vi.fn().mockReturnValue('0000000000000000000000000000000000000000000000000000000000000000'),
+    };
+});
+
 // Mock dependencies
 vi.mock('$lib/db/ContactRepository');
 vi.mock('$lib/db/MessageRepository');
@@ -21,6 +29,21 @@ vi.mock('$lib/stores/auth');
 vi.mock('svelte/store');
 vi.mock('./ProfileResolver');
 
+vi.mock('$lib/stores/reactions', () => ({
+    reactionsStore: {
+        refreshSummariesForTarget: vi.fn(),
+        applyReactionUpdate: vi.fn(),
+        subscribeToMessageReactions: vi.fn()
+    }
+}));
+
+vi.mock('$lib/db/ReactionRepository', () => ({
+    reactionRepo: {
+        upsertReaction: vi.fn().mockResolvedValue(undefined),
+        getReactionsForTarget: vi.fn().mockResolvedValue([])
+    }
+}));
+ 
 vi.mock('./connection/instance', () => ({
     connectionManager: {
         fetchEvents: vi.fn().mockResolvedValue([]),
@@ -235,3 +258,69 @@ describe('MessagingService - Auto-add Contacts', () => {
         });
     });
 });
+
+    describe('reactions handling', () => {
+        it('processReactionRumor stores reaction via repository', async () => {
+            const hexPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+            const s: any = {
+                getPublicKey: vi.fn().mockResolvedValue(hexPubkey),
+            };
+
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return s;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            const messaging = new MessagingService();
+            const rumor: any = {
+                kind: 7,
+                pubkey: hexPubkey,
+                content: '+',
+                created_at: 123,
+                tags: [
+                    ['p', hexPubkey],
+                    ['e', 'target-event-id']
+                ]
+            };
+
+            const { reactionRepo } = await import('$lib/db/ReactionRepository');
+            const upsertSpy = vi.spyOn(reactionRepo, 'upsertReaction');
+
+            await (messaging as any).processReactionRumor(rumor, 'wrap-id');
+
+            expect(upsertSpy).toHaveBeenCalledTimes(1);
+            const callArg = upsertSpy.mock.calls[0][0];
+            expect(callArg.targetEventId).toBe('target-event-id');
+            expect(callArg.emoji).toBe('👍');
+        });
+
+        it('sendReaction method is exposed', () => {
+            const messaging = new MessagingService();
+            expect(typeof (messaging as any).sendReaction).toBe('function');
+        });
+
+        it('createMessageFromRumor calculates rumorId', async () => {
+            const s: any = {
+                getPublicKey: vi.fn().mockResolvedValue('79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef'),
+            };
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return s;
+                return null;
+            });
+
+            const messaging = new MessagingService();
+            const rumor: any = {
+                kind: 14,
+                pubkey: '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef',
+                content: 'test message',
+                created_at: 1600000000,
+                tags: [['p', '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef']]
+            };
+
+            const msg = await (messaging as any).createMessageFromRumor(rumor, 'wrap-id');
+            expect(msg.rumorId).toBeDefined();
+            expect(typeof msg.rumorId).toBe('string');
+            expect(msg.rumorId).toBe('0000000000000000000000000000000000000000000000000000000000000000'); 
+        });
+    });
