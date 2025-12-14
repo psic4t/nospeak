@@ -22,11 +22,20 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           api-level: 34
           build-tools: "34.0.0"
+      - name: Install dependencies
+        run: npm ci
+      - name: Build web assets and sync Capacitor
+        run: npm run build:android
       - name: Restore release keystore from secret
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
