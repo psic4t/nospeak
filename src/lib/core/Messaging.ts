@@ -12,7 +12,7 @@ import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
 import { reactionsStore } from '$lib/stores/reactions';
-import { encryptFileWithAesGcm } from './FileEncryption';
+import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
 import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
  
  export class MessagingService {
@@ -622,6 +622,68 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     return 'audio/mpeg';
   }
 
+  private async uploadEncryptedMedia(
+    encrypted: EncryptedFileResult,
+    mediaType: 'image' | 'video' | 'audio',
+    mimeType: string
+  ): Promise<string> {
+    const authHeader = await buildUploadAuthHeader();
+    if (!authHeader) {
+      throw new Error('You must be logged in to upload media');
+    }
+
+    const formData = new FormData();
+    const blob = new Blob([encrypted.ciphertext.buffer as ArrayBuffer], { type: mimeType });
+    formData.append('file', blob, 'encrypted');
+    formData.append('type', mediaType);
+
+    return await new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      // Optional: we could hook up progress here later if needed
+      const uploadTimeout = setTimeout(() => {
+        xhr.abort();
+        reject(new Error('Upload timeout - please try again'));
+      }, 30000);
+
+      xhr.onload = () => {
+        clearTimeout(uploadTimeout);
+        if (xhr.status === 200) {
+          try {
+            const response = JSON.parse(xhr.responseText) as { success?: boolean; url?: string; error?: string };
+            if (response.success && response.url) {
+              resolve(response.url);
+            } else {
+              reject(new Error(response.error || 'Upload failed'));
+            }
+          } catch {
+            reject(new Error('Invalid response from server while uploading file message'));
+          }
+        } else if (xhr.status === 413) {
+          reject(new Error('File too large'));
+        } else if (xhr.status === 400) {
+          reject(new Error('Invalid file type or size'));
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        clearTimeout(uploadTimeout);
+        reject(new Error('Network error during upload'));
+      };
+
+      xhr.onabort = () => {
+        clearTimeout(uploadTimeout);
+        reject(new Error('Upload was cancelled'));
+      };
+
+      xhr.open('POST', CANONICAL_UPLOAD_URL);
+      xhr.setRequestHeader('Authorization', authHeader);
+      xhr.send(formData);
+    });
+  }
+
   public async sendFileMessage(
     recipientNpub: string,
     file: File,
@@ -654,49 +716,12 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     // 2. Encrypt file with AES-GCM
     const encrypted = await encryptFileWithAesGcm(file);
 
-    const blob = new Blob([encrypted.ciphertext.buffer as ArrayBuffer], {
-      type: file.type || this.mediaTypeToMime(mediaType)
-    });
-    // Use an extensionless filename for encrypted blobs; MIME type carries content type
-    const uploadFile = new File([blob], 'encrypted', { type: blob.type });
-
-    // 3. Upload encrypted blob to canonical media endpoint
-    const authHeader = await buildUploadAuthHeader();
-    if (!authHeader) {
-      throw new Error('You must be logged in to upload media');
-    }
-
-    const formData = new FormData();
-    formData.append('file', uploadFile);
-    formData.append('type', mediaType);
-
-    const uploadResponse = await fetch(CANONICAL_UPLOAD_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader
-      },
-      body: formData
-    });
-
-    if (!uploadResponse.ok) {
-      const text = await uploadResponse.text().catch(() => '');
-      throw new Error(text || `Upload failed with status ${uploadResponse.status}`);
-    }
-
-    let fileUrl: string;
-    try {
-      const json = await uploadResponse.json() as { success?: boolean; url?: string; error?: string };
-      if (!json.success || !json.url) {
-        throw new Error(json.error || 'Upload failed');
-      }
-      fileUrl = json.url;
-    } catch (e) {
-      throw new Error('Invalid response from server while uploading file message');
-    }
+    // 3. Upload encrypted blob to canonical media endpoint using XMLHttpRequest (works on web + Android)
+    const mimeType = file.type || this.mediaTypeToMime(mediaType);
+    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType);
 
     // 4. Create Kind 15 rumor
     const now = Math.floor(Date.now() / 1000);
-    const mimeType = file.type || this.mediaTypeToMime(mediaType);
 
     const rumor: Partial<NostrEvent> = {
       kind: 15,

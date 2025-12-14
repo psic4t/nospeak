@@ -2,7 +2,13 @@ import { error } from '@sveltejs/kit';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,OPTIONS'
+} as const;
+ 
 const EXTENSION_TO_MIME: Record<string, string> = {
+
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
@@ -45,7 +51,8 @@ export async function GET({ params }: { params: { filename: string } }) {
             headers: {
                 'Content-Type': mimeType,
                 // Allow caching of user media while ensuring updates propagate
-                'Cache-Control': 'public, max-age=31536000, immutable'
+                'Cache-Control': 'public, max-age=31536000, immutable',
+                ...CORS_HEADERS
             }
         });
     } catch (err: unknown) {
