@@ -30,8 +30,7 @@ export class ProfileRepository {
     public async cacheProfile(
         npub: string,
         metadata: any,
-        readRelays: string[],
-        writeRelays: string[],
+        messagingRelays: string[],
         nip05Info?: {
             status: 'valid' | 'invalid' | 'unknown';
             lastChecked: number;
@@ -50,23 +49,21 @@ export class ProfileRepository {
         
         let profile: Profile;
         
-        if (readRelays.length > 0 || writeRelays.length > 0) {
-            // Full update
+        if (messagingRelays.length > 0) {
+            // Full update: replace messaging relays and (optionally) metadata
             profile = {
                 npub,
-                metadata: metadata || (existing?.metadata), // Keep existing metadata if nil passed? Go code replaces if profile provided.
-                readRelays,
-                writeRelays,
+                metadata: metadata || existing?.metadata,
+                messagingRelays,
                 cachedAt: now,
                 expiresAt: now + this.ttl
             };
         } else {
-            // Profile only update, preserve relays
+            // Profile-only update, preserve existing messaging relays
             profile = {
                 npub,
                 metadata,
-                readRelays: existing?.readRelays || [],
-                writeRelays: existing?.writeRelays || [],
+                messagingRelays: existing?.messagingRelays || [],
                 cachedAt: now,
                 expiresAt: now + this.ttl
             };

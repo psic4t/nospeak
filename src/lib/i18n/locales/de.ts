@@ -45,31 +45,31 @@ const de = {
     sync: {
         title: 'Nachrichten werden synchronisiert...'
     },
-    modals: {
-        manageContacts: {
-            title: 'Kontakte verwalten',
-            searchPlaceholder: 'npub oder Suchbegriff',
-            addContactAria: 'Kontakt hinzufügen',
-            searchContactsAria: 'Kontakte suchen',
-            searching: 'Suche…',
-            searchFailed: 'Suche fehlgeschlagen',
-            noResults: 'Keine Treffer',
-            noContacts: 'Keine Kontakte hinzugefügt',
-            removeContactAria: 'Kontakt entfernen'
-        },
-        profile: {
-            unknownName: 'Unbekannt',
-            about: 'Über',
-            publicKey: 'Öffentlicher Schlüssel',
-            readRelays: 'Lese-Relays',
-            writeRelays: 'Schreib-Relays',
-            noRelays: 'Keine',
-            notFound: 'Profil nicht gefunden'
-        },
+        modals: {
+         manageContacts: {
+             title: 'Kontakte verwalten',
+             searchPlaceholder: 'npub oder Suchbegriff',
+             addContactAria: 'Kontakt hinzufügen',
+             searchContactsAria: 'Kontakte suchen',
+             searching: 'Suche…',
+             searchFailed: 'Suche fehlgeschlagen',
+             noResults: 'Keine Treffer',
+             noContacts: 'Keine Kontakte hinzugefügt',
+             removeContactAria: 'Kontakt entfernen'
+         },
+         profile: {
+             unknownName: 'Unbekannt',
+             about: 'Über',
+             publicKey: 'Öffentlicher Schlüssel',
+             messagingRelays: 'Messaging-Relays',
+             noRelays: 'Keine',
+             notFound: 'Profil nicht gefunden'
+         },
+
         emptyProfile: {
             title: 'Profil-Einrichtung abschließen',
             introLine1: 'Dieser Schlüssel hat noch keine Messaging-Relays oder einen Benutzernamen.',
-            introLine2: 'Wir richten einige Standard-Messaging-Relays ein, damit nospeak Nachrichten senden und empfangen kann. Du kannst diese später in den Einstellungen unter Mailbox-Relays ändern.',
+            introLine2: 'Wir richten einige Standard-Messaging-Relays ein, damit nospeak Nachrichten senden und empfangen kann. Du kannst diese später in den Einstellungen unter Messaging-Relays ändern.',
             usernameLabel: 'Benutzername',
             usernamePlaceholder: 'Dein Name',
             usernameRequired: 'Bitte gib einen Benutzernamen ein, um fortzufahren.',
@@ -149,15 +149,16 @@ const de = {
             failedMessagePrefix: 'Reaktion konnte nicht gesendet werden: '
         }
     },
-    settings: {
-        title: 'Einstellungen',
-        categories: {
-            general: 'Allgemein',
-            profile: 'Profil',
-            mailboxRelays: 'Mailbox-Relays',
-            security: 'Sicherheit',
-            about: 'Info'
-        },
+        settings: {
+         title: 'Einstellungen',
+         categories: {
+             general: 'Allgemein',
+             profile: 'Profil',
+             messagingRelays: 'Messaging-Relays',
+             security: 'Sicherheit',
+             about: 'Info'
+         },
+
         general: {
             appearanceLabel: 'Darstellung',
             appearanceDescription:
@@ -197,14 +198,14 @@ const de = {
             saveButton: 'Änderungen speichern',
             savingButton: 'Speichere…'
         },
-        mailboxRelays: {
-            description: 'Konfiguriere deine NIP-65-Mailbox-Relays. Diese Relays geben an, wohin andere dir Nachrichten senden (Lesen) und wo sie deine Nachrichten finden (Schreiben).',
-            inputPlaceholder: 'wss://relay.example.com',
-            addButton: 'Hinzufügen',
-            readLabel: 'Lesen',
-            writeLabel: 'Schreiben',
-            emptyState: 'Keine Relays konfiguriert'
-        },
+         messagingRelays: {
+             description: 'Konfiguriere deine NIP-17-Messaging-Relays. Diese Relays werden verwendet, um deine verschlüsselten Nachrichten zu empfangen. Für die meisten Nutzer funktionieren 2–3 Messaging-Relays am zuverlässigsten.',
+             inputPlaceholder: 'wss://relay.example.com',
+             addButton: 'Hinzufügen',
+             emptyState: 'Keine Relays konfiguriert',
+             tooManyWarning: 'Mehr als 3 Messaging-Relays können Performance und Zuverlässigkeit verschlechtern.'
+         },
+
         security: {
             loginMethodTitle: 'Anmeldemethode',
             loginMethodUnknown: 'Unbekannt',

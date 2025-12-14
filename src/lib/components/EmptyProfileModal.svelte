@@ -48,7 +48,6 @@
 
         try {
             await relaySettingsService.updateSettings(
-                DEFAULT_EMPTY_PROFILE_RELAYS,
                 DEFAULT_EMPTY_PROFILE_RELAYS
             );
 

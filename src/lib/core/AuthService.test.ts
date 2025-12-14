@@ -349,8 +349,7 @@ describe('AuthService ordered login history flow integration', () => {
  
          const { profileRepo } = await import('$lib/db/ProfileRepository');
          (profileRepo.getProfileIgnoreTTL as any).mockResolvedValue({
-             readRelays: ['wss://relay.example.com'],
-             writeRelays: []
+             messagingRelays: ['wss://relay.example.com']
          });
      });
  

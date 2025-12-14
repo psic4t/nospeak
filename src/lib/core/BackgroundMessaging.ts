@@ -72,7 +72,7 @@ interface AndroidBackgroundMessagingPlugin {
         mode: 'nsec' | 'amber';
         pubkeyHex: string;
         nsecHex?: string;
-        readRelays: string[];
+        readRelays: string[]; // keeps native interface name but will carry messaging relays
         summary: string;
     }): Promise<void>;
     update(options: { summary: string }): Promise<void>;
@@ -193,30 +193,32 @@ export async function enableAndroidBackgroundMessaging(): Promise<void> {
     if (!isAndroidNative()) {
         return;
     }
-
+ 
     const user = get(currentUser);
     let readRelays: string[] = [];
-
+ 
     try {
         if (user?.npub) {
             const profile = await profileRepo.getProfileIgnoreTTL(user.npub);
-            if (profile?.readRelays && Array.isArray(profile.readRelays)) {
-                readRelays = profile.readRelays;
+            if (profile?.messagingRelays && Array.isArray(profile.messagingRelays)) {
+                readRelays = profile.messagingRelays;
             }
         }
     } catch (e) {
         console.error('Failed to load profile for Android background messaging:', e);
     }
-
+ 
     const summary = buildRelaySummary(readRelays);
+
  
     // Apply more conservative reconnection behavior while background messaging is enabled
     connectionManager.setBackgroundModeEnabled(true);
  
-    // Track the current summary and start the foreground service
+     // Track the current summary and start the foreground service
      lastNotificationSummary = summary;
      try {
          await startNativeForegroundService(summary, readRelays);
+
  
          // Keep the notification in sync with connected relays
          ensureRelayHealthSubscription();

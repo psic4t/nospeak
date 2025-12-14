@@ -19,7 +19,7 @@ vi.mock('$lib/db/ContactRepository');
 vi.mock('$lib/db/MessageRepository');
 vi.mock('$lib/db/ProfileRepository', () => ({
     profileRepo: {
-        getProfile: vi.fn().mockResolvedValue({ readRelays: ['wss://relay.test'] }),
+        getProfile: vi.fn().mockResolvedValue({ messagingRelays: ['wss://relay.test'] }),
         getProfileIgnoreTTL: vi.fn(),
         updateProfile: vi.fn()
     }

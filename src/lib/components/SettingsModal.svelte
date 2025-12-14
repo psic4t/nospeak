@@ -32,7 +32,7 @@
   let isSupported = $state(false);
   let isLoaded = $state(false);
 
-  type Category = "General" | "Profile" | "Mailbox Relays" | "About" | "Security";
+  type Category = "General" | "Profile" | "Messaging Relays" | "About" | "Security";
   type AuthMethod = "local" | "nip07" | "nip46" | "unknown";
 
   let activeCategory = $state<Category>("General");
@@ -56,11 +56,9 @@
   let isSavingProfile = $state(false);
   let profileNip05Status = $state<"valid" | "invalid" | "unknown" | null>(null);
 
-  // Relay settings
+  // Relay settings (messaging relays)
   type RelayConfig = {
     url: string;
-    read: boolean;
-    write: boolean;
   };
   let relays = $state<RelayConfig[]>([]);
   let newRelayUrl = $state("");
@@ -122,33 +120,27 @@
   }
 
   async function loadRelaySettings() {
-    let readRelays: string[] = [];
-    let writeRelays: string[] = [];
-
+    let messagingRelays: string[] = [];
+ 
     if ($currentUser?.npub) {
       const profile = await profileRepo.getProfileIgnoreTTL($currentUser.npub);
       if (profile) {
-        readRelays = profile.readRelays || [];
-        writeRelays = profile.writeRelays || [];
+        messagingRelays = profile.messagingRelays || [];
       }
     }
-
-    const allUrls = new Set([...readRelays, ...writeRelays]);
-
-    relays = Array.from(allUrls)
+ 
+    relays = messagingRelays
       .map((url) => ({
-        url,
-        read: readRelays.includes(url),
-        write: writeRelays.includes(url)
+        url
       }))
       .sort((a, b) => a.url.localeCompare(b.url));
   }
-
+ 
   async function saveRelaySettings() {
-    const readRelays = relays.filter((r) => r.read).map((r) => r.url);
-    const writeRelays = relays.filter((r) => r.write).map((r) => r.url);
-    await relaySettingsService.updateSettings(readRelays, writeRelays);
+    const messagingRelays = relays.map((r) => r.url);
+    await relaySettingsService.updateSettings(messagingRelays);
   }
+
 
   function addRelay() {
     if (!newRelayUrl) return;
@@ -160,7 +152,7 @@
     }
 
     if (!relays.find((r) => r.url === url)) {
-      relays = [...relays, { url, read: true, write: true }];
+      relays = [...relays, { url }];
       saveRelaySettings();
     }
     newRelayUrl = "";
@@ -171,18 +163,7 @@
     saveRelaySettings();
   }
 
-  function toggleRelayPermission(url: string, type: "read" | "write") {
-    const index = relays.findIndex((r) => r.url === url);
-    if (index !== -1) {
-      const relay = relays[index];
-      const updated = { ...relay, [type]: !relay[type] };
 
-      const newRelays = [...relays];
-      newRelays[index] = updated;
-      relays = newRelays;
-      saveRelaySettings();
-    }
-  }
 
   let showMobileContent = $state(false);
 
@@ -417,16 +398,16 @@
           </button>
           <button
             class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
-              activeCategory === "Mailbox Relays"
+              activeCategory === "Messaging Relays"
                 ? "bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-slate-700 dark:ring-0 font-medium text-gray-900 dark:text-white"
                 : "text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200"
             }`}
             onclick={() => {
-              activeCategory = "Mailbox Relays";
+              activeCategory = "Messaging Relays";
               showMobileContent = true;
             }}
           >
-            {$t("settings.categories.mailboxRelays")}
+            {$t("settings.categories.messagingRelays")}
           </button>
           <button
             class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
@@ -484,8 +465,8 @@
                 {$t('settings.categories.general')}
               {:else if activeCategory === "Profile"}
                 {$t('settings.categories.profile')}
-              {:else if activeCategory === "Mailbox Relays"}
-                {$t('settings.categories.mailboxRelays')}
+              {:else if activeCategory === "Messaging Relays"}
+                {$t('settings.categories.messagingRelays')}
               {:else if activeCategory === "Security"}
                 {$t('settings.categories.security')}
               {:else if activeCategory === "About"}
@@ -880,16 +861,22 @@
                 </div>
               </div>
             </div>
-          {:else if activeCategory === "Mailbox Relays"}
+          {:else if activeCategory === "Messaging Relays"}
             <div class="space-y-6">
               <p class="text-sm text-gray-500 dark:text-slate-400">
-                {$t('settings.mailboxRelays.description')}
+                {$t('settings.messagingRelays.description')}
               </p>
-
+ 
+              {#if relays.length > 3}
+                <p class="text-sm text-red-600 dark:text-red-400">
+                  {$t('settings.messagingRelays.tooManyWarning')}
+                </p>
+              {/if}
+ 
               <div class="flex gap-2">
                 <input
                   bind:value={newRelayUrl}
-                  placeholder={$t('settings.mailboxRelays.inputPlaceholder')}
+                  placeholder={$t('settings.messagingRelays.inputPlaceholder')}
                   class="flex-1 px-3 py-2 border rounded-md dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   onkeydown={(e) => e.key === "Enter" && addRelay()}
                 />
@@ -897,10 +884,10 @@
                   onclick={addRelay}
                   class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
                 >
-                  {$t('settings.mailboxRelays.addButton')}
+                  {$t('settings.messagingRelays.addButton')}
                 </button>
               </div>
-
+ 
               <div
                 class="border border-gray-200/60 dark:border-slate-700/70 rounded-2xl bg-white/80 dark:bg-slate-900/60 overflow-hidden shadow-sm divide-y divide-gray-200/60 dark:divide-slate-700/70"
               >
@@ -915,28 +902,6 @@
                       </p>
                     </div>
                     <div class="flex items-center gap-4">
-                      <label class="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={relay.read}
-                          onchange={() => toggleRelayPermission(relay.url, "read")}
-                          class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span class="text-sm text-gray-600 dark:text-slate-400">
-                          {$t('settings.mailboxRelays.readLabel')}
-                        </span>
-                      </label>
-                      <label class="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={relay.write}
-                          onchange={() => toggleRelayPermission(relay.url, "write")}
-                          class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span class="text-sm text-gray-600 dark:text-slate-400">
-                          {$t('settings.mailboxRelays.writeLabel')}
-                        </span>
-                      </label>
                       <button
                         onclick={() => removeRelay(relay.url)}
                         class="text-red-500 hover:text-red-700 p-1"
@@ -962,11 +927,12 @@
                   <div
                     class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400"
                   >
-                    {$t('settings.mailboxRelays.emptyState')}
+                    {$t('settings.messagingRelays.emptyState')}
                   </div>
                 {/each}
               </div>
             </div>
+
           {:else if activeCategory === "About"}
             <div class="space-y-6">
               <div class="flex items-center gap-6">

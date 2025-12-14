@@ -24,8 +24,7 @@ export interface Message {
 export interface Profile {
     npub: string;
     metadata: any; // NIP-01 metadata
-    readRelays: string[];
-    writeRelays: string[];
+    messagingRelays: string[];
     cachedAt: number;
     expiresAt: number;
     nip05Status?: 'valid' | 'invalid' | 'unknown';

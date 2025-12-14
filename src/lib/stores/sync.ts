@@ -46,7 +46,7 @@ function createInitialSteps(): LoginSyncStep[] {
         },
         {
             id: 'connect-read-relays',
-            label: "Connect to user's read relays",
+            label: "Connect to user's messaging relays",
             status: 'pending'
         },
         {

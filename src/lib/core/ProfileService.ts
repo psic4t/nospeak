@@ -56,8 +56,7 @@ export class ProfileService {
         await profileRepo.cacheProfile(
             currentUserData.npub,
             metadata,
-            existingProfile?.readRelays || [],
-            existingProfile?.writeRelays || [],
+            existingProfile?.messagingRelays || [],
             nip05Info
         );
 
@@ -77,16 +76,15 @@ export class ProfileService {
         // Target: Blaster + Connected + Configured Read/Write
         
         // Get configured relays from profile
-        const readRelays = existingProfile?.readRelays || [];
-        const writeRelays = existingProfile?.writeRelays || [];
-
+        const messagingRelays = existingProfile?.messagingRelays || [];
+ 
         const allRelays = new Set([
             ...DEFAULT_DISCOVERY_RELAYS,
             'wss://sendit.nosflare.com', // Blaster relay
             ...connectionManager.getAllRelayHealth().map(h => h.url),
-            ...readRelays,
-            ...writeRelays
+            ...messagingRelays
         ]);
+
 
         console.log(`Publishing profile update to ${allRelays.size} relays...`);
 

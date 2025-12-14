@@ -21,12 +21,12 @@ export class ProfileResolver {
 
         const filters = [
             {
-                kinds: [0, 10002],
+                kinds: [0, 10050, 10002],
                 authors: [pubkey],
                 limit: 10 // Get multiple to ensure we catch both kinds if they exist
             }
         ];
-
+ 
         const buildNip05Info = async (currentMetadata: any): Promise<{
             status: 'valid' | 'invalid' | 'unknown';
             lastChecked: number;
@@ -65,14 +65,14 @@ export class ProfileResolver {
 
         return new Promise<void>((resolve) => {
             let metadata: any = null;
-            let readRelays: string[] = [];
-            let writeRelays: string[] = [];
+            let messagingRelays: string[] = [];
             let foundProfile = false;
-            let foundRelays = false;
-
+            let foundMessagingRelays = false;
+            let foundNip65Relays = false;
+ 
             const finalize = async () => {
                 const nip05Info = await buildNip05Info(metadata);
-                await profileRepo.cacheProfile(npub, metadata, readRelays, writeRelays, nip05Info);
+                await profileRepo.cacheProfile(npub, metadata, messagingRelays, nip05Info);
                 resolve();
             };
 
@@ -90,28 +90,48 @@ export class ProfileResolver {
                     } catch (e) {
                         console.error('Failed to parse profile metadata', e);
                     }
-                } else if (event.kind === 10002 && !foundRelays) {
+                } else if (event.kind === 10050 && !foundMessagingRelays) {
+                    const parsed = this.parseMessagingRelayList(event);
+                    messagingRelays = parsed;
+                    foundMessagingRelays = true;
+                } else if (event.kind === 10002 && !foundNip65Relays && !foundMessagingRelays) {
                     const parsed = this.parseNIP65RelayList(event);
-                    readRelays = parsed.read;
-                    writeRelays = parsed.write;
-                    foundRelays = true;
+                    messagingRelays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
+                    foundNip65Relays = true;
                 }
-
-                if (foundProfile && foundRelays) {
+ 
+                if (foundProfile && (foundMessagingRelays || foundNip65Relays)) {
                     clearTimeout(timeout);
                     cleanup();
-                    finalize();
+                    void finalize();
                 }
             });
         });
     }
 
+    private parseMessagingRelayList(event: any): string[] {
+        const urls: string[] = [];
+        const seen = new Set<string>();
+ 
+        for (const tag of event.tags) {
+            if (tag.length < 2 || tag[0] !== 'relay') continue;
+ 
+            const url = tag[1];
+            if (!url || seen.has(url)) continue;
+ 
+            seen.add(url);
+            urls.push(url);
+        }
+ 
+        return urls;
+    }
+ 
     private parseNIP65RelayList(event: any): { read: string[], write: string[] } {
         const read: string[] = [];
         const write: string[] = [];
         const seenRead = new Set<string>();
         const seenWrite = new Set<string>();
-
+ 
         for (const tag of event.tags) {
             if (tag.length < 2 || tag[0] !== 'r') continue;
             

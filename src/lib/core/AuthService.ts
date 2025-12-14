@@ -83,7 +83,7 @@ export class AuthService {
                 relays,
                 name: 'nospeak',
                 url: window.location.origin,
-                perms: ['sign_event:1', 'sign_event:0', 'sign_event:13', 'sign_event:10002', 'nip44_encrypt', 'nip44_decrypt'],
+                perms: ['sign_event:1', 'sign_event:0', 'sign_event:13', 'sign_event:10050', 'nip44_encrypt', 'nip44_decrypt'],
                 secret,
             };
 
@@ -165,8 +165,7 @@ export class AuthService {
         try {
             const existingProfile = await profileRepo.getProfileIgnoreTTL(npub);
             const hasCachedRelays = !!existingProfile && (
-                (existingProfile.readRelays && existingProfile.readRelays.length > 0) ||
-                (existingProfile.writeRelays && existingProfile.writeRelays.length > 0)
+                existingProfile.messagingRelays && existingProfile.messagingRelays.length > 0
             );
 
             const totalMessages = await messageRepo.countMessages('ALL');
@@ -193,13 +192,14 @@ export class AuthService {
             }
 
             const profile = await profileRepo.getProfileIgnoreTTL(npub);
-            const readRelays = profile?.readRelays || [];
-
-            // 3. Connect to user's read relays
+            const messagingRelays = profile?.messagingRelays || [];
+ 
+            // 3. Connect to user's messaging relays
             setLoginSyncActiveStep('connect-read-relays');
-            for (const url of readRelays) {
+            for (const url of messagingRelays) {
                 connectionManager.addPersistentRelay(url);
             }
+
 
             // Cleanup discovery relays used during this flow
             connectionManager.cleanupTemporaryConnections();
@@ -229,19 +229,18 @@ export class AuthService {
 
             try {
                 const finalProfile = await profileRepo.getProfileIgnoreTTL(npub);
-                const metadata = finalProfile?.metadata ?? {};
-                const hasRelays = !!(
-                    (finalProfile?.readRelays && finalProfile.readRelays.length > 0) ||
-                    (finalProfile?.writeRelays && finalProfile.writeRelays.length > 0)
-                );
+                const hasRelays = !!finalProfile && Array.isArray(finalProfile.messagingRelays) && finalProfile.messagingRelays.length > 0;
+ 
+                const metadata = finalProfile?.metadata || {};
                 const hasUsername = !!(metadata.name || metadata.display_name || metadata.nip05);
-
+ 
                 if (!hasRelays && !hasUsername) {
                     showEmptyProfileModal.set(true);
                 }
             } catch (profileError) {
                 console.error(`${context} empty profile check failed:`, profileError);
             }
+
         } catch (error) {
              console.error(`${context} login history flow failed:`, error);
          } finally {
@@ -267,16 +266,16 @@ export class AuthService {
             try {
                 const profile = await profileRepo.getProfileIgnoreTTL(npub);
                 const hasCachedRelays = !!profile && (
-                    (profile.readRelays && profile.readRelays.length > 0) ||
-                    (profile.writeRelays && profile.writeRelays.length > 0)
+                    profile.messagingRelays && profile.messagingRelays.length > 0
                 );
-
+ 
                 if (hasCachedRelays) {
-                    if (profile && profile.readRelays && profile.readRelays.length > 0) {
-                        for (const url of profile.readRelays) {
+                    if (profile && profile.messagingRelays && profile.messagingRelays.length > 0) {
+                        for (const url of profile.messagingRelays) {
                             connectionManager.addPersistentRelay(url);
                         }
                     }
+
 
                     messagingService
                         .fetchHistory()

@@ -32,9 +32,9 @@ export async function discoverUserRelays(npub: string, isCurrentUser: boolean = 
     // 3. Connect to user relays from cache
     const profile = await profileRepo.getProfile(npub);
     if (profile) {
-        // Only connect Read relays permanently if it is the current user
-        if (profile.readRelays && profile.readRelays.length > 0) {
-            for (const url of profile.readRelays) {
+        // Only connect messaging relays permanently if it is the current user
+        if (profile.messagingRelays && profile.messagingRelays.length > 0) {
+            for (const url of profile.messagingRelays) {
                 if (isCurrentUser) {
                     connectionManager.addPersistentRelay(url);
                 } else {

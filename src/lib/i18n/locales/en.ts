@@ -44,31 +44,31 @@ const en = {
     sync: {
         title: 'Syncing messages...'
     },
-    modals: {
-        manageContacts: {
-            title: 'Manage Contacts',
-            searchPlaceholder: 'npub or search term',
-            addContactAria: 'Add contact',
-            searchContactsAria: 'Search contacts',
-            searching: 'Searching...',
-            searchFailed: 'Search failed',
-            noResults: 'No results',
-            noContacts: 'No contacts added',
-            removeContactAria: 'Remove contact'
-        },
-        profile: {
-            unknownName: 'Unknown',
-            about: 'About',
-            publicKey: 'Public Key',
-            readRelays: 'Read Relays',
-            writeRelays: 'Write Relays',
-            noRelays: 'None',
-            notFound: 'Profile not found'
-        },
+        modals: {
+         manageContacts: {
+             title: 'Manage Contacts',
+             searchPlaceholder: 'npub or search term',
+             addContactAria: 'Add contact',
+             searchContactsAria: 'Search contacts',
+             searching: 'Searching...',
+             searchFailed: 'Search failed',
+             noResults: 'No results',
+             noContacts: 'No contacts added',
+             removeContactAria: 'Remove contact'
+         },
+         profile: {
+             unknownName: 'Unknown',
+             about: 'About',
+             publicKey: 'Public Key',
+             messagingRelays: 'Messaging Relays',
+             noRelays: 'None',
+             notFound: 'Profile not found'
+         },
+
         emptyProfile: {
             title: 'Finish setting up your profile',
             introLine1: "This key doesn't have any messaging relays or a username configured yet.",
-            introLine2: "We'll configure some default messaging relays so nospeak can send and receive messages. You can change these later in Settings under Mailbox Relays.",
+            introLine2: "We'll configure some default messaging relays so nospeak can send and receive messages. You can change these later in Settings under Messaging Relays.",
             usernameLabel: 'Username',
             usernamePlaceholder: 'Your name',
             usernameRequired: 'Please enter a username to continue.',
@@ -147,15 +147,16 @@ const en = {
             failedMessagePrefix: 'Failed to send reaction: '
         }
     },
-    settings: {
-        title: 'Settings',
-        categories: {
-            general: 'General',
-            profile: 'Profile',
-            mailboxRelays: 'Mailbox Relays',
-            security: 'Security',
-            about: 'About'
-        },
+        settings: {
+         title: 'Settings',
+         categories: {
+             general: 'General',
+             profile: 'Profile',
+             messagingRelays: 'Messaging Relays',
+             security: 'Security',
+             about: 'About'
+         },
+
         general: {
             appearanceLabel: 'Appearance',
             appearanceDescription:
@@ -195,14 +196,14 @@ const en = {
             saveButton: 'Save Changes',
             savingButton: 'Saving...'
         },
-        mailboxRelays: {
-            description: 'Configure your NIP-65 Mailbox Relays. These relays inform others where to send you messages (Read) and where to find your messages (Write).',
-            inputPlaceholder: 'wss://relay.example.com',
-            addButton: 'Add',
-            readLabel: 'Read',
-            writeLabel: 'Write',
-            emptyState: 'No relays configured'
-        },
+         messagingRelays: {
+             description: 'Configure your NIP-17 messaging relays. These relays are used to receive your encrypted messages. For best performance, 2–3 messaging relays usually work best.',
+             inputPlaceholder: 'wss://relay.example.com',
+             addButton: 'Add',
+             emptyState: 'No relays configured',
+             tooManyWarning: 'Having more than 3 messaging relays may reduce performance and reliability.'
+         },
+
         security: {
             loginMethodTitle: 'Login method',
             loginMethodUnknown: 'Unknown',

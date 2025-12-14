@@ -197,15 +197,9 @@
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">{$t('modals.profile.readRelays')}</div>
+                                    <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">{$t('modals.profile.messagingRelays')}</div>
                                     <div class="text-xs text-gray-600 dark:text-slate-300 break-words leading-relaxed bg-gray-50 dark:bg-slate-800/30 p-3 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                                        {formatRelays(profile.readRelays)}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">{$t('modals.profile.writeRelays')}</div>
-                                    <div class="text-xs text-gray-600 dark:text-slate-300 break-words leading-relaxed bg-gray-50 dark:bg-slate-800/30 p-3 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                                        {formatRelays(profile.writeRelays)}
+                                        {formatRelays(profile.messagingRelays || [])}
                                     </div>
                                 </div>
                             </div>

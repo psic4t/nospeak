@@ -379,7 +379,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       startSync(isFirstSync);
 
       // 1. Wait for relays to be connected before fetching
-      const relays = await this.getReadRelays(nip19.npubEncode(myPubkey));
+      const relays = await this.getMessagingRelays(nip19.npubEncode(myPubkey));
       if (relays.length === 0) {
         console.warn('No user relays found, history fetching may be incomplete');
       }
@@ -421,7 +421,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       const myPubkey = await s.getPublicKey();
 
       // Ensure relays are connected (fast check)
-      const relays = await this.getReadRelays(nip19.npubEncode(myPubkey));
+      const relays = await this.getMessagingRelays(nip19.npubEncode(myPubkey));
       await this.waitForRelayConnection(relays, 2000); // Shorter timeout for pagination
 
       // Fetch a single batch of older messages
@@ -531,72 +531,68 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
   public async sendMessage(recipientNpub: string, text: string) {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
-
+ 
     const senderPubkey = await s.getPublicKey();
     const senderNpub = nip19.npubEncode(senderPubkey);
     const { data: recipientPubkey } = nip19.decode(recipientNpub);
-
-    // 1. Get Relays
-    const recipientRelays = await this.getReadRelays(recipientNpub);
-    const senderRelays = await this.getWriteRelays(senderNpub);
-
-    const targetRelays = [...new Set([...recipientRelays, ...senderRelays])];
-    if (targetRelays.length === 0) {
-      targetRelays.push('wss://nostr.data.haus'); // Fallback
+ 
+    // 1. Get messaging relays for recipient and sender
+    const recipientRelays = await this.getMessagingRelays(recipientNpub);
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+ 
+    if (recipientRelays.length === 0) {
+      throw new Error('Contact has no messaging relays configured');
     }
-
-    if (this.debug) console.log('Sending message to relays:', targetRelays);
-
+ 
+    const allRelays = [...new Set([...recipientRelays, ...senderRelays])];
+ 
+    if (this.debug) console.log('Sending message to relays:', { recipientRelays, senderRelays });
+ 
     // Connect temporarily for message sending
-    for (const url of targetRelays) {
+    for (const url of allRelays) {
       connectionManager.addTemporaryRelay(url);
     }
-
+ 
     // Wait a bit for connections
-    await new Promise(r => setTimeout(r, 500));
-
+    await new Promise((r) => setTimeout(r, 500));
+ 
     // 2. Create Rumor (Kind 14)
-      const rumor: Partial<NostrEvent> = {
-        kind: 14,
-        pubkey: senderPubkey,
-        created_at: Math.floor(Date.now() / 1000),
-        content: text,
-        tags: [['p', recipientPubkey as string]]
-      };
-
-      // Calculate stable rumor ID for reactions
-      const rumorId = getEventHash(rumor as NostrEvent);
-
-      // 3. Create Gift Wrap for Recipient
-      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
-
-
+    const rumor: Partial<NostrEvent> = {
+      kind: 14,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: text,
+      tags: [['p', recipientPubkey as string]]
+    };
+ 
+    // Calculate stable rumor ID for reactions
+    const rumorId = getEventHash(rumor as NostrEvent);
+ 
+    // 3. Create Gift Wrap for Recipient
+    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+ 
     // Initialize ephemeral relay send status for UI (do not persist)
-    initRelaySendStatus(giftWrap.id, recipientNpub, targetRelays.length);
-
-    // 4. Publish to Recipient's Read Relays + My Write Relays
-
-    // Actually, logic is: Send to Recipient Read + My Write.
-    // We already combined them in targetRelays.
-    // RetryQueue handles publishing.
-    for (const url of targetRelays) {
+    initRelaySendStatus(giftWrap.id, recipientNpub, recipientRelays.length);
+ 
+    // 4. Publish to recipient messaging relays
+    for (const url of recipientRelays) {
       await retryQueue.enqueue(giftWrap, url);
     }
-
+ 
     // 5. Create Gift Wrap for Self (History)
     // We encrypt the SAME rumor for OURSELVES.
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
-
-    // Publish self-wrap to my write relays
+ 
+    // Publish self-wrap to my messaging relays (may be empty)
     for (const url of senderRelays) {
       await retryQueue.enqueue(selfGiftWrap, url);
     }
-
+ 
     // 6. Cleanup temporary relays after sending
     setTimeout(() => {
       connectionManager.cleanupTemporaryConnections();
     }, 2000);
-
+ 
     // 6. Cache locally immediately
     await messageRepo.saveMessage({
       recipientNpub,
@@ -607,10 +603,11 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       direction: 'sent',
       createdAt: Date.now()
     });
-
+ 
     // Auto-add unknown contacts when sending messages
     await this.autoAddContact(recipientNpub);
   }
+
 
   private mediaTypeToMime(type: 'image' | 'video' | 'audio'): string {
     if (type === 'image') {
@@ -691,27 +688,29 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
-
+ 
     const senderPubkey = await s.getPublicKey();
     const senderNpub = nip19.npubEncode(senderPubkey);
     const { data: recipientPubkey } = nip19.decode(recipientNpub);
-
-    // 1. Get Relays
-    const recipientRelays = await this.getReadRelays(recipientNpub);
-    const senderRelays = await this.getWriteRelays(senderNpub);
-
-    const targetRelays = [...new Set([...recipientRelays, ...senderRelays])];
-    if (targetRelays.length === 0) {
-      targetRelays.push('wss://nostr.data.haus'); // Fallback
+ 
+    // 1. Get messaging relays
+    const recipientRelays = await this.getMessagingRelays(recipientNpub);
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+ 
+    if (recipientRelays.length === 0) {
+      throw new Error('Contact has no messaging relays configured');
     }
-
-    if (this.debug) console.log('Sending file message to relays:', targetRelays);
-
-    for (const url of targetRelays) {
+ 
+    const allRelays = [...new Set([...recipientRelays, ...senderRelays])];
+ 
+    if (this.debug) console.log('Sending file message to relays:', { recipientRelays, senderRelays });
+ 
+    for (const url of allRelays) {
       connectionManager.addTemporaryRelay(url);
     }
+ 
+    await new Promise((r) => setTimeout(r, 500));
 
-    await new Promise(r => setTimeout(r, 500));
 
     // 2. Encrypt file with AES-GCM
     const encrypted = await encryptFileWithAesGcm(file);
@@ -747,21 +746,22 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
 
     // 5. Create Gift Wraps
     const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
-
-    initRelaySendStatus(giftWrap.id, recipientNpub, targetRelays.length);
-
-    for (const url of targetRelays) {
+ 
+    initRelaySendStatus(giftWrap.id, recipientNpub, recipientRelays.length);
+ 
+    for (const url of recipientRelays) {
       await retryQueue.enqueue(giftWrap, url);
     }
-
+ 
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
     for (const url of senderRelays) {
       await retryQueue.enqueue(selfGiftWrap, url);
     }
-
+ 
     setTimeout(() => {
       connectionManager.cleanupTemporaryConnections();
     }, 2000);
+
 
     // 6. Cache locally immediately
     await messageRepo.saveMessage({
@@ -805,21 +805,24 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     const senderPubkey = await s.getPublicKey();
     const senderNpub = nip19.npubEncode(senderPubkey);
     const { data: recipientPubkey } = nip19.decode(recipientNpub);
-
-    const recipientRelays = await this.getReadRelays(recipientNpub);
-    const senderRelays = await this.getWriteRelays(senderNpub);
-    const targetRelays = [...new Set([...recipientRelays, ...senderRelays])];
-    if (targetRelays.length === 0) {
-      targetRelays.push('wss://nostr.data.haus');
+ 
+    const recipientRelays = await this.getMessagingRelays(recipientNpub);
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+ 
+    if (recipientRelays.length === 0) {
+      throw new Error('Contact has no messaging relays configured');
     }
-
-    if (this.debug) console.log('Sending reaction to relays:', targetRelays);
-
-    for (const url of targetRelays) {
+ 
+    const allRelays = [...new Set([...recipientRelays, ...senderRelays])];
+ 
+    if (this.debug) console.log('Sending reaction to relays:', { recipientRelays, senderRelays });
+ 
+    for (const url of allRelays) {
       connectionManager.addTemporaryRelay(url);
     }
+ 
+    await new Promise((r) => setTimeout(r, 500));
 
-    await new Promise(r => setTimeout(r, 500));
 
     const myPubkey = senderPubkey;
     let targetAuthorPubkey: string;
@@ -842,13 +845,14 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
 
     const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
-
-    for (const url of targetRelays) {
+ 
+    for (const url of recipientRelays) {
       await retryQueue.enqueue(giftWrap, url);
     }
     for (const url of senderRelays) {
       await retryQueue.enqueue(selfGiftWrap, url);
     }
+
 
     setTimeout(() => {
       connectionManager.cleanupTemporaryConnections();
@@ -901,24 +905,22 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     return finalizeEvent(giftWrap as any, ephemeralPrivKey);
   }
 
-  private async getReadRelays(npub: string): Promise<string[]> {
-    let profile = await profileRepo.getProfile(npub);
-    if (!profile) {
-      // Try to resolve
-      await discoverUserRelays(npub, false);
-      profile = await profileRepo.getProfile(npub);
-    }
-    return profile?.readRelays || [];
-  }
-
-  private async getWriteRelays(npub: string): Promise<string[]> {
+  private async getMessagingRelays(npub: string): Promise<string[]> {
     let profile = await profileRepo.getProfile(npub);
     if (!profile) {
       await discoverUserRelays(npub);
       profile = await profileRepo.getProfile(npub);
     }
-    return profile?.writeRelays || [];
+ 
+    if (!profile) {
+      return [];
+    }
+ 
+    const urls = new Set<string>(profile.messagingRelays || []);
+ 
+    return Array.from(urls);
   }
+
 
   private async waitForRelayConnection(relayUrls: string[], timeoutMs: number = 10000): Promise<void> {
     if (relayUrls.length === 0) return;
