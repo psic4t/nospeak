@@ -414,6 +414,9 @@
   }
 
 
+  const translate = (key: string, vars?: Record<string, unknown>) =>
+    (get(t) as (k: string, v?: Record<string, unknown>) => string)(key, vars);
+
   async function send() {
     if (!partnerNpub || !inputText.trim()) return;
 
@@ -431,8 +434,9 @@
     } catch (e) {
       console.error("Failed to send message:", e);
       await nativeDialogService.alert({
-        title: 'Send failed',
-        message: 'Failed to send message: ' + (e as Error).message
+        title: translate('chat.sendFailedTitle'),
+        message:
+          translate('chat.sendFailedMessagePrefix') + (e as Error).message
       });
       inputText = text; // Restore text on failure
     } finally {
@@ -501,24 +505,29 @@
 
     if (!contextMenu.message.rumorId) {
       await nativeDialogService.alert({
-        title: 'Cannot React',
-        message: 'This message is too old to support reactions.'
+        title: translate('chat.reactions.cannotReactTitle'),
+        message: translate('chat.reactions.cannotReactMessage')
       });
       return;
     }
 
     try {
-      await messagingService.sendReaction(partnerNpub, {
-        recipientNpub: contextMenu.message.recipientNpub,
-        eventId: contextMenu.message.eventId,
-        rumorId: contextMenu.message.rumorId,
-        direction: contextMenu.message.direction
-      }, emoji);
+      await messagingService.sendReaction(
+        partnerNpub,
+        {
+          recipientNpub: contextMenu.message.recipientNpub,
+          eventId: contextMenu.message.eventId,
+          rumorId: contextMenu.message.rumorId,
+          direction: contextMenu.message.direction
+        },
+        emoji
+      );
     } catch (e) {
       console.error('Failed to send reaction:', e);
       await nativeDialogService.alert({
-        title: 'Reaction failed',
-        message: 'Failed to send reaction: ' + (e as Error).message
+        title: translate('chat.reactions.failedTitle'),
+        message:
+          translate('chat.reactions.failedMessagePrefix') + (e as Error).message
       });
     }
   }

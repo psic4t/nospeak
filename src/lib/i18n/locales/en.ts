@@ -135,7 +135,16 @@ const en = {
             forContact: 'Start the conversation with {name}.',
             generic: 'Select a contact to start chatting.'
         },
-        inputPlaceholder: 'Type a message...'
+        inputPlaceholder: 'Type a message...',
+        contextMenu: {
+            cite: 'Cite'
+        },
+        reactions: {
+            cannotReactTitle: 'Cannot React',
+            cannotReactMessage: 'This message is too old to support reactions.',
+            failedTitle: 'Reaction failed',
+            failedMessagePrefix: 'Failed to send reaction: '
+        }
     },
     settings: {
         title: 'Settings',
