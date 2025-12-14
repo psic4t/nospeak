@@ -9,7 +9,7 @@ jobs:
       contents: write # needed to upload assets to the release
     env:
       # Gradle signing config expects these
-      RELEASE_STORE_FILE: android/release.keystore
+      RELEASE_STORE_FILE: ../release.keystore
       RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
       RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
       RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
@@ -47,6 +47,7 @@ jobs:
             echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="capacitor.android.plugins"/>' > android/capacitor-cordova-android-plugins/src/main/AndroidManifest.xml
           fi
       - name: Restore release keystore from secret
+        working-directory: android/app
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
         env:
