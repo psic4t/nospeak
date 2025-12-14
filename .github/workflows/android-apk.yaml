@@ -38,8 +38,9 @@ jobs:
         run: npm run build:android
       - name: Workaround for missing capacitor-cordova-android-plugins
         run: |
-          if [ ! -d "android/capacitor-cordova-android-plugins" ]; then
-            echo "Creating missing capacitor-cordova-android-plugins directory"
+          # Create the directory if it doesn't exist, or if the critical file is missing
+          if [ ! -f "android/capacitor-cordova-android-plugins/cordova.variables.gradle" ]; then
+            echo "Creating missing capacitor-cordova-android-plugins module"
             mkdir -p android/capacitor-cordova-android-plugins/src/main
             echo "ext.cordovaConfig = [:]" > android/capacitor-cordova-android-plugins/cordova.variables.gradle
             echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.13.1' } } apply plugin: 'com.android.library' android { namespace \"capacitor.android.plugins\" compileSdk 34 defaultConfig { minSdkVersion 22 targetSdkVersion 34 } }" > android/capacitor-cordova-android-plugins/build.gradle
