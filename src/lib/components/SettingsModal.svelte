@@ -394,12 +394,12 @@
           </h2>
         </div>
 
-        <nav class="space-y-1">
+        <nav class="space-y-1 px-1.5">
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+            class={`w-full text-left p-3 my-1.5 rounded-2xl cursor-pointer transition-all duration-150 ease-out ${
               activeCategory === "General"
-                ? "bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-slate-700 dark:ring-0 font-medium text-gray-900 dark:text-white"
-                : "text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200"
+                ? "bg-blue-50/10 dark:bg-blue-900/40 font-medium text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-slate-400 hover:bg-gray-100/80 dark:hover:bg-slate-800/90 hover:text-gray-900 dark:hover:text-slate-200"
             }`}
             onclick={() => {
               activeCategory = "General";
@@ -409,10 +409,10 @@
             {$t("settings.categories.general")}
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+            class={`w-full text-left p-3 my-1.5 rounded-2xl cursor-pointer transition-all duration-150 ease-out ${
               activeCategory === "Profile"
-                ? "bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-slate-700 dark:ring-0 font-medium text-gray-900 dark:text-white"
-                : "text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200"
+                ? "bg-blue-50/10 dark:bg-blue-900/40 font-medium text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-slate-400 hover:bg-gray-100/80 dark:hover:bg-slate-800/90 hover:text-gray-900 dark:hover:text-slate-200"
             }`}
             onclick={() => {
               activeCategory = "Profile";
@@ -422,10 +422,10 @@
             {$t("settings.categories.profile")}
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+            class={`w-full text-left p-3 my-1.5 rounded-2xl cursor-pointer transition-all duration-150 ease-out ${
               activeCategory === "Messaging Relays"
-                ? "bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-slate-700 dark:ring-0 font-medium text-gray-900 dark:text-white"
-                : "text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200"
+                ? "bg-blue-50/10 dark:bg-blue-900/40 font-medium text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-slate-400 hover:bg-gray-100/80 dark:hover:bg-slate-800/90 hover:text-gray-900 dark:hover:text-slate-200"
             }`}
             onclick={() => {
               activeCategory = "Messaging Relays";
@@ -435,10 +435,10 @@
             {$t("settings.categories.messagingRelays")}
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+            class={`w-full text-left p-3 my-1.5 rounded-2xl cursor-pointer transition-all duration-150 ease-out ${
               activeCategory === "Security"
-                ? "bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-slate-700 dark:ring-0 font-medium text-gray-900 dark:text-white"
-                : "text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200"
+                ? "bg-blue-50/10 dark:bg-blue-900/40 font-medium text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-slate-400 hover:bg-gray-100/80 dark:hover:bg-slate-800/90 hover:text-gray-900 dark:hover:text-slate-200"
             }`}
             onclick={() => {
               activeCategory = "Security";
@@ -448,10 +448,10 @@
             {$t("settings.categories.security")}
           </button>
           <button
-            class={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+            class={`w-full text-left p-3 my-1.5 rounded-2xl cursor-pointer transition-all duration-150 ease-out ${
               activeCategory === "About"
-                ? "bg-white shadow-sm ring-1 ring-gray-900/5 dark:bg-slate-700 dark:ring-0 font-medium text-gray-900 dark:text-white"
-                : "text-gray-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-200"
+                ? "bg-blue-50/10 dark:bg-blue-900/40 font-medium text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-slate-400 hover:bg-gray-100/80 dark:hover:bg-slate-800/90 hover:text-gray-900 dark:hover:text-slate-200"
             }`}
             onclick={() => {
               activeCategory = "About";
