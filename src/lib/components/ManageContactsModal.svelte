@@ -242,7 +242,9 @@
     <div 
         in:fade={{ duration: 130 }}
         out:fade={{ duration: 110 }}
-        class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+        class={`fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex justify-center z-50 ${
+            isAndroidApp ? "items-end" : "items-center"
+        }`}
         class:android-safe-area-top={isAndroidApp}
         role="dialog"
         aria-modal="true"
@@ -253,7 +255,11 @@
         <div 
             in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
             out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-            class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl p-6 w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden outline-none relative"
+            class={`bg-white dark:bg-slate-900/80 md:bg-white/95 backdrop-blur-xl p-6 shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden outline-none relative ${
+                isAndroidApp
+                    ? "w-full max-w-xl mx-2 rounded-t-3xl rounded-b-none max-h-[90vh]"
+                    : "w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl"
+            }`}
         >
             <button onclick={close} aria-label="Close modal" class="hidden md:block absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
