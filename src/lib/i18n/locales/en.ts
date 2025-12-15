@@ -42,8 +42,18 @@ const en = {
         relaysLabel: 'Relays:'
     },
     sync: {
-        title: 'Syncing messages...'
-    },
+         title: 'Syncing messages...',
+         fetched: '{count} fetched',
+         steps: {
+             connectDiscoveryRelays: 'Connect to discovery relays',
+             fetchMessagingRelays: "Fetch and cache user's messaging relays",
+             connectReadRelays: "Connect to user's messaging relays",
+             fetchHistory: 'Fetch and cache history items from relays',
+             fetchContactProfiles: 'Fetch and cache contact profiles and relay info',
+             fetchUserProfile: 'Fetch and cache user profile'
+         }
+     },
+
         modals: {
          manageContacts: {
              title: 'Manage Contacts',

@@ -10,7 +10,7 @@ export type LoginSyncStepId =
 
 export interface LoginSyncStep {
     id: LoginSyncStepId;
-    label: string;
+    labelKey: string;
     status: 'pending' | 'active' | 'completed';
 }
 
@@ -36,32 +36,32 @@ function createInitialSteps(): LoginSyncStep[] {
     return [
         {
             id: 'connect-discovery-relays',
-            label: 'Connect to discovery relays',
+            labelKey: 'sync.steps.connectDiscoveryRelays',
             status: 'pending'
         },
         {
             id: 'fetch-messaging-relays',
-            label: "Fetch and cache user's messaging relays",
+            labelKey: 'sync.steps.fetchMessagingRelays',
             status: 'pending'
         },
         {
             id: 'connect-read-relays',
-            label: "Connect to user's messaging relays",
+            labelKey: 'sync.steps.connectReadRelays',
             status: 'pending'
         },
         {
             id: 'fetch-history',
-            label: 'Fetch and cache history items from relays',
+            labelKey: 'sync.steps.fetchHistory',
             status: 'pending'
         },
         {
             id: 'fetch-contact-profiles',
-            label: 'Fetch and cache contact profiles and relay info',
+            labelKey: 'sync.steps.fetchContactProfiles',
             status: 'pending'
         },
         {
             id: 'fetch-user-profile',
-            label: 'Fetch and cache user profile',
+            labelKey: 'sync.steps.fetchUserProfile',
             status: 'pending'
         }
     ];

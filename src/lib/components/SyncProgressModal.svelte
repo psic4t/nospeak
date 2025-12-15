@@ -17,29 +17,24 @@
             
             <div class="text-center">
                 <div class="typ-title dark:text-white mb-2">{$t('sync.title')}</div>
-                <div class="typ-meta text-gray-500 dark:text-slate-400">({progress} fetched)</div>
-            </div>
+                <div class="typ-meta text-gray-500 dark:text-slate-400">({$t('sync.fetched', { values: { count: progress } })})</div>
+             </div>
 
-            <div class="w-full bg-gray-100 dark:bg-slate-800/50 rounded-2xl p-4">
-                <ul class="typ-body space-y-3">
-                    {#each $syncState.steps as step}
-                        <li class="flex items-center gap-3">
-                            <div class={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors duration-300 ${
-                                step.status === 'completed'
-                                    ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]'
-                                    : step.status === 'active'
-                                        ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)] animate-pulse'
-                                        : 'bg-gray-300 dark:bg-slate-700'
-                            }`}></div>
-                            <span class={`flex-1 transition-colors duration-300 ${
-                                step.status === 'active' 
-                                    ? 'font-bold text-gray-900 dark:text-white' 
-                                    : step.status === 'completed'
-                                        ? 'text-gray-700 dark:text-slate-300'
-                                        : 'text-gray-400 dark:text-slate-600'
-                            }`}>
-                                {step.label}
-                            </span>
+
+             <div class="w-full bg-gray-100 dark:bg-slate-800/50 rounded-2xl p-4">
+                 <ul class="typ-body space-y-3">
+                     {#each $syncState.steps as step}
+                         <li class="flex items-center gap-3">
+                             <span class={`flex-1 transition-colors duration-300 ${
+                                 step.status === 'active' 
+                                     ? 'font-bold text-gray-900 dark:text-white' 
+                                     : step.status === 'completed'
+                                         ? 'text-gray-700 dark:text-slate-300'
+                                         : 'text-gray-400 dark:text-slate-600'
+                             }`}>
+                                {$t(step.labelKey)}
+                             </span>
+
                             {#if step.status === 'completed'}
                                 <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                             {/if}

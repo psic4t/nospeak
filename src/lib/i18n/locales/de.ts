@@ -43,8 +43,18 @@ const de = {
         relaysLabel: 'Relays:'
     },
     sync: {
-        title: 'Nachrichten werden synchronisiert...'
-    },
+         title: 'Nachrichten werden synchronisiert...',
+         fetched: '{count} abgerufen',
+         steps: {
+             connectDiscoveryRelays: 'Verbindung zu Discovery-Relays herstellen',
+             fetchMessagingRelays: 'Messaging-Relays des Nutzers abrufen und zwischenspeichern',
+             connectReadRelays: 'Verbindung zu den Messaging-Relays des Nutzers herstellen',
+             fetchHistory: 'Verlaufseinträge von Relays abrufen und zwischenspeichern',
+             fetchContactProfiles: 'Kontaktprofile und Relay-Informationen abrufen und zwischenspeichern',
+             fetchUserProfile: 'Benutzerprofil abrufen und zwischenspeichern'
+         }
+     },
+
         modals: {
          manageContacts: {
              title: 'Kontakte verwalten',
