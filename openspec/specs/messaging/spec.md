@@ -643,6 +643,15 @@ The messaging interface SHALL provide an in-app image viewer for inline message 
 - **THEN** the system SHALL initiate a download or save flow for the current image using the platform-appropriate download behavior
 - **AND** this download action SHALL NOT navigate away from the nospeak messaging UI.
 
+#### Scenario: Android viewer supports pinch-zoom, pan, and double-tap reset
+- **GIVEN** the user is running nospeak inside the Android Capacitor app shell
+- **AND** the in-app image viewer is open for a particular image
+- **WHEN** the user performs a two-finger pinch gesture on the image
+- **THEN** the viewer SHALL adjust the zoom level smoothly within reasonable bounds without zooming the entire page or WebView
+- **AND** when zoomed in, the user SHALL be able to pan the image within the viewer using a drag gesture.
+- **WHEN** the user double-taps the image while the viewer is open
+- **THEN** the viewer SHALL reset the zoom level and panning offsets so that the image returns to a fit-to-screen state.
+
 ### Requirement: Camera Capture for Message Media Upload
 The message input area SHALL provide a camera capture option labeled "Take photo" in the media upload affordance on supported devices so that users can capture and send photos directly from the chat UI. Camera-captured photos SHALL be treated as image uploads that use the existing NIP-98 authenticated media upload endpoint and rendering semantics, and the client SHALL resize captured photos client-side to a maximum dimension of 2048px (width or height) and encode them as JPEG before upload when feasible.
 
