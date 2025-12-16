@@ -443,16 +443,13 @@
                                             class="!w-8 !h-8 flex-shrink-0"
                                         />
                                         <div class="flex flex-col min-w-0">
-                                            <span class="font-medium dark:text-gray-100 truncate">
-                                                {result.name}
-                                            </span>
-                                             <span class="typ-meta text-gray-500 dark:text-slate-400 truncate">
-
-                                                {shortenNpub(result.npub)}
+                                            <div class="flex items-center gap-1 min-w-0">
+                                                <span class="font-medium dark:text-gray-100 truncate">
+                                                    {result.name}
+                                                </span>
                                                 {#if result.nip05}
-                                                    {' · '}
                                                     {#if result.nip05Status === 'valid'}
-                                                        <span class="inline-flex items-center gap-1">
+                                                        <span class="inline-flex items-center gap-1 typ-meta text-gray-500 dark:text-slate-400 truncate">
                                                             <svg
                                                                 class="text-green-500 shrink-0"
                                                                 xmlns="http://www.w3.org/2000/svg"
@@ -470,7 +467,7 @@
                                                             <span>{getDisplayedNip05(result.nip05)}</span>
                                                         </span>
                                                     {:else if result.nip05Status === 'invalid'}
-                                                        <span class="inline-flex items-center gap-1" title="NIP-05 not verified for this key">
+                                                        <span class="inline-flex items-center gap-1 typ-meta text-gray-500 dark:text-slate-400 truncate" title="NIP-05 not verified for this key">
                                                             <svg
                                                                 class="text-yellow-500 shrink-0"
                                                                 xmlns="http://www.w3.org/2000/svg"
@@ -489,11 +486,15 @@
                                                             <span>{getDisplayedNip05(result.nip05)}</span>
                                                         </span>
                                                     {:else}
-                                                        <span>{getDisplayedNip05(result.nip05)}</span>
+                                                        <span class="typ-meta text-gray-500 dark:text-slate-400 truncate">
+                                                            {getDisplayedNip05(result.nip05)}
+                                                        </span>
                                                     {/if}
                                                 {/if}
+                                            </div>
+                                            <span class="typ-meta text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">
+                                                {shortenNpub(result.npub)}
                                             </span>
-
                                         </div>
                                     </button>
                                 {/each}
