@@ -63,10 +63,10 @@ jobs:
         run: |
           VERSION="${RELEASE_TAG#v}"  # strips leading 'v' if present
           SRC="app/build/outputs/apk/release/app-release.apk"
-          DST="app/build/outputs/apk/release/nospeak-${VERSION}.apk"
+          DST="app/build/outputs/apk/release/nospeak.apk"
           cp "$SRC" "$DST"
       - name: Attach APK to GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release' && github.event.action == 'published'
         with:
-          files: android/app/build/outputs/apk/release/nospeak-*.apk
+          files: android/app/build/outputs/apk/release/nospeak.apk
