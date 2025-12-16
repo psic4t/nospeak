@@ -74,7 +74,7 @@
 <div class="flex flex-col items-center justify-center h-full p-4">
     <div class="p-8 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl w-full max-w-md rounded-3xl shadow-2xl border border-white/20 dark:border-white/10">
         <img src="/nospeak.svg" alt="nospeak logo" class="mx-auto mb-4 h-20 app-logo drop-shadow-sm" />
-        <h1 class="text-3xl font-bold mb-8 text-center dark:text-white tracking-tight">nospeak</h1>
+        <h1 class="typ-title mb-8 text-center dark:text-white">nospeak</h1>
         
         {#if error}
             <div class="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 p-4 rounded-xl mb-6 text-sm border border-red-100 dark:border-red-800">
@@ -108,15 +108,15 @@
             <div class="absolute inset-0 flex items-center">
                 <div class="w-full border-t border-gray-200/50 dark:border-gray-700"></div>
             </div>
-            <div class="relative flex justify-center text-sm">
-                <span class="px-4 bg-transparent text-gray-500 dark:text-gray-400 bg-white/0 backdrop-blur-sm rounded-full">{$t('auth.orSeparator')}</span>
+            <div class="relative flex justify-center">
+                <span class="typ-meta px-4 bg-transparent text-gray-500 dark:text-gray-400 bg-white/0 backdrop-blur-sm rounded-full">{$t('auth.orSeparator')}</span>
             </div>
         </div>
 
         <div class="mb-2">
             <label 
                 for="nsec-input" 
-                class="block text-sm font-medium mb-2 dark:text-gray-300 ml-1"
+                class="block typ-body mb-2 dark:text-gray-300 ml-1"
             >
                 {$t('auth.loginWithNsecLabel')}
             </label>
@@ -130,14 +130,14 @@
             <button 
                 onclick={loginNsec} 
                 disabled={isLoading}
-                class="w-full mt-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium p-3 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full mt-4 bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-700 text-white font-medium p-3 rounded-xl hover:shadow-lg hover:shadow-cyan-400/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {isLoading ? $t('auth.connecting') : $t('auth.loginButton')}
             </button>
             <button 
                 type="button"
                 onclick={() => (showKeypairModal = true)}
-                class="w-full mt-2 text-xs text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 text-center underline decoration-dotted"
+                class="w-full mt-2 typ-body text-gray-800 hover:text-gray-900 dark:text-slate-100 dark:hover:text-slate-50 text-center underline decoration-dotted"
             >
                 {$t('auth.generateKeypairLink')}
             </button>

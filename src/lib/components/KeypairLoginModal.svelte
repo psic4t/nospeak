@@ -57,28 +57,30 @@
         aria-labelledby="keypair-modal-title"
         tabindex="-1"
     >
-        <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl p-6 max-w-md w-full shadow-2xl border border-white/20 dark:border-white/10">
-            <div class="flex justify-between items-center mb-4">
-                <h2 id="keypair-modal-title" class="text-lg font-bold dark:text-white">{$t('auth.keypair.title')}</h2>
-                <button
-                    type="button"
-                    class="text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
-                    onclick={close}
-                    aria-label="Close"
-                >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+        <div class="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl p-6 max-w-md w-full shadow-2xl border border-white/20 dark:border-white/10 relative outline-none">
+            <button
+                type="button"
+                onclick={close}
+                aria-label="Close modal"
+                class="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+
+            <div class="mb-4">
+                <h2 id="keypair-modal-title" class="typ-title dark:text-white">{$t('auth.keypair.title')}</h2>
             </div>
 
-            <p class="text-sm text-gray-600 dark:text-slate-300 mb-4">
+            <p class="typ-body text-gray-800 dark:text-slate-100 mb-4">
                 {$t('auth.keypair.description')}
             </p>
 
             <div class="space-y-3 mb-4">
                 <div>
-                    <p class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                    <p class="block typ-meta text-gray-700 dark:text-slate-200 mb-1">
                         {$t('auth.keypair.npubLabel')}
                     </p>
                     <div class="text-xs font-mono break-all p-2 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-700/60">
@@ -86,7 +88,7 @@
                     </div>
                 </div>
                 <div>
-                    <p class="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">
+                    <p class="block typ-meta text-gray-700 dark:text-slate-200 mb-1">
                         {$t('auth.keypair.nsecLabel')}
                     </p>
                     <div class="text-xs font-mono break-all p-2 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-700/60">
@@ -99,18 +101,20 @@
                 <button
                     type="button"
                     onclick={generateNewKeypair}
-                    class="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 dark:text-slate-300 dark:hover:text-slate-100 px-3 py-2 rounded-xl bg-gray-100/80 dark:bg-slate-800/80 border border-gray-200/60 dark:border-slate-700/60"
+                    class="inline-flex items-center justify-center typ-body text-gray-700 hover:text-gray-900 dark:text-slate-100 dark:hover:text-white w-10 h-10 rounded-full bg-gray-100/80 dark:bg-slate-800/80 border border-gray-200/60 dark:border-slate-700/60"
+                    aria-label={$t('auth.keypair.generateAnother')}
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M5 19a9 9 0 0014 0M19 5a9 9 0 00-14 0" />
                     </svg>
-                    <span>{$t('auth.keypair.generateAnother')}</span>
                 </button>
+
 
                 <button
                     type="button"
                     onclick={handleUseKeypair}
-                    class="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-center"
+                     class="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white typ-body font-medium px-4 py-2.5 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-center"
+
                     disabled={!nsec}
                 >
                     {$t('auth.keypair.useAndLogin')}
