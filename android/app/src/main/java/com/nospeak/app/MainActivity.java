@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         // Register custom plugins before bridge initialization
         registerPlugin(AndroidBackgroundMessagingPlugin.class);
+        registerPlugin(AndroidNip55SignerPlugin.class);
 
         super.onCreate(savedInstanceState);
  

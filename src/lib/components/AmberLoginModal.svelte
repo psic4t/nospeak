@@ -1,4 +1,5 @@
 <script lang="ts">
+    // Legacy modal: kept for reference; Android Amber login now uses NIP-55 intents directly and does not use this QR-based flow.
     import { onMount } from 'svelte';
     import QRCode from 'qrcode';
     import { t } from '$lib/i18n';

@@ -1,10 +1,9 @@
 import { signer, currentUser } from '$lib/stores/auth';
 import { LocalSigner } from '$lib/core/signer/LocalSigner';
 import { Nip07Signer } from '$lib/core/signer/Nip07Signer';
-import { Nip46Signer } from '$lib/core/signer/Nip46Signer';
+import { Nip55Signer } from '$lib/core/signer/Nip55Signer';
 import { DEFAULT_DISCOVERY_RELAYS, discoverUserRelays } from '$lib/core/connection/Discovery';
-import { nip19, generateSecretKey, getPublicKey, SimplePool } from 'nostr-tools';
-import { BunkerSigner, createNostrConnectURI, type NostrConnectParams } from 'nostr-tools/nip46';
+import { nip19, generateSecretKey, getPublicKey } from 'nostr-tools';
 import { goto } from '$app/navigation';
 import { connectionManager } from './connection/instance';
 import { messagingService } from './Messaging';
@@ -30,7 +29,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 const STORAGE_KEY = 'nospeak:nsec';
-const AUTH_METHOD_KEY = 'nospeak:auth_method'; // 'local' | 'nip07' | 'nip46'
+const AUTH_METHOD_KEY = 'nospeak:auth_method'; // 'local' | 'nip07' | 'amber'
 const NIP46_SECRET_KEY = 'nospeak:nip46_secret';
 const NIP46_URI_KEY = 'nospeak:nip46_uri';
 const NIP46_BUNKER_PUBKEY_KEY = 'nospeak:nip46_bunker_pubkey';
@@ -69,71 +68,24 @@ export class AuthService {
         }
     }
 
-    public async loginWithAmber(): Promise<string> {
+    public async loginWithAmber(): Promise<void> {
         try {
-            const localSecret = generateSecretKey();
-            const localPubkey = getPublicKey(localSecret);
-            const relays = ['wss://relay.nsec.app', 'wss://nostr.data.haus', 'wss://nos.lol'];
-            
-            // Generate a random 16-byte hex secret for the connection
-            const secret = bytesToHex(generateSecretKey()).substring(0, 32);
+            const s = new Nip55Signer();
+            const pubkeyHex = await s.getPublicKey();
+            const npub = nip19.npubEncode(pubkeyHex);
 
-            const params: NostrConnectParams = {
-                clientPubkey: localPubkey,
-                relays,
-                name: 'nospeak',
-                url: window.location.origin,
-                perms: ['sign_event:1', 'sign_event:0', 'sign_event:13', 'sign_event:10050', 'nip44_encrypt', 'nip44_decrypt'],
-                secret,
-            };
+            signer.set(s);
+            currentUser.set({ npub });
 
-            const uri = createNostrConnectURI(params);
-            
-            // Start listening for connection in background
-            this.waitForNip46Connection(localSecret, uri).catch(console.error);
-            
-            return uri;
+            localStorage.setItem(AUTH_METHOD_KEY, 'amber');
+            localStorage.setItem('nospeak:amber_pubkey_hex', pubkeyHex);
+
+            goto('/chat');
+            this.runLoginHistoryFlow(npub, 'Amber login').catch(console.error);
         } catch (e) {
             console.error('Amber login failed:', e);
             throw e;
         }
-    }
-
-    private async waitForNip46Connection(localSecret: Uint8Array, uri: string) {
-        const pool = new SimplePool();
-        const s = await BunkerSigner.fromURI(localSecret, uri, {
-            pool,
-            onauth: (url: string) => {
-                try {
-                    window.open(url, '_blank');
-                } catch (e) {
-                    console.warn('Failed to open NIP-46 auth URL', e, url);
-                }
-            }
-        });
-        
-        try {
-            await s.connect();
-        } catch (e) {
-            console.warn('NIP-46 connect() failed:', e);
-        }
-        
-        const pubkey = await s.getPublicKey();
-        const npub = nip19.npubEncode(pubkey);
-
-        signer.set(new Nip46Signer(s));
-        currentUser.set({ npub });
-
-        // Save persistence data
-        localStorage.setItem(AUTH_METHOD_KEY, 'nip46');
-        localStorage.setItem(NIP46_SECRET_KEY, bytesToHex(localSecret));
-        localStorage.setItem(NIP46_URI_KEY, uri);
-        localStorage.setItem(NIP46_BUNKER_PUBKEY_KEY, s.bp.pubkey);
-        localStorage.setItem(NIP46_BUNKER_RELAYS_KEY, s.bp.relays.join(','));
-
-        // Navigate to chat and start ordered login history flow in background
-        goto('/chat');
-        this.runLoginHistoryFlow(npub, 'NIP-46 login').catch(console.error);
     }
 
     public async loginWithExtension(remember: boolean = true) {
@@ -339,50 +291,42 @@ export class AuthService {
                  });
  
                  return true;
-            } else if (method === 'nip46') {
-                const secretHex = localStorage.getItem(NIP46_SECRET_KEY);
-                const bunkerPubkey = localStorage.getItem(NIP46_BUNKER_PUBKEY_KEY);
-                const bunkerRelaysCsv = localStorage.getItem(NIP46_BUNKER_RELAYS_KEY);
+            } else if (method === 'amber') {
+                const cachedHex = localStorage.getItem('nospeak:amber_pubkey_hex');
  
-                if (!secretHex || !bunkerPubkey || !bunkerRelaysCsv) return false;
+                if (!cachedHex) {
+                    // Amber session without cached pubkey; force clean login instead of
+                    // triggering a new get_public_key flow during restore.
+                    localStorage.removeItem(AUTH_METHOD_KEY);
+                    return false;
+                }
  
-                const localSecret = hexToBytes(secretHex);
-                const relays = bunkerRelaysCsv.split(',').map(r => r.trim()).filter(Boolean);
-                if (relays.length === 0) return false;
-                const pool = new SimplePool();
+                const s = new Nip55Signer(cachedHex);
+                const pubkeyHex = cachedHex;
+                const npub = nip19.npubEncode(pubkeyHex);
  
-                const s = BunkerSigner.fromBunker(
-                    localSecret,
-                    { pubkey: bunkerPubkey, relays, secret: null },
-                    {
-                        pool,
-                        onauth: (url: string) => {
-                            try {
-                                window.open(url, '_blank');
-                            } catch (e) {
-                                console.warn('Failed to open NIP-46 auth URL', e, url);
-                            }
-                        }
-                    }
-                );
- 
-                const pubkey = await s.getPublicKey();
-                const npub = nip19.npubEncode(pubkey);
- 
-                signer.set(new Nip46Signer(s));
+                signer.set(s);
                 currentUser.set({ npub });
  
                 await ensureRelaysAndHistory(npub, 'Restoration');
  
                  await messagingService.startSubscriptionsForCurrentUser().catch(e => {
-                     console.error('Failed to start app-global message subscriptions after nip46 restore:', e);
+                     console.error('Failed to start app-global message subscriptions after amber restore:', e);
                  });
  
                  await syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                     console.error('Failed to sync Android background messaging preference after nip46 restore:', e);
+                     console.error('Failed to sync Android background messaging preference after amber restore:', e);
                  });
  
                  return true;
+            } else if (method === 'nip46') {
+                // Legacy NIP-46 sessions are no longer supported; clear persisted keys and require re-login.
+                localStorage.removeItem(NIP46_SECRET_KEY);
+                localStorage.removeItem(NIP46_URI_KEY);
+                localStorage.removeItem(NIP46_BUNKER_PUBKEY_KEY);
+                localStorage.removeItem(NIP46_BUNKER_RELAYS_KEY);
+                localStorage.removeItem(AUTH_METHOD_KEY);
+                return false;
             }
 
         } catch (e) {
@@ -407,6 +351,7 @@ export class AuthService {
         localStorage.removeItem(AUTH_METHOD_KEY);
         localStorage.removeItem(NIP46_SECRET_KEY);
         localStorage.removeItem(NIP46_URI_KEY);
+        localStorage.removeItem('nospeak:amber_pubkey_hex');
         localStorage.removeItem('nospeak-settings');
         localStorage.removeItem('nospeak-theme');
         localStorage.removeItem('nospeak-theme-mode');

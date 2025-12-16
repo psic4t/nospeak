@@ -74,17 +74,22 @@ vi.mock('$lib/core/signer/LocalSigner', () => ({
         getPublicKey = vi.fn().mockResolvedValue('local-pubkey');
     }
 }));
-
-
+ 
+ 
 vi.mock('$lib/core/signer/Nip07Signer', () => ({
     Nip07Signer: {
         clearCache: vi.fn()
     }
 }));
  
-vi.mock('$lib/core/signer/Nip46Signer', () => ({
-     Nip46Signer: vi.fn()
- }));
+vi.mock('$lib/core/signer/Nip55Signer', () => ({
+    Nip55Signer: class {
+        getPublicKey = vi.fn().mockResolvedValue('amber-pubkey');
+        signEvent = vi.fn();
+        encrypt = vi.fn();
+        decrypt = vi.fn();
+    }
+}));
  
  vi.mock('./BackgroundMessaging', () => ({
      syncAndroidBackgroundMessagingFromPreference: vi.fn().mockResolvedValue(undefined),
@@ -362,5 +367,116 @@ describe('AuthService ordered login history flow integration', () => {
          expect(syncAndroidBackgroundMessagingFromPreference).toHaveBeenCalledTimes(1);
      });
  });
+ 
+ describe('AuthService amber login and restore', () => {
+     let authService: AuthService;
+ 
+     beforeEach(async () => {
+         vi.clearAllMocks();
+ 
+         const storageData: Record<string, string> = {};
+         const storageImpl: any = {
+             get length() {
+                 return Object.keys(storageData).length;
+             },
+             key(index: number) {
+                 const keys = Object.keys(storageData);
+                 return keys[index] ?? null;
+             },
+             getItem(key: string) {
+                 return Object.prototype.hasOwnProperty.call(storageData, key) ? storageData[key] : null;
+             },
+             setItem(key: string, value: string) {
+                 storageData[key] = String(value);
+             },
+             removeItem(key: string) {
+                 delete storageData[key];
+             },
+             clear() {
+                 Object.keys(storageData).forEach((key) => delete storageData[key]);
+             }
+         };
+ 
+         Object.defineProperty(globalThis, 'localStorage', {
+             value: storageImpl,
+             configurable: true
+         });
+ 
+         if (typeof window !== 'undefined') {
+             Object.defineProperty(window, 'localStorage', {
+                 value: storageImpl,
+                 configurable: true
+             });
+         }
+ 
+         const module = await import('./AuthService');
+         authService = new module.AuthService();
+ 
+         const { nip19 } = await import('nostr-tools');
+         (nip19.npubEncode as any).mockReturnValue('npub1amber');
+ 
+         const { profileRepo } = await import('$lib/db/ProfileRepository');
+         (profileRepo.getProfileIgnoreTTL as any).mockResolvedValue({
+             messagingRelays: ['wss://relay.example.com']
+         });
+     });
+ 
+      it('loginWithAmber navigates to /chat, sets auth method amber, caches pubkey, and starts history flow', async () => {
 
+         const module = await import('./AuthService');
+         const runFlowSpy = vi
+             .spyOn(module.AuthService.prototype as any, 'runLoginHistoryFlow')
+             .mockResolvedValue(undefined);
+ 
+         const { goto } = await import('$app/navigation');
+ 
+          await authService.loginWithAmber();
+ 
+          expect(goto).toHaveBeenCalledWith('/chat');
+          expect(runFlowSpy).toHaveBeenCalledWith('npub1amber', 'Amber login');
+          expect(localStorage.getItem('nospeak:auth_method')).toBe('amber');
+          expect(localStorage.getItem('nospeak:amber_pubkey_hex')).toBeTruthy();
+      });
+ 
+      it('restore() returns true and syncs background messaging for amber sessions when cached pubkey exists', async () => {
+          const { syncAndroidBackgroundMessagingFromPreference } = await import('./BackgroundMessaging');
+ 
+          localStorage.setItem('nospeak:auth_method', 'amber');
+          localStorage.setItem('nospeak:amber_pubkey_hex', 'deadbeef');
+ 
+          const result = await authService.restore();
+ 
+          expect(result).toBe(true);
+          expect(syncAndroidBackgroundMessagingFromPreference).toHaveBeenCalledTimes(1);
+      });
+ 
+      it('restore() returns false and clears auth method when amber session has no cached pubkey', async () => {
+          localStorage.setItem('nospeak:auth_method', 'amber');
+ 
+          const result = await authService.restore();
+ 
+          expect(result).toBe(false);
+          expect(localStorage.getItem('nospeak:auth_method')).toBeNull();
+      });
+ 
+      it('restore() clears legacy nip46 sessions and returns false', async () => {
+
+         localStorage.setItem('nospeak:auth_method', 'nip46');
+         localStorage.setItem('nospeak:nip46_secret', 'secret');
+         localStorage.setItem('nospeak:nip46_uri', 'uri');
+         localStorage.setItem('nospeak:nip46_bunker_pubkey', 'pubkey');
+         localStorage.setItem('nospeak:nip46_bunker_relays', 'wss://relay.example.com');
+ 
+         const result = await authService.restore();
+ 
+         expect(result).toBe(false);
+         expect(localStorage.getItem('nospeak:nip46_secret')).toBeNull();
+         expect(localStorage.getItem('nospeak:nip46_uri')).toBeNull();
+         expect(localStorage.getItem('nospeak:nip46_bunker_pubkey')).toBeNull();
+         expect(localStorage.getItem('nospeak:nip46_bunker_relays')).toBeNull();
+         expect(localStorage.getItem('nospeak:auth_method')).toBeNull();
+     });
+ });
+ 
+ 
 

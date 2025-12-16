@@ -1,7 +1,6 @@
 <script lang="ts">
     import { authService } from '$lib/core/AuthService';
     import { onMount } from 'svelte';
-    import AmberLoginModal from '$lib/components/AmberLoginModal.svelte';
     import KeypairLoginModal from '$lib/components/KeypairLoginModal.svelte';
     import { t } from '$lib/i18n';
     import { isAndroidCapacitorShell } from '$lib/utils/platform';
@@ -10,7 +9,6 @@
     let error = $state('');
     let isLoading = $state(false);
     let hasExtension = $state(false);
-    let amberUri = $state('');
     let showKeypairModal = $state(false);
     let isAndroidShell = $state(false);
 
@@ -43,9 +41,10 @@
     async function loginAmber() {
         try {
             isLoading = true;
-            amberUri = await authService.loginWithAmber();
+            await authService.loginWithAmber();
         } catch (e) {
             error = (e as Error).message;
+        } finally {
             isLoading = false;
         }
     }
@@ -145,13 +144,6 @@
         </div>
     </div>
 </div>
-
-{#if isAndroidShell && amberUri}
-    <AmberLoginModal 
-        uri={amberUri} 
-        onClose={() => { amberUri = ''; isLoading = false; }} 
-    />
-{/if}
 
 {#if showKeypairModal}
     <KeypairLoginModal

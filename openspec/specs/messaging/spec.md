@@ -583,10 +583,10 @@ The messaging implementation for Android background messaging SHALL minimize ene
 - AND it SHALL stop attempting reconnections entirely if the user signs out or disables background messaging.
 
 ### Requirement: Login Screen Local Keypair Generator
-The unauthenticated login screen SHALL provide a locally generated Nostr keypair option in addition to existing login methods (Amber and NIP-07 extension, and manual `nsec` entry). The keypair generator flow SHALL be accessible via a small link under the local `nsec` login control, SHALL open a dedicated modal that displays the newly generated `npub` and `nsec`, and SHALL offer controls to regenerate and to log in using the currently displayed secret key. Key generation SHALL occur entirely on the client using a standard Nostr keypair format, and the generated keys SHALL NOT be persisted by the keypair UI itself until or unless the user explicitly chooses to log in with them.
+The unauthenticated login screen SHALL provide a locally generated Nostr keypair option in addition to existing login methods (Amber, which on Android uses a NIP-55-compatible external signer when running inside the Android app shell, NIP-07 extension when available, and manual `nsec` entry). The keypair generator flow SHALL be accessible via a small link under the local `nsec` login control, SHALL open a dedicated modal that displays the newly generated `npub` and `nsec`, and SHALL offer controls to regenerate and to log in using the currently displayed secret key. Key generation SHALL occur entirely on the client using a standard Nostr keypair format, and the generated keys SHALL NOT be persisted by the keypair UI itself until or unless the user explicitly chooses to log in with them.
 
 #### Scenario: User opens keypair generator from login screen
-- **GIVEN** the unauthenticated login screen is visible with options for Amber, NIP-07 extension (when available), and manual `nsec` entry
+- **GIVEN** the unauthenticated login screen is visible with options for Amber (which, when running inside the Android app shell, uses a NIP-55-compatible external signer), NIP-07 extension (when available), and manual `nsec` entry
 - **WHEN** the user clicks the "Generate new keypair" link under the local `nsec` login section
 - **THEN** a glass-style modal appears over the login background
 - **AND** the modal displays a newly generated Nostr keypair where the `npub` and `nsec` are shown as bech32-encoded strings.

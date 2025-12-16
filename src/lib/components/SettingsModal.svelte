@@ -33,7 +33,7 @@
   let isLoaded = $state(false);
 
   type Category = "General" | "Profile" | "Messaging Relays" | "About" | "Security";
-  type AuthMethod = "local" | "nip07" | "nip46" | "unknown";
+  type AuthMethod = "local" | "nip07" | "amber" | "nip46" | "unknown";
 
   let activeCategory = $state<Category>("General");
 
@@ -211,9 +211,10 @@
         const method = localStorage.getItem("nospeak:auth_method") as
           | "local"
           | "nip07"
+          | "amber"
           | "nip46"
           | null;
-        if (method === "local" || method === "nip07" || method === "nip46") {
+        if (method === "local" || method === "nip07" || method === "amber" || method === "nip46") {
           securityAuthMethod = method;
         } else {
           securityAuthMethod = "unknown";
@@ -1284,11 +1285,17 @@
                     >
                       NIP-07 Extension
                     </span>
+                  {:else if securityAuthMethod === "amber"}
+                    <span
+                      class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                    >
+                      Amber / NIP-55
+                    </span>
                   {:else if securityAuthMethod === "nip46"}
                     <span
                       class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
                     >
-                      NIP-46 / Amber
+                      NIP-46 / Amber (legacy)
                     </span>
                   {:else if securityAuthMethod === "local"}
                     <span
