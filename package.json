@@ -20,6 +20,7 @@
     "@capacitor/cli": "^7.4.4",
     "@capacitor/core": "^7.4.4",
     "@capacitor/dialog": "^7.0.2",
+    "@capacitor/filesystem": "^7.1.6",
     "@capacitor/haptics": "^7.0.2",
     "@capacitor/local-notifications": "^7.0.3",
     "@capacitor/share": "^7.0.2",

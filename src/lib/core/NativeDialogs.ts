@@ -18,6 +18,7 @@ export interface ShareOptions {
     title?: string;
     text?: string;
     url?: string;
+    files?: string[];
     dialogTitle?: string;
 }
 
@@ -96,17 +97,16 @@ export const nativeDialogService: NativeDialogService = {
     },
     async share(options: ShareOptions): Promise<void> {
         if (isAndroidNative()) {
-            try {
-                await Share.share({
-                    title: options.title,
-                    text: options.text,
-                    url: options.url,
-                    dialogTitle: options.dialogTitle
-                });
-                return;
-            } catch {
-                // Fallback to web share below
-            }
+            // On Android native, prefer the Capacitor Share plugin and
+            // allow errors to propagate so callers can surface feedback.
+            await Share.share({
+                title: options.title,
+                text: options.text,
+                url: options.url,
+                files: options.files,
+                dialogTitle: options.dialogTitle
+            });
+            return;
         }
 
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {

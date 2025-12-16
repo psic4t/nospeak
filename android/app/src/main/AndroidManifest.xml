@@ -10,9 +10,13 @@
      </queries>
  
      <!-- Permissions -->
-     <uses-permission android:name="android.permission.INTERNET" />
-     <uses-permission android:name="android.permission.CAMERA" />
-     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+      <uses-permission android:name="android.permission.INTERNET" />
+      <uses-permission android:name="android.permission.CAMERA" />
+      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+      <!-- For saving downloaded files to shared Documents on older Android -->
+      <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+      <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
 
     <!-- Required for dataSync foreground service on Android 14+ / targetSdk 35 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />

@@ -1,9 +1,10 @@
 <script lang="ts">
     import { imageViewerState, closeImageViewer, toggleImageViewerFit } from '$lib/stores/imageViewer';
     import { nativeDialogService, isAndroidNative } from '$lib/core/NativeDialogs';
+    import { createAndroidShareFileFromUrl, createAndroidDownloadFileFromUrl, cleanupAndroidDecryptedShareFiles } from '$lib/core/MediaShare';
 
     const isAndroidNativeEnv = $derived(isAndroidNative());
-    let { url: imageViewerUrl, fitToScreen: imageViewerFitToScreen } = $derived($imageViewerState);
+    let { url: imageViewerUrl, originalUrl: imageViewerOriginalUrl, fitToScreen: imageViewerFitToScreen } = $derived($imageViewerState);
 
     let scale = $state(1);
     let translateX = $state(0);
@@ -160,32 +161,69 @@
         if (!imageViewerUrl || typeof window === 'undefined') {
             return;
         }
-
-        try {
-            const response = await fetch(imageViewerUrl);
-            const blob = await response.blob();
-            const objectUrl = URL.createObjectURL(blob);
-
-            const anchor = document.createElement('a');
-            anchor.href = objectUrl;
-
-            try {
-                const parsed = new URL(imageViewerUrl);
-                const segments = parsed.pathname.split('/');
-                const lastSegment = segments[segments.length - 1] || 'image';
-                anchor.download = lastSegment;
-            } catch {
-                anchor.download = 'image';
+ 
+        const filenameFromOriginal = (() => {
+            if (!imageViewerOriginalUrl) {
+                return 'image';
             }
-
+            try {
+                const parsed = new URL(imageViewerOriginalUrl, window.location.origin);
+                const segments = parsed.pathname.split('/');
+                const lastSegment = segments[segments.length - 1];
+                return lastSegment || 'image';
+            } catch {
+                return 'image';
+            }
+        })();
+ 
+        // Android native: use Filesystem to write a decrypted file to Documents
+        if (isAndroidNativeEnv && imageViewerUrl.startsWith('blob:')) {
+            try {
+                const uri = await createAndroidDownloadFileFromUrl(imageViewerUrl, filenameFromOriginal);
+ 
+                // Inform the user that the image has been saved. Exact path handling
+                // depends on Android version and Documents visibility.
+                await nativeDialogService.alert({
+                    title: 'Image saved',
+                    message: 'Image has been saved to device storage.'
+                });
+ 
+                return;
+            } catch (e) {
+                console.error('Android download via Filesystem failed, falling back to browser download:', e);
+            }
+        }
+ 
+        // Default: browser-style download using an anchor element
+        try {
+            const anchor = document.createElement('a');
+ 
+            if (imageViewerUrl.startsWith('blob:')) {
+                anchor.href = imageViewerUrl;
+                anchor.download = filenameFromOriginal;
+            } else {
+                const response = await fetch(imageViewerUrl);
+                const blob = await response.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                anchor.href = objectUrl;
+ 
+                anchor.download = filenameFromOriginal;
+ 
+                anchor.addEventListener('click', () => {
+                    setTimeout(() => {
+                        URL.revokeObjectURL(objectUrl);
+                    }, 0);
+                });
+            }
+ 
             document.body.appendChild(anchor);
             anchor.click();
             document.body.removeChild(anchor);
-            URL.revokeObjectURL(objectUrl);
         } catch (e) {
             console.error('Failed to download image from viewer:', e);
         }
     }
+
 
     async function shareActiveImage() {
         if (!imageViewerUrl || !isAndroidNativeEnv) {
@@ -193,12 +231,44 @@
         }
 
         try {
-            await nativeDialogService.share({
-                url: imageViewerUrl,
-                text: 'Shared from nospeak'
-            });
+            let sharedViaFile = false;
+
+            if (imageViewerUrl.startsWith('blob:')) {
+                try {
+                    // Best-effort cleanup of previous decrypted share files before creating a new one
+                    await cleanupAndroidDecryptedShareFiles();
+
+                    const filename = `image-${Date.now()}.jpg`;
+                    const uri = await createAndroidShareFileFromUrl(imageViewerUrl, filename);
+
+                    await nativeDialogService.share({
+                        files: [uri],
+                        text: 'Shared from nospeak'
+                    });
+
+                    sharedViaFile = true;
+                } catch (innerError) {
+                    console.error('Failed to share image via Android file share, falling back to URL:', innerError);
+                }
+            }
+
+            if (!sharedViaFile) {
+                await nativeDialogService.share({
+                    url: imageViewerOriginalUrl || imageViewerUrl,
+                    text: 'Shared from nospeak'
+                });
+            }
         } catch (e) {
             console.error('Failed to share image from viewer:', e);
+
+            try {
+                await nativeDialogService.alert({
+                    title: 'Share failed',
+                    message: 'Could not share this image. Please try again.'
+                });
+            } catch {
+                // Ignore alert failures
+            }
         }
     }
 </script>

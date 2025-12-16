@@ -17,7 +17,7 @@
     } = $props<{
         content: string;
         isOwn?: boolean;
-        onImageClick?: (url: string) => void;
+        onImageClick?: (url: string, originalUrl?: string | null) => void;
         fileUrl?: string;
         fileType?: string;
         fileEncryptionAlgorithm?: string;
@@ -293,14 +293,15 @@
          <div class="space-y-2">
              {#if decryptedUrl}
                  {#if isImageMime(fileType) || isImage(decryptedUrl)}
-                     {#if onImageClick}
-                         <button
-                             type="button"
-                             class="block my-1 cursor-zoom-in"
-                             onclick={() => onImageClick?.(decryptedUrl!)}
-                         >
-                             <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
-                         </button>
+                      {#if onImageClick}
+                          <button
+                              type="button"
+                              class="block my-1 cursor-zoom-in"
+                              onclick={() => onImageClick?.(decryptedUrl!, fileUrl)}
+                          >
+                              <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
+                          </button>
+
                      {:else}
                          <a href={decryptedUrl} target="_blank" rel="noopener noreferrer" class="block my-1">
                              <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
@@ -330,12 +331,13 @@
          {#each parts as part}
              {#if part.match(/^https?:\/\//)}
                  {#if isImage(part)}
-                     {#if onImageClick}
-                         <button
-                             type="button"
-                             class="block my-1 cursor-zoom-in"
-                             onclick={() => onImageClick?.(part)}
-                         >
+                      {#if onImageClick}
+                          <button
+                              type="button"
+                              class="block my-1 cursor-zoom-in"
+                              onclick={() => onImageClick?.(part, part)}
+                          >
+
                              <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" />
                          </button>
                      {:else}
