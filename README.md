@@ -1,16 +1,17 @@
 # Nospeak
 
-A decentralized Nostr chat client for secure, private messaging built with SvelteKit.
+nospeak is a decentralized Nostr chat client for secure, private messaging. It is easy to
+use but has state of the art end-to-end encryption without metadata leakage. 
+
+Use https://nospeak.chat or download the APK for Android
 
 ## Features
 
-- 🚀 **Decentralized Chat**: Connect directly to Nostr relays without central servers
-- 🔐 **Private Messaging**: End-to-end encrypted conversations
-- 👤 **Profile Management**: Nostr native profile system with metadata
-- 📱 **Responsive Design**: Works seamlessly on desktop and mobile
-- 🖼️ **Media Upload**: Share images and videos in chat
-- 🎨 **Dark Mode**: Built-in dark/light theme support
-- 📝 **Rich Text**: Support for markdown formatting and emojis
+- **Decentralized Chat**: Uses Nostr relays without central servers
+- **Private Messaging**: End-to-end encrypted conversations
+- **Encrypted Media Upload**: Share images and videos in chat
+- **Responsive Design**: Works seamlessly on desktop and mobile
+- **Rich Text**: Support for markdown formatting and emojis
 
 ## Quick Start
 
@@ -31,29 +32,6 @@ npm install
 
 # Start development server
 npm run dev
-```
-
-The application will be available at `http://localhost:5173`.
-
-## Development
-
-### Available Scripts
-
-```bash
-# Start development server with hot reload
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-
-# Run type checking and linting
-npm run check
-
-# Run tests
-npm run vitest
 ```
 
 ### Project Structure
@@ -121,7 +99,6 @@ Default relays are configured, but users can add custom relays in settings. The 
 
 - Local IndexedDB for message history and profiles
 - No server-side storage of private data
-- Automatic cleanup of old cache data
 
 ## Android (Capacitor)
 
@@ -130,7 +107,6 @@ Nospeak can be packaged as a native Android application using Capacitor.
 ### Requirements
 
 - Node.js 18+
-- Android Studio with Android SDK and platform tools
 - Java 17 (for recent Android Gradle plugin versions)
 - At least one Android emulator or physical device (Android 8.0 / API 26 or newer)
 
@@ -143,8 +119,8 @@ npm install
 # Build web assets and sync to Android project
 npm run build:android
 
-# Open the Android project in Android Studio
-npm run android
+# Build an unsigned APK
+cd android && ./gradlew clean :app:assembleDebug
 ```
 
 The Capacitor configuration (`capacitor.config.ts`) is set to use the SvelteKit `build/android` directory as `webDir`, so the Android app loads the bundled nospeak UI from local assets.
@@ -171,14 +147,6 @@ npm run build
 rsync -av build/ user@server:/var/www/nospeak/
 ```
 
-
-### Development Guidelines
-
-- Follow TypeScript strict mode
-- Use 4-space indentation
-- Write tests for new features
-- Keep components small and focused
-- Follow existing code patterns
 
 ## Nostr Integration
 
