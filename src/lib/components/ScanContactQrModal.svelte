@@ -1,8 +1,10 @@
 <script lang="ts">
     import { fade } from 'svelte/transition';
-    import { glassModal } from '$lib/utils/transitions';
-    import { isAndroidNative } from '$lib/core/NativeDialogs';
-    import { decodeQrFromImageData, parseNpubFromQrPayload } from '$lib/utils/qr';
+     import { glassModal } from '$lib/utils/transitions';
+     import { isAndroidNative } from '$lib/core/NativeDialogs';
+     import { decodeQrFromImageData, parseNpubFromQrPayload } from '$lib/utils/qr';
+     import { hapticSelection } from '$lib/utils/haptics';
+
     import { openScanContactQrResult } from '$lib/stores/modals';
     import { t } from '$lib/i18n';
 
@@ -131,18 +133,21 @@
         }
     }
 
-    function handleOverlayClick(e: MouseEvent): void {
+     function handleOverlayClick(e: MouseEvent): void {
+ 
+         if (e.target === e.currentTarget) {
+             hapticSelection();
+             closeWithCleanup();
+         }
+     }
 
-        if (e.target === e.currentTarget) {
-            closeWithCleanup();
-        }
-    }
+     function handleKeydown(e: KeyboardEvent): void {
+         if (e.key === 'Escape') {
+             hapticSelection();
+             closeWithCleanup();
+         }
+     }
 
-    function handleKeydown(e: KeyboardEvent): void {
-        if (e.key === 'Escape') {
-            closeWithCleanup();
-        }
-    }
 
     function closeWithCleanup(): void {
         stopCamera();
@@ -247,9 +252,10 @@
             </div>
  
             <div class="mt-6 flex justify-end gap-3">
-                <button
-                    type="button"
-                    onclick={closeWithCleanup}
+             <button
+                     type="button"
+                     onclick={() => { hapticSelection(); closeWithCleanup(); }}
+
                     class="px-3 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-600 transition-colors"
                 >
                     {$t('common.cancel')}

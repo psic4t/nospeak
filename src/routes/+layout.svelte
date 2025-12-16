@@ -4,9 +4,10 @@
   import { authService } from "$lib/core/AuthService";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { page } from "$app/state";
-  import { softVibrate } from "$lib/utils/haptics";
-  import { currentUser } from "$lib/stores/auth";
+   import { page } from "$app/state";
+   import { hapticSelection } from "$lib/utils/haptics";
+   import { currentUser } from "$lib/stores/auth";
+
    import RelayStatusModal from "$lib/components/RelayStatusModal.svelte";
     import SettingsModal from "$lib/components/SettingsModal.svelte";
     import ManageContactsModal from "$lib/components/ManageContactsModal.svelte";
@@ -41,7 +42,7 @@
     const target = e.target as HTMLElement;
     const anchor = target.closest('a');
     if (anchor) {
-        softVibrate();
+        hapticSelection();
     }
   }
 

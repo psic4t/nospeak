@@ -1,8 +1,10 @@
 <script lang="ts">
     import { profileRepo } from '$lib/db/ProfileRepository';
-    import type { Profile } from '$lib/db/db';
-     import Avatar from './Avatar.svelte';
-     import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+     import type { Profile } from '$lib/db/db';
+      import Avatar from './Avatar.svelte';
+      import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+      import { hapticSelection } from '$lib/utils/haptics';
+
      import { isAndroidNative } from "$lib/core/NativeDialogs";
      import { fade } from 'svelte/transition';
      import { glassModal } from '$lib/utils/transitions';
@@ -49,9 +51,10 @@
         class:android-safe-area-top={isAndroidApp}
         role="dialog"
         aria-modal="true"
-        tabindex="-1"
-        onclick={(e) => { if(e.target === e.currentTarget) close(); }}
-        onkeydown={(e) => { if(e.key === 'Escape') close(); }}
+         tabindex="-1"
+         onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
+         onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
+
     >
         <div 
             in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 

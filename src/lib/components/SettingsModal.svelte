@@ -15,6 +15,7 @@
   import { glassModal } from "$lib/utils/transitions";
   import { t } from "$lib/i18n";
   import { language, setLanguage } from "$lib/stores/language";
+  import { hapticSelection } from "$lib/utils/haptics";
   import type { Language } from "$lib/i18n";
  
   const packageVersion = __APP_VERSION__;
@@ -179,6 +180,7 @@
     if (!relays.find((r) => r.url === url)) {
       relays = [...relays, { url }];
       await saveRelaySettings();
+      hapticSelection();
     }
     newRelayUrl = "";
   }
@@ -286,9 +288,11 @@
       const granted = await notificationService.requestPermission();
       if (granted) {
         notificationsEnabled = true;
+        hapticSelection();
       }
     } else {
       notificationsEnabled = false;
+      hapticSelection();
     }
   }
 
@@ -301,6 +305,7 @@
 
     try {
       await applyAndroidBackgroundMessaging(backgroundMessagingEnabled);
+      hapticSelection();
     } catch (e) {
       console.error("Failed to sync Android background messaging from toggle:", e);
     }
@@ -429,16 +434,20 @@
 
   function handleOverlayClick(e: MouseEvent) {
 
-    if (e.target === e.currentTarget) {
-      close();
-    }
+     if (e.target === e.currentTarget) {
+       hapticSelection();
+       close();
+     }
+
   }
 
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
-      close();
-    }
+       hapticSelection();
+       close();
+     }
+
   }
 </script>
 
@@ -487,7 +496,10 @@
 
 
       <button
-         onclick={close}
+         onclick={() => {
+           hapticSelection();
+           close();
+         }}
          aria-label="Close modal"
          class="hidden md:block absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm"
        >
@@ -898,9 +910,10 @@
                     {$t("settings.urlPreviews.description")}
                   </p>
                 </div>
-                <button
-                  id="url-previews-toggle"
-                  onclick={() => (urlPreviewsEnabled = !urlPreviewsEnabled)}
+                 <button
+                   id="url-previews-toggle"
+                   onclick={() => { urlPreviewsEnabled = !urlPreviewsEnabled; hapticSelection(); }}
+
                   class={`ml-4 flex-shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                     urlPreviewsEnabled ? "bg-blue-500" : "bg-gray-200 dark:bg-slate-600"
                   }`}

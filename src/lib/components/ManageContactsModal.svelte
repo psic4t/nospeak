@@ -6,9 +6,11 @@
 
     import { profileRepo } from '$lib/db/ProfileRepository';
     import Avatar from './Avatar.svelte';
-    import { searchProfiles, type UserSearchResult } from '$lib/core/SearchProfiles';
-    import { verifyNip05ForNpub, type Nip05Status } from '$lib/core/Nip05Verifier';
-     import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+     import { searchProfiles, type UserSearchResult } from '$lib/core/SearchProfiles';
+     import { verifyNip05ForNpub, type Nip05Status } from '$lib/core/Nip05Verifier';
+      import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+      import { hapticSelection } from '$lib/utils/haptics';
+
      import { isAndroidNative } from "$lib/core/NativeDialogs";
      import { fade } from 'svelte/transition';
      import { glassModal } from '$lib/utils/transitions';
@@ -282,6 +284,7 @@
          isBottomSheetDragging = false;
          bottomSheetDragY = 0;
          if (shouldClose) {
+             hapticSelection();
              close();
          }
        }
@@ -318,11 +321,13 @@
                return;
            }
            const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
-           isBottomSheetDragging = false;
-           bottomSheetDragY = 0;
-           if (shouldClose) {
-               close();
-           }
+            isBottomSheetDragging = false;
+            bottomSheetDragY = 0;
+            if (shouldClose) {
+                hapticSelection();
+                close();
+            }
+
        }
    </script>
 
@@ -340,8 +345,9 @@
         role="dialog"
         aria-modal="true"
         tabindex="-1"
-        onclick={(e) => { if(e.target === e.currentTarget) close(); }}
-        onkeydown={(e) => { if(e.key === 'Escape') close(); }}
+         onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
+         onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
+
     >
         <div 
              in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
@@ -371,7 +377,7 @@
                  </div>
              {/if}
 
-             <button onclick={close} aria-label="Close modal" class="hidden md:block absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm">
+             <button onclick={() => { hapticSelection(); close(); }} aria-label="Close modal" class="hidden md:block absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm">
 
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>

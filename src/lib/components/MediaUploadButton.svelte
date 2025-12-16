@@ -1,7 +1,9 @@
 <script lang="ts">
-    import FileTypeDropdown from './FileTypeDropdown.svelte';
-    import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from '$lib/core/Nip98Auth';
-    import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
+     import FileTypeDropdown from './FileTypeDropdown.svelte';
+     import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from '$lib/core/Nip98Auth';
+     import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
+     import { hapticSelection } from '$lib/utils/haptics';
+
 
     let { onFileSelect, inline = false, allowedTypes = ['image', 'video'], dmEncrypted = false } = $props<{
         onFileSelect: (file: File, type: 'image' | 'video' | 'audio', url?: string) => void;
@@ -20,21 +22,28 @@
     const MAX_HEIGHT = 2048;
     const JPEG_QUALITY = 0.8;
 
-    const isAndroidNativeEnv = typeof window !== 'undefined' && isAndroidNative();
-    const isMobileWebEnv = typeof window !== 'undefined' && isMobileWeb();
+     const isAndroidNativeEnv = typeof window !== 'undefined' && isAndroidNative();
+     const isMobileWebEnv = typeof window !== 'undefined' && isMobileWeb();
+ 
+     function toggleDropdown() {
+         const opening = !showDropdown;
+         showDropdown = !showDropdown;
+         if (opening) {
+             hapticSelection();
+         }
+     }
 
-    function toggleDropdown() {
-        showDropdown = !showDropdown;
-    }
 
     function closeDropdown() {
         showDropdown = false;
     }
 
-    function handleFileTypeSelect(type: 'image' | 'video' | 'audio') {
-        closeDropdown();
-        openFileSelector(type);
-    }
+     function handleFileTypeSelect(type: 'image' | 'video' | 'audio') {
+         closeDropdown();
+         hapticSelection();
+         openFileSelector(type);
+     }
+
 
     async function uploadFile(file: File, type: 'image' | 'video' | 'audio') {
         isUploading = true;
@@ -243,10 +252,12 @@
         input.click();
     }
 
-    async function handleTakePhoto() {
-        closeDropdown();
+     async function handleTakePhoto() {
+         closeDropdown();
+         hapticSelection();
+ 
+         if (isAndroidNativeEnv) {
 
-        if (isAndroidNativeEnv) {
             try {
                 const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
 

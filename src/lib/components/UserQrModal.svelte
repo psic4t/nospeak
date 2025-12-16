@@ -1,12 +1,14 @@
 <script lang="ts">
     import QRCode from 'qrcode';
     import { currentUser } from '$lib/stores/auth';
-    import { profileRepo } from '$lib/db/ProfileRepository';
-    import Avatar from '$lib/components/Avatar.svelte';
-    import { fade } from 'svelte/transition';
-    import { glassModal } from '$lib/utils/transitions';
-    import { isAndroidNative } from '$lib/core/NativeDialogs';
-    import { t } from '$lib/i18n';
+     import { profileRepo } from '$lib/db/ProfileRepository';
+     import Avatar from '$lib/components/Avatar.svelte';
+     import { fade } from 'svelte/transition';
+     import { glassModal } from '$lib/utils/transitions';
+     import { isAndroidNative } from '$lib/core/NativeDialogs';
+     import { t } from '$lib/i18n';
+     import { hapticSelection } from '$lib/utils/haptics';
+
 
     let { isOpen, close } = $props<{
         isOpen: boolean;
@@ -71,16 +73,19 @@
     });
 
     function handleOverlayClick(e: MouseEvent) {
-        if (e.target === e.currentTarget) {
-            close();
-        }
-    }
+         if (e.target === e.currentTarget) {
+             hapticSelection();
+             close();
+         }
+     }
 
-    function handleKeydown(e: KeyboardEvent) {
-        if (e.key === 'Escape') {
-            close();
-        }
-    }
+     function handleKeydown(e: KeyboardEvent) {
+         if (e.key === 'Escape') {
+             hapticSelection();
+             close();
+         }
+     }
+
 </script>
 
 {#if isOpen}
@@ -101,8 +106,9 @@
             class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl w-full max-w-sm rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none px-6 pb-6 pt-14"
         >
             <button
-                onclick={close}
-                aria-label="Close modal"
+                 onclick={() => { hapticSelection(); close(); }}
+                 aria-label="Close modal"
+
                 class="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors backdrop-blur-sm"
             >
                 <svg

@@ -11,8 +11,10 @@
     import { goto } from '$app/navigation';
      import { page } from '$app/state';
      import Avatar from './Avatar.svelte';
-       import { softVibrate } from '$lib/utils/haptics';
+       import { hapticSelection } from '$lib/utils/haptics';
        import { onMount } from 'svelte';
+
+
        import * as modals from '$lib/stores/modals';
        import { t } from '$lib/i18n';
        import { get } from 'svelte/store';
@@ -137,7 +139,7 @@
     });
 
     function selectContact(npub: string) {
-        softVibrate();
+        hapticSelection();
         goto(`/chat/${npub}`, { invalidateAll: true }); 
     }
 </script>
@@ -149,7 +151,7 @@
                  <div class="flex items-center gap-2">
                      <button 
                          onclick={() => {
-                             softVibrate();
+                             hapticSelection();
                               modals.openProfileModal($currentUser.npub);
 
                          }}
@@ -166,7 +168,7 @@
  
                      <button
                          onclick={() => {
-                             softVibrate();
+                             hapticSelection();
                               modals.showUserQrModal.set(true);
 
                          }}
@@ -201,7 +203,7 @@
             </span>
             <button 
                 onclick={() => {
-                    softVibrate();
+                    hapticSelection();
                      modals.showSettingsModal.set(true);
 
                 }} 
@@ -218,11 +220,12 @@
              <div class="flex items-center gap-2">
                  <div class="typ-section dark:text-white">{$t('contacts.title')}</div>
 
-                 {#if canScanQr}
+                     {#if canScanQr}
                      <button
                          onclick={() => {
-                             softVibrate();
+                             hapticSelection();
                              (modals as any).showScanContactQrModal.set(true);
+
                          }}
                          class="p-1.5 rounded-full bg-white/80 dark:bg-slate-800/80 hover:bg-gray-100 dark:hover:bg-slate-700 shadow-sm border border-gray-200/60 dark:border-slate-600 text-gray-700 dark:text-slate-100 transition-colors"
                          aria-label={$t('contacts.scanQrAria')}
@@ -245,7 +248,7 @@
 
             <button 
                 onclick={() => {
-                    softVibrate();
+                    hapticSelection();
                     modals.showManageContactsModal.set(true);
                 }}
                 class="text-xs px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800/80 hover:bg-gray-100 dark:hover:bg-slate-700 text-blue-600 dark:text-blue-300 font-semibold shadow-sm border border-gray-200/60 dark:border-slate-600 transition-colors"
