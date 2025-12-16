@@ -91,7 +91,7 @@ Default relays are configured, but users can add custom relays in settings. The 
 
 ### Encryption
 
-- All messages are end-to-end encrypted using Nostr's NIP-04
+- All messages are end-to-end encrypted using Nostr's NIP-44
 - Private keys never leave the user's device
 - Profile metadata is publicly shared as per Nostr protocol
 
@@ -153,23 +153,26 @@ rsync -av build/ user@server:/var/www/nospeak/
 Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 
 ### Core Protocol
-- **NIP-05**: Mapping Nostr keys to DNS-based internet identifiers
-- **NIP-17**: Private Direct Messages 
+- **NIP-01**: Basic Nostr event and client protocol
+- **NIP-17**: Encrypted direct messages and messaging relays
 - **NIP-19**: bech32-encoded entities for keys and identifiers
 
-### Metadata & Profiles
-- **NIP-40**: Reaction events for emoji responses
+### Identity, Metadata & Discovery
+- **NIP-05**: Mapping Nostr keys to DNS-based internet identifiers
+- **NIP-50**: Search relays for contact discovery
+- **NIP-65**: Relay list metadata for messaging/mailbox relays
+
+### Reactions
+- **NIP-25**: Reaction events for emoji responses on messages
 
 ### Content & Media
-- **NIP-44**: Encrypted Payloads
-- **NIP-59**: Gift wrapper events for media sharing
+- **NIP-44**: Encrypted payloads for direct messages
+- **NIP-59**: Gift wrapper events for DM and media delivery
+- **NIP-98**: HTTP-authenticated media uploads
 
-### Advanced Features
-- **NIP-07**: Windowed messages for rate limiting
-
-## Support
-
-- 🐛 [Issues](https://github.com/psic4t/nospeak/issues)
+### Signer Integration
+- **NIP-07**: Browser extension signer integration
+- **NIP-55**: Android native signer integration (Amber and similar)
 
 ## License
 
