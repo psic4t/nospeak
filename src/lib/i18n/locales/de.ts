@@ -6,7 +6,7 @@ const de = {
     },
     auth: {
         loginWithAmber: 'Mit Amber anmelden',
-        loginWithExtension: 'Mit Erweiterung anmelden',
+        loginWithExtension: 'Mit Nostr-Signer-Erweiterung anmelden',
         orSeparator: 'ODER',
         loginWithNsecLabel: 'Mit nsec anmelden',
         nsecPlaceholder: 'nsec1...',
