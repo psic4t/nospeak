@@ -355,7 +355,7 @@
          >
              {#if isAndroidApp}
                  <div
-                     class="absolute inset-x-0 top-0 h-12"
+                     class="absolute top-0 left-1/2 -translate-x-1/2 h-12 w-32"
                      onpointerdown={handleBottomSheetPointerDown}
                      onpointermove={handleBottomSheetPointerMove}
                      onpointerup={handleBottomSheetPointerEnd}
@@ -377,15 +377,6 @@
             </button>
             <div class="flex items-center justify-between mb-4 px-1">
                 <div class="flex items-center gap-2">
-                    <button
-                        onclick={close}
-                        class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 -ml-1"
-                        aria-label="Back"
-                    >
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                        </svg>
-                    </button>
                     <h2 class="typ-title dark:text-white">{$t('modals.manageContacts.title')}</h2>
                 </div>
             </div>

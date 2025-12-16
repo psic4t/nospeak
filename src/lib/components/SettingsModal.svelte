@@ -469,7 +469,7 @@
     >
       {#if isAndroidApp}
         <div
-          class="absolute inset-x-0 top-0 h-12"
+          class="absolute top-0 left-1/2 -translate-x-1/2 h-12 w-32"
           onpointerdown={handleBottomSheetPointerDown}
           onpointermove={handleBottomSheetPointerMove}
           onpointerup={handleBottomSheetPointerEnd}
@@ -514,20 +514,6 @@
         }`}
       >
         <div class="flex items-center gap-2 mb-6 px-2">
-          <button
-            class="md:hidden text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
-            onclick={close}
-            aria-label="Close settings"
-          >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 19l-7-7 7-7"
-              ></path>
-            </svg>
-          </button>
           <h2 id="settings-title" class="typ-title dark:text-white">
             {$t("settings.title")}
           </h2>
