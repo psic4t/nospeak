@@ -232,12 +232,9 @@
 
 {#if isInitialized}
   <div
-    class="h-dvh bg-gray-50 dark:bg-slate-950 flex justify-center overflow-hidden relative lg:p-4"
+    class="h-dvh app-shell flex justify-center overflow-hidden relative lg:p-4"
     class:android-safe-area-top={isAndroidApp}
   >
-    <!-- Background Elements for Glassmorphism Context -->
-    <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-400/20 dark:bg-blue-900/20 rounded-full blur-[100px] pointer-events-none"></div>
-    <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/20 dark:bg-purple-900/20 rounded-full blur-[100px] pointer-events-none"></div>
 
     {#if page.url.pathname === '/'}
       {@render children()}

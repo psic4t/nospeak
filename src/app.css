@@ -25,8 +25,32 @@
  }
 
  body {
-     @apply bg-gray-50 dark:bg-slate-950 antialiased text-gray-900 dark:text-white;
- }
+      @apply bg-gray-50 dark:bg-slate-950 antialiased text-gray-900 dark:text-white;
+  }
+
+  /* Theme-driven app-shell background (desktop-friendly) */
+  .app-shell {
+      --shell-glow-1-alpha: 0.10;
+      --shell-glow-2-alpha: 0.08;
+      --shell-glow-3-alpha: 0.07;
+
+      background-color: rgb(var(--color-base-rgb, 239 241 245) / 1);
+      background-image:
+          radial-gradient(1200px circle at 0% 0%, rgb(var(--color-sky-rgb, 4 165 229) / var(--shell-glow-1-alpha)), transparent 60%),
+          radial-gradient(1000px circle at 100% 10%, rgb(var(--color-mauve-rgb, 136 57 239) / var(--shell-glow-2-alpha)), transparent 55%),
+          radial-gradient(1100px circle at 100% 100%, rgb(var(--color-rosewater-rgb, 220 138 120) / var(--shell-glow-3-alpha)), transparent 60%);
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+  }
+
+  .dark .app-shell {
+      --shell-glow-1-alpha: 0.14;
+      --shell-glow-2-alpha: 0.12;
+      --shell-glow-3-alpha: 0.10;
+
+      background-color: rgb(var(--color-crust-rgb, 17 17 27) / 1);
+  }
+
 
 /* Custom Scrollbar for Glass UI */
 .custom-scrollbar::-webkit-scrollbar {
