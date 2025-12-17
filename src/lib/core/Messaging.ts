@@ -260,6 +260,9 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       }
 
       // Default text (Kind 14) path
+      const parentTag = rumor.tags.find(t => t[0] === 'e');
+      const parentRumorId = parentTag?.[1];
+
       return {
         recipientNpub: partnerNpub,
         message: rumor.content,
@@ -268,7 +271,8 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
         rumorId,
         direction,
         createdAt: Date.now(),
-        rumorKind: rumor.kind
+        rumorKind: rumor.kind,
+        parentRumorId
       };
     } catch (e) {
       console.error('Failed to create message from rumor:', e);
@@ -528,7 +532,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     return { totalFetched, processed: totalFetched };
   }
 
-  public async sendMessage(recipientNpub: string, text: string) {
+  public async sendMessage(recipientNpub: string, text: string, parentRumorId?: string) {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
  
@@ -557,19 +561,41 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     await new Promise((r) => setTimeout(r, 500));
  
     // 2. Create Rumor (Kind 14)
+    const tags: string[][] = [['p', recipientPubkey as string]];
+    if (parentRumorId) {
+      tags.push(['e', parentRumorId]);
+    }
+
     const rumor: Partial<NostrEvent> = {
       kind: 14,
       pubkey: senderPubkey,
       created_at: Math.floor(Date.now() / 1000),
       content: text,
-      tags: [['p', recipientPubkey as string]]
+      tags
     };
+
+    if (this.debug && parentRumorId) {
+      console.log('Sending caption rumor', {
+        content: rumor.content,
+        tags: rumor.tags,
+        parentRumorId
+      });
+    }
  
     // Calculate stable rumor ID for reactions
     const rumorId = getEventHash(rumor as NostrEvent);
+
  
     // 3. Create Gift Wrap for Recipient
     const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
+    if (this.debug && parentRumorId) {
+      console.log('Caption giftWrap for recipient', {
+        id: giftWrap.id,
+        kind: giftWrap.kind,
+        tags: giftWrap.tags
+      });
+    }
  
     // Initialize ephemeral relay send status for UI (do not persist)
     initRelaySendStatus(giftWrap.id, recipientNpub, recipientRelays.length);
@@ -591,7 +617,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     // 6. Cleanup temporary relays after sending
     setTimeout(() => {
       connectionManager.cleanupTemporaryConnections();
-    }, 2000);
+    }, 15000);
  
     // 6. Cache locally immediately
     await messageRepo.saveMessage({
@@ -601,11 +627,15 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       eventId: selfGiftWrap.id, // Save SELF-WRAP ID to match incoming
       rumorId, // Save stable rumor ID
       direction: 'sent',
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      rumorKind: 14,
+      parentRumorId: parentRumorId
     });
  
     // Auto-add unknown contacts when sending messages
     await this.autoAddContact(recipientNpub);
+
+    return rumorId;
   }
 
 
@@ -685,7 +715,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     recipientNpub: string,
     file: File,
     mediaType: 'image' | 'video' | 'audio'
-  ): Promise<void> {
+  ): Promise<string> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
  
@@ -760,7 +790,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
  
     setTimeout(() => {
       connectionManager.cleanupTemporaryConnections();
-    }, 2000);
+    }, 15000);
 
 
     // 6. Cache locally immediately
@@ -784,6 +814,8 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     });
 
     await this.autoAddContact(recipientNpub);
+
+    return rumorId;
   }
 
   public async sendReaction(
@@ -856,7 +888,7 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
 
     setTimeout(() => {
       connectionManager.cleanupTemporaryConnections();
-    }, 2000);
+    }, 15000);
 
     const authorNpub = senderNpub;
     const reaction: Omit<Reaction, 'id'> = {

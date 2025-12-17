@@ -16,11 +16,12 @@
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
   import { openProfileModal } from '$lib/stores/modals';
   import { openImageViewer } from '$lib/stores/imageViewer';
-  import { fly, fade } from 'svelte/transition';
+  import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { nativeDialogService, isAndroidNative } from '$lib/core/NativeDialogs';
   import { t } from '$lib/i18n';
   import { get } from 'svelte/store';
+  import { isCaptionMessage, getCaptionForParent } from '$lib/core/captionGrouping';
 
   let {
     messages = [],
@@ -52,7 +53,21 @@
    
   let previousScrollHeight = 0;
   let isLoadingMore = false;
+  
+  // Single-file media preview state
+  let showMediaPreview = $state(false);
+  let pendingMediaFile = $state<File | null>(null);
+  let pendingMediaType = $state<'image' | 'video' | 'audio' | null>(null);
+  let pendingMediaObjectUrl = $state<string | null>(null);
+  let pendingMediaCaption = $state("");
+  let pendingMediaError = $state<string | null>(null);
 
+  // Bottom sheet drag state (Android only)
+  const BOTTOM_SHEET_ACTIVATION_THRESHOLD = 8;
+  const BOTTOM_SHEET_CLOSE_THRESHOLD = 96;
+  let isBottomSheetDragging = $state(false);
+  let bottomSheetDragStartY = 0;
+  let bottomSheetDragY = $state(0);
 
   // Context menu state
   let contextMenu = $state({
@@ -416,7 +431,6 @@
     });
   }
 
-
   const translate = (key: string, vars?: Record<string, unknown>) =>
     (get(t) as (k: string, v?: Record<string, unknown>) => string)(key, vars);
 
@@ -445,6 +459,156 @@
       inputText = text; // Restore text on failure
     } finally {
       isSending = false;
+    }
+  }
+
+  function resetMediaPreview() {
+    showMediaPreview = false;
+    pendingMediaCaption = "";
+    pendingMediaError = null;
+
+    if (pendingMediaObjectUrl) {
+      URL.revokeObjectURL(pendingMediaObjectUrl);
+      pendingMediaObjectUrl = null;
+    }
+
+    pendingMediaFile = null;
+    pendingMediaType = null;
+    isBottomSheetDragging = false;
+    bottomSheetDragY = 0;
+  }
+
+  function openMediaPreview(file: File, type: 'image' | 'video' | 'audio') {
+    if (pendingMediaObjectUrl) {
+      URL.revokeObjectURL(pendingMediaObjectUrl);
+      pendingMediaObjectUrl = null;
+    }
+
+    pendingMediaFile = file;
+    pendingMediaType = type;
+    pendingMediaCaption = "";
+    pendingMediaError = null;
+    pendingMediaObjectUrl = URL.createObjectURL(file);
+    showMediaPreview = true;
+    isBottomSheetDragging = false;
+    bottomSheetDragY = 0;
+  }
+
+  async function confirmSendMedia() {
+    if (!partnerNpub || !pendingMediaFile || !pendingMediaType) {
+      return;
+    }
+ 
+    const caption = pendingMediaCaption.trim();
+    let didSucceed = false;
+    isSending = true;
+ 
+    try {
+      const parentRumorId = await messagingService.sendFileMessage(partnerNpub, pendingMediaFile, pendingMediaType);
+ 
+      if (caption.length > 0) {
+        await messagingService.sendMessage(partnerNpub, caption, parentRumorId);
+      }
+ 
+      didSucceed = true;
+      scrollToBottom();
+      hapticLightImpact();
+    } catch (e) {
+      console.error('Failed to send file message:', e);
+      await nativeDialogService.alert({
+        title: translate('chat.sendFailedTitle'),
+        message:
+          translate('chat.sendFailedMessagePrefix') + (e as Error).message
+      });
+      pendingMediaError = translate('chat.sendFailedMessagePrefix') + (e as Error).message;
+    } finally {
+      isSending = false;
+      if (didSucceed) {
+        resetMediaPreview();
+      }
+    }
+  }
+
+
+  function handleBottomSheetPointerDown(e: PointerEvent) {
+    if (!isAndroidShell) return;
+    e.preventDefault();
+    isBottomSheetDragging = false;
+    bottomSheetDragStartY = e.clientY;
+    bottomSheetDragY = 0;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleBottomSheetPointerMove(e: PointerEvent) {
+    if (!isAndroidShell) return;
+    const delta = e.clientY - bottomSheetDragStartY;
+    if (!isBottomSheetDragging) {
+      if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
+        isBottomSheetDragging = true;
+      } else {
+        return;
+      }
+    }
+    bottomSheetDragY = delta > 0 ? delta : 0;
+  }
+
+  function handleBottomSheetPointerEnd(e: PointerEvent) {
+    if (!isAndroidShell) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    if (!isBottomSheetDragging) {
+      bottomSheetDragY = 0;
+      return;
+    }
+    const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
+    isBottomSheetDragging = false;
+    bottomSheetDragY = 0;
+    if (shouldClose) {
+      hapticSelection();
+      resetMediaPreview();
+    }
+  }
+
+  function handleBottomSheetTouchStart(e: TouchEvent) {
+    if (!isAndroidShell) return;
+    if (e.touches.length === 0) return;
+    const touch = e.touches[0];
+    isBottomSheetDragging = false;
+    bottomSheetDragStartY = touch.clientY;
+    bottomSheetDragY = 0;
+  }
+
+  function handleBottomSheetTouchMove(e: TouchEvent) {
+    if (!isAndroidShell) return;
+    if (e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const delta = touch.clientY - bottomSheetDragStartY;
+    if (!isBottomSheetDragging) {
+      if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
+        isBottomSheetDragging = true;
+      } else {
+        return;
+      }
+    }
+    bottomSheetDragY = delta > 0 ? delta : 0;
+    e.preventDefault();
+  }
+
+  function handleBottomSheetTouchEnd() {
+    if (!isAndroidShell) return;
+    if (!isBottomSheetDragging) {
+      bottomSheetDragY = 0;
+      return;
+    }
+    const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
+    isBottomSheetDragging = false;
+    bottomSheetDragY = 0;
+    if (shouldClose) {
+      hapticSelection();
+      resetMediaPreview();
     }
   }
 
@@ -544,24 +708,9 @@
   }
 
   async function handleFileSelect(file: File, type: 'image' | 'video' | 'audio', _url?: string) {
-     if (!partnerNpub) return;
- 
-     try {
-       isSending = true;
-       await messagingService.sendFileMessage(partnerNpub, file, type);
-       scrollToBottom();
-       hapticLightImpact();
+    if (!partnerNpub) return;
 
-    } catch (e) {
-      console.error('Failed to send file message:', e);
-      await nativeDialogService.alert({
-        title: translate('chat.sendFailedTitle'),
-        message:
-          translate('chat.sendFailedMessagePrefix') + (e as Error).message
-      });
-    } finally {
-      isSending = false;
-    }
+    openMediaPreview(file, type);
   }
 </script>
 
@@ -575,6 +724,124 @@
 </svelte:head>
 
 <div class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 backdrop-blur-sm">
+  {#if showMediaPreview && pendingMediaFile && pendingMediaType}
+    <div
+      class="fixed inset-0 z-30 flex items-end md:items-center justify-center bg-black/40 px-4 md:pb-4"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick={(e) => { if (e.target === e.currentTarget) { hapticSelection(); resetMediaPreview(); } }}
+      onkeydown={(e) => { if (e.key === 'Escape') { hapticSelection(); resetMediaPreview(); } }}
+    >
+      <div
+        class="relative w-full max-w-md bg-white/95 dark:bg-slate-900/95 border border-gray-200/80 dark:border-slate-700/80 rounded-t-2xl md:rounded-2xl shadow-2xl backdrop-blur-xl p-4 space-y-3"
+        style:transform={isAndroidShell ? `translateY(${bottomSheetDragY}px)` : undefined}
+      >
+        {#if isAndroidShell}
+          <div
+            class="absolute top-0 left-1/2 -translate-x-1/2 h-10 w-24"
+            onpointerdown={handleBottomSheetPointerDown}
+            onpointermove={handleBottomSheetPointerMove}
+            onpointerup={handleBottomSheetPointerEnd}
+            onpointercancel={handleBottomSheetPointerEnd}
+            ontouchstart={handleBottomSheetTouchStart}
+            ontouchmove={handleBottomSheetTouchMove}
+            ontouchend={handleBottomSheetTouchEnd}
+            ontouchcancel={handleBottomSheetTouchEnd}
+          >
+            <div
+              class="mx-auto mt-2 w-10 h-1.5 rounded-full bg-white/50 dark:bg-slate-700/80 touch-none"
+            ></div>
+          </div>
+        {/if}
+
+        <button
+          onclick={resetMediaPreview}
+          aria-label="Close modal"
+          class="hidden md:block absolute top-3 right-3 z-10 p-1.5 rounded-full bg-black/25 hover:bg-black/40 text-white transition-colors backdrop-blur-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+
+        <div class="flex items-center justify-between mb-2 px-0.5 mt-2 md:mt-0">
+          <h2 class="typ-title dark:text-white">
+            Attachment preview
+          </h2>
+        </div>
+
+        <div class="rounded-xl overflow-hidden bg-gray-100/80 dark:bg-slate-800/80 flex items-center justify-center min-h-[160px]">
+          {#if pendingMediaType === 'image' && pendingMediaObjectUrl}
+            <img src={pendingMediaObjectUrl} alt="Attachment preview" class="max-h-64 w-full object-contain" />
+          {:else if pendingMediaType === 'video' && pendingMediaObjectUrl}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video src={pendingMediaObjectUrl} controls class="max-h-64 w-full object-contain"></video>
+          {:else if pendingMediaType === 'audio' && pendingMediaObjectUrl}
+            <audio src={pendingMediaObjectUrl} controls class="w-full"></audio>
+          {:else}
+            <div class="typ-body text-gray-500 dark:text-slate-400">
+              No preview available
+            </div>
+          {/if}
+        </div>
+
+        <div>
+          <label class="typ-meta block mb-1 text-gray-600 dark:text-slate-300">
+            Caption (optional)
+            <textarea
+              rows="2"
+              class="w-full mt-1 rounded-xl border border-gray-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 px-3 py-2 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
+              bind:value={pendingMediaCaption}
+              placeholder={$t('chat.inputPlaceholder')}
+              disabled={isSending}
+            ></textarea>
+          </label>
+        </div>
+
+        {#if pendingMediaError}
+          <div class="typ-body text-sm text-red-600 dark:text-red-300 pt-1">
+            {pendingMediaError}
+          </div>
+        {/if}
+
+        <div class="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            class="typ-meta px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 text-gray-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+            onclick={resetMediaPreview}
+            disabled={isSending}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="typ-meta px-4 py-1.5 rounded-full bg-[color:var(--color-green)] text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
+            onclick={confirmSendMedia}
+            disabled={isSending || !pendingMediaFile || !pendingMediaType}
+          >
+            {#if isSending}
+              <svg
+                class="animate-spin h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span>Sending…</span>
+            {:else}
+              Send
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if partnerNpub}
     <div
       class="absolute top-0 left-0 right-0 z-20 p-2 h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm transition-all duration-150 ease-out"
@@ -687,11 +954,16 @@
           </div>
         </div>
       {/if}
+
+      {@const caption = isCaptionMessage(messages, i)}
+      {@const captionForThis = getCaptionForParent(messages, i)}
+
+      {#if !caption}
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={{ y: 20, duration: 300, easing: cubicOut }}
       >
-        {#if msg.direction === "received" && partnerNpub}
+        {#if msg.direction === "received" && partnerNpub && !caption}
           <button
             class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
             onclick={() => partnerNpub && openProfile(partnerNpub)}
@@ -731,6 +1003,12 @@
              fileNonce={msg.fileNonce}
            />
 
+           {#if captionForThis}
+             <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">
+               {captionForThis.message}
+             </div>
+           {/if}
+
            <MessageReactions
              targetEventId={msg.rumorId || ''}
              isOwn={msg.direction === "sent"}
@@ -763,6 +1041,7 @@
           </button>
         {/if}
       </div>
+      {/if}
     {/each}
   </div>
 

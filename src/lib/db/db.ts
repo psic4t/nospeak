@@ -11,6 +11,7 @@ export interface Message {
     direction: 'sent' | 'received';
     createdAt: number;
     rumorKind?: number; // 14 for text, 15 for file messages
+    parentRumorId?: string; // direct parent from NIP-17 e tag when applicable
     fileUrl?: string;
     fileType?: string;
     fileSize?: number;
