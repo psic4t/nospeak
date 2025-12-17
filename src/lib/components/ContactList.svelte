@@ -289,10 +289,10 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
                 onclick={() => selectContact(contact.npub)}
-                class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-150 ease-out group ${
+                class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-150 ease-out group border border-white/20 dark:border-white/10 active:scale-[0.98] ${
                     page.url.pathname.includes(contact.npub) 
-                    ? 'bg-blue-50/10 dark:bg-blue-900/40' 
-                    : 'hover:bg-gray-100/80 dark:hover:bg-slate-800/90'
+                    ? 'bg-blue-50/20 dark:bg-blue-900/50 shadow-sm' 
+                    : 'bg-white/10 dark:bg-slate-800/40 hover:bg-white/20 dark:hover:bg-slate-800/70 hover:shadow-lg'
                 }`}
             >
                 <Avatar 
