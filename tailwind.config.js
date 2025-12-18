@@ -48,6 +48,20 @@ export default {
           800: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
           900: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
           950: 'rgb(var(--color-blue-rgb) / <alpha-value>)',
+        },
+        // Brand color Lavender
+        lavender: {
+          50: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          100: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          200: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          300: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          400: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          500: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          600: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          700: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          800: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          900: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
+          950: 'rgb(var(--color-lavender-rgb) / <alpha-value>)',
         }
       }
     },
