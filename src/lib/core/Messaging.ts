@@ -8,6 +8,7 @@ import { discoverUserRelays } from './connection/Discovery';
 import { notificationService } from './NotificationService';
 import { initRelaySendStatus } from '$lib/stores/sending';
 import { contactRepo } from '$lib/db/ContactRepository';
+import { addUnreadMessage, addUnreadReaction, isActivelyViewingConversation } from '$lib/stores/unreadMessages';
 import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
@@ -296,6 +297,11 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
 
     // Show notification for received messages (but not for history messages)
     if (message.direction === 'received') {
+      const shouldPersistUnread = !isActivelyViewingConversation(message.recipientNpub);
+      if (shouldPersistUnread) {
+        addUnreadMessage(user.npub, message.recipientNpub, message.eventId);
+      }
+
       // Don't show notifications for messages fetched during history sync
       if (!this.isFetchingHistory) {
         await notificationService.showNewMessageNotification(message.recipientNpub, message.message);
@@ -348,9 +354,14 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       reactionsStore.applyReactionUpdate(reaction);
 
       const isFromOtherUser = rumor.pubkey !== myPubkey;
-      if (isFromOtherUser && !this.isFetchingHistory) {
+      if (isFromOtherUser) {
         const partnerPubkey = rumor.pubkey;
         const partnerNpub = nip19.npubEncode(partnerPubkey);
+
+        const shouldPersistUnread = !isActivelyViewingConversation(partnerNpub);
+        if (shouldPersistUnread) {
+          addUnreadReaction(user.npub, partnerNpub, originalEventId);
+        }
 
         try {
           await contactRepo.markActivity(partnerNpub, rumor.created_at * 1000);
@@ -418,7 +429,8 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
         until: Math.floor(Date.now() / 1000),
         limit: 50,
         maxBatches: isFirstSync ? 10000 : 1, // Effectively unlimited for first sync
-        abortOnDuplicates: !isFirstSync // Only abort on duplicates for returning users
+        abortOnDuplicates: !isFirstSync, // Only abort on duplicates for returning users
+        markUnread: !isFirstSync
       });
 
       if (this.debug) console.log(`History fetch completed. Total fetched: ${result.totalFetched}`);
@@ -464,9 +476,10 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     }
   }
 
-  private async fetchMessages(options: { until: number, limit: number, abortOnDuplicates: boolean, maxBatches?: number }) {
+  private async fetchMessages(options: { until: number, limit: number, abortOnDuplicates: boolean, maxBatches?: number, markUnread?: boolean }) {
     const s = get(signer);
-    if (!s) return { totalFetched: 0, processed: 0 };
+    const user = get(currentUser);
+    if (!s || !user) return { totalFetched: 0, processed: 0 };
 
     const myPubkey = await s.getPublicKey();
     let until = options.until;
@@ -527,11 +540,20 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
             await messageRepo.saveMessages(messagesToSave);
             if (this.debug) console.log(`Saved ${messagesToSave.length} messages from batch`);
 
-            // Auto-add contacts from historical messages (both sent and received)
+            // Auto-add contacts from fetched messages (both sent and received)
             // For received: recipientNpub is the sender
             // For sent: recipientNpub is the recipient
             for (const message of messagesToSave) {
-              await this.autoAddContact(message.recipientNpub, false); // Don't mark as unread for history
+              await this.autoAddContact(message.recipientNpub, false);
+
+              const shouldMarkUnread =
+                !!options.markUnread &&
+                message.direction === 'received' &&
+                !isActivelyViewingConversation(message.recipientNpub);
+
+              if (shouldMarkUnread) {
+                addUnreadMessage(user.npub, message.recipientNpub, message.eventId);
+              }
             }
           }
         }

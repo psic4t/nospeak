@@ -6,7 +6,9 @@
   import { goto } from "$app/navigation";
    import { page } from "$app/state";
    import { hapticSelection } from "$lib/utils/haptics";
-   import { currentUser } from "$lib/stores/auth";
+    import { currentUser } from "$lib/stores/auth";
+    import { clearAppBadge, initAppVisibilityAndFocusTracking, syncAppBadge } from "$lib/stores/unreadMessages";
+
    import { AndroidShareTarget, type AndroidSharePayload, fileFromAndroidMediaPayload } from '$lib/core/AndroidShareTarget';
    import { setPendingAndroidMediaShare, setPendingAndroidTextShare } from '$lib/stores/androidShare';
  
@@ -60,6 +62,21 @@
      }
    });
 
+  // Keep PWA app badge in sync with unread counts
+  $effect(() => {
+      const user = $currentUser;
+      if (user?.npub) {
+          void syncAppBadge(user.npub);
+          return;
+      }
+
+      void clearAppBadge();
+  });
+
+
+  onMount(() => {
+      return initAppVisibilityAndFocusTracking();
+  });
 
   onMount(async () => {
     initLanguage();

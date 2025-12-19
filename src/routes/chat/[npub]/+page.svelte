@@ -1,7 +1,8 @@
 <script lang="ts">
     import ChatView from '$lib/components/ChatView.svelte';
     import { messageRepo } from '$lib/db/MessageRepository';
-    import { signer } from '$lib/stores/auth';
+    import { currentUser, signer } from '$lib/stores/auth';
+    import { clearActiveConversation, setActiveConversation } from '$lib/stores/unreadMessages';
     import { onMount } from 'svelte';
     import type { Message } from '$lib/db/db';
     import { messagingService } from '$lib/core/Messaging';
@@ -13,9 +14,23 @@
      const PAGE_SIZE = 50;
 
 
-    let messages = $state<Message[]>([]);
-     let currentPartner = $derived(page.params.npub);
-     let isFetchingHistory = $state(false);
+     let messages = $state<Message[]>([]);
+      let currentPartner = $derived(page.params.npub);
+      let isFetchingHistory = $state(false);
+
+      $effect(() => {
+          const partner = currentPartner;
+          if (!partner || partner === 'ALL') {
+              clearActiveConversation();
+              return;
+          }
+
+          setActiveConversation(partner);
+          return () => {
+              clearActiveConversation();
+          };
+      });
+
      let initialSharedMedia = $state<{ file: File; mediaType: 'image' | 'video' | 'audio' } | null>(null);
      let initialSharedText = $state<string | null>(null);
 
@@ -180,16 +195,18 @@
     });
 </script>
 
-<ChatView
-     {messages}
-     partnerNpub={currentPartner}
-     onLoadMore={handleLoadMore}
-     {isFetchingHistory}
-     {canRequestNetworkHistory}
-     onRequestNetworkHistory={handleRequestNetworkHistory}
-     networkHistoryStatus={networkHistoryStatus}
-     {initialSharedMedia}
-     {initialSharedText}
- />
+{#key currentPartner}
+    <ChatView
+         {messages}
+         partnerNpub={currentPartner}
+         onLoadMore={handleLoadMore}
+         {isFetchingHistory}
+         {canRequestNetworkHistory}
+         onRequestNetworkHistory={handleRequestNetworkHistory}
+         networkHistoryStatus={networkHistoryStatus}
+         {initialSharedMedia}
+         {initialSharedText}
+     />
+{/key}
 
 

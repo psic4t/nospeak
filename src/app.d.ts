@@ -24,8 +24,14 @@ declare global {
  		};
  	}
  
+ 	interface Navigator {
+ 		setAppBadge?: (contents?: number) => Promise<void>;
+ 		clearAppBadge?: () => Promise<void>;
+ 	}
+ 
  	const __APP_VERSION__: string;
- }
+  }
+
  
  export {};
 

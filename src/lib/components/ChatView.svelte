@@ -8,6 +8,7 @@
   import MessageReactions from "./MessageReactions.svelte";
   import MediaUploadButton from "./MediaUploadButton.svelte";
   import { currentUser } from "$lib/stores/auth";
+  import { clearChatUnread, getUnreadSnapshot, isActivelyViewingConversation } from "$lib/stores/unreadMessages";
   import { emojis } from "$lib/utils/emojis";
   import { goto } from '$app/navigation';
   import { hapticLightImpact, hapticSelection } from '$lib/utils/haptics';
@@ -17,6 +18,7 @@
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
   import { openProfileModal } from '$lib/stores/modals';
   import { openImageViewer } from '$lib/stores/imageViewer';
+  import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { nativeDialogService, isAndroidNative } from '$lib/core/NativeDialogs';
@@ -57,22 +59,92 @@
   let chatContainer: HTMLElement;
   let inputElement: HTMLTextAreaElement;
   let currentTime = $state(Date.now());
-  let relayStatusTimeout: number | null = null;
+   let relayStatusTimeout: number | null = null;
    
-   let previousScrollHeight = 0;
-   let isLoadingMore = false;
-   let isSwitchingChat = $state(false);
+    let previousScrollHeight = 0;
+    let isLoadingMore = false;
 
-   $effect(() => {
-     partnerNpub;
-     isSwitchingChat = true;
-     const t = setTimeout(() => {
-       isSwitchingChat = false;
-     }, 1000);
-     return () => clearTimeout(t);
-   });
-   
-   // Single-file media preview state
+    let unreadSnapshotMessageIds = $state<string[]>([]);
+    let activeHighlightMessageIds = $state<string[]>([]);
+    let unreadSnapshotMessageSet = $derived(new Set(unreadSnapshotMessageIds));
+    let activeHighlightMessageSet = $derived(new Set(activeHighlightMessageIds));
+
+
+    function clearEphemeralHighlights() {
+      activeHighlightMessageIds = [];
+    }
+
+    function clearUnreadMarkersForChat() {
+      if (!$currentUser || !partnerNpub) {
+        return;
+      }
+
+      clearChatUnread($currentUser.npub, partnerNpub);
+      unreadSnapshotMessageIds = [];
+      clearEphemeralHighlights();
+    }
+
+    $effect(() => {
+      const user = $currentUser;
+      const partner = partnerNpub;
+      if (!user || !partner) {
+        unreadSnapshotMessageIds = [];
+        clearEphemeralHighlights();
+        return;
+      }
+
+      const snapshot = getUnreadSnapshot(user.npub, partner);
+      unreadSnapshotMessageIds = Array.from(snapshot.messages);
+      clearEphemeralHighlights();
+
+      clearChatUnread(user.npub, partner);
+    });
+
+    onMount(() => {
+      const handleBlur = () => {
+        clearEphemeralHighlights();
+      };
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState !== 'visible') {
+          clearEphemeralHighlights();
+        }
+      };
+
+      const handleNewMessage = (event: Event) => {
+        const partner = partnerNpub;
+        if (!partner) {
+          return;
+        }
+
+        const custom = event as CustomEvent<{ recipientNpub?: string; direction?: string; eventId?: string }>;
+        const { recipientNpub, direction, eventId } = custom.detail || {};
+
+        if (direction !== 'received' || !eventId || recipientNpub !== partner) {
+          return;
+        }
+
+        if (!isActivelyViewingConversation(partner)) {
+          return;
+        }
+
+        if (!activeHighlightMessageIds.includes(eventId)) {
+          activeHighlightMessageIds = [...activeHighlightMessageIds, eventId];
+        }
+      };
+
+      window.addEventListener('blur', handleBlur);
+      window.addEventListener('nospeak:new-message', handleNewMessage);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        window.removeEventListener('blur', handleBlur);
+        window.removeEventListener('nospeak:new-message', handleNewMessage);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    });
+    
+    // Single-file media preview state
   let showMediaPreview = $state(false);
   let pendingMediaFile = $state<File | null>(null);
   let pendingMediaType = $state<'image' | 'video' | 'audio' | null>(null);
@@ -292,7 +364,7 @@
     // This fixes the issue where loading images push the content up
     const distanceFromBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
     
-    if (isSwitchingChat || distanceFromBottom < 1000) {
+    if (distanceFromBottom < 1000) {
       scrollToBottom();
     }
   }
@@ -500,6 +572,7 @@
 
     try {
       await messagingService.sendMessage(partnerNpub, text);
+      clearUnreadMarkersForChat();
       // The message will appear via reactive prop update from parent
       scrollToBottom();
       hapticLightImpact();
@@ -564,8 +637,9 @@
         await messagingService.sendMessage(partnerNpub, caption, parentRumorId);
       }
  
-      didSucceed = true;
-      scrollToBottom();
+       didSucceed = true;
+       clearUnreadMarkersForChat();
+       scrollToBottom();
       hapticLightImpact();
     } catch (e) {
       console.error('Failed to send file message:', e);
@@ -1006,10 +1080,15 @@
         </div>
       {/if}
 
-      {@const caption = isCaptionMessage(messages, i)}
-      {@const captionForThis = getCaptionForParent(messages, i)}
-
-      {#if !caption}
+       {@const caption = isCaptionMessage(messages, i)}
+       {@const captionForThis = getCaptionForParent(messages, i)}
+       {@const hasUnreadMarker = msg.direction === "received" && (
+         unreadSnapshotMessageSet.has(msg.eventId) ||
+         (captionForThis && unreadSnapshotMessageSet.has(captionForThis.eventId)) ||
+         activeHighlightMessageSet.has(msg.eventId)
+       )}
+ 
+       {#if !caption}
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={{ y: 20, duration: 300, easing: cubicOut }}
@@ -1042,9 +1121,12 @@
 
           onmouseup={handleMouseUp}
           onmouseleave={handleMouseUp}
-        >
-           <MessageContent
-             content={msg.message}
+           >
+            {#if hasUnreadMarker}
+              <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-emerald-400/70"></div>
+            {/if}
+            <MessageContent
+              content={msg.message}
              isOwn={msg.direction === "sent"}
              onImageClick={openImageViewer}
              fileUrl={msg.fileUrl}
