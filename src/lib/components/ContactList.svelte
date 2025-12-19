@@ -220,7 +220,7 @@
                 </svg>
             </Button>
         </div>
-        <div class="px-4 pb-3 flex justify-between items-center">
+        <div class="px-2 pb-3 flex justify-between items-center">
              <div class="typ-section dark:text-white">{$t('contacts.title')}</div>
 
              <div class="flex items-center -space-x-px">
