@@ -36,10 +36,10 @@
     {disabled}
     onclick={handleClick}
     class={`
-        relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500/30
+        relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500/30 active:scale-95
         ${checked 
-            ? 'bg-green-200/50 dark:bg-green-900/20 border-green-400/60 dark:border-green-800/50 shadow-sm' 
-            : 'bg-gray-200/50 dark:bg-slate-700/50 border-gray-200 dark:border-slate-600'
+            ? 'bg-blue-500/10 border-blue-500/30 shadow-sm' 
+            : 'bg-transparent border-gray-300 dark:border-slate-700'
         }
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         ${className}
@@ -50,9 +50,12 @@
     <span
         aria-hidden="true"
         class={`
-            pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition-all duration-200 ease-in-out
-            ${checked ? 'translate-x-[22px] bg-green-900 dark:bg-green-100' : 'translate-x-0.5 bg-white'}
-            translate-y-0.5
+            pointer-events-none inline-block h-5 w-5 transform rounded-full shadow-sm transition-all duration-200 ease-in-out
+            ${checked 
+                ? 'translate-x-[22px] bg-blue-400 dark:bg-blue-400' 
+                : 'translate-x-1 bg-blue-500/30 dark:bg-blue-400/20'
+            }
+            translate-y-[3px]
         `}
     ></span>
 </button>
