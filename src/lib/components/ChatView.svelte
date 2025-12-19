@@ -18,7 +18,7 @@
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
   import { openProfileModal } from '$lib/stores/modals';
   import { openImageViewer } from '$lib/stores/imageViewer';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { nativeDialogService, isAndroidNative } from '$lib/core/NativeDialogs';
@@ -56,6 +56,66 @@
   let partnerPicture = $state<string | undefined>(undefined);
   let myPicture = $state<string | undefined>(undefined);
   let isSending = $state(false);
+  let optimisticMessages = $state<Message[]>([]);
+  let displayMessages = $derived([...messages, ...optimisticMessages]);
+  let isDestroyed = false;
+
+  function revokeOptimisticResources(msg: Message) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (msg.fileUrl && msg.fileUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(msg.fileUrl);
+    }
+  }
+
+  function makeOptimisticEventId(): string {
+    return `optimistic:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+  }
+
+  function isPersistedMatch(optimistic: Message, persisted: Message): boolean {
+    if (persisted.direction !== 'sent') return false;
+    if (persisted.recipientNpub !== optimistic.recipientNpub) return false;
+    if ((persisted.rumorKind || 14) !== (optimistic.rumorKind || 14)) return false;
+    if (persisted.sentAt !== optimistic.sentAt) return false;
+
+    if ((optimistic.rumorKind || 14) === 14) {
+      return persisted.message === optimistic.message;
+    }
+
+    // Kind 15: attachment placeholder
+    return (persisted.fileType || '') === (optimistic.fileType || '');
+  }
+
+  $effect(() => {
+    const persistedMessages: Message[] = messages;
+    if (optimisticMessages.length === 0) {
+      return;
+    }
+
+    const remaining: Message[] = [];
+    for (const optimistic of optimisticMessages) {
+      const hasPersisted = persistedMessages.some((m: Message) => isPersistedMatch(optimistic, m));
+      if (hasPersisted) {
+        revokeOptimisticResources(optimistic);
+      } else {
+        remaining.push(optimistic);
+      }
+    }
+
+    if (remaining.length !== optimisticMessages.length) {
+      optimisticMessages = remaining;
+    }
+  });
+
+  onDestroy(() => {
+    isDestroyed = true;
+    for (const optimistic of optimisticMessages) {
+      revokeOptimisticResources(optimistic);
+    }
+  });
+
   let chatContainer: HTMLElement;
   let inputElement: HTMLTextAreaElement;
   let currentTime = $state(Date.now());
@@ -287,10 +347,10 @@
     }
   });
 
-  function getLastSentIndex(): number {
+  function getLastSentIndex(list: Message[]): number {
     let index = -1;
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].direction === "sent") {
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].direction === "sent") {
         index = i;
       }
     }
@@ -332,7 +392,7 @@
   $effect(() => {
     // Dependencies to trigger scroll
     partnerNpub;
-    messages.length;
+    displayMessages.length;
 
     if (!isLoadingMore) {
         scrollToBottom();
@@ -351,7 +411,7 @@
 
   function handleScroll() {
       if (!chatContainer) return;
-      if (chatContainer.scrollTop < 50 && onLoadMore && !isLoadingMore && messages.length > 0) {
+      if (chatContainer.scrollTop < 50 && onLoadMore && !isLoadingMore && displayMessages.length > 0) {
           isLoadingMore = true;
           previousScrollHeight = chatContainer.scrollHeight;
           onLoadMore();
@@ -560,6 +620,18 @@
   const translate = (key: string, vars?: Record<string, unknown>) =>
     (get(t) as (k: string, v?: Record<string, unknown>) => string)(key, vars);
 
+  function removeOptimisticMessage(eventId: string) {
+    const target = optimisticMessages.find((m) => m.eventId === eventId);
+    if (target) {
+      revokeOptimisticResources(target);
+    }
+    optimisticMessages = optimisticMessages.filter((m) => m.eventId !== eventId);
+  }
+
+  function makeOptimisticSentAtMs(): number {
+    return Math.floor(Date.now() / 1000) * 1000;
+  }
+
   async function send() {
     if (!partnerNpub || !inputText.trim()) return;
 
@@ -568,25 +640,40 @@
     if (inputElement) {
       inputElement.style.height = "auto";
     }
-    isSending = true;
 
-    try {
-      await messagingService.sendMessage(partnerNpub, text);
-      clearUnreadMarkersForChat();
-      // The message will appear via reactive prop update from parent
-      scrollToBottom();
-      hapticLightImpact();
-    } catch (e) {
-      console.error("Failed to send message:", e);
-      await nativeDialogService.alert({
-        title: translate('chat.sendFailedTitle'),
-        message:
-          translate('chat.sendFailedMessagePrefix') + (e as Error).message
+    const optimisticEventId = makeOptimisticEventId();
+    const optimistic: Message = {
+      recipientNpub: partnerNpub,
+      message: text,
+      sentAt: makeOptimisticSentAtMs(),
+      eventId: optimisticEventId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: 14,
+    };
+
+    optimisticMessages = [...optimisticMessages, optimistic];
+    scrollToBottom();
+
+    void messagingService
+      .sendMessage(partnerNpub, text)
+      .then(() => {
+        if (isDestroyed) return;
+        clearUnreadMarkersForChat();
+        scrollToBottom();
+        hapticLightImpact();
+      })
+      .catch(async (e) => {
+        if (isDestroyed) return;
+        console.error("Failed to send message:", e);
+        clearRelayStatus();
+        removeOptimisticMessage(optimisticEventId);
+        await nativeDialogService.alert({
+          title: translate('chat.sendFailedTitle'),
+          message: translate('chat.sendFailedMessagePrefix') + (e as Error).message,
+        });
+        inputText = text; // Restore text on failure
       });
-      inputText = text; // Restore text on failure
-    } finally {
-      isSending = false;
-    }
   }
 
   function resetMediaPreview() {
@@ -621,40 +708,88 @@
     bottomSheetDragY = 0;
   }
 
+  function mediaTypeToMime(type: 'image' | 'video' | 'audio'): string {
+    if (type === 'image') {
+      return 'image/jpeg';
+    }
+    if (type === 'video') {
+      return 'video/mp4';
+    }
+    return 'audio/mpeg';
+  }
+
   async function confirmSendMedia() {
     if (!partnerNpub || !pendingMediaFile || !pendingMediaType) {
       return;
     }
- 
+
+    const file = pendingMediaFile;
+    const mediaType = pendingMediaType;
     const caption = pendingMediaCaption.trim();
-    let didSucceed = false;
-    isSending = true;
- 
-    try {
-      const parentRumorId = await messagingService.sendFileMessage(partnerNpub, pendingMediaFile, pendingMediaType);
- 
-      if (caption.length > 0) {
-        await messagingService.sendMessage(partnerNpub, caption, parentRumorId);
+
+    const optimisticEventId = makeOptimisticEventId();
+    const optimisticUrl = URL.createObjectURL(file);
+    const optimistic: Message = {
+      recipientNpub: partnerNpub,
+      message: '',
+      sentAt: makeOptimisticSentAtMs(),
+      eventId: optimisticEventId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: 15,
+      fileUrl: optimisticUrl,
+      fileType: file.type || mediaTypeToMime(mediaType),
+    };
+
+    optimisticMessages = [...optimisticMessages, optimistic];
+
+    // Dismiss the preview immediately after initiating send.
+    resetMediaPreview();
+    scrollToBottom();
+
+    void (async () => {
+      try {
+        const parentRumorId = await messagingService.sendFileMessage(partnerNpub, file, mediaType);
+
+        if (caption.length > 0) {
+          await messagingService.sendMessage(partnerNpub, caption, parentRumorId);
+        }
+
+        if (isDestroyed) return;
+
+        // The persisted attachment message will arrive via the parent refresh.
+        // Remove the optimistic placeholder to avoid duplicates.
+        setTimeout(() => {
+          if (!isDestroyed) {
+            removeOptimisticMessage(optimisticEventId);
+          }
+        }, 0);
+
+        clearUnreadMarkersForChat();
+        scrollToBottom();
+        hapticLightImpact();
+      } catch (e) {
+        if (isDestroyed) return;
+        console.error('Failed to send file message:', e);
+        clearRelayStatus();
+        removeOptimisticMessage(optimisticEventId);
+
+        await nativeDialogService.alert({
+          title: translate('chat.sendFailedTitle'),
+          message: translate('chat.sendFailedMessagePrefix') + (e as Error).message,
+        });
+
+        // Restore preview state for retry
+        pendingMediaFile = file;
+        pendingMediaType = mediaType;
+        pendingMediaCaption = caption;
+        pendingMediaError = translate('chat.sendFailedMessagePrefix') + (e as Error).message;
+        pendingMediaObjectUrl = URL.createObjectURL(file);
+        showMediaPreview = true;
+        isBottomSheetDragging = false;
+        bottomSheetDragY = 0;
       }
- 
-       didSucceed = true;
-       clearUnreadMarkersForChat();
-       scrollToBottom();
-      hapticLightImpact();
-    } catch (e) {
-      console.error('Failed to send file message:', e);
-      await nativeDialogService.alert({
-        title: translate('chat.sendFailedTitle'),
-        message:
-          translate('chat.sendFailedMessagePrefix') + (e as Error).message
-      });
-      pendingMediaError = translate('chat.sendFailedMessagePrefix') + (e as Error).message;
-    } finally {
-      isSending = false;
-      if (didSucceed) {
-        resetMediaPreview();
-      }
-    }
+    })();
   }
 
 
@@ -1019,7 +1154,7 @@
     class="flex-1 overflow-y-auto px-4 pb-28 pt-20 space-y-4 custom-scrollbar"
     onscroll={handleScroll}
   >
-    {#if canRequestNetworkHistory && messages.length > 0}
+    {#if canRequestNetworkHistory && displayMessages.length > 0}
         <div class="flex justify-center p-2">
           <button
            class="typ-meta px-4 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-sm border border-gray-200/60 dark:border-slate-700/60 text-gray-700 dark:text-slate-200 hover:bg-white/90 dark:hover:bg-slate-700/90 transition-all shadow-sm"
@@ -1030,7 +1165,7 @@
          </button>
        </div>
 
-    {:else if networkHistoryStatus === 'no-more' && messages.length > 0}
+    {:else if networkHistoryStatus === 'no-more' && displayMessages.length > 0}
         <div class="flex justify-center p-2">
           <div class="px-3 py-1 rounded-full typ-meta bg-white/70 dark:bg-slate-800/80 border border-gray-200/70 dark:border-slate-700/70 text-gray-500 dark:text-slate-300 shadow-sm backdrop-blur-sm">
            {$t('chat.history.none')}
@@ -1038,7 +1173,7 @@
 
        </div>
 
-    {:else if networkHistoryStatus === 'error' && messages.length > 0}
+    {:else if networkHistoryStatus === 'error' && displayMessages.length > 0}
         <div class="flex justify-center p-2">
          <div class="px-3 py-1 rounded-full typ-meta bg-red-50/80 dark:bg-red-900/40 border border-red-200/80 dark:border-red-500/70 text-red-600 dark:text-red-200 shadow-sm backdrop-blur-sm">
            {$t('chat.history.error')}
@@ -1053,7 +1188,7 @@
       </div>
     {/if}
  
-    {#if messages.length === 0 && !isFetchingHistory}
+    {#if displayMessages.length === 0 && !isFetchingHistory}
       <div class="flex justify-center mt-10">
         <div class="max-w-sm px-4 py-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-gray-200/70 dark:border-slate-700/70 shadow-md backdrop-blur-xl text-center space-y-1">
           <div class="typ-meta font-semibold uppercase text-gray-500 dark:text-slate-400">
@@ -1071,8 +1206,8 @@
     {/if}
 
 
-    {#each messages as msg, i (msg.id || i)}
-      {#if i === 0 || !isSameDay(msg.sentAt, messages[i - 1].sentAt)}
+    {#each displayMessages as msg, i (msg.eventId || msg.id || i)}
+      {#if i === 0 || !isSameDay(msg.sentAt, displayMessages[i - 1].sentAt)}
         <div class="flex justify-center my-2">
           <div class="px-3 py-1 rounded-full typ-meta bg-white/70 dark:bg-slate-800/80 border border-gray-200/70 dark:border-slate-700/70 text-gray-600 dark:text-slate-200 shadow-sm backdrop-blur-sm">
             {formatDateLabel(msg.sentAt)}
@@ -1080,8 +1215,8 @@
         </div>
       {/if}
 
-       {@const caption = isCaptionMessage(messages, i)}
-       {@const captionForThis = getCaptionForParent(messages, i)}
+       {@const caption = isCaptionMessage(displayMessages, i)}
+       {@const captionForThis = getCaptionForParent(displayMessages, i)}
        {@const hasUnreadMarker = msg.direction === "received" && (
          unreadSnapshotMessageSet.has(msg.eventId) ||
          (captionForThis && unreadSnapshotMessageSet.has(captionForThis.eventId)) ||
@@ -1154,10 +1289,20 @@
           >
             {getRelativeTime(msg.sentAt)}
           </div>
-          {#if msg.direction === "sent" && i === getLastSentIndex() && $lastRelaySendStatus && $lastRelaySendStatus.recipientNpub === partnerNpub}
-            <div class="typ-meta mt-0.5 text-right text-blue-100">
-              sent to {$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays
-            </div>
+          {#if msg.direction === "sent" && i === getLastSentIndex(displayMessages) && partnerNpub}
+            {#if $lastRelaySendStatus && $lastRelaySendStatus.recipientNpub === partnerNpub}
+              <div class="typ-meta mt-0.5 text-right text-blue-100">
+                {#if $lastRelaySendStatus.successfulRelays === 0}
+                  sending...
+                {:else}
+                  sent to {$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays
+                {/if}
+              </div>
+            {:else if msg.eventId && msg.eventId.startsWith('optimistic:')}
+              <div class="typ-meta mt-0.5 text-right text-blue-100">
+                sending...
+              </div>
+            {/if}
           {/if}
         </div>
 

@@ -5,8 +5,9 @@ import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { discoverUserRelays } from './connection/Discovery';
+import { publishWithDeadline } from './connection/publishWithDeadline';
 import { notificationService } from './NotificationService';
-import { initRelaySendStatus } from '$lib/stores/sending';
+import { initRelaySendStatus, registerRelaySuccess } from '$lib/stores/sending';
 import { contactRepo } from '$lib/db/ContactRepository';
 import { addUnreadMessage, addUnreadReaction, isActivelyViewingConversation } from '$lib/stores/unreadMessages';
 import { profileResolver } from './ProfileResolver';
@@ -599,8 +600,10 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
       connectionManager.addTemporaryRelay(url);
     }
  
-    // Wait a bit for connections
-    await new Promise((r) => setTimeout(r, 500));
+    // Cleanup temporary relays after sending attempt
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
  
     // 2. Create Rumor (Kind 14)
     const tags: string[][] = [['p', recipientPubkey as string]];
@@ -642,26 +645,53 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     // Initialize ephemeral relay send status for UI (do not persist)
     initRelaySendStatus(giftWrap.id, recipientNpub, recipientRelays.length);
  
-    // 4. Publish to recipient messaging relays
-    for (const url of recipientRelays) {
-      await retryQueue.enqueue(giftWrap, url);
+    const publishResult = await publishWithDeadline({
+      connectionManager,
+      event: giftWrap,
+      relayUrls: recipientRelays,
+      deadlineMs: 5000,
+      onRelaySuccess: (url) => registerRelaySuccess(giftWrap.id, url),
+    });
+
+    if (publishResult.successfulRelays.length === 0) {
+      console.warn('DM send failed to reach any recipient relays', {
+        recipientNpub,
+        giftWrapId: giftWrap.id,
+        failedRelays: publishResult.failedRelays,
+        timedOutRelays: publishResult.timedOutRelays,
+      });
+      throw new Error('Failed to send message to any relay');
     }
- 
+
+    if (publishResult.failedRelays.length > 0 || publishResult.timedOutRelays.length > 0) {
+      console.warn('DM send did not reach some recipient relays', {
+        recipientNpub,
+        giftWrapId: giftWrap.id,
+        successfulRelays: publishResult.successfulRelays,
+        failedRelays: publishResult.failedRelays,
+        timedOutRelays: publishResult.timedOutRelays,
+      });
+    }
+
+    const successfulRelaySet = new Set(publishResult.successfulRelays);
+
+    // Enqueue any remaining relays for best-effort delivery
+    for (const url of recipientRelays) {
+      if (!successfulRelaySet.has(url)) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
     // 5. Create Gift Wrap for Self (History)
     // We encrypt the SAME rumor for OURSELVES.
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
- 
+
     // Publish self-wrap to my messaging relays (may be empty)
     for (const url of senderRelays) {
       await retryQueue.enqueue(selfGiftWrap, url);
     }
- 
-    // 6. Cleanup temporary relays after sending
-    setTimeout(() => {
-      connectionManager.cleanupTemporaryConnections();
-    }, 15000);
- 
-    // 6. Cache locally immediately
+
+    // 6. Cache locally after delivery confirmation
     await messageRepo.saveMessage({
       recipientNpub,
       message: text,
@@ -780,9 +810,11 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     for (const url of allRelays) {
       connectionManager.addTemporaryRelay(url);
     }
- 
-    await new Promise((r) => setTimeout(r, 500));
 
+    // Cleanup temporary relays after sending attempt
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
 
     // 2. Encrypt file with AES-GCM
     const encrypted = await encryptFileWithAesGcm(file);
@@ -820,22 +852,50 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
  
     initRelaySendStatus(giftWrap.id, recipientNpub, recipientRelays.length);
- 
-    for (const url of recipientRelays) {
-      await retryQueue.enqueue(giftWrap, url);
+
+    const publishResult = await publishWithDeadline({
+      connectionManager,
+      event: giftWrap,
+      relayUrls: recipientRelays,
+      deadlineMs: 5000,
+      onRelaySuccess: (url) => registerRelaySuccess(giftWrap.id, url),
+    });
+
+    if (publishResult.successfulRelays.length === 0) {
+      console.warn('DM file send failed to reach any recipient relays', {
+        recipientNpub,
+        giftWrapId: giftWrap.id,
+        failedRelays: publishResult.failedRelays,
+        timedOutRelays: publishResult.timedOutRelays,
+      });
+      throw new Error('Failed to send message to any relay');
     }
- 
+
+    if (publishResult.failedRelays.length > 0 || publishResult.timedOutRelays.length > 0) {
+      console.warn('DM file send did not reach some recipient relays', {
+        recipientNpub,
+        giftWrapId: giftWrap.id,
+        successfulRelays: publishResult.successfulRelays,
+        failedRelays: publishResult.failedRelays,
+        timedOutRelays: publishResult.timedOutRelays,
+      });
+    }
+
+    const successfulRelaySet = new Set(publishResult.successfulRelays);
+
+    // Enqueue any remaining relays for best-effort delivery
+    for (const url of recipientRelays) {
+      if (!successfulRelaySet.has(url)) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
     for (const url of senderRelays) {
       await retryQueue.enqueue(selfGiftWrap, url);
     }
- 
-    setTimeout(() => {
-      connectionManager.cleanupTemporaryConnections();
-    }, 15000);
 
-
-    // 6. Cache locally immediately
+    // 6. Cache locally after delivery confirmation
     await messageRepo.saveMessage({
       recipientNpub,
       message: '',

@@ -329,6 +329,35 @@
                  {/if}
              {/if}
          </div>
+     {:else if fileUrl}
+         <div class="space-y-2">
+             {#if isImageMime(fileType) || isImage(fileUrl)}
+                 {#if onImageClick}
+                     <button
+                         type="button"
+                         class="block my-1 cursor-zoom-in"
+                         onclick={() => onImageClick?.(fileUrl, fileUrl)}
+                     >
+                         <img src={fileUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                     </button>
+                 {:else}
+                     <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="block my-1">
+                         <img src={fileUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                     </a>
+                 {/if}
+             {:else if isVideoMime(fileType) || isVideo(fileUrl)}
+                 <!-- svelte-ignore a11y_media_has_caption -->
+                 <div class="my-1">
+                     <video controls src={fileUrl} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
+                 </div>
+             {:else if isAudioMime(fileType) || isAudio(fileUrl)}
+                 <div class="mt-2 mb-1">
+                     <AudioWaveformPlayer url={fileUrl} isOwn={isOwn} />
+                 </div>
+             {:else}
+                 <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">Download attachment</a>
+             {/if}
+         </div>
      {:else}
          {#each parts as part}
              {#if part.match(/^https?:\/\//)}
