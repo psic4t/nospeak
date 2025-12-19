@@ -30,13 +30,13 @@
     }>();
 
     // Base styles
-    const baseStyles = "inline-flex items-center justify-center rounded-full font-semibold transition-all duration-200 ease-out active:scale-95 disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50";
+    const baseStyles = "inline-flex items-center justify-center rounded-full font-semibold transition-all duration-200 ease-out active:scale-95 disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30";
 
     // Variant styles
     const variants: Record<Variant, string> = {
-        glass: "bg-white/95 dark:bg-slate-800/95 border border-lavender/20 dark:border-lavender/20 text-gray-900 dark:text-gray-200 backdrop-blur-md shadow-md hover:bg-white dark:hover:bg-slate-700 hover:border-lavender/40 dark:hover:border-lavender/40 hover:text-lavender-600 dark:hover:text-lavender-300 hover:shadow-lg shadow-lavender/5",
+        glass: "bg-white/90 dark:bg-slate-800/90 border border-blue-500/10 dark:border-blue-500/15 text-gray-900 dark:text-gray-200 backdrop-blur-md shadow-md hover:bg-blue-500/5 dark:hover:bg-blue-500/10 hover:border-blue-500/20 dark:hover:border-blue-500/25 hover:text-black dark:hover:text-white hover:shadow-lg",
         primary: "bg-green-200/90 dark:bg-green-900/40 text-green-900 dark:text-green-300 border border-green-400/60 dark:border-green-800/50 shadow-md hover:bg-green-300 dark:hover:bg-green-900/60 active:bg-green-400/50 dark:active:bg-green-900/80 hover:text-green-950 dark:hover:text-green-200 hover:shadow-lg",
-        ghost: "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 active:bg-gray-200/50 dark:active:bg-slate-700/80 hover:text-gray-900 dark:hover:text-white border border-transparent",
+        ghost: "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-blue-500/5 dark:hover:bg-blue-500/10 active:bg-blue-500/10 dark:active:bg-blue-500/20 hover:text-gray-900 dark:hover:text-white border border-transparent",
         danger: "bg-red-200/90 dark:bg-red-900/40 text-red-900 dark:text-red-300 border border-red-400/60 dark:border-red-800/50 shadow-md hover:bg-red-300 dark:hover:bg-red-900/60 active:bg-red-400/50 dark:active:bg-red-900/80 hover:text-red-950 dark:hover:text-red-200 hover:shadow-lg"
     };
 

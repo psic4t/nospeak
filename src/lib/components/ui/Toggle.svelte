@@ -36,7 +36,7 @@
     {disabled}
     onclick={handleClick}
     class={`
-        relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500/50
+        relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500/30
         ${checked 
             ? 'bg-green-200/50 dark:bg-green-900/20 border-green-400/60 dark:border-green-800/50 shadow-sm' 
             : 'bg-gray-200/50 dark:bg-slate-700/50 border-gray-200 dark:border-slate-600'
