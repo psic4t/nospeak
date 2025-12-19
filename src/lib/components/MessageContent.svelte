@@ -7,6 +7,7 @@
 
     let {
         content,
+        highlight = undefined,
         isOwn = false,
         onImageClick,
         fileUrl = undefined,
@@ -17,6 +18,7 @@
         onMediaLoad = undefined
     } = $props<{
         content: string;
+        highlight?: string;
         isOwn?: boolean;
         onImageClick?: (url: string, originalUrl?: string | null) => void;
         fileUrl?: string;
@@ -85,6 +87,84 @@
         text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
         
         return text;
+    }
+
+    const highlightNeedle = $derived((highlight ?? '').trim());
+
+    function escapeRegExp(value: string): string {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function applyHighlightToHtml(html: string, needle: string): string {
+        if (!needle) {
+            return html;
+        }
+
+        if (typeof window === 'undefined') {
+            return html;
+        }
+
+        try {
+            const regex = new RegExp(escapeRegExp(needle), 'gi');
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+            const root = doc.body.firstElementChild;
+
+            if (!root) {
+                return html;
+            }
+
+            const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const textNodes: Text[] = [];
+
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    textNodes.push(node as Text);
+                }
+            }
+
+            const markClass = 'bg-yellow-200/70 dark:bg-yellow-400/20 rounded px-0.5';
+
+            for (const textNode of textNodes) {
+                const text = textNode.nodeValue ?? '';
+                regex.lastIndex = 0;
+
+                if (!regex.test(text)) {
+                    continue;
+                }
+
+                regex.lastIndex = 0;
+                const fragment = doc.createDocumentFragment();
+                let lastIndex = 0;
+                let match: RegExpExecArray | null;
+
+                while ((match = regex.exec(text)) !== null) {
+                    const start = match.index;
+                    const end = start + match[0].length;
+
+                    if (start > lastIndex) {
+                        fragment.appendChild(doc.createTextNode(text.slice(lastIndex, start)));
+                    }
+
+                    const mark = doc.createElement('mark');
+                    mark.setAttribute('class', markClass);
+                    mark.textContent = text.slice(start, end);
+                    fragment.appendChild(mark);
+
+                    lastIndex = end;
+                }
+
+                if (lastIndex < text.length) {
+                    fragment.appendChild(doc.createTextNode(text.slice(lastIndex)));
+                }
+
+                textNode.parentNode?.replaceChild(fragment, textNode);
+            }
+
+            return root.innerHTML;
+        } catch {
+            return html;
+        }
     }
 
     function getFirstNonMediaUrl(text: string): string | null {
@@ -389,7 +469,7 @@
                      <a href={part} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">{part}</a>
                  {/if}
              {:else}
-                 <span>{@html parseMarkdown(part)}</span>
+                  <span>{@html applyHighlightToHtml(parseMarkdown(part), highlightNeedle)}</span>
              {/if}
          {/each}
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Message } from "$lib/db/db";
+  import { messageRepo } from "$lib/db/MessageRepository";
   import { profileRepo } from "$lib/db/ProfileRepository";
   import { messagingService } from "$lib/core/Messaging";
   import Avatar from "./Avatar.svelte";
@@ -25,6 +26,7 @@
   import { t } from '$lib/i18n';
   import { get } from 'svelte/store';
   import { isCaptionMessage, getCaptionForParent } from '$lib/core/captionGrouping';
+  import { buildChatHistorySearchResults } from '$lib/core/chatHistorySearch';
   import Button from '$lib/components/ui/Button.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
 
@@ -50,14 +52,163 @@
      initialSharedText?: string | null;
    }>();
  
-   let inputText = $state("");
+    let inputText = $state("");
+
+  // Chat history search
+  let isSearchOpen = $state(false);
+  let searchQuery = $state("");
+  let searchInputElement = $state<HTMLInputElement | null>(null);
+  let searchResults = $state<Message[]>([]);
+  let isSearchingHistory = $state(false);
+  let searchDebounceId: ReturnType<typeof setTimeout> | null = null;
+  let searchToken = 0;
+  let isSearchActive = $derived(searchQuery.trim().length >= 3);
+
+  function cancelPendingSearch() {
+    searchToken += 1;
+    isSearchingHistory = false;
+
+    if (searchDebounceId) {
+      clearTimeout(searchDebounceId);
+      searchDebounceId = null;
+    }
+  }
+
+  function closeSearch() {
+    cancelPendingSearch();
+    isSearchOpen = false;
+    searchQuery = "";
+    searchResults = [];
+  }
+
+  function openSearch() {
+    isSearchOpen = true;
+    setTimeout(() => {
+      searchInputElement?.focus();
+    }, 0);
+  }
+
+  function toggleSearch() {
+    if (isSearchOpen) {
+      closeSearch();
+      return;
+    }
+
+    openSearch();
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') {
+      return;
+    }
+
+    e.preventDefault();
+    hapticSelection();
+    closeSearch();
+  }
+
+  function escapeHtml(value: string): string {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function highlightPlainTextToHtml(text: string, query: string): string {
+    const needle = query.trim();
+    if (!needle) {
+      return escapeHtml(text);
+    }
+
+    const regex = new RegExp(escapeRegExp(needle), 'gi');
+    const markClass = 'bg-yellow-200/70 dark:bg-yellow-400/20 rounded px-0.5';
+
+    let result = '';
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+
+      result += escapeHtml(text.slice(lastIndex, start));
+      result += `<mark class="${markClass}">${escapeHtml(text.slice(start, end))}</mark>`;
+
+      lastIndex = end;
+    }
+
+    result += escapeHtml(text.slice(lastIndex));
+    return result;
+  }
+
+  // Reset search when switching conversations
+  $effect(() => {
+    partnerNpub;
+    closeSearch();
+  });
+
+  // Debounced IndexedDB filtering
+  $effect(() => {
+    const partner = partnerNpub;
+    const query = searchQuery.trim();
+    messages.length;
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!partner || partner === 'ALL' || query.length < 3) {
+      cancelPendingSearch();
+      searchResults = [];
+      return;
+    }
+
+    if (searchDebounceId) {
+      clearTimeout(searchDebounceId);
+      searchDebounceId = null;
+    }
+
+    const currentToken = ++searchToken;
+    isSearchingHistory = true;
+
+    searchDebounceId = setTimeout(() => {
+      void (async () => {
+        try {
+          const allMessages = await messageRepo.getAllMessagesFor(partner);
+
+          if (currentToken !== searchToken) {
+            return;
+          }
+
+          searchResults = buildChatHistorySearchResults(allMessages, query);
+        } catch (e) {
+          console.error('Chat history search failed:', e);
+          if (currentToken === searchToken) {
+            searchResults = [];
+          }
+        } finally {
+          if (currentToken === searchToken) {
+            isSearchingHistory = false;
+          }
+        }
+      })();
+    }, 250);
+  });
 
   let partnerName = $state("");
   let partnerPicture = $state<string | undefined>(undefined);
   let myPicture = $state<string | undefined>(undefined);
   let isSending = $state(false);
   let optimisticMessages = $state<Message[]>([]);
-  let displayMessages = $derived([...messages, ...optimisticMessages]);
+  let displayMessages = $derived(
+    isSearchActive ? searchResults : [...messages, ...optimisticMessages],
+  );
   let isDestroyed = false;
 
   function revokeOptimisticResources(msg: Message) {
@@ -109,12 +260,13 @@
     }
   });
 
-  onDestroy(() => {
-    isDestroyed = true;
-    for (const optimistic of optimisticMessages) {
-      revokeOptimisticResources(optimistic);
-    }
-  });
+   onDestroy(() => {
+     isDestroyed = true;
+     cancelPendingSearch();
+     for (const optimistic of optimisticMessages) {
+       revokeOptimisticResources(optimistic);
+     }
+   });
 
   let chatRoot: HTMLElement;
   let chatContainer: HTMLElement;
@@ -243,6 +395,7 @@
           .slice(0, 5)
       : [],
   );
+
 
   function handleInput(e: Event) {
     const input = e.target as HTMLTextAreaElement;
@@ -389,14 +542,19 @@
     clearRelayStatus();
   });
 
-  // Auto-scroll to bottom on new messages or conversation change
-  $effect(() => {
-    // Dependencies to trigger scroll
-    partnerNpub;
-    displayMessages.length;
+   // Auto-scroll to bottom on new messages or conversation change
+   $effect(() => {
+     // Dependencies to trigger scroll
+     partnerNpub;
+     displayMessages.length;
+     isSearchActive;
 
-    if (!isLoadingMore) {
-        scrollToBottom();
+     if (isSearchActive) {
+       return;
+     }
+
+     if (!isLoadingMore) {
+         scrollToBottom();
     } else if (chatContainer) {
         // Restore scroll position when loading more
         // Use timeout to ensure DOM has updated height
@@ -410,8 +568,9 @@
     }
   });
 
-  function handleScroll() {
-      if (!chatContainer) return;
+   function handleScroll() {
+       if (isSearchActive) return;
+       if (!chatContainer) return;
       if (chatContainer.scrollTop < 50 && onLoadMore && !isLoadingMore && displayMessages.length > 0) {
           isLoadingMore = true;
           previousScrollHeight = chatContainer.scrollHeight;
@@ -1182,7 +1341,40 @@
         </button>
       </div>
 
-    </div>
+      {#if partnerNpub !== 'ALL'}
+        <div class="flex items-center gap-2">
+          <div
+            class={`transition-[max-width,opacity] duration-200 ease-out ${
+              isSearchOpen
+                ? 'max-w-56 opacity-100 overflow-visible'
+                : 'max-w-0 opacity-0 overflow-hidden pointer-events-none'
+            }`}
+          >
+            <input
+              bind:value={searchQuery}
+              bind:this={searchInputElement}
+              placeholder="Search"
+              class="w-full px-4 h-11 border border-gray-200 dark:border-slate-700 rounded-full bg-white/90 dark:bg-slate-800/90 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              aria-label="Search chat"
+              onkeydown={handleSearchKeydown}
+            />
+          </div>
+
+          <Button
+            variant="glass"
+            size="icon"
+            onclick={toggleSearch}
+            class="h-11 w-11"
+            aria-label="Search chat"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </Button>
+        </div>
+      {/if}
+
+     </div>
   {/if}
 
   <div
@@ -1192,55 +1384,69 @@
     onscroll={handleScroll}
     onpointerdown={activateMessageWindow}
   >
-    {#if canRequestNetworkHistory && displayMessages.length > 0}
+    {#if isSearchActive}
+      {#if isSearchingHistory}
         <div class="flex justify-center p-2">
-          <button
-           class="typ-meta px-4 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-sm border border-gray-200/60 dark:border-slate-700/60 text-gray-700 dark:text-slate-200 hover:bg-white/90 dark:hover:bg-slate-700/90 transition-all shadow-sm"
-           type="button"
-           onclick={() => onRequestNetworkHistory && onRequestNetworkHistory()}
-         >
-           {$t('chat.history.fetchOlder')}
-         </button>
-       </div>
-
-    {:else if networkHistoryStatus === 'no-more' && displayMessages.length > 0}
-        <div class="flex justify-center p-2">
-          <div class="px-3 py-1 rounded-full typ-meta bg-white/70 dark:bg-slate-800/80 border border-gray-200/70 dark:border-slate-700/70 text-gray-500 dark:text-slate-300 shadow-sm backdrop-blur-sm">
-           {$t('chat.history.none')}
-         </div>
-
-       </div>
-
-    {:else if networkHistoryStatus === 'error' && displayMessages.length > 0}
-        <div class="flex justify-center p-2">
-         <div class="px-3 py-1 rounded-full typ-meta bg-red-50/80 dark:bg-red-900/40 border border-red-200/80 dark:border-red-500/70 text-red-600 dark:text-red-200 shadow-sm backdrop-blur-sm">
-           {$t('chat.history.error')}
-         </div>
-       </div>
-
-    {/if}
- 
-    {#if isFetchingHistory}
-      <div class="flex justify-center p-2">
-        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-      </div>
-    {/if}
- 
-    {#if displayMessages.length === 0 && !isFetchingHistory}
-      <div class="flex justify-center mt-10">
-        <div class="max-w-sm px-4 py-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-gray-200/70 dark:border-slate-700/70 shadow-md backdrop-blur-xl text-center space-y-1">
-          <div class="typ-meta font-semibold uppercase text-gray-500 dark:text-slate-400">
-            {$t('chat.empty.noMessagesTitle')}
-          </div>
-          <div class="typ-body text-gray-600 dark:text-slate-200">
-            {#if partnerNpub}
-              {get(t)('chat.empty.forContact', { values: { name: partnerName || partnerNpub.slice(0, 10) + '...' } })}
-            {:else}
-              {$t('chat.empty.generic')}
-            {/if}
+          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+        </div>
+      {:else if displayMessages.length === 0}
+        <div class="flex justify-center mt-10">
+          <div class="px-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-gray-200/70 dark:border-slate-700/70 shadow-md backdrop-blur-xl typ-body text-gray-600 dark:text-slate-200">
+            No matches
           </div>
         </div>
-      </div>
+      {/if}
+    {:else}
+      {#if canRequestNetworkHistory && displayMessages.length > 0}
+          <div class="flex justify-center p-2">
+            <button
+             class="typ-meta px-4 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-sm border border-gray-200/60 dark:border-slate-700/60 text-gray-700 dark:text-slate-200 hover:bg-white/90 dark:hover:bg-slate-700/90 transition-all shadow-sm"
+             type="button"
+             onclick={() => onRequestNetworkHistory && onRequestNetworkHistory()}
+           >
+             {$t('chat.history.fetchOlder')}
+           </button>
+         </div>
+
+      {:else if networkHistoryStatus === 'no-more' && displayMessages.length > 0}
+          <div class="flex justify-center p-2">
+            <div class="px-3 py-1 rounded-full typ-meta bg-white/70 dark:bg-slate-800/80 border border-gray-200/70 dark:border-slate-700/70 text-gray-500 dark:text-slate-300 shadow-sm backdrop-blur-sm">
+             {$t('chat.history.none')}
+           </div>
+
+         </div>
+
+      {:else if networkHistoryStatus === 'error' && displayMessages.length > 0}
+          <div class="flex justify-center p-2">
+           <div class="px-3 py-1 rounded-full typ-meta bg-red-50/80 dark:bg-red-900/40 border border-red-200/80 dark:border-red-500/70 text-red-600 dark:text-red-200 shadow-sm backdrop-blur-sm">
+             {$t('chat.history.error')}
+           </div>
+         </div>
+
+      {/if}
+   
+      {#if isFetchingHistory}
+        <div class="flex justify-center p-2">
+          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+        </div>
+      {/if}
+   
+      {#if displayMessages.length === 0 && !isFetchingHistory}
+        <div class="flex justify-center mt-10">
+          <div class="max-w-sm px-4 py-3 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-gray-200/70 dark:border-slate-700/70 shadow-md backdrop-blur-xl text-center space-y-1">
+            <div class="typ-meta font-semibold uppercase text-gray-500 dark:text-slate-400">
+              {$t('chat.empty.noMessagesTitle')}
+            </div>
+            <div class="typ-body text-gray-600 dark:text-slate-200">
+              {#if partnerNpub}
+                {get(t)('chat.empty.forContact', { values: { name: partnerName || partnerNpub.slice(0, 10) + '...' } })}
+              {:else}
+                {$t('chat.empty.generic')}
+              {/if}
+            </div>
+          </div>
+        </div>
+      {/if}
     {/if}
 
 
@@ -1298,23 +1504,24 @@
             {#if hasUnreadMarker}
               <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-emerald-400/70"></div>
             {/if}
-            <MessageContent
-              content={msg.message}
-             isOwn={msg.direction === "sent"}
-             onImageClick={openImageViewer}
-             fileUrl={msg.fileUrl}
-             fileType={msg.fileType}
-             fileEncryptionAlgorithm={msg.fileEncryptionAlgorithm}
-             fileKey={msg.fileKey}
-             fileNonce={msg.fileNonce}
-             onMediaLoad={handleMediaLoad}
-           />
+             <MessageContent
+               content={msg.message}
+               highlight={isSearchActive ? searchQuery : undefined}
+              isOwn={msg.direction === "sent"}
+              onImageClick={openImageViewer}
+              fileUrl={msg.fileUrl}
+              fileType={msg.fileType}
+              fileEncryptionAlgorithm={msg.fileEncryptionAlgorithm}
+              fileKey={msg.fileKey}
+              fileNonce={msg.fileNonce}
+              onMediaLoad={handleMediaLoad}
+            />
 
-           {#if captionForThis}
-             <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">
-               {captionForThis.message}
-             </div>
-           {/if}
+            {#if captionForThis}
+              <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">
+                {@html highlightPlainTextToHtml(captionForThis.message, isSearchActive ? searchQuery : '')}
+              </div>
+            {/if}
 
            <MessageReactions
              targetEventId={msg.rumorId || ''}
