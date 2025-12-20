@@ -54,7 +54,6 @@
             
             <Button 
                 onclick={copyUri}
-                variant="glass"
                 class="w-full"
             >
                 {copied ? $t('auth.amber.copied') : $t('auth.amber.copyConnectionString')}

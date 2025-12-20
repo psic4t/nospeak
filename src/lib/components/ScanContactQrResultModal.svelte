@@ -124,7 +124,6 @@
             <Button
                 onclick={close}
                 aria-label="Close modal"
-                variant="glass"
                 size="icon"
                 class="absolute top-4 right-4 z-10"
             >
@@ -190,7 +189,6 @@
 
             <div class="mt-6 flex justify-end gap-3">
                 <Button
-                    variant="glass"
                     size="sm"
                     onclick={close}
                 >

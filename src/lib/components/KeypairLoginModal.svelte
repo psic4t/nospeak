@@ -62,7 +62,6 @@
             <Button
                 onclick={close}
                 aria-label="Close modal"
-                variant="glass"
                 size="icon"
                 class="absolute top-4 right-4 z-10"
             >
@@ -102,7 +101,7 @@
             <div class="flex items-center justify-between gap-3">
                 <Button
                     onclick={generateNewKeypair}
-                    variant="glass"
+                    
                     size="icon"
                     aria-label={$t('auth.keypair.generateAnother')}
                 >

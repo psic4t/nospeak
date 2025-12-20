@@ -1218,7 +1218,6 @@
         <Button
           onclick={resetMediaPreview}
           aria-label="Close modal"
-          variant="glass"
           size="icon"
           class="hidden md:flex absolute top-3 right-3 z-10"
         >
@@ -1267,7 +1266,6 @@
 
         <div class="flex justify-end gap-2 pt-1">
           <Button
-            variant="glass"
             onclick={resetMediaPreview}
             disabled={isSending}
           >
@@ -1380,7 +1378,6 @@
           </div>
 
           <Button
-            variant="glass"
             size="icon"
             onclick={toggleSearch}
             class="h-11 w-11 relative z-40"

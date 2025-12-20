@@ -190,7 +190,6 @@
             <Button
                 onclick={closeWithCleanup}
                 aria-label="Close modal"
-                variant="glass"
                 size="icon"
                 class="absolute top-4 right-4 z-10"
             >

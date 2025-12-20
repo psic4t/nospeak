@@ -283,7 +283,6 @@
         <div class={`flex items-center justify-end gap-2 p-3 text-white ${isAndroidNativeEnv ? 'pt-12' : ''}`}>
             {#if !isAndroidNativeEnv}
                 <Button
-                    variant="glass"
                     size="icon"
                     onclick={toggleImageViewerFit}
                     aria-label={imageViewerFitToScreen ? 'View image at full size' : 'Fit image to screen'}
@@ -315,7 +314,6 @@
             {/if}
 
             <Button
-                variant="glass"
                 size="icon"
                 onclick={downloadActiveImage}
                 aria-label="Download image"
@@ -329,7 +327,6 @@
 
             {#if isAndroidNativeEnv}
                 <Button
-                    variant="glass"
                     size="icon"
                     onclick={shareActiveImage}
                     aria-label="Share image"
@@ -345,7 +342,6 @@
             {/if}
 
             <Button
-                variant="glass"
                 size="icon"
                 onclick={closeImageViewer}
                 aria-label="Close image viewer"

@@ -12,7 +12,6 @@
 }`}>
     <Button 
         onclick={() => showRelayStatusModal.set(true)}
-        variant="glass"
         size="sm"
         class={`gap-2 ${isAndroidApp ? 'mr-2' : ''}`}
     >

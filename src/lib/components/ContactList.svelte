@@ -188,9 +188,8 @@
                           onclick={() => {
                                modals.showUserQrModal.set(true);
  
-                          }}
-                         variant="glass"
-                         size="icon"
+                           }}
+                          size="icon"
                          aria-label="Show nostr QR code"
                      >
                          <svg
@@ -223,9 +222,8 @@
                  onclick={() => {
                       modals.showSettingsModal.set(true);
  
-                 }} 
-                variant="glass"
-                size="icon"
+                  }} 
+                 size="icon"
                 aria-label="Open settings"
             >
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -246,9 +244,8 @@
                             onclick={() => {
                                 (modals as any).showScanContactQrModal.set(true);
    
-                            }}
-                           variant="glass"
-                           size="icon"
+                             }}
+                            size="icon"
                            aria-label={$t('contacts.scanQrAria')}
                            class="rounded-none rounded-l-full bg-transparent dark:bg-transparent shadow-none hover:shadow-none focus-visible:z-10"
                        >
@@ -274,9 +271,8 @@
                    <Button 
                        onclick={() => {
                            modals.showManageContactsModal.set(true);
-                       }}
-                      variant="glass"
-                      class={`
+                        }}
+                       class={`
                            ${canScanQr ? 'rounded-none rounded-r-full' : 'rounded-full'}
                             bg-transparent dark:bg-transparent shadow-none hover:shadow-none focus-visible:z-10
                       `}

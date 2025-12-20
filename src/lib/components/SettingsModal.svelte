@@ -502,7 +502,6 @@
            close();
          }}
          aria-label="Close modal"
-         variant="glass"
          size="icon"
          class="hidden md:flex absolute top-4 right-4 z-10"
        >

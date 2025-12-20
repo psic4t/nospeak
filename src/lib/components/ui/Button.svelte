@@ -2,11 +2,11 @@
     import { hapticSelection } from '$lib/utils/haptics';
 
     // Props interface using Svelte 5 $props
-    type Variant = 'glass' | 'primary' | 'ghost' | 'danger';
+    type Variant = 'filled-tonal' | 'primary' | 'ghost' | 'danger';
     type Size = 'sm' | 'md' | 'lg' | 'icon';
 
     let { 
-        variant = 'glass',
+        variant = 'filled-tonal',
         size = 'md',
         disabled = false,
         loading = false,
@@ -34,7 +34,7 @@
 
     // Variant styles
     const variants: Record<Variant, string> = {
-        glass: "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]",
+        'filled-tonal': "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]",
         primary: "bg-green-200/90 dark:bg-green-900/40 text-green-900 dark:text-green-300 border border-green-400/60 dark:border-green-800/50 shadow-md hover:bg-green-300 dark:hover:bg-green-900/60 active:bg-green-400/50 dark:active:bg-green-900/80 hover:text-green-950 dark:hover:text-green-200 hover:shadow-lg",
         ghost: "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-blue-500/5 dark:hover:bg-blue-500/10 active:bg-blue-500/10 dark:active:bg-blue-500/20 hover:text-gray-900 dark:hover:text-white border border-transparent focus-visible:ring-[rgb(var(--color-lavender-rgb)/0.45)] focus-visible:ring-inset",
         danger: "bg-red-200/90 dark:bg-red-900/40 text-red-900 dark:text-red-300 border border-red-400/60 dark:border-red-800/50 shadow-md hover:bg-red-300 dark:hover:bg-red-900/60 active:bg-red-400/50 dark:active:bg-red-900/80 hover:text-red-950 dark:hover:text-red-200 hover:shadow-lg"
