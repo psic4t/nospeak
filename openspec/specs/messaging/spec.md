@@ -557,7 +557,8 @@ When running inside the Android Capacitor app shell with background messaging en
 - **THEN** the native service SHALL attempt to decrypt the gift-wrap using the active Android signer integration
 - **AND** when the inner rumor is a Kind 14 text message authored by another user, it SHALL raise an Android OS notification whose body includes a truncated plaintext preview
 - **AND** when the inner rumor is a Kind 15 file message authored by another user, it SHALL raise an Android OS notification whose body includes the phrase `Message: Sent you an attachment`
-- **AND** when decryption is not available or fails, it SHALL instead raise a generic notification that indicates a new encrypted message has arrived.
+- **AND** when the decrypted inner rumor is a NIP-25 `kind 7` reaction, it SHALL NOT raise an Android OS notification for that reaction
+- **AND** when decryption is not available or fails, it SHALL NOT raise a generic "new encrypted message" notification.
 
 #### Scenario: Background notifications show cached sender identity when available
 - **GIVEN** the same background messaging setup as above
@@ -1039,42 +1040,23 @@ When message notifications are enabled for the current device and the platform h
 - **THEN** the system SHALL display a browser notification indicating that Contact B reacted to the user's message (for example, including the sender name and reaction emoji when available)
 - **AND** activating the notification SHALL keep or bring the nospeak window to the foreground and navigate to the conversation with Contact B.
 
-#### Scenario: Web browser suppresses reaction notification for active conversation
-- **GIVEN** the user is accessing nospeak in a supported web browser
-- **AND** message notifications are enabled in Settings → General
-- **AND** the browser has granted notification permission
-- **AND** the nospeak window is visible and focused
-- **AND** the user is currently viewing an open conversation with Contact C
-- **WHEN** a new NIP-25 `kind 7` reaction addressed to the current user is received from Contact C and processed by the messaging pipeline
-- **THEN** the system SHALL NOT display a browser notification for that reaction
-- **AND** the reaction SHALL still be rendered under the corresponding message and SHALL update unread indicators according to the reaction unread requirements.
-
-#### Scenario: Android app shows local notification for reaction via background service
+#### Scenario: Android app does not raise reaction notifications from background service
 - **GIVEN** the user is running nospeak inside the Android Capacitor app shell
 - **AND** message notifications are enabled in Settings → General
 - **AND** the Android OS has granted permission for local notifications
 - **AND** Android background messaging is enabled and the native foreground service for background messaging is active
 - **WHEN** a new NIP-25 `kind 7` reaction addressed to the current user is received while the app UI is not visible
-- **THEN** the native foreground service SHALL emit an Android OS notification for the new reaction
-- **AND** the notification body SHALL include a short reaction preview (for example, `Reaction: ❤️`)
-- **AND** activating the notification SHALL bring the nospeak Android app to the foreground and navigate to the conversation with that sender.
-
-#### Scenario: Reaction notifications suppressed when disabled or permission missing
-- **GIVEN** either message notifications are disabled in Settings → General for the current device or the platform has denied notification permission
-- **WHEN** a new NIP-25 `kind 7` reaction addressed to the current user is received
-- **THEN** the system SHALL NOT show a browser or Android OS notification for that reaction
-- **AND** the rest of the messaging behavior for reactions (storage and in-app display under messages, and unread indicators) SHALL continue to function normally.
+- **THEN** the native foreground service SHALL NOT emit an Android OS notification for that reaction.
 
 ### Requirement: Background Messaging Covers Reaction Gift-Wrap Events
-When running inside the Android Capacitor app shell with background messaging enabled, the Android-native foreground service responsible for background messaging SHALL handle gift-wrapped events whose inner rumor is a NIP-25 `kind 7` reaction and SHALL surface an Android OS notification preview for them when decryption is available.
+When running inside the Android Capacitor app shell with background messaging enabled, the Android-native foreground service responsible for background messaging SHALL handle gift-wrapped events whose inner rumor is a NIP-25 `kind 7` reaction without surfacing an Android OS notification preview for them.
 
-#### Scenario: Background service raises reaction preview notification for reaction gift-wrap
+#### Scenario: Background service suppresses reaction preview notifications for reaction gift-wrap
 - **GIVEN** the user is logged in, has enabled background messaging in Settings → General, and is running inside the Android Capacitor app shell
 - **AND** the native Android foreground service for background messaging is active and subscribed to NIP-17 DM gift-wrapped events addressed to the user
 - **AND** message notifications are enabled and Android has granted local notification permission
 - **WHEN** a gift-wrapped event is delivered from any configured read relay whose decrypted inner rumor is a NIP-25 `kind 7` reaction authored by another user
-- **THEN** the native service SHALL raise an Android OS notification whose body includes a short reaction preview (for example, `Reaction: ❤️`)
-- **AND** it SHALL include this activity in the same per-conversation grouping used for other background message notifications.
+- **THEN** the native service SHALL NOT raise an Android OS notification for that reaction.
 
 ### Requirement: Sender Avatar Fallback for Messaging Notifications
 When a message or reaction notification is shown for a specific sender, the system SHALL prefer showing the sender’s profile picture when available. When the sender has no profile picture, the system SHALL instead use a deterministic robohash avatar derived from the sender’s `npub` using the same seed logic as the in-app avatar fallback. If the avatar cannot be resolved due to platform limitations or fetch failures, the system SHALL fall back to the branded nospeak icon while still showing the notification.
@@ -1324,4 +1306,15 @@ When cached sender identity data is available on the device, the native service 
 - **AND** the notification SHALL include exactly one `MessagingStyle.Message` whose text is the latest conversation activity preview
 - **AND** when cached sender identity is available, the sender `Person` SHOULD use the cached username and cached avatar as its icon on a best-effort basis
 - **AND** activating the notification SHALL bring the nospeak Android app to the foreground and navigate to the conversation with that sender.
+
+### Requirement: Heads-Up Defaults for Android Background DMs
+When running inside the Android Capacitor app shell with background messaging enabled and active, the Android-native background messaging service SHALL configure its message notification channel so that new decrypted DM notifications are Heads-Up eligible by default.
+
+#### Scenario: Message channel defaults allow Heads-Up notifications
+- **GIVEN** the user is running nospeak inside the Android Capacitor app shell
+- **AND** background messaging is enabled and the native Android foreground service for background messaging is active
+- **WHEN** the Android notification channel used for background DM notifications is created
+- **THEN** it SHALL use an importance level equivalent to `IMPORTANCE_HIGH`
+- **AND** it SHALL enable sound and vibration by default
+- **AND** it SHALL allow lockscreen content visibility (subject to user OS privacy settings).
 

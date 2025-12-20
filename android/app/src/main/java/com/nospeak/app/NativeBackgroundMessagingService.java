@@ -18,6 +18,8 @@ import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Shader;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -242,14 +244,32 @@ public class NativeBackgroundMessagingService extends Service {
             // Do not show app icon badge for the persistent foreground-service notification.
             channel.setShowBadge(false);
 
+            // Testing-stage behavior: recreate the messages channel so default importance/sound/vibration
+            // changes take effect immediately.
+            manager.deleteNotificationChannel(CHANNEL_MESSAGES_ID);
+
             NotificationChannel messagesChannel = new NotificationChannel(
                     CHANNEL_MESSAGES_ID,
                     "nospeak background messages",
-                    NotificationManager.IMPORTANCE_DEFAULT
+                    NotificationManager.IMPORTANCE_HIGH
             );
             messagesChannel.setDescription("Notifications for new encrypted messages received in background");
             // Allow app icon badges for actual message notifications.
             messagesChannel.setShowBadge(true);
+
+            messagesChannel.enableVibration(true);
+            messagesChannel.setVibrationPattern(new long[] { 0, 250, 250, 250 });
+            messagesChannel.enableLights(true);
+            messagesChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
+            Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            if (sound != null) {
+                AudioAttributes attrs = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build();
+                messagesChannel.setSound(sound, attrs);
+            }
 
             manager.createNotificationChannel(channel);
             manager.createNotificationChannel(messagesChannel);
@@ -458,12 +478,11 @@ public class NativeBackgroundMessagingService extends Service {
 
         DecryptedRumor rumor = tryDecryptGiftWrapToRumor(giftWrapEvent, currentPubkeyHex);
         if (rumor == null) {
-            showGenericEncryptedMessageNotification();
+            // Testing-stage behavior: suppress generic "new encrypted message" notifications.
             return;
         }
 
         if (rumor.pubkeyHex == null || rumor.pubkeyHex.isEmpty()) {
-            showGenericEncryptedMessageNotification();
             return;
         }
 
@@ -472,10 +491,15 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        // Only notify for decrypted DMs (kinds 14 and 15). Reactions (kind 7) and other rumor kinds
+        // are treated as background activity but do not produce OS notifications.
+        if (rumor.kind != 14 && rumor.kind != 15) {
+            return;
+        }
+
         String partnerPubkeyHex = rumor.pubkeyHex;
         String preview = resolveRumorPreview(rumor);
         if (preview == null) {
-            showGenericEncryptedMessageNotification();
             return;
         }
 
@@ -532,7 +556,9 @@ public class NativeBackgroundMessagingService extends Service {
                 .setSmallIcon(R.drawable.ic_stat_nospeak)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setStyle(messagingStyle);
 
         if (avatar != null) {
@@ -646,7 +672,9 @@ public class NativeBackgroundMessagingService extends Service {
                 .setSmallIcon(R.drawable.ic_stat_nospeak)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setStyle(messagingStyle);
 
         if (avatar != null) {
