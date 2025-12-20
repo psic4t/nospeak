@@ -302,10 +302,10 @@
 
   <div class="flex-1 overflow-y-auto custom-scrollbar pt-[120px] pb-16">
     {#if $contactsStore.length === 0}
-      <div class="space-y-3 p-3 animate-pulse">
+      <div class="space-y-3 p-2 animate-pulse">
         {#each Array(5) as _}
           <div
-            class="flex items-center gap-3 p-3 rounded-2xl bg-white/20 dark:bg-slate-800/20"
+            class="flex items-center gap-3 p-2 rounded-full bg-white/20 dark:bg-slate-800/20"
           >
             <div
               class="w-12 h-12 rounded-full bg-gray-200/50 dark:bg-slate-700/50"
@@ -340,7 +340,7 @@
           e.preventDefault();
         }}
         class:select-none={isAndroidApp}
-        class={`p-3 mx-3 my-1.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-150 ease-out group border border-white/20 dark:border-transparent active:scale-[0.98] ${
+        class={`p-2 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-150 ease-out group border border-white/20 dark:border-transparent active:scale-[0.98] ${
           page.url.pathname.includes(contact.npub)
             ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] shadow-sm border-[rgb(var(--color-lavender-rgb)/0.18)] dark:border-[rgb(var(--color-lavender-rgb)/0.24)]"
             : "bg-white/10 dark:bg-transparent hover:bg-white/20 dark:hover:bg-slate-800/70 hover:shadow-lg dark:hover:border-white/10"

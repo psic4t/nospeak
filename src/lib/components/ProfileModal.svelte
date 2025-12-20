@@ -109,8 +109,8 @@
 
                     <!-- Profile Header -->
                     <div class="px-6 relative">
-                        <div class="-mt-16 mb-3 inline-block rounded-2xl p-1 bg-white dark:bg-slate-800 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
-                             <Avatar npub={npub} src={profile.metadata?.picture} size="2xl" class="rounded-xl" />
+                        <div class="-mt-16 mb-3 inline-block rounded-full p-1 bg-white dark:bg-slate-800 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                             <Avatar npub={npub} src={profile.metadata?.picture} size="2xl" class="rounded-full" />
                         </div>
 
                         <div class="flex flex-col mb-4">

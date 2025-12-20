@@ -442,7 +442,7 @@
                                 {#each searchResults as result (result.npub)}
                                     <button
                                         type="button"
-                                        class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 text-left transition-colors border-b border-gray-50 dark:border-slate-800 last:border-0"
+                                        class="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 dark:hover:bg-slate-700/50 text-left transition-colors border-b border-gray-50 dark:border-slate-800 last:border-0"
                                         onclick={() => selectSearchResult(result)}
                                     >
                                         <Avatar
@@ -520,7 +520,7 @@
                     </div>
                 {/if}
                 {#each displayContacts as contact}
-                    <div class="flex justify-between items-center p-3 border border-gray-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-800/40 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors shadow-sm">
+                    <div class="flex justify-between items-center p-2 border border-gray-100 dark:border-slate-800 rounded-full bg-white dark:bg-slate-800/40 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors shadow-sm">
                         <div class="flex items-center gap-3 min-w-0">
                             <Avatar 
                                 npub={contact.npub}
