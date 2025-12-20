@@ -305,7 +305,7 @@
       <div class="space-y-3 p-2 animate-pulse">
         {#each Array(5) as _}
           <div
-            class="flex items-center gap-3 p-2 rounded-full bg-white/20 dark:bg-slate-800/20"
+            class="flex items-center gap-3 p-2 rounded-full bg-[rgb(var(--color-lavender-rgb)/0.10)] dark:bg-[rgb(var(--color-lavender-rgb)/0.14)]"
           >
             <div
               class="w-12 h-12 rounded-full bg-gray-200/50 dark:bg-slate-700/50"
@@ -340,10 +340,10 @@
           e.preventDefault();
         }}
         class:select-none={isAndroidApp}
-        class={`p-2 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-150 ease-out group border border-white/20 dark:border-transparent active:scale-[0.98] ${
+        class={`p-2 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-200 ease-out group active:scale-[0.98] ${
           page.url.pathname.includes(contact.npub)
-            ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] shadow-sm border-[rgb(var(--color-lavender-rgb)/0.18)] dark:border-[rgb(var(--color-lavender-rgb)/0.24)]"
-            : "bg-white/10 dark:bg-transparent hover:bg-white/20 dark:hover:bg-slate-800/70 hover:shadow-lg dark:hover:border-white/10"
+            ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
+            : "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
         }`}
       >
         <Avatar
