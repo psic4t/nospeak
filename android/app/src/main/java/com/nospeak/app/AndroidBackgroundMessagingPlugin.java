@@ -5,7 +5,6 @@ import android.content.Intent;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSArray;
-import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -44,6 +43,8 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
             }
         }
 
+        AndroidBackgroundMessagingPrefs.saveStartConfig(getContext(), mode, pubkeyHex, relays, summary);
+
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         intent.setAction(NativeBackgroundMessagingService.ACTION_START);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_MODE, mode);
@@ -66,6 +67,8 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
             return;
         }
 
+        AndroidBackgroundMessagingPrefs.saveSummary(getContext(), summary);
+
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         intent.setAction(NativeBackgroundMessagingService.ACTION_UPDATE);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_SUMMARY, summary);
@@ -75,6 +78,8 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
 
     @PluginMethod
     public void stop(PluginCall call) {
+        AndroidBackgroundMessagingPrefs.setEnabled(getContext(), false);
+
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         getContext().stopService(intent);
         call.resolve();

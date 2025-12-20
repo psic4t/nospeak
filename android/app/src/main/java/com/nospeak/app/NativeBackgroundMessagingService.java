@@ -58,7 +58,9 @@ public class NativeBackgroundMessagingService extends Service {
     private final Set<WebSocket> historyCompleted = new HashSet<>();
     private String currentPubkeyHex;
     private String currentMode = "amber";
- 
+
+    private int configuredRelaysCount = 0;
+
     private final Map<String, WebSocket> activeSockets = new HashMap<>();
     private final Map<String, Integer> retryAttempts = new HashMap<>();
     private Handler handler;
@@ -80,8 +82,12 @@ public class NativeBackgroundMessagingService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) {
-            stopSelf();
-            return START_NOT_STICKY;
+            Intent restoredIntent = AndroidBackgroundMessagingPrefs.buildStartServiceIntent(getApplicationContext());
+            if (restoredIntent == null) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            intent = restoredIntent;
         }
 
         String action = intent.getAction();
@@ -107,7 +113,8 @@ public class NativeBackgroundMessagingService extends Service {
 
             currentPubkeyHex = intent.getStringExtra(EXTRA_PUBKEY_HEX);
             String[] relays = intent.getStringArrayExtra(EXTRA_READ_RELAYS);
- 
+            configuredRelaysCount = relays != null ? relays.length : 0;
+
             Notification notification = buildNotification(currentSummary);
             startForeground(NOTIFICATION_ID, notification);
  
@@ -413,7 +420,9 @@ public class NativeBackgroundMessagingService extends Service {
         }
  
         String text;
-        if (connectedCount > 0) {
+        if (configuredRelaysCount == 0) {
+            text = "No read relays configured";
+        } else if (connectedCount > 0) {
             text = "Connected relays: " + connectedCount;
         } else {
             text = "Not connected to relays";
