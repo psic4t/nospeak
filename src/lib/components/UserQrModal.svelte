@@ -104,7 +104,7 @@
         <div
             in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }}
             out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-            class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl w-full max-w-sm rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none px-6 pb-6 pt-14"
+            class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl w-full max-w-sm rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none p-6"
         >
             <Button
                  onclick={() => { hapticSelection(); close(); }}
@@ -128,14 +128,14 @@
                 </svg>
             </Button>
 
-            <div class="flex items-center gap-3 mb-6">
+            <div class="flex items-center gap-3 mb-6 pr-16 md:pr-14">
                 <Avatar
                     npub={$currentUser?.npub || ''}
                     src={picture}
                     size="md"
                     class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
                 />
-                <div class="flex flex-col">
+                <div class="flex flex-col flex-1 min-w-0">
                     <div class="text-base font-semibold text-gray-900 dark:text-white">
                         {displayName || $currentUser?.npub?.slice(0, 10) + '...'}
                     </div>
