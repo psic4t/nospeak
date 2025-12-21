@@ -69,48 +69,34 @@ The project SHALL define a documented build and release pipeline for the Android
 - **AND** SHALL be able to submit it to the chosen distribution channel (such as the Google Play Store) without requiring undocumented manual configuration changes.
 
 ### Requirement: Android Background Messaging Foreground Service
-The Android Capacitor app shell SHALL provide a background messaging mode that keeps the user's read relays connected while the app UI is not visible by running the messaging stack inside a native Android foreground service that is started and controlled via a dedicated Capacitor plugin.
+When running inside the Android Capacitor app shell with background messaging enabled, the native Android foreground service responsible for background messaging SHALL suppress Android OS notification floods caused by historical replay on initial enable and on service restarts.
 
-When the current session uses an external signer such as Amber, this native service SHALL decrypt gift-wrapped messages via the signer integration.
+The service SHALL implement a persisted notification baseline (cutoff) that determines the earliest eligible decrypted DM rumor timestamp that may generate an Android OS notification preview.
 
-When the current session uses a local key (nsec) login, this native service SHALL decrypt gift-wrapped messages using a locally stored secret key (NIP-44 v2) that is persisted in Android-native, Keystore-backed storage.
+- The baseline SHALL be stored per Android installation.
+- The baseline eligibility decision SHALL be based on the decrypted inner rumor timestamp (`created_at`) when available, rather than the outer gift-wrap event timestamp.
+- The service SHALL apply a maximum backlog eligibility window of 15 minutes on service restarts.
 
-In both modes, the native service SHALL raise OS notifications that include short plaintext previews for messages and reactions, consistent with existing lockscreen privacy and notification routing requirements.
+#### Scenario: First enable does not notify historical messages
+- **GIVEN** the user has just logged in and the web runtime explicitly enables Android background messaging
+- **AND** the native Android foreground service starts and subscribes to gift-wrapped events for the user
+- **WHEN** the relays deliver historical gift-wrap events that decrypt to DM rumors created before the moment background messaging was enabled
+- **THEN** the service SHALL NOT emit Android OS notifications for those historical DMs
+- **AND** it MAY still update internal dedupe state without notifying.
 
-#### Scenario: Native foreground service emits preview notifications for Amber sessions
-- **GIVEN** the user is running nospeak inside the Android Capacitor app shell and has enabled background messaging
-- **AND** the native foreground service is active
-- **AND** message notifications are enabled and Android has granted local notification permission
-- **AND** the current session uses an external signer (Amber)
-- **WHEN** a new gift-wrapped message or reaction addressed to the current user is delivered from any configured read relay while the app UI is not visible
-- **THEN** the native foreground service SHALL attempt to decrypt the gift-wrap using the external signer integration
-- **AND** it SHALL raise an Android OS notification that includes a short preview (for example, a truncated plaintext message preview or `Reaction: ❤️`) when the device is unlocked
-- **AND** activating the notification SHALL open the nospeak app and navigate to the corresponding chat conversation.
+#### Scenario: Service restart caps backlog notifications to 15 minutes
+- **GIVEN** the user previously enabled Android background messaging
+- **AND** the native Android foreground service restarts due to device reboot, app update, or process restart
+- **WHEN** the relays deliver gift-wrap events that decrypt to DM rumors
+- **THEN** only rumors whose decrypted inner rumor timestamps fall within the last 15 minutes (relative to current device time) SHALL be eligible to trigger Android OS notifications
+- **AND** older rumors SHALL be suppressed to avoid notification floods.
 
-#### Scenario: Native foreground service emits preview notifications for local-key sessions
-- **GIVEN** the user is running nospeak inside the Android Capacitor app shell and has enabled background messaging
-- **AND** the native foreground service is active
-- **AND** message notifications are enabled and Android has granted local notification permission
-- **AND** the current session uses a local key (nsec) login
-- **AND** the local secret key is available in Android-native secure storage
-- **WHEN** a new gift-wrapped message or reaction addressed to the current user is delivered from any configured read relay while the app UI is not visible
-- **THEN** the native foreground service SHALL decrypt the gift-wrap using NIP-44 v2 with the locally stored secret key
-- **AND** it SHALL raise an Android OS notification that includes a short preview when the device is unlocked
-- **AND** activating the notification SHALL open the nospeak app and navigate to the corresponding chat conversation.
-
-#### Scenario: Local-key secret is not passed through intents
-- **GIVEN** the user enables Android background messaging in a local-key (nsec) session
-- **WHEN** the web runtime starts or updates the native Android foreground service via the Capacitor plugin
-- **THEN** the start/update request SHALL NOT include the local secret key in an Android intent extra
-- **AND** the foreground service SHALL obtain the local secret key only from Android-native, Keystore-backed storage.
-
-#### Scenario: Background messaging is disabled when local secret is missing
-- **GIVEN** the Android foreground service starts or restores background messaging in local-key mode
-- **AND** the local secret key is missing from Android-native secure storage
-- **WHEN** the service evaluates whether it can perform background decryption
-- **THEN** it SHALL persistently disable Android background messaging for that installation
-- **AND** it SHALL stop the foreground service
-- **AND** it SHOULD update the foreground notification summary to indicate that re-login is required.
+#### Scenario: Backdated gift-wrap timestamps do not break notifications
+- **GIVEN** the relays deliver gift-wrap events whose outer `created_at` timestamps are randomized or backdated
+- **AND** the gift-wrap decrypts to a valid DM rumor with an inner rumor timestamp
+- **WHEN** the inner rumor timestamp indicates the message is within the eligible notification cutoff window
+- **THEN** the service SHALL treat the message as eligible to notify even if the outer gift-wrap timestamp is older than the cutoff
+- **AND** the service SHALL NOT rely on a strict outer `since now` filter that would exclude these deliveries.
 
 ### Requirement: Persistent Android Foreground Notification for Background Messaging
 When Android background messaging is active, the Android app shell SHALL display a persistent foreground notification indicating that nospeak is connected to the user's read relays, including a summary of which relays are connected, and SHALL keep this notification visible as long as background messaging is running.

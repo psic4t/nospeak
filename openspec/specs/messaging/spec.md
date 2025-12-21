@@ -222,26 +222,17 @@ The system SHALL display a blocking modal progress indicator during the ordered 
 - **AND** the user SHALL NOT be able to interact with the main messaging UI until the flow completes and the modal is dismissed.
 
 ### Requirement: Real-Time Message Subscription and Deduplication
-The real-time message subscription SHALL subscribe to all encrypted gift-wrapped messages for the current user, MAY receive both historical and new messages from relays, and MUST rely on local deduplication to avoid processing the same message more than once.
+When Android background messaging is enabled and delegated to the native Android foreground service, the system SHALL avoid notification floods caused by historical replay while still tolerating backdated gift-wrap timestamps.
 
-#### Scenario: Subscription receives incoming messages in real time
-- **GIVEN** the user is logged in and the message subscription is active
-- **WHEN** a new message is sent to the user
-- **THEN** the corresponding gift-wrap event is received via the subscription
-- **AND** the message is decrypted, saved to the local database, and displayed in the appropriate conversation without requiring a page reload
+- The native foreground service SHALL use decrypted inner rumor timestamps for notification eligibility decisions when available.
+- The native foreground service SHALL NOT rely on the outer gift-wrap `created_at` as a strict eligibility filter for notifications.
 
-#### Scenario: Subscription tolerates backdated gift-wrap timestamps
-- **GIVEN** the system uses NIP-59 style gift-wraps with randomized `created_at` timestamps
-- **WHEN** the subscription connects or reconnects to a relay
-- **THEN** it does NOT restrict events by a strict "since now" filter that would exclude backdated gift-wraps
-- **AND** it allows relays to send any matching gift-wrap events for the user
-
-#### Scenario: Historical messages deduplicated across sync and subscription
-- **GIVEN** the user has already fetched some message history via explicit history sync
-- **AND** the real-time subscription is active
-- **WHEN** a relay sends a gift-wrap event that corresponds to a message already stored locally
-- **THEN** the system SHALL skip decrypting and saving that message again
-- **AND** the UI SHALL NOT display duplicate copies of the same message
+#### Scenario: Background notification eligibility uses inner rumor timestamp
+- **GIVEN** the user is running nospeak inside the Android Capacitor app shell
+- **AND** Android background messaging is enabled and the native foreground service is active
+- **WHEN** a gift-wrap event decrypts to a DM rumor that contains a `created_at` timestamp
+- **THEN** the service SHALL use the rumor timestamp to decide whether the message is eligible to notify
+- **AND** it SHALL suppress notifications for rumors outside the configured backlog guard window.
 
 ### Requirement: Manage Contacts Modal Contact Display
 The Manage Contacts modal SHALL display each contact using their profile picture and resolved username when available, with the shortened npub still visible but visually secondary.

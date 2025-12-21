@@ -50,6 +50,10 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
             }
         }
 
+        long nowSeconds = System.currentTimeMillis() / 1000L;
+        long baselineSeconds = Math.max(0L, nowSeconds - 60L);
+        AndroidBackgroundMessagingPrefs.saveNotificationBaselineSeconds(getContext(), baselineSeconds);
+
         AndroidBackgroundMessagingPrefs.saveStartConfig(getContext(), mode, pubkeyHex, relays, summary, notificationsEnabled);
 
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);

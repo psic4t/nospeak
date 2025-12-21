@@ -172,7 +172,7 @@ export class NotificationService {
             return;
         }
 
-        if (this.isAndroidNativeEnv && this.settings.backgroundMessagingEnabled) {
+        if (this.isAndroidNativeEnv) {
             return;
         }
 
@@ -390,7 +390,7 @@ export class NotificationService {
             return;
         }
 
-        if (this.isAndroidNativeEnv && this.settings.backgroundMessagingEnabled) {
+        if (this.isAndroidNativeEnv) {
             return;
         }
 

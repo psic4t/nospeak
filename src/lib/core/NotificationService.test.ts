@@ -47,7 +47,7 @@ function setLocalStorage() {
     };
 }
 
-describe('NotificationService (Android local notifications)', () => {
+describe('NotificationService (Android native)', () => {
     beforeEach(() => {
         vi.resetModules();
 
@@ -68,7 +68,7 @@ describe('NotificationService (Android local notifications)', () => {
         vi.unstubAllGlobals();
     });
 
-    it('schedules an Android local notification when enabled and permission granted', async () => {
+    it('does not schedule JS-driven Android notifications', async () => {
         isAndroidNativeMock.mockReturnValue(true);
         getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Alice' } });
 
@@ -87,105 +87,38 @@ describe('NotificationService (Android local notifications)', () => {
 
         await notificationService.showNewMessageNotification('npub1alice', 'Hello from Alice');
 
-        expect(createChannelMock).toHaveBeenCalledTimes(1);
-        expect(scheduleMock).toHaveBeenCalledTimes(1);
-        const args = scheduleMock.mock.calls[0][0];
-        expect(args.notifications[0].title).toContain('Alice');
-        expect(args.notifications[0].channelId).toBe('messages');
-        expect(args.notifications[0].smallIcon).toBe('ic_stat_nospeak');
+        expect(scheduleMock).not.toHaveBeenCalled();
+        expect(createChannelMock).not.toHaveBeenCalled();
+        expect(checkPermissionsMock).not.toHaveBeenCalled();
     });
 
-    it('adds a largeIcon when the sender avatar is cached successfully', async () => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        const writeFileMock = vi.fn().mockResolvedValue({ uri: 'file://avatar.png' });
-        (window as any).Capacitor = {
-            Plugins: {
-                Filesystem: {
-                    writeFile: writeFileMock
-                }
-            }
-        };
-
-        const fetchMock = vi.fn().mockResolvedValue({
-            ok: true,
-            blob: async () => new Blob(['avatar'], { type: 'image/png' })
-        });
-        vi.stubGlobal('fetch', fetchMock as any);
-
-        isAndroidNativeMock.mockReturnValue(true);
-        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Alice' } });
-
-        if (typeof document !== 'undefined') {
-            Object.defineProperty(document, 'visibilityState', {
-                value: 'hidden',
-                configurable: true
-            });
-        }
-
-        if (window.localStorage) {
-            window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
-        }
-
-        const { notificationService } = await import('./NotificationService');
-
-        await notificationService.showNewMessageNotification('npub1alice', 'Hello from Alice');
-
-        expect(scheduleMock).toHaveBeenCalledTimes(1);
-        const args = scheduleMock.mock.calls[0][0];
-        expect(args.notifications[0].largeIcon).toBe('file://avatar.png');
-
-        const expectedRobohashUrl = 'https://robohash.org/npub1alice.png?set=set1&bgset=bg2';
-        expect(fetchMock.mock.calls[0][0]).toBe(expectedRobohashUrl);
-        expect(writeFileMock).toHaveBeenCalled();
-    });
-
-    it('still schedules when sender avatar cannot be fetched', async () => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        const writeFileMock = vi.fn();
-        (window as any).Capacitor = {
-            Plugins: {
-                Filesystem: {
-                    writeFile: writeFileMock
-                }
-            }
-        };
-
-        const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
-        vi.stubGlobal('fetch', fetchMock as any);
-
-        isAndroidNativeMock.mockReturnValue(true);
-        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Alice' } });
-
-        if (typeof document !== 'undefined') {
-            Object.defineProperty(document, 'visibilityState', {
-                value: 'hidden',
-                configurable: true
-            });
-        }
-
-        if (window.localStorage) {
-            window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
-        }
-
-        const { notificationService } = await import('./NotificationService');
-
-        await notificationService.showNewMessageNotification('npub1alice', 'Hello from Alice');
-
-        expect(scheduleMock).toHaveBeenCalledTimes(1);
-        const args = scheduleMock.mock.calls[0][0];
-        expect(args.notifications[0].largeIcon).toBeUndefined();
-        expect(writeFileMock).not.toHaveBeenCalled();
-    });
-
-    it('does not schedule when notifications are disabled in settings', async () => {
+    it('does not schedule JS-driven Android reaction notifications', async () => {
         isAndroidNativeMock.mockReturnValue(true);
         getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Bob' } });
+
+        if (typeof document !== 'undefined') {
+            Object.defineProperty(document, 'visibilityState', {
+                value: 'hidden',
+                configurable: true
+            });
+        }
+
+        if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
+        }
+
+        const { notificationService } = await import('./NotificationService');
+
+        await notificationService.showReactionNotification('npub1bob', '❤️');
+
+        expect(scheduleMock).not.toHaveBeenCalled();
+        expect(createChannelMock).not.toHaveBeenCalled();
+        expect(checkPermissionsMock).not.toHaveBeenCalled();
+    });
+
+    it('still respects the notificationsEnabled toggle', async () => {
+        isAndroidNativeMock.mockReturnValue(true);
+        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Carol' } });
 
         if (typeof window !== 'undefined' && window.localStorage) {
             window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: false }));
@@ -193,69 +126,7 @@ describe('NotificationService (Android local notifications)', () => {
 
         const { notificationService } = await import('./NotificationService');
 
-        await notificationService.showNewMessageNotification('npub1bob', 'Hi');
-
-        expect(scheduleMock).not.toHaveBeenCalled();
-    });
-
-    it('does not schedule when background messaging is enabled', async () => {
-        isAndroidNativeMock.mockReturnValue(true);
-        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Bob' } });
-
-        if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem(
-                'nospeak-settings',
-                JSON.stringify({ notificationsEnabled: true, backgroundMessagingEnabled: true })
-            );
-        }
-
-        const { notificationService } = await import('./NotificationService');
-
-        await notificationService.showNewMessageNotification('npub1bob', 'Hi');
-
-        expect(scheduleMock).not.toHaveBeenCalled();
-    });
-
-    it('does not schedule when Android permission is denied', async () => {
-        isAndroidNativeMock.mockReturnValue(true);
-        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Carol' } });
-
-        if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
-        }
-
-        checkPermissionsMock.mockResolvedValueOnce({ display: 'denied' });
-
-        const { notificationService } = await import('./NotificationService');
-
         await notificationService.showNewMessageNotification('npub1carol', 'Hi');
-
-        expect(scheduleMock).not.toHaveBeenCalled();
-    });
-
-    it('suppresses Android notification when same conversation is active and visible', async () => {
-        isAndroidNativeMock.mockReturnValue(true);
-        getProfileIgnoreTTLMock.mockResolvedValue({ metadata: { name: 'Dave' } });
-
-        if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem('nospeak-settings', JSON.stringify({ notificationsEnabled: true }));
-        }
-
-        if (typeof window !== 'undefined') {
-            window.history.pushState({}, '', '/chat/npub1dave');
-        }
-
-        if (typeof document !== 'undefined') {
-            Object.defineProperty(document, 'visibilityState', {
-                value: 'visible',
-                configurable: true
-            });
-            (document as any).hasFocus = vi.fn().mockReturnValue(true);
-        }
-
-        const { notificationService } = await import('./NotificationService');
-
-        await notificationService.showNewMessageNotification('npub1dave', 'Hi from Dave');
 
         expect(scheduleMock).not.toHaveBeenCalled();
     });

@@ -106,6 +106,7 @@ public class NativeBackgroundMessagingService extends Service {
     private static final int MAX_PERSISTED_EVENT_IDS = 500;
 
     private static final long EOSE_FALLBACK_DELAY_MS = 8000L;
+    private static final long MAX_NOTIFICATION_BACKLOG_SECONDS = 15L * 60L;
 
     private String currentSummary = "Connected to read relays";
 
@@ -132,6 +133,7 @@ public class NativeBackgroundMessagingService extends Service {
     private String currentPubkeyHex;
     private String currentMode = "amber";
     private boolean notificationsEnabled = false;
+    private long notificationCutoffSeconds = 0L;
 
     private byte[] localSecretKey;
 
@@ -192,6 +194,11 @@ public class NativeBackgroundMessagingService extends Service {
             notificationsEnabled = intent.getBooleanExtra(EXTRA_NOTIFICATIONS_ENABLED, false);
             String[] relays = intent.getStringArrayExtra(EXTRA_READ_RELAYS);
             configuredRelaysCount = relays != null ? relays.length : 0;
+
+            long persistedBaselineSeconds = AndroidBackgroundMessagingPrefs.loadNotificationBaselineSeconds(getApplicationContext());
+            long nowSeconds = System.currentTimeMillis() / 1000L;
+            long maxBacklogCutoffSeconds = Math.max(0L, nowSeconds - MAX_NOTIFICATION_BACKLOG_SECONDS);
+            notificationCutoffSeconds = Math.max(persistedBaselineSeconds, maxBacklogCutoffSeconds);
 
             Notification notification = buildNotification(currentSummary);
             startForeground(NOTIFICATION_ID, notification);
@@ -519,6 +526,12 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        long nowSeconds = System.currentTimeMillis() / 1000L;
+        long rumorCreatedAtSeconds = rumor.createdAtSeconds > 0L ? rumor.createdAtSeconds : nowSeconds;
+        if (rumorCreatedAtSeconds < notificationCutoffSeconds) {
+            return;
+        }
+
         if (rumor.pubkeyHex == null || rumor.pubkeyHex.isEmpty()) {
             return;
         }
@@ -541,6 +554,11 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         showConversationActivityNotification(partnerPubkeyHex, preview);
+
+        if (rumorCreatedAtSeconds > notificationCutoffSeconds) {
+            notificationCutoffSeconds = rumorCreatedAtSeconds;
+            AndroidBackgroundMessagingPrefs.saveNotificationBaselineSeconds(getApplicationContext(), notificationCutoffSeconds);
+        }
     }
 
     private static final int AVATAR_TARGET_PX = 192;
@@ -1293,6 +1311,7 @@ public class NativeBackgroundMessagingService extends Service {
             result.pubkeyHex = rumor.optString("pubkey", null);
             result.content = rumor.optString("content", "");
             result.tags = rumor.optJSONArray("tags");
+            result.createdAtSeconds = rumor.optLong("created_at", 0L);
             return result;
         } catch (JSONException e) {
             return null;
@@ -1599,6 +1618,7 @@ public class NativeBackgroundMessagingService extends Service {
         String pubkeyHex;
         String content;
         JSONArray tags;
+        long createdAtSeconds;
     }
 
     private void showGenericEncryptedMessageNotification() {

@@ -17,6 +17,7 @@ public final class AndroidBackgroundMessagingPrefs {
     private static final String KEY_READ_RELAYS_JSON = "readRelaysJson";
     private static final String KEY_SUMMARY = "summary";
     private static final String KEY_NOTIFICATIONS_ENABLED = "notificationsEnabled";
+    private static final String KEY_NOTIFICATION_BASELINE_SECONDS = "notificationBaselineSeconds";
 
     private AndroidBackgroundMessagingPrefs() {
     }
@@ -96,6 +97,16 @@ public final class AndroidBackgroundMessagingPrefs {
         SharedPreferences.Editor editor = getPrefs(context).edit();
         editor.putBoolean(KEY_ENABLED, enabled);
         editor.apply();
+    }
+
+    public static void saveNotificationBaselineSeconds(Context context, long baselineSeconds) {
+        SharedPreferences.Editor editor = getPrefs(context).edit();
+        editor.putLong(KEY_NOTIFICATION_BASELINE_SECONDS, baselineSeconds);
+        editor.apply();
+    }
+
+    public static long loadNotificationBaselineSeconds(Context context) {
+        return getPrefs(context).getLong(KEY_NOTIFICATION_BASELINE_SECONDS, 0L);
     }
 
     public static Config load(Context context) {
