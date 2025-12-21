@@ -7,6 +7,8 @@
     const isAndroidNativeEnv = $derived(isAndroidNative());
     let { url: imageViewerUrl, originalUrl: imageViewerOriginalUrl, fitToScreen: imageViewerFitToScreen } = $derived($imageViewerState);
 
+    const overlayIconButtonClass = "!text-[rgb(var(--color-base-rgb))] dark:!text-[rgb(var(--color-text-rgb)/0.92)] !bg-[rgb(var(--color-lavender-rgb)/0.24)] hover:!bg-[rgb(var(--color-lavender-rgb)/0.30)] active:!bg-[rgb(var(--color-lavender-rgb)/0.36)]";
+
     let scale = $state(1);
     let translateX = $state(0);
     let translateY = $state(0);
@@ -284,6 +286,7 @@
             {#if !isAndroidNativeEnv}
                 <Button
                     size="icon"
+                    class={overlayIconButtonClass}
                     onclick={toggleImageViewerFit}
                     aria-label={imageViewerFitToScreen ? 'View image at full size' : 'Fit image to screen'}
                 >
@@ -315,6 +318,7 @@
 
             <Button
                 size="icon"
+                class={overlayIconButtonClass}
                 onclick={downloadActiveImage}
                 aria-label="Download image"
             >
@@ -328,6 +332,7 @@
             {#if isAndroidNativeEnv}
                 <Button
                     size="icon"
+                    class={overlayIconButtonClass}
                     onclick={shareActiveImage}
                     aria-label="Share image"
                 >
@@ -343,6 +348,7 @@
 
             <Button
                 size="icon"
+                class={overlayIconButtonClass}
                 onclick={closeImageViewer}
                 aria-label="Close image viewer"
             >
