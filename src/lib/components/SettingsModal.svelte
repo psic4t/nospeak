@@ -527,13 +527,13 @@
     if (activeCategory === category) {
       return (
         base +
-        " bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
+        " bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-gray-900 dark:text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
       );
     }
 
     return (
       base +
-      " bg-transparent text-gray-500 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
+      " bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
     );
   }
 
@@ -727,7 +727,7 @@
             }}
           >
             <div class="flex items-center gap-3">
-              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+              <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
                 <svg
                   class="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -748,7 +748,7 @@
               </span>
             </div>
             <svg
-              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              class="w-4 h-4 text-gray-500 dark:text-slate-500"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -768,7 +768,7 @@
             }}
           >
             <div class="flex items-center gap-3">
-              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+              <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
                 <svg
                   class="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -787,7 +787,7 @@
               </span>
             </div>
             <svg
-              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              class="w-4 h-4 text-gray-500 dark:text-slate-500"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -807,7 +807,7 @@
             }}
           >
             <div class="flex items-center gap-3">
-              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+              <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
                 <svg
                   class="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -828,7 +828,7 @@
               </span>
             </div>
             <svg
-              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              class="w-4 h-4 text-gray-500 dark:text-slate-500"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -848,7 +848,7 @@
             }}
           >
             <div class="flex items-center gap-3">
-              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+              <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
                 <svg
                   class="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -866,7 +866,7 @@
               </span>
             </div>
             <svg
-              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              class="w-4 h-4 text-gray-500 dark:text-slate-500"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -886,7 +886,7 @@
             }}
           >
             <div class="flex items-center gap-3">
-              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+              <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
                 <svg
                   class="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -905,7 +905,7 @@
               </span>
             </div>
             <svg
-              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              class="w-4 h-4 text-gray-500 dark:text-slate-500"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -925,7 +925,7 @@
             }}
           >
             <div class="flex items-center gap-3">
-              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+              <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
                 <svg
                   class="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -945,7 +945,7 @@
               </span>
             </div>
             <svg
-              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              class="w-4 h-4 text-gray-500 dark:text-slate-500"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -1006,10 +1006,10 @@
             <div class="space-y-6">
               <div class="flex items-center justify-between">
                 <div>
-                  <label for="theme-mode" class="font-medium dark:text-white">
+                  <label for="theme-mode" class="font-medium text-gray-900 dark:text-white">
                     {$t("settings.general.appearanceLabel")}
                   </label>
-                  <p class="typ-body text-gray-500 dark:text-slate-400">
+                  <p class="typ-body text-gray-600 dark:text-slate-400">
                     {$t("settings.general.appearanceDescription")}
                   </p>
                 </div>
@@ -1027,10 +1027,10 @@
 
               <div class="flex items-center justify-between">
                 <div>
-                  <label for="language-select" class="font-medium dark:text-white">
+                  <label for="language-select" class="font-medium text-gray-900 dark:text-white">
                     {$t("settings.general.languageLabel")}
                   </label>
-                  <p class="typ-body text-gray-500 dark:text-slate-400">
+                  <p class="typ-body text-gray-600 dark:text-slate-400">
                     {$t("settings.general.languageDescription")}
                   </p>
                 </div>
@@ -1049,11 +1049,11 @@
                 <div class="flex-1 min-w-0">
                   <label
                     for="notifications-toggle"
-                    class="font-medium dark:text-white"
+                    class="font-medium text-gray-900 dark:text-white"
                   >
                     {$t("settings.notifications.label")}
                   </label>
-                  <p class="text-sm text-gray-500 dark:text-slate-400">
+                  <p class="text-sm text-gray-600 dark:text-slate-400">
                     {#if isSupported}
                       {$t("settings.notifications.supportedDescription")}
                     {:else}
@@ -1087,7 +1087,7 @@
                     >
                       {$t("settings.backgroundMessaging.label")}
                     </label>
-                    <p class="text-sm text-gray-500 dark:text-slate-400">
+                    <p class="text-sm text-gray-600 dark:text-slate-400">
                       {$t("settings.backgroundMessaging.description")}
                     </p>
 
@@ -1119,11 +1119,11 @@
                 <div class="flex-1 min-w-0">
                   <label
                     for="url-previews-toggle"
-                    class="font-medium dark:text-white"
+                    class="font-medium text-gray-900 dark:text-white"
                   >
                     {$t("settings.urlPreviews.label")}
                   </label>
-                  <p class="text-sm text-gray-500 dark:text-slate-400">
+                  <p class="text-sm text-gray-600 dark:text-slate-400">
                     {$t("settings.urlPreviews.description")}
                   </p>
                 </div>
@@ -1143,7 +1143,7 @@
                 <div>
                   <label
                     for="profile-name"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.nameLabel')}
                   </label>
@@ -1157,7 +1157,7 @@
                 <div>
                   <label
                     for="profile-display-name"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.displayNameLabel')}
                   </label>
@@ -1171,7 +1171,7 @@
                 <div>
                   <label
                     for="profile-about"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.aboutLabel')}
                   </label>
@@ -1186,7 +1186,7 @@
                 <div>
                   <label
                     for="profile-picture"
-                    class="block text sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.pictureUrlLabel')}
                   </label>
@@ -1208,7 +1208,7 @@
                 <div>
                   <label
                     for="profile-banner"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.bannerUrlLabel')}
                   </label>
@@ -1230,7 +1230,7 @@
                 <div>
                   <label
                     for="profile-nip05"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.nip05Label')}
                   </label>
@@ -1283,7 +1283,7 @@
                         <span>NIP-05 not verified for this key</span>
                       </div>
                     {:else}
-                      <div class="mt-1 text-xs text-gray-500">
+                      <div class="mt-1 text-xs text-gray-600 dark:text-slate-400">
                         Verification status unknown for {getDisplayedNip05(profileNip05)}
                       </div>
                     {/if}
@@ -1293,7 +1293,7 @@
                 <div>
                   <label
                     for="profile-website"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.websiteLabel')}
                   </label>
@@ -1308,7 +1308,7 @@
                 <div>
                   <label
                     for="profile-lud16"
-                    class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                   >
                     {$t('settings.profile.lightningLabel')}
                   </label>
@@ -1356,7 +1356,7 @@
             </div>
           {:else if activeCategory === "Messaging Relays"}
             <div class="space-y-6">
-              <p class="text-sm text-gray-500 dark:text-slate-400">
+              <p class="text-sm text-gray-600 dark:text-slate-400">
                 {$t('settings.messagingRelays.description')}
               </p>
  
@@ -1448,7 +1448,7 @@
                   </div>
                 {:else}
                   <div
-                    class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400"
+                    class="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400"
                   >
                     {$t('settings.messagingRelays.emptyState')}
                   </div>
@@ -1458,7 +1458,7 @@
 
           {:else if activeCategory === "Media Servers"}
             <div class="space-y-6">
-              <p class="text-sm text-gray-500 dark:text-slate-400">
+              <p class="text-sm text-gray-600 dark:text-slate-400">
                 {$t('settings.mediaServers.description')}
               </p>
 
@@ -1470,7 +1470,7 @@
                   >
                     {$t('settings.mediaServers.toggleLabel')}
                   </label>
-                  <p class="text-sm text-gray-500 dark:text-slate-400">
+                  <p class="text-sm text-gray-600 dark:text-slate-400">
                     {$t('settings.mediaServers.toggleDescription')}
                   </p>
                 </div>
@@ -1572,7 +1572,7 @@
                   </div>
                 {:else}
                   <div
-                    class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400"
+                    class="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400"
                   >
                     {$t('settings.mediaServers.emptyState')}
                   </div>
@@ -1597,7 +1597,7 @@
               <div class="space-y-4 pt-4 border-t dark:border-slate-700">
                 <div>
                   <h4
-                    class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+                    class="text-sm font-medium text-gray-900 dark:text-slate-300 mb-2"
                   >
                     License
                   </h4>
@@ -1638,7 +1638,7 @@
                       Nsec
                     </span>
                   {:else}
-                    <span class="text-sm text-gray-500 dark:text-slate-400">
+                    <span class="text-sm text-gray-600 dark:text-slate-400">
                       {$t('settings.security.loginMethodUnknown')}
                     </span>
                   {/if}
@@ -1646,7 +1646,7 @@
               </div>
 
               <div class="space-y-2 max-w-xl">
-                <label class="font-medium dark:text-white" for="security-npub">
+                <label class="font-medium text-gray-900 dark:text-white" for="security-npub">
                   {$t('settings.security.npubLabel')}
                 </label>
                 <Input
@@ -1659,7 +1659,7 @@
 
               {#if securityAuthMethod === "local"}
                 <div class="space-y-2 max-w-xl">
-                  <label class="font-medium dark:text-white" for="security-nsec">
+                  <label class="font-medium text-gray-900 dark:text-white" for="security-nsec">
                     {$t('settings.security.nsecLabel')}
                   </label>
                   <div class="relative">
