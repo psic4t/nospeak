@@ -128,47 +128,20 @@ The Settings interface SHALL provide a message notifications option under Settin
 - **AND** the stored preference SHALL be updated so that notifications remain disabled on subsequent app launches until the user re-enables them.
 
 ### Requirement: Android Background Messaging Preference
-The Settings interface SHALL provide an Android-only background messaging preference under Settings → General that controls whether the Android app is allowed to keep relay connections and message subscriptions active while the app UI is not visible. The preference SHALL be stored per Android installation and SHALL be independent from, but compatible with, the existing message notifications toggle. The preference persistence mechanism SHALL survive device restarts and app updates and SHALL be readable by Android-native components (for example, boot receivers) without requiring the WebView to start.
+The Settings interface SHALL provide an Android-only background messaging preference under Settings → General that controls whether the Android app is allowed to keep relay connections and message subscriptions active while the app UI is not visible.
 
-#### Scenario: Background messaging toggle default and visibility
-- **GIVEN** a user opens Settings → General inside the Android Capacitor app shell on a device where no background messaging preference has been stored
-- **WHEN** the settings view is rendered
-- **THEN** the background messaging preference SHALL appear in the disabled state by default
-- **AND** the control SHALL be visible only when running inside the Android app shell (not in standard web browsers).
+This preference SHALL be stored per Android installation and SHALL be independent from, but compatible with, the existing message notifications toggle. The preference persistence mechanism SHALL survive device restarts and app updates and SHALL be readable by Android-native components (for example, boot receivers) without requiring the WebView to start.
 
-#### Scenario: User enables Android background messaging
-- **GIVEN** the user is running nospeak inside the Android Capacitor app shell
-- **AND** the background messaging preference is currently disabled
-- **WHEN** the user enables the background messaging option in Settings → General
-- **THEN** the app SHALL persist the enabled state for that Android installation
-- **AND** it SHALL prompt the user to grant any required Android background activity or battery optimization permissions (for example, by navigating to the appropriate system settings screen)
-- **AND** upon confirmation or best-effort completion of the OS permission flow, the app SHALL be eligible to start the Android background messaging foreground service.
+When the current session is a local-key (nsec) session and the Android-native secret key required for background decryption is missing, the system SHALL disable background messaging for that installation rather than keeping the service running in a degraded state.
 
-#### Scenario: Background messaging enables background notification delivery
-- **GIVEN** the user has enabled Android background messaging
-- **AND** the message notifications toggle is enabled and notification permission is granted
-- **WHEN** the app UI is not visible and gift-wrapped messages or reactions arrive
-- **THEN** the system SHALL allow the Android-native foreground service to emit OS notifications for this activity
-- **AND** the system SHALL NOT require the WebView to be executing for these notifications to be emitted.
-
-#### Scenario: User disables Android background messaging
-- **GIVEN** the background messaging preference is currently enabled on an Android device
-- **WHEN** the user disables the background messaging option in Settings → General
-- **THEN** the app SHALL persist the disabled state for that installation
-- **AND** it SHALL stop any active Android background messaging foreground service
-- **AND** it SHALL close background relay connections associated with that service.
-
-#### Scenario: Preference persists across reboot and app update
-- **GIVEN** the user previously enabled Android background messaging on a device
-- **WHEN** the device reboots or the nospeak Android app is updated
-- **THEN** the persisted preference state SHALL remain available for that Android installation
-- **AND** it SHALL be available to Android-native components used to restore background messaging behavior.
-
-#### Scenario: Web settings behavior unchanged outside Android
-- **GIVEN** the user opens Settings → General in a standard web browser (not inside the Android app shell)
-- **WHEN** the settings view is rendered
-- **THEN** no Android background messaging preference control SHALL be shown
-- **AND** the existing message notifications toggle and other settings SHALL behave as already defined in the `settings` specification.
+#### Scenario: Background messaging auto-disables when local secret is missing
+- **GIVEN** the user previously enabled Android background messaging in Settings → General
+- **AND** the current session is a local-key (nsec) session
+- **AND** the Android-native secret key required for local-key background decryption is missing
+- **WHEN** the Android shell attempts to start or restore background messaging (including on boot)
+- **THEN** the system SHALL persistently disable the background messaging preference for that installation
+- **AND** the native foreground service SHALL stop
+- **AND** the user MUST re-login before background messaging can be enabled again.
 
 ### Requirement: Android Back Behavior for Settings and Manage Contacts
 When running inside the Android Capacitor app shell, the Settings and Manage Contacts experiences SHALL integrate with the Android system back action so that back first closes these modals before any route-level navigation occurs, keeping the user on their current underlying chat or contact list view.

@@ -1,6 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthService } from './AuthService';
 
+let isAndroidNativeMock = false;
+
+const setAndroidLocalSecretKeyHexMock = vi.fn().mockResolvedValue(undefined);
+const getAndroidLocalSecretKeyHexMock = vi.fn().mockResolvedValue(null);
+const clearAndroidLocalSecretKeyMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('./NativeDialogs', () => ({
+    isAndroidNative: () => isAndroidNativeMock
+}));
+
+vi.mock('./AndroidLocalSecretKey', () => ({
+    setAndroidLocalSecretKeyHex: setAndroidLocalSecretKeyHexMock,
+    getAndroidLocalSecretKeyHex: getAndroidLocalSecretKeyHexMock,
+    clearAndroidLocalSecretKey: clearAndroidLocalSecretKeyMock
+}));
+
+beforeEach(() => {
+    isAndroidNativeMock = false;
+    setAndroidLocalSecretKeyHexMock.mockClear();
+    getAndroidLocalSecretKeyHexMock.mockClear();
+    clearAndroidLocalSecretKeyMock.mockClear();
+});
+
 vi.mock('$app/navigation', () => ({
     goto: vi.fn()
 }));
@@ -107,7 +130,8 @@ vi.mock('$lib/core/signer/Nip55Signer', () => ({
 vi.mock('nostr-tools', () => ({
     nip19: {
         npubEncode: vi.fn(),
-        nsecEncode: vi.fn()
+        nsecEncode: vi.fn(),
+        decode: vi.fn()
     },
     generateSecretKey: vi.fn(),
     getPublicKey: vi.fn(),
@@ -473,10 +497,107 @@ describe('AuthService ordered login history flow integration', () => {
          expect(localStorage.getItem('nospeak:nip46_secret')).toBeNull();
          expect(localStorage.getItem('nospeak:nip46_uri')).toBeNull();
          expect(localStorage.getItem('nospeak:nip46_bunker_pubkey')).toBeNull();
-         expect(localStorage.getItem('nospeak:nip46_bunker_relays')).toBeNull();
-         expect(localStorage.getItem('nospeak:auth_method')).toBeNull();
-     });
- });
- 
+          expect(localStorage.getItem('nospeak:nip46_bunker_relays')).toBeNull();
+          expect(localStorage.getItem('nospeak:auth_method')).toBeNull();
+      });
+  });
+
+  describe('AuthService Android local secret storage', () => {
+      let authService: AuthService;
+
+      beforeEach(async () => {
+          isAndroidNativeMock = true;
+          vi.clearAllMocks();
+
+          const storageData: Record<string, string> = {};
+          const storageImpl: any = {
+              get length() {
+                  return Object.keys(storageData).length;
+              },
+              key(index: number) {
+                  const keys = Object.keys(storageData);
+                  return keys[index] ?? null;
+              },
+              getItem(key: string) {
+                  return Object.prototype.hasOwnProperty.call(storageData, key) ? storageData[key] : null;
+              },
+              setItem(key: string, value: string) {
+                  storageData[key] = String(value);
+              },
+              removeItem(key: string) {
+                  delete storageData[key];
+              },
+              clear() {
+                  Object.keys(storageData).forEach((key) => delete storageData[key]);
+              }
+          };
+
+          Object.defineProperty(globalThis, 'localStorage', {
+              value: storageImpl,
+              configurable: true
+          });
+
+          if (typeof window !== 'undefined') {
+              Object.defineProperty(window, 'localStorage', {
+                  value: storageImpl,
+                  configurable: true
+              });
+          }
+
+          const module = await import('./AuthService');
+          authService = new module.AuthService();
+
+          const { nip19 } = await import('nostr-tools');
+          (nip19.npubEncode as any).mockReturnValue('npub1test');
+          (nip19.decode as any).mockReturnValue({ type: 'nsec', data: new Uint8Array([0, 1, 2, 3]) });
+          (nip19.nsecEncode as any).mockReturnValue('nsec1restored');
+
+          const { profileRepo } = await import('$lib/db/ProfileRepository');
+          (profileRepo.getProfileIgnoreTTL as any).mockResolvedValue({
+              messagingRelays: ['wss://relay.example.com']
+          });
+      });
+
+      it('login stores secret via Android plugin and not localStorage', async () => {
+          const module = await import('./AuthService');
+          const runFlowSpy = vi
+              .spyOn(module.AuthService.prototype as any, 'runLoginHistoryFlow')
+              .mockResolvedValue(undefined);
+
+          await authService.login('nsec1test');
+
+          expect(setAndroidLocalSecretKeyHexMock).toHaveBeenCalledWith('00010203');
+          expect(localStorage.getItem('nospeak:nsec')).toBeNull();
+          expect(localStorage.getItem('nospeak:auth_method')).toBe('local');
+          expect(runFlowSpy).toHaveBeenCalledWith('npub1test', 'Login');
+      });
+
+      it('restore fails and clears auth method when Android secret missing', async () => {
+          localStorage.setItem('nospeak:auth_method', 'local');
+          getAndroidLocalSecretKeyHexMock.mockResolvedValueOnce(null);
+
+          const result = await authService.restore();
+
+          expect(result).toBe(false);
+          expect(localStorage.getItem('nospeak:auth_method')).toBeNull();
+      });
+
+      it('restore succeeds when Android secret exists', async () => {
+          localStorage.setItem('nospeak:auth_method', 'local');
+          getAndroidLocalSecretKeyHexMock.mockResolvedValueOnce('00'.repeat(32));
+
+          const result = await authService.restore();
+
+          expect(result).toBe(true);
+          expect(localStorage.getItem('nospeak:nsec')).toBeNull();
+      });
+
+      it('logout clears Android secret key store', async () => {
+          await authService.logout();
+
+          expect(clearAndroidLocalSecretKeyMock).toHaveBeenCalledTimes(1);
+      });
+  });
+  
  
 

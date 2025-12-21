@@ -22,6 +22,7 @@ import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.util.Base64;
 import android.util.Log;
 import android.os.Handler;
 import android.os.IBinder;
@@ -42,8 +43,20 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.bouncycastle.asn1.sec.SECNamedCurves;
+import org.bouncycastle.asn1.x9.X9ECParameters;
+import org.bouncycastle.crypto.engines.ChaCha7539Engine;
+import org.bouncycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.params.ParametersWithIV;
+import org.bouncycastle.math.ec.ECPoint;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayDeque;
 import java.util.HashMap;
@@ -120,6 +133,8 @@ public class NativeBackgroundMessagingService extends Service {
     private String currentMode = "amber";
     private boolean notificationsEnabled = false;
 
+    private byte[] localSecretKey;
+
     private int configuredRelaysCount = 0;
 
     private final Map<String, WebSocket> activeSockets = new HashMap<>();
@@ -180,14 +195,30 @@ public class NativeBackgroundMessagingService extends Service {
 
             Notification notification = buildNotification(currentSummary);
             startForeground(NOTIFICATION_ID, notification);
- 
+
+            if ("nsec".equalsIgnoreCase(currentMode)) {
+                String secretKeyHex = AndroidLocalSecretStore.getSecretKeyHex(getApplicationContext());
+                if (secretKeyHex == null) {
+                    disableBackgroundMessagingDueToMissingSecret();
+                    return START_NOT_STICKY;
+                }
+
+                try {
+                    localSecretKey = hexToBytes(secretKeyHex);
+                } catch (Exception e) {
+                    disableBackgroundMessagingDueToMissingSecret();
+                    return START_NOT_STICKY;
+                }
+            } else {
+                localSecretKey = null;
+            }
+
             if (currentPubkeyHex != null && relays != null && relays.length > 0) {
                 startRelayConnections(relays, currentPubkeyHex);
             } else {
                 // No valid relays; still keep notification accurate.
                 updateServiceNotificationForHealth();
             }
-
 
             return START_STICKY;
         }
@@ -1097,8 +1128,7 @@ public class NativeBackgroundMessagingService extends Service {
             return false;
         }
 
-        // Amber-only for now.
-        if (!"amber".equalsIgnoreCase(currentMode)) {
+        if (!"amber".equalsIgnoreCase(currentMode) && !"nsec".equalsIgnoreCase(currentMode)) {
             return false;
         }
 
@@ -1234,7 +1264,7 @@ public class NativeBackgroundMessagingService extends Service {
             return null;
         }
 
-        String decryptedGiftWrap = amberNip44Decrypt(giftWrapCiphertext, outerSenderPubkeyHex, currentUserPubkeyHex);
+        String decryptedGiftWrap = decryptNip44(giftWrapCiphertext, outerSenderPubkeyHex, currentUserPubkeyHex);
         if (decryptedGiftWrap == null) {
             return null;
         }
@@ -1252,7 +1282,7 @@ public class NativeBackgroundMessagingService extends Service {
                 return null;
             }
 
-            String decryptedSeal = amberNip44Decrypt(sealCiphertext, sealPubkeyHex, currentUserPubkeyHex);
+            String decryptedSeal = decryptNip44(sealCiphertext, sealPubkeyHex, currentUserPubkeyHex);
             if (decryptedSeal == null) {
                 return null;
             }
@@ -1267,6 +1297,263 @@ public class NativeBackgroundMessagingService extends Service {
         } catch (JSONException e) {
             return null;
         }
+    }
+
+    private void disableBackgroundMessagingDueToMissingSecret() {
+        Log.w(LOG_TAG, "Disabling background messaging: missing local secret key (re-login required)");
+
+        AndroidBackgroundMessagingPrefs.setEnabled(getApplicationContext(), false);
+        AndroidBackgroundMessagingPrefs.saveSummary(getApplicationContext(), "Disabled: re-login required");
+
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(NOTIFICATION_ID, buildNotification("Disabled: re-login required"));
+        }
+
+        try {
+            stopForeground(true);
+        } catch (Exception ignored) {
+            // ignore
+        }
+        stopSelf();
+    }
+
+    private String decryptNip44(String ciphertext, String senderPubkeyHex, String currentUserPubkeyHex) {
+        if (ciphertext == null || senderPubkeyHex == null) {
+            return null;
+        }
+
+        if ("amber".equalsIgnoreCase(currentMode)) {
+            return amberNip44Decrypt(ciphertext, senderPubkeyHex, currentUserPubkeyHex);
+        }
+
+        if ("nsec".equalsIgnoreCase(currentMode)) {
+            return localNip44Decrypt(ciphertext, senderPubkeyHex);
+        }
+
+        return null;
+    }
+
+    private String localNip44Decrypt(String payload, String senderPubkeyHex) {
+        if (localSecretKey == null || localSecretKey.length != 32) {
+            return null;
+        }
+
+        if (payload == null || senderPubkeyHex == null) {
+            return null;
+        }
+
+        try {
+            byte[] conversationKey = getConversationKey(localSecretKey, senderPubkeyHex);
+            return nip44V2DecryptPayload(payload, conversationKey);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static byte[] getConversationKey(byte[] privateKey, String peerPubkeyHex) throws Exception {
+        if (privateKey == null || privateKey.length != 32) {
+            throw new IllegalArgumentException("invalid private key");
+        }
+
+        byte[] peerPubkeyX = hexToBytes(peerPubkeyHex);
+        if (peerPubkeyX.length != 32) {
+            throw new IllegalArgumentException("invalid peer pubkey");
+        }
+
+        byte[] sharedX = secp256k1Ecdh(privateKey, peerPubkeyX);
+        return hkdfExtract(sharedX, "nip44-v2".getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static byte[] secp256k1Ecdh(byte[] privateKey, byte[] peerPubkeyX) throws Exception {
+        X9ECParameters params = SECNamedCurves.getByName("secp256k1");
+        if (params == null) {
+            throw new IllegalStateException("secp256k1 params not available");
+        }
+
+        byte[] compressed = new byte[33];
+        compressed[0] = 0x02; // even Y (BIP340-style lift)
+        System.arraycopy(peerPubkeyX, 0, compressed, 1, 32);
+
+        ECPoint peerPoint = params.getCurve().decodePoint(compressed);
+        BigInteger scalar = new BigInteger(1, privateKey);
+        if (scalar.signum() == 0) {
+            throw new IllegalArgumentException("invalid private key");
+        }
+
+        ECPoint sharedPoint = peerPoint.multiply(scalar).normalize();
+        byte[] x = sharedPoint.getAffineXCoord().getEncoded();
+
+        if (x.length == 32) {
+            return x;
+        }
+
+        if (x.length > 32) {
+            return Arrays.copyOfRange(x, x.length - 32, x.length);
+        }
+
+        byte[] out = new byte[32];
+        System.arraycopy(x, 0, out, 32 - x.length, x.length);
+        return out;
+    }
+
+    private static byte[] hkdfExtract(byte[] ikm, byte[] salt) throws Exception {
+        return hmacSha256(salt, ikm);
+    }
+
+    private static byte[] hkdfExpand(byte[] prk, byte[] info, int length) throws Exception {
+        if (length <= 0) {
+            throw new IllegalArgumentException("invalid length");
+        }
+
+        byte[] result = new byte[length];
+        int pos = 0;
+        byte[] previous = new byte[0];
+        int counter = 1;
+
+        while (pos < length) {
+            byte[] message = concat(previous, info, new byte[]{(byte) counter});
+            previous = hmacSha256(prk, message);
+
+            int toCopy = Math.min(previous.length, length - pos);
+            System.arraycopy(previous, 0, result, pos, toCopy);
+            pos += toCopy;
+            counter++;
+        }
+
+        return result;
+    }
+
+    private static byte[] hmacSha256(byte[] key, byte[] message) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(key, "HmacSHA256"));
+        return mac.doFinal(message);
+    }
+
+    private static String nip44V2DecryptPayload(String payload, byte[] conversationKey) throws Exception {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+
+        byte[] data = Base64.decode(payload, Base64.DEFAULT);
+        if (data.length < 99) {
+            return null;
+        }
+
+        int version = data[0] & 0xFF;
+        if (version != 2) {
+            return null;
+        }
+
+        byte[] nonce = Arrays.copyOfRange(data, 1, 33);
+        byte[] mac = Arrays.copyOfRange(data, data.length - 32, data.length);
+        byte[] ciphertext = Arrays.copyOfRange(data, 33, data.length - 32);
+        if (ciphertext.length == 0) {
+            return null;
+        }
+
+        byte[] keys = hkdfExpand(conversationKey, nonce, 76);
+        byte[] chachaKey = Arrays.copyOfRange(keys, 0, 32);
+        byte[] chachaNonce = Arrays.copyOfRange(keys, 32, 44);
+        byte[] hmacKey = Arrays.copyOfRange(keys, 44, 76);
+
+        byte[] calculatedMac = hmacSha256(hmacKey, concat(nonce, ciphertext));
+        if (!MessageDigest.isEqual(calculatedMac, mac)) {
+            return null;
+        }
+
+        byte[] paddedPlaintext = chacha20Decrypt(chachaKey, chachaNonce, ciphertext);
+        return unpadNip44(paddedPlaintext);
+    }
+
+    private static byte[] chacha20Decrypt(byte[] key, byte[] nonce, byte[] ciphertext) {
+        ChaCha7539Engine engine = new ChaCha7539Engine();
+        engine.init(false, new ParametersWithIV(new KeyParameter(key), nonce));
+
+        byte[] out = new byte[ciphertext.length];
+        engine.processBytes(ciphertext, 0, ciphertext.length, out, 0);
+        return out;
+    }
+
+    private static String unpadNip44(byte[] padded) {
+        if (padded == null || padded.length < 2) {
+            return null;
+        }
+
+        int unpaddedLen = readUint16Be(padded, 0);
+        if (unpaddedLen <= 0) {
+            return null;
+        }
+
+        int expectedPaddedLen = calcPaddedLen(unpaddedLen);
+        if (padded.length != 2 + expectedPaddedLen) {
+            return null;
+        }
+
+        if (2 + unpaddedLen > padded.length) {
+            return null;
+        }
+
+        byte[] unpadded = Arrays.copyOfRange(padded, 2, 2 + unpaddedLen);
+        return new String(unpadded, StandardCharsets.UTF_8);
+    }
+
+    private static int calcPaddedLen(int unpaddedLen) {
+        if (unpaddedLen <= 32) {
+            return 32;
+        }
+
+        int value = unpaddedLen - 1;
+        int nextPower = 1;
+        while (nextPower <= value && nextPower > 0) {
+            nextPower <<= 1;
+        }
+
+        int chunk = nextPower <= 256 ? 32 : nextPower / 8;
+        return chunk * ((unpaddedLen - 1) / chunk + 1);
+    }
+
+    private static int readUint16Be(byte[] bytes, int offset) {
+        return ((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF);
+    }
+
+    private static byte[] hexToBytes(String hex) {
+        if (hex == null) {
+            return new byte[0];
+        }
+
+        String normalized = hex.trim();
+        if ((normalized.length() % 2) != 0) {
+            throw new IllegalArgumentException("invalid hex");
+        }
+
+        int len = normalized.length() / 2;
+        byte[] out = new byte[len];
+        for (int i = 0; i < len; i++) {
+            int index = i * 2;
+            out[i] = (byte) Integer.parseInt(normalized.substring(index, index + 2), 16);
+        }
+        return out;
+    }
+
+    private static byte[] concat(byte[]... chunks) {
+        int length = 0;
+        for (byte[] chunk : chunks) {
+            if (chunk != null) {
+                length += chunk.length;
+            }
+        }
+
+        byte[] out = new byte[length];
+        int pos = 0;
+        for (byte[] chunk : chunks) {
+            if (chunk == null || chunk.length == 0) {
+                continue;
+            }
+            System.arraycopy(chunk, 0, out, pos, chunk.length);
+            pos += chunk.length;
+        }
+        return out;
     }
 
     private String amberNip44Decrypt(String ciphertext, String senderPubkeyHex, String currentUserPubkeyHex) {

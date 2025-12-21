@@ -16,7 +16,9 @@
   import { fade } from "svelte/transition";
   import { glassModal } from "$lib/utils/transitions";
   import { t } from "$lib/i18n";
+  import { nip19 } from "nostr-tools";
   import { language, setLanguage } from "$lib/stores/language";
+  import { getAndroidLocalSecretKeyHex } from "$lib/core/AndroidLocalSecretKey";
   import { hapticSelection } from "$lib/utils/haptics";
   import type { Language } from "$lib/i18n";
   import Button from '$lib/components/ui/Button.svelte';
@@ -51,6 +53,65 @@
   let securityAuthMethod = $state<AuthMethod>("unknown");
   let storedNsec = $state("");
   let showNsec = $state(false);
+
+  function hexToBytes(hex: string): Uint8Array {
+    const normalized = hex.trim();
+    if ((normalized.length % 2) !== 0) {
+      throw new Error("Invalid hex");
+    }
+
+    const bytes = new Uint8Array(normalized.length / 2);
+    for (let i = 0; i < normalized.length; i += 2) {
+      bytes[i / 2] = parseInt(normalized.substring(i, i + 2), 16);
+    }
+
+    return bytes;
+  }
+
+  async function toggleNsecVisibility(): Promise<void> {
+    if (securityAuthMethod !== "local") {
+      return;
+    }
+
+    if (showNsec) {
+      showNsec = false;
+      storedNsec = "";
+      return;
+    }
+
+    if (isAndroidApp) {
+      const secretKeyHex = await getAndroidLocalSecretKeyHex();
+      if (!secretKeyHex) {
+        await nativeDialogService.alert({
+          message: "Unable to load nsec. Please re-login."
+        });
+        showNsec = false;
+        storedNsec = "";
+        return;
+      }
+
+      try {
+        storedNsec = nip19.nsecEncode(hexToBytes(secretKeyHex));
+        showNsec = true;
+      } catch (e) {
+        await nativeDialogService.alert({
+          message: "Unable to load nsec. Please re-login."
+        });
+        showNsec = false;
+        storedNsec = "";
+      }
+
+      return;
+    }
+
+    try {
+      storedNsec = localStorage.getItem("nospeak:nsec") || "";
+      showNsec = storedNsec.length > 0;
+    } catch (e) {
+      showNsec = false;
+      storedNsec = "";
+    }
+  }
 
   // Profile settings
   let profileName = $state("");
@@ -313,8 +374,13 @@
         }
 
         if (method === "local") {
-          const nsec = localStorage.getItem("nospeak:nsec");
-          storedNsec = nsec || "";
+          if (isAndroidApp) {
+            // On Android native we store the secret in Keystore, not localStorage.
+            storedNsec = "";
+          } else {
+            const nsec = localStorage.getItem("nospeak:nsec");
+            storedNsec = nsec || "";
+          }
         } else {
           storedNsec = "";
         }
@@ -1570,14 +1636,14 @@
                       value={storedNsec}
                       class="pr-10 font-mono"
                     />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      class="absolute inset-y-0 right-0"
-                      onclick={() => (showNsec = !showNsec)}
-                      aria-label={showNsec ? $t('settings.security.hideNsecAria') : $t('settings.security.showNsecAria')}
-                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        class="absolute inset-y-0 right-0"
+                        onclick={toggleNsecVisibility}
+                        aria-label={showNsec ? $t('settings.security.hideNsecAria') : $t('settings.security.showNsecAria')}
+                      >
                       {#if showNsec}
                         <svg
                           class="w-5 h-5"

@@ -61,48 +61,48 @@ The project SHALL define a documented build and release pipeline for the Android
 - **AND** SHALL be able to submit it to the chosen distribution channel (such as the Google Play Store) without requiring undocumented manual configuration changes.
 
 ### Requirement: Android Background Messaging Foreground Service
-The Android Capacitor app shell SHALL provide a background messaging mode that keeps the user's read relays connected while the app UI is not visible by running the messaging stack inside a native Android foreground service that is started and controlled via a dedicated Capacitor plugin. When the current session uses an external signer such as Amber, this native service SHALL decrypt gift-wrapped messages via the signer integration and raise OS notifications that include short plaintext previews for messages and reactions.
+The Android Capacitor app shell SHALL provide a background messaging mode that keeps the user's read relays connected while the app UI is not visible by running the messaging stack inside a native Android foreground service that is started and controlled via a dedicated Capacitor plugin.
 
-#### Scenario: Native foreground service emits preview notifications and routes taps
+When the current session uses an external signer such as Amber, this native service SHALL decrypt gift-wrapped messages via the signer integration.
+
+When the current session uses a local key (nsec) login, this native service SHALL decrypt gift-wrapped messages using a locally stored secret key (NIP-44 v2) that is persisted in Android-native, Keystore-backed storage.
+
+In both modes, the native service SHALL raise OS notifications that include short plaintext previews for messages and reactions, consistent with existing lockscreen privacy and notification routing requirements.
+
+#### Scenario: Native foreground service emits preview notifications for Amber sessions
 - **GIVEN** the user is running nospeak inside the Android Capacitor app shell and has enabled background messaging
 - **AND** the native foreground service is active
 - **AND** message notifications are enabled and Android has granted local notification permission
+- **AND** the current session uses an external signer (Amber)
 - **WHEN** a new gift-wrapped message or reaction addressed to the current user is delivered from any configured read relay while the app UI is not visible
-- **THEN** the native foreground service SHALL attempt to decrypt the gift-wrap using the active signer integration when available
+- **THEN** the native foreground service SHALL attempt to decrypt the gift-wrap using the external signer integration
 - **AND** it SHALL raise an Android OS notification that includes a short preview (for example, a truncated plaintext message preview or `Reaction: ❤️`) when the device is unlocked
-- **AND** it SHALL group notification entries per conversation and combine message + reaction activity
-- **AND** when a locally cached contact identity exists for the sender public key, it SHOULD use the cached **username** as the notification title
-- **AND** when a locally cached avatar URL exists for that sender, it SHOULD display the corresponding avatar as the conversation icon on a best-effort basis
-- **AND** activating the notification SHALL open the nospeak app and navigate to the corresponding chat conversation
-- **AND** the username used for this title SHALL be derived strictly from Nostr kind `0` metadata field `name` (it SHALL NOT use `display_name`)
-- **AND** the native service SHALL NOT subscribe to Nostr kind `0` metadata events to obtain this identity (it relies on local cache only)
+- **AND** activating the notification SHALL open the nospeak app and navigate to the corresponding chat conversation.
 
-#### Scenario: Android 11+ conversation icon uses dynamic shortcut
-- **GIVEN** the user receives a background message notification on an Android 11+ device
-- **WHEN** the native service raises the OS notification for the corresponding chat
-- **THEN** the service SHALL publish or update a dynamic shortcut for that conversation using a stable identifier derived from the partner public key (for example `chat_<partnerPubkeyHex>`)
-- **AND** it SHALL bind the notification to that shortcut identifier so Android can render a conversation icon
-- **AND** the shortcut intent SHOULD be uniquely addressable per conversation (for example `ACTION_VIEW` with `nospeak://chat/<partnerPubkeyHex>`), while still routing into the app’s chat screen
-- **AND** when an avatar bitmap is available for the contact, it SHOULD be used as the shortcut icon
+#### Scenario: Native foreground service emits preview notifications for local-key sessions
+- **GIVEN** the user is running nospeak inside the Android Capacitor app shell and has enabled background messaging
+- **AND** the native foreground service is active
+- **AND** message notifications are enabled and Android has granted local notification permission
+- **AND** the current session uses a local key (nsec) login
+- **AND** the local secret key is available in Android-native secure storage
+- **WHEN** a new gift-wrapped message or reaction addressed to the current user is delivered from any configured read relay while the app UI is not visible
+- **THEN** the native foreground service SHALL decrypt the gift-wrap using NIP-44 v2 with the locally stored secret key
+- **AND** it SHALL raise an Android OS notification that includes a short preview when the device is unlocked
+- **AND** activating the notification SHALL open the nospeak app and navigate to the corresponding chat conversation.
 
-#### Scenario: Lockscreen shows contact name but redacts preview text
-- **GIVEN** the user receives a background message notification while the device is locked
-- **WHEN** the OS renders the notification on the lockscreen with sensitive content hidden
-- **THEN** the notification SHALL display the contact name as the title
-- **AND** it SHALL NOT display the plaintext message preview on the lockscreen
-- **AND** it SHALL still route taps to the correct chat conversation.
+#### Scenario: Local-key secret is not passed through intents
+- **GIVEN** the user enables Android background messaging in a local-key (nsec) session
+- **WHEN** the web runtime starts or updates the native Android foreground service via the Capacitor plugin
+- **THEN** the start/update request SHALL NOT include the local secret key in an Android intent extra
+- **AND** the foreground service SHALL obtain the local secret key only from Android-native, Keystore-backed storage.
 
-#### Scenario: Shortcut failures do not suppress notifications
-- **GIVEN** a background message notification is raised
-- **WHEN** Android rejects conversation shortcut publication or shortcut binding (for example due to OEM limits or rate limiting)
-- **THEN** the service SHALL still post a message notification to the message notification channel
-- **AND** it SHOULD fall back to displaying the contact avatar as a large icon when available.
-
-#### Scenario: Notification channel settings persist across updates
-- **GIVEN** the user has customized the Android notification channel settings for background message notifications (for example sound or vibration)
-- **WHEN** the app is restarted or updated
-- **THEN** the app SHALL NOT delete or recreate the existing channel solely to apply defaults
-- **AND** the user’s channel customizations SHALL remain in effect.
+#### Scenario: Background messaging is disabled when local secret is missing
+- **GIVEN** the Android foreground service starts or restores background messaging in local-key mode
+- **AND** the local secret key is missing from Android-native secure storage
+- **WHEN** the service evaluates whether it can perform background decryption
+- **THEN** it SHALL persistently disable Android background messaging for that installation
+- **AND** it SHALL stop the foreground service
+- **AND** it SHOULD update the foreground notification summary to indicate that re-login is required.
 
 ### Requirement: Persistent Android Foreground Notification for Background Messaging
 When Android background messaging is active, the Android app shell SHALL display a persistent foreground notification indicating that nospeak is connected to the user's read relays, including a summary of which relays are connected, and SHALL keep this notification visible as long as background messaging is running.
@@ -543,34 +543,47 @@ When running inside the Android Capacitor app shell, the app SHALL be able to pl
 - **AND** the absence of tap sound feedback SHALL NOT block or degrade the primary interaction behavior.
 
 ### Requirement: Android Background Messaging Auto-Restart After Device Restart
-When running inside the Android Capacitor app shell, the system SHALL restore Android background messaging after a device restart or app update for users who previously enabled background messaging. The Android shell SHALL persist the background messaging enabled state and the minimal service start configuration (for example, public key and configured read relay URLs) in Android app-private storage so that native components can read it without requiring the WebView to start. After Android delivers `BOOT_COMPLETED`, the shell SHALL (best-effort) restart the native background messaging foreground service once the user has unlocked their profile. After Android delivers `MY_PACKAGE_REPLACED`, the shell SHALL (best-effort) restart the service if background messaging remains enabled.
+When running inside the Android Capacitor app shell, the system SHALL restore Android background messaging after a device restart or app update for users who previously enabled background messaging.
 
-This restoration behavior SHALL be best-effort and SHALL NOT attempt to bypass Android background execution policies. If the user force-stops the app or the OS blocks background execution, the service MAY not restart until the user manually opens the app again.
+For Amber sessions, the native service MAY rely on the persisted signer package selection and existing signer integration as specified.
 
-#### Scenario: Service restarts after device reboot
+For local-key sessions, the native service SHALL only restart in a state that can perform NIP-44 decryption when the local secret key is available in Android-native secure storage. If the secret key is missing, the service SHALL disable background messaging and SHALL NOT continue attempting to run in a degraded mode.
+
+#### Scenario: Local-key service restarts after device reboot when secret is available
 - **GIVEN** the user previously enabled background messaging in Settings → General while running inside the Android Capacitor app shell
-- **AND** the Android app has previously persisted the background messaging enabled state and required configuration in app-private storage
+- **AND** the user previously logged in with a local key (nsec) and the key is stored in Android-native secure storage
 - **WHEN** the device reboots and the user unlocks their Android profile
 - **THEN** the Android app shell SHALL start the native background messaging foreground service without requiring the WebView to be opened
-- **AND** the persistent foreground notification for background messaging SHALL be displayed.
+- **AND** the service SHALL be able to decrypt gift-wraps and emit preview notifications according to the background messaging requirements.
 
-#### Scenario: Service restarts after app update
-- **GIVEN** the user previously enabled background messaging in Settings → General while running inside the Android Capacitor app shell
-- **AND** the Android app has previously persisted the background messaging enabled state and required configuration in app-private storage
-- **WHEN** the app is updated and Android delivers `MY_PACKAGE_REPLACED` for the nospeak package
-- **THEN** the Android app shell SHALL (best-effort) start the native background messaging foreground service
-- **AND** the persistent foreground notification for background messaging SHALL be displayed.
-
-#### Scenario: Service does not restart when background messaging is disabled
-- **GIVEN** the user has disabled background messaging in Settings → General
-- **WHEN** the device reboots or the app is updated
-- **THEN** the Android app shell SHALL NOT start the native background messaging foreground service.
-
-#### Scenario: Service starts when no read relays are configured
+#### Scenario: Local-key service does not run after reboot when secret is missing
 - **GIVEN** the user previously enabled background messaging in Settings → General
-- **AND** the Android app has persisted the enabled state but has no configured read relay URLs available (for example, the list is empty)
-- **WHEN** the native background messaging foreground service is started or restored (including after reboot)
-- **THEN** the service SHALL remain running with its persistent notification
-- **AND** the foreground notification text SHALL indicate that no relays are configured (for example, "No read relays configured")
-- **AND** the service SHALL NOT attempt to establish relay WebSocket connections until one or more relay URLs are configured.
+- **AND** the user previously used a local key (nsec) session
+- **AND** the local secret key is no longer available in Android-native secure storage
+- **WHEN** the device reboots or the app is updated
+- **THEN** the Android shell SHALL disable background messaging for that installation
+- **AND** it SHALL NOT keep the foreground service running in a state that cannot decrypt messages.
+
+### Requirement: Android Local Key Secret Storage
+When running inside the Android Capacitor app shell, the system SHALL persist local-key (nsec) authentication secrets only in Android-native, Keystore-backed storage and SHALL NOT persist the local secret key in web `localStorage`.
+
+The Android shell SHALL expose a minimal Capacitor plugin API for the web runtime to store, retrieve, and clear the local secret key.
+
+#### Scenario: Local-key login persists secret in Android-native secure storage
+- **GIVEN** the user is running nospeak inside the Android Capacitor app shell
+- **WHEN** the user logs in using a local key (nsec)
+- **THEN** the system SHALL store the secret key in Android-native, Keystore-backed storage
+- **AND** it SHALL persist the auth method in a non-secret form so the session can be restored.
+
+#### Scenario: Android local-key restore requires secure secret
+- **GIVEN** the user previously logged in using a local key (nsec) in the Android app shell
+- **WHEN** the app attempts to restore the session on startup
+- **THEN** it SHALL restore the session only if the local secret key is present in Android-native secure storage
+- **AND** if the secret is missing, it SHALL require the user to re-login.
+
+#### Scenario: Logout clears Android-native secret storage
+- **GIVEN** the user is logged in using a local key (nsec) inside the Android app shell
+- **WHEN** the user logs out
+- **THEN** the system SHALL clear the local secret key from Android-native secure storage
+- **AND** it SHALL stop Android background messaging and clear any persisted state as already specified.
 

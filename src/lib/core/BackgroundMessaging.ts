@@ -71,7 +71,6 @@ interface AndroidBackgroundMessagingPlugin {
     start(options: {
         mode: 'nsec' | 'amber';
         pubkeyHex: string;
-        nsecHex?: string;
         readRelays: string[]; // keeps native interface name but will carry messaging relays
         summary: string;
         notificationsEnabled: boolean;
@@ -96,15 +95,12 @@ async function startNativeForegroundService(summary: string, readRelays: string[
 
 
     let mode: 'nsec' | 'amber' = 'amber';
-    let nsecHex: string | undefined;
 
     if (typeof window !== 'undefined' && window.localStorage) {
         try {
             const authMethod = window.localStorage.getItem('nospeak:auth_method');
-            const storedNsec = window.localStorage.getItem('nospeak:nsec');
-            if (authMethod === 'local' && storedNsec) {
+            if (authMethod === 'local') {
                 mode = 'nsec';
-                nsecHex = storedNsec;
             }
         } catch (e) {
             console.warn('Failed to read auth method for Android background messaging:', e);
@@ -144,7 +140,6 @@ async function startNativeForegroundService(summary: string, readRelays: string[
       await AndroidBackgroundMessaging.start({
           mode,
           pubkeyHex,
-          nsecHex,
           readRelays,
           summary,
           notificationsEnabled

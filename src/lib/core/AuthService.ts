@@ -14,6 +14,8 @@ import { profileResolver } from './ProfileResolver';
 import { messageRepo } from '$lib/db/MessageRepository';
 import { beginLoginSyncFlow, completeLoginSyncFlow, setLoginSyncActiveStep } from '$lib/stores/sync';
 import { showEmptyProfileModal } from '$lib/stores/modals';
+import { isAndroidNative } from './NativeDialogs';
+import { clearAndroidLocalSecretKey, getAndroidLocalSecretKeyHex, setAndroidLocalSecretKeyHex } from './AndroidLocalSecretKey';
 
 // Helper for hex conversion
 function bytesToHex(bytes: Uint8Array): string {
@@ -45,18 +47,35 @@ export class AuthService {
         return { npub, nsec };
     }
 
-    public async login(nsec: string, remember: boolean = true) {
+    public async login(nsec: string) {
         try {
             const s = new LocalSigner(nsec);
             const pubkey = await s.getPublicKey();
             const npub = nip19.npubEncode(pubkey);
-            
+
             signer.set(s);
             currentUser.set({ npub });
 
-            if (remember) {
+            localStorage.setItem(AUTH_METHOD_KEY, 'local');
+
+            if (isAndroidNative()) {
+                try {
+                    const decoded = nip19.decode(nsec);
+                    if (decoded.type !== 'nsec' || !(decoded.data instanceof Uint8Array)) {
+                        throw new Error('Invalid nsec');
+                    }
+
+                    const secretKeyHex = bytesToHex(decoded.data);
+                    await setAndroidLocalSecretKeyHex(secretKeyHex);
+
+                    // Ensure the local secret is not duplicated in web storage on Android.
+                    localStorage.removeItem(STORAGE_KEY);
+                } catch (e) {
+                    console.error('Failed to persist Android local secret key:', e);
+                    throw e;
+                }
+            } else {
                 localStorage.setItem(STORAGE_KEY, nsec);
-                localStorage.setItem(AUTH_METHOD_KEY, 'local');
             }
 
             // Navigate to chat and start ordered login history flow in background
@@ -88,7 +107,7 @@ export class AuthService {
         }
     }
 
-    public async loginWithExtension(remember: boolean = true) {
+    public async loginWithExtension() {
         try {
             const s = new Nip07Signer();
             const pubkey = await s.getPublicKey();
@@ -100,9 +119,7 @@ export class AuthService {
             signer.set(s);
             currentUser.set({ npub });
 
-            if (remember) {
-                localStorage.setItem(AUTH_METHOD_KEY, 'nip07');
-            }
+            localStorage.setItem(AUTH_METHOD_KEY, 'nip07');
 
             // Navigate to chat and start ordered login history flow in background
             goto('/chat');
@@ -245,27 +262,46 @@ export class AuthService {
 
         try {
             if (method === 'local') {
-                const nsec = localStorage.getItem(STORAGE_KEY);
-                if (!nsec) return false;
- 
+                let nsec: string | null = null;
+
+                if (isAndroidNative()) {
+                    const secretKeyHex = await getAndroidLocalSecretKeyHex();
+                    if (!secretKeyHex) {
+                        // No migration: require explicit re-login.
+                        localStorage.removeItem(AUTH_METHOD_KEY);
+                        localStorage.removeItem(STORAGE_KEY);
+                        return false;
+                    }
+
+                    try {
+                        nsec = nip19.nsecEncode(hexToBytes(secretKeyHex));
+                    } catch (e) {
+                        localStorage.removeItem(AUTH_METHOD_KEY);
+                        return false;
+                    }
+                } else {
+                    nsec = localStorage.getItem(STORAGE_KEY);
+                    if (!nsec) return false;
+                }
+
                 const s = new LocalSigner(nsec);
                 const pubkey = await s.getPublicKey();
                 const npub = nip19.npubEncode(pubkey);
- 
+
                 signer.set(s);
                 currentUser.set({ npub });
- 
+
                 await ensureRelaysAndHistory(npub, 'Restoration');
- 
-                 await messagingService.startSubscriptionsForCurrentUser().catch(e => {
-                     console.error('Failed to start app-global message subscriptions after local restore:', e);
-                 });
- 
-                 await syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                     console.error('Failed to sync Android background messaging preference after local restore:', e);
-                 });
- 
-                 return true;
+
+                await messagingService.startSubscriptionsForCurrentUser().catch(e => {
+                    console.error('Failed to start app-global message subscriptions after local restore:', e);
+                });
+
+                await syncAndroidBackgroundMessagingFromPreference().catch(e => {
+                    console.error('Failed to sync Android background messaging preference after local restore:', e);
+                });
+
+                return true;
             } else if (method === 'nip07') {
                 if (!window.nostr) {
                     // Wait a bit? Or fail.
@@ -345,7 +381,11 @@ export class AuthService {
  
          // Stop app-global message subscriptions before tearing down connections
          messagingService.stopSubscriptions();
- 
+
+         await clearAndroidLocalSecretKey().catch((e: unknown) => {
+             console.error('Failed to clear Android local secret key on logout:', e);
+         });
+
          localStorage.removeItem(STORAGE_KEY);
 
         localStorage.removeItem(AUTH_METHOD_KEY);
