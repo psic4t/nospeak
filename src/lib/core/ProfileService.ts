@@ -56,7 +56,10 @@ export class ProfileService {
         await profileRepo.cacheProfile(
             currentUserData.npub,
             metadata,
-            existingProfile?.messagingRelays || [],
+            {
+                messagingRelays: existingProfile?.messagingRelays || [],
+                mediaServers: (existingProfile as any)?.mediaServers || []
+            },
             nip05Info
         );
 

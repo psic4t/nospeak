@@ -28,51 +28,39 @@ The message input area SHALL provide a media upload button instead of displaying
 - **AND** sending the message occurs via the mobile keyboard's send/enter action
 
 ### Requirement: Media Upload Support
-The system SHALL allow users to upload images, videos, and MP3 audio files as encrypted attachments in NIP-17 conversations. Media uploads SHALL be performed via HTTPS POST requests to the canonical nospeak upload endpoint `https://nospeak.chat/api/upload`. Each media upload request SHALL include a valid NIP-98 Authorization header proving control of a Nostr key for the current session; the server SHALL reject uploads that are missing, expired, or invalid according to the NIP-98 verification rules. Uploaded media files SHALL continue to be stored under a `user_media` directory using UUID-based filenames, and the server SHALL expose these files via a CORS-enabled media API at `/api/user_media/<filename>` so that NIP-17 Kind 15 file messages and legacy text messages from other clients can reference those URLs when rendering media in conversations. When nospeak itself sends media attachments, it SHALL represent them as NIP-17 Kind 15 file messages instead of inserting the media URLs into Kind 14 text messages created by this client.
+The system SHALL allow users to upload images, videos, and MP3 audio files as encrypted attachments in NIP-17 conversations. The upload destination SHALL be selected based on the user’s Settings → Media Servers preference.
 
-#### Scenario: User sends image file message
-- **WHEN** the user opens the media upload menu from the message input, selects "Image", and chooses a valid image file
-- **THEN** the system SHALL open the media preview surface showing the selected image and an optional caption input
-- **WHEN** the user confirms sending from the preview
-- **THEN** the client SHALL upload the (encrypted) image blob to `https://nospeak.chat/api/upload` using HTTPS POST with a valid NIP-98 Authorization header
-- **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the resulting `/api/user_media/<filename>` URL and whose tags include at least the original MIME type, file size in bytes, and SHA-256 hash of the encrypted file blob
-- **AND** if the caption input is non-empty, the system SHALL also send a separate NIP-17 Kind 14 text message in the same conversation whose content is the caption text.
+- If the user has enabled Blossom uploads and has at least one configured Blossom server, the client SHALL upload the encrypted blob to Blossom servers using BUD-03 server ordering and Blossom authorization events (kind `24242`) as defined by BUD-01/BUD-02.
+- Otherwise, the client SHALL upload the encrypted blob to the canonical nospeak upload endpoint `https://nospeak.chat/api/upload` using HTTPS POST with a valid NIP-98 Authorization header.
 
-#### Scenario: User sends video file message
-- **WHEN** the user opens the media upload menu from the message input, selects "Video", and chooses a valid video file
-- **THEN** the system SHALL open the media preview surface showing the selected video and an optional caption input
-- **WHEN** the user confirms sending from the preview
-- **THEN** the client SHALL upload the (encrypted) video blob to `https://nospeak.chat/api/upload` with a valid NIP-98 Authorization header
-- **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the resulting `/api/user_media/<filename>` URL and whose tags include at least the original video MIME type, file size in bytes, and SHA-256 hash of the encrypted file blob
-- **AND** if the caption input is non-empty, the system SHALL also send a separate NIP-17 Kind 14 text message in the same conversation whose content is the caption text.
+When Blossom uploads are enabled:
+- The client MUST attempt to upload the blob to at least the first configured Blossom server.
+- The client SHOULD also upload (or otherwise mirror) the blob to the remaining configured servers on a best-effort basis.
 
-#### Scenario: User sends audio file message (MP3)
-- **WHEN** the user opens the media upload menu from the message input, selects a "Music" or audio option, and chooses a valid MP3 audio file
-- **THEN** the system SHALL open the media preview surface showing the selected audio file details and an optional caption input
-- **WHEN** the user confirms sending from the preview
-- **THEN** the client SHALL upload the (encrypted) audio blob to `https://nospeak.chat/api/upload` with a valid NIP-98 Authorization header
-- **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the resulting `/api/user_media/<filename>` URL and whose tags include at least the original audio MIME type, file size in bytes, and SHA-256 hash of the encrypted file blob
-- **AND** if the caption input is non-empty, the system SHALL also send a separate NIP-17 Kind 14 text message in the same conversation whose content is the caption text.
+#### Scenario: User sends image file message using Blossom servers
+- **GIVEN** the user has enabled Blossom uploads in Settings → Media Servers
+- **AND** the user has at least one configured Blossom server URL
+- **WHEN** the user selects an image file and confirms sending from the preview
+- **THEN** the client SHALL upload the encrypted image blob to the first configured Blossom server using `PUT /upload` with a valid Blossom authorization event (kind `24242` with `t=upload` and an `x` tag matching the uploaded blob’s SHA-256)
+- **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the returned blob `url`
+- **AND** the client SHOULD then attempt to upload or mirror the blob to remaining configured Blossom servers without blocking the message send.
 
-#### Scenario: Media display in messages
-- **WHEN** a message in a conversation contains or references an image media URL (either as the content of a NIP-17 Kind 15 file message or as a bare HTTP(S) image URL in a Kind 14 text message received from another client)
-- **THEN** the image SHALL be rendered inline in the message bubble
-- **WHEN** a message contains or references a video media URL (either as the content of a NIP-17 Kind 15 file message or as a bare HTTP(S) video URL in a Kind 14 text message received from another client)
-- **THEN** the video SHALL be rendered with controls in the message bubble
-- **WHEN** a message contains or references an audio media URL that ends with `.mp3` (either as the content of a NIP-17 Kind 15 file message or as a bare HTTP(S) `.mp3` URL in a Kind 14 text message received from another client)
-- **THEN** the message bubble SHALL render a compact audio player that displays a simple waveform visualization for the MP3
-- **AND** the audio player SHALL provide basic play and pause controls so the user can listen without leaving the conversation.
+#### Scenario: User sends video file message using local uploads
+- **GIVEN** the user has disabled Blossom uploads in Settings → Media Servers
+- **WHEN** the user selects a video file and confirms sending from the preview
+- **THEN** the client SHALL upload the encrypted video blob to `https://nospeak.chat/api/upload` using HTTPS POST with a valid NIP-98 Authorization header
+- **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the resulting `/api/user_media/<filename>` URL.
 
-#### Scenario: Invalid file upload
-- **WHEN** the user selects an invalid file type or oversized file for upload
+#### Scenario: Blossom toggle disabled when no servers configured
+- **GIVEN** the user has zero configured Blossom servers
+- **WHEN** the user views Settings → Media Servers
+- **THEN** the Blossom upload toggle is disabled
+- **AND** sending file messages SHALL use the local nospeak upload endpoint with NIP-98 authorization.
+
+#### Scenario: Upload failure is non-blocking
+- **WHEN** the user attempts to upload an image, video, or MP3 audio file and the selected upload backend is unreachable or rejects the upload
 - **THEN** an error message SHALL be displayed
-- **AND** no upload or Kind 15 file message SHALL be sent for that file.
-
-#### Scenario: Unauthorized media upload is rejected
-- **WHEN** a client attempts to upload an image, video, or MP3 audio file without a NIP-98 Authorization header, with an Authorization header that does not target `https://nospeak.chat/api/upload`, or with an Authorization header that fails signature or freshness validation
-- **THEN** the server SHALL reject the upload request with an error status
-- **AND** no file SHALL be stored in the `user_media` directory
-- **AND** the client SHALL surface a non-blocking error message in the messaging UI.
+- **AND** the rest of the messaging UI (including text sending, history scrolling, and media rendering for previously uploaded content) SHALL continue to function normally.
 
 ### Requirement: Unread Message Indicator
 The system SHALL display a visual indicator for contacts with unread messages.

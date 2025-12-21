@@ -4,6 +4,9 @@
     import { IntersectionObserverManager } from '$lib/utils/observers';
     import AudioWaveformPlayer from './AudioWaveformPlayer.svelte';
     import { decryptAesGcmToBytes } from '$lib/core/FileEncryption';
+    import { profileRepo } from '$lib/db/ProfileRepository';
+    import { profileResolver } from '$lib/core/ProfileResolver';
+    import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
 
     let {
         content,
@@ -15,6 +18,7 @@
         fileEncryptionAlgorithm = undefined,
         fileKey = undefined,
         fileNonce = undefined,
+        authorNpub = undefined,
         onMediaLoad = undefined
     } = $props<{
         content: string;
@@ -26,6 +30,7 @@
         fileEncryptionAlgorithm?: string;
         fileKey?: string;
         fileNonce?: string;
+        authorNpub?: string;
         onMediaLoad?: () => void;
     }>();
 
@@ -311,16 +316,98 @@
         }, 300); // 300ms debounce
     });
 
-    function getDecryptionUrl(url: string): string {
+    function getDownloadUrl(url: string): string {
         try {
             const u = new URL(url);
-            const segments = u.pathname.split('/');
-            const filename = segments[segments.length - 1];
-            if (!filename) return url;
-            // Always use the CORS-enabled API route for encrypted media
-            return `${u.origin}/api/user_media/${filename}`;
+
+            if (u.pathname.startsWith('/api/user_media/')) {
+                return url;
+            }
+
+            if (u.pathname.startsWith('/user_media/')) {
+                const segments = u.pathname.split('/');
+                const filename = segments[segments.length - 1];
+                if (!filename) return url;
+                return `${u.origin}/api/user_media/${filename}`;
+            }
+
+            // Blossom (and other) URLs should be fetched as-is.
+            return url;
         } catch {
             return url;
+        }
+    }
+
+    async function fetchCiphertext(url: string): Promise<Uint8Array> {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Download failed with status ${response.status}`);
+        }
+        return new Uint8Array(await response.arrayBuffer());
+    }
+
+    async function getAuthorMediaServers(): Promise<string[]> {
+        if (!authorNpub) {
+            return [];
+        }
+
+        const cached = await profileRepo.getProfileIgnoreTTL(authorNpub);
+        if (cached?.mediaServers?.length) {
+            return cached.mediaServers;
+        }
+
+        try {
+            await profileResolver.resolveProfile(authorNpub, true);
+        } catch {
+            // Best-effort; fallback will be skipped if servers remain empty.
+        }
+
+        const refreshed = await profileRepo.getProfileIgnoreTTL(authorNpub);
+        return refreshed?.mediaServers ?? [];
+    }
+
+    async function fetchCiphertextWithBlossomFallback(originalUrl: string): Promise<Uint8Array> {
+        const primaryUrl = getDownloadUrl(originalUrl);
+
+        try {
+            return await fetchCiphertext(primaryUrl);
+        } catch (e) {
+            const extracted = extractBlossomSha256FromUrl(originalUrl);
+            if (!extracted) {
+                throw e;
+            }
+
+            const servers = await getAuthorMediaServers();
+            if (servers.length === 0) {
+                throw e;
+            }
+
+            const candidatesWithExtension = buildBlossomCandidateUrls({
+                servers,
+                sha256: extracted.sha256,
+                extension: extracted.extension
+            });
+            const candidatesWithoutExtension = extracted.extension
+                ? buildBlossomCandidateUrls({ servers, sha256: extracted.sha256, extension: '' })
+                : [];
+
+            const candidates = Array.from(
+                new Set([
+                    ...candidatesWithExtension,
+                    ...candidatesWithoutExtension
+                ])
+            ).filter((candidate) => candidate !== primaryUrl);
+
+            let lastError: unknown = e;
+            for (const candidate of candidates) {
+                try {
+                    return await fetchCiphertext(candidate);
+                } catch (inner) {
+                    lastError = inner;
+                }
+            }
+
+            throw lastError;
         }
     }
 
@@ -348,12 +435,7 @@
             isDecrypting = true;
             decryptError = null;
 
-            const response = await fetch(getDecryptionUrl(fileUrl));
-            if (!response.ok) {
-                throw new Error(`Download failed with status ${response.status}`);
-            }
-
-            const ciphertextBuffer = new Uint8Array(await response.arrayBuffer());
+            const ciphertextBuffer = await fetchCiphertextWithBlossomFallback(fileUrl);
             const plainBytes = await decryptAesGcmToBytes(ciphertextBuffer, fileKey, fileNonce);
 
             const blob = new Blob([plainBytes.buffer as ArrayBuffer], { type: fileType || 'application/octet-stream' });

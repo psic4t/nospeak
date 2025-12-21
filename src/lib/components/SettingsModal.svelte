@@ -1,6 +1,8 @@
 <script lang="ts">
   import { notificationService } from "$lib/core/NotificationService";
   import { relaySettingsService } from "$lib/core/RelaySettingsService";
+  import { mediaServerSettingsService } from "$lib/core/MediaServerSettingsService";
+  import { normalizeBlossomServerUrl } from "$lib/core/BlossomServers";
   import { profileService } from "$lib/core/ProfileService";
   import { authService } from "$lib/core/AuthService";
   import { currentUser } from "$lib/stores/auth";
@@ -38,7 +40,7 @@
   let isSupported = $state(false);
   let isLoaded = $state(false);
 
-  type Category = "General" | "Profile" | "Messaging Relays" | "About" | "Security";
+  type Category = "General" | "Profile" | "Messaging Relays" | "Media Servers" | "About" | "Security";
   type AuthMethod = "local" | "nip07" | "amber" | "nip46" | "unknown";
 
   let activeCategory = $state<Category | null>(isMobile ? null : "General");
@@ -70,6 +72,16 @@
   let newRelayUrl = $state("");
   let isSavingRelays = $state(false);
   let relaySaveStatus = $state<string | null>(null);
+
+  // Media server settings (Blossom servers)
+  type MediaServerConfig = {
+    url: string;
+  };
+  let mediaServers = $state<MediaServerConfig[]>([]);
+  let newMediaServerUrl = $state("");
+  let isSavingMediaServers = $state(false);
+  let mediaServerSaveStatus = $state<string | null>(null);
+  let blossomUploadsEnabled = $state(false);
 
   function handlePictureUpload(file: File, type: "image" | "video" | "audio", url?: string) {
     if (url) {
@@ -173,7 +185,74 @@
   }
 
 
+  async function loadMediaServerSettings() {
+    let configured: string[] = [];
+
+    if ($currentUser?.npub) {
+      const profile = await profileRepo.getProfileIgnoreTTL($currentUser.npub);
+      if (profile) {
+        configured = (profile as any).mediaServers || [];
+      }
+    }
+
+    mediaServers = configured
+      .map((url) => ({ url }))
+      .sort((a, b) => a.url.localeCompare(b.url));
+  }
+
+  async function saveMediaServerSettings() {
+    const servers = mediaServers.map((s) => s.url);
+
+    isSavingMediaServers = true;
+    mediaServerSaveStatus = null;
+
+    try {
+      const result = await mediaServerSettingsService.updateSettings(servers);
+
+      if (result.succeeded === 0) {
+        mediaServerSaveStatus = $t('settings.mediaServers.saveStatusNone') as string;
+      } else if (result.failed === 0) {
+        const template = $t('settings.mediaServers.saveStatusSuccess') as string;
+        mediaServerSaveStatus = template.replace('{count}', String(result.succeeded));
+      } else {
+        let template = $t('settings.mediaServers.saveStatusPartial') as string;
+        template = template.replace('{succeeded}', String(result.succeeded));
+        template = template.replace('{attempted}', String(result.attempted));
+        mediaServerSaveStatus = template;
+      }
+    } catch (e) {
+      console.error('Failed to save media server settings:', e);
+      mediaServerSaveStatus = $t('settings.mediaServers.saveStatusError') as string;
+    } finally {
+      isSavingMediaServers = false;
+    }
+  }
+
+  async function addMediaServer() {
+    if (!newMediaServerUrl) return;
+
+    const normalized = normalizeBlossomServerUrl(newMediaServerUrl);
+    if (!normalized) {
+      return;
+    }
+
+    if (!mediaServers.find((s) => s.url === normalized)) {
+      mediaServers = [...mediaServers, { url: normalized }];
+      await saveMediaServerSettings();
+      hapticSelection();
+    }
+
+    newMediaServerUrl = "";
+  }
+
+  async function removeMediaServer(url: string) {
+    mediaServers = mediaServers.filter((s) => s.url !== url);
+    await saveMediaServerSettings();
+  }
+
+
   async function addRelay() {
+
     if (!newRelayUrl) return;
     let url = newRelayUrl.trim();
 
@@ -210,8 +289,9 @@
   $effect(() => {
     if (isOpen) {
       showMobileContent = false;
-      // Always refresh profile and relay settings when the modal opens
+      // Always refresh profile, relay, and media server settings when the modal opens
       loadRelaySettings();
+      loadMediaServerSettings();
       loadProfile();
 
       try {
@@ -254,6 +334,7 @@
           notificationsEnabled?: boolean;
           urlPreviewsEnabled?: boolean;
           backgroundMessagingEnabled?: boolean;
+          uploadBackend?: "local" | "blossom";
         };
         notificationsEnabled = settings.notificationsEnabled || false;
         urlPreviewsEnabled =
@@ -261,10 +342,12 @@
             ? settings.urlPreviewsEnabled
             : true;
         backgroundMessagingEnabled = settings.backgroundMessagingEnabled === true;
+        blossomUploadsEnabled = settings.uploadBackend === "blossom";
       } else {
         notificationsEnabled = false;
         urlPreviewsEnabled = true;
         backgroundMessagingEnabled = false;
+        blossomUploadsEnabled = false;
       }
 
       themeMode = getCurrentThemeMode();
@@ -281,9 +364,16 @@
         ...existingSettings,
         notificationsEnabled,
         urlPreviewsEnabled,
-        backgroundMessagingEnabled
+        backgroundMessagingEnabled,
+        uploadBackend: blossomUploadsEnabled ? "blossom" : "local"
       };
       localStorage.setItem("nospeak-settings", JSON.stringify(settings));
+    }
+  });
+
+  $effect(() => {
+    if (mediaServers.length === 0 && blossomUploadsEnabled) {
+      blossomUploadsEnabled = false;
     }
   });
 
@@ -652,6 +742,44 @@
           </button>
 
           <button
+            class={getCategoryCardClasses("Media Servers")}
+            onclick={() => {
+              activeCategory = "Media Servers";
+              showMobileContent = true;
+            }}
+          >
+            <div class="flex items-center gap-3">
+              <div class="w-6 h-6 flex items-center justify-center text-gray-700 dark:text-slate-100 flex-shrink-0">
+                <svg
+                  class="w-5 h-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M3 15a4 4 0 0 0 4 4h10a4 4 0 0 0 0-8 5 5 0 0 0-9.5-1.5A4 4 0 0 0 3 15z"></path>
+                </svg>
+              </div>
+              <span class="typ-section">
+                {$t("settings.categories.mediaServers")}
+              </span>
+            </div>
+            <svg
+              class="w-4 h-4 text-gray-400 dark:text-slate-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9 18l6-6-6-6"></path>
+            </svg>
+          </button>
+
+          <button
             class={getCategoryCardClasses("Security")}
             onclick={() => {
               activeCategory = "Security";
@@ -763,6 +891,8 @@
                 {$t('settings.categories.profile')}
               {:else if activeCategory === "Messaging Relays"}
                 {$t('settings.categories.messagingRelays')}
+              {:else if activeCategory === "Media Servers"}
+                {$t('settings.categories.mediaServers')}
               {:else if activeCategory === "Security"}
                 {$t('settings.categories.security')}
               {:else if activeCategory === "About"}
@@ -871,9 +1001,9 @@
                     bind:checked={backgroundMessagingEnabled}
                     onclick={toggleBackgroundMessaging}
                     aria-label={
-                      backgroundMessagingEnabled
-                        ? "Disable Android background messaging"
-                        : "Enable Android background messaging"
+                        backgroundMessagingEnabled
+                            ? "Disable Android background messaging"
+                            : "Enable Android background messaging"
                     }
                     class="ml-4"
                   />
@@ -1216,6 +1346,130 @@
                     class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400"
                   >
                     {$t('settings.messagingRelays.emptyState')}
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+          {:else if activeCategory === "Media Servers"}
+            <div class="space-y-6">
+              <p class="text-sm text-gray-500 dark:text-slate-400">
+                {$t('settings.mediaServers.description')}
+              </p>
+
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                  <label
+                    for="blossom-uploads-toggle"
+                    class="font-medium dark:text-white"
+                  >
+                    {$t('settings.mediaServers.toggleLabel')}
+                  </label>
+                  <p class="text-sm text-gray-500 dark:text-slate-400">
+                    {$t('settings.mediaServers.toggleDescription')}
+                  </p>
+                </div>
+                <Toggle
+                  id="blossom-uploads-toggle"
+                  bind:checked={blossomUploadsEnabled}
+                  disabled={mediaServers.length === 0}
+                  aria-label={
+                    blossomUploadsEnabled
+                      ? ($t('settings.mediaServers.toggleAriaDisable') as string)
+                      : ($t('settings.mediaServers.toggleAriaEnable') as string)
+                  }
+                  class="ml-4"
+                />
+              </div>
+
+              {#if mediaServers.length === 0}
+                <p class="text-xs text-gray-600 dark:text-slate-400">
+                  {$t('settings.mediaServers.toggleDisabledNoServers')}
+                </p>
+              {/if}
+
+              <div class="flex gap-2">
+                <Input
+                  bind:value={newMediaServerUrl}
+                  placeholder={$t('settings.mediaServers.inputPlaceholder')}
+                  class="flex-1"
+                  onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addMediaServer()}
+                />
+                <Button
+                  onclick={addMediaServer}
+                  variant="primary"
+                  size="icon"
+                  disabled={isSavingMediaServers}
+                  aria-label={$t('settings.mediaServers.addButton')}
+                >
+                  <svg
+                    class="w-5 h-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </Button>
+              </div>
+
+              {#if isSavingMediaServers || mediaServerSaveStatus}
+                <p class="text-xs text-gray-600 dark:text-slate-400">
+                  {#if isSavingMediaServers}
+                    {$t('settings.mediaServers.savingStatus')}
+                  {:else}
+                    {mediaServerSaveStatus}
+                  {/if}
+                </p>
+              {/if}
+
+              <div
+                class="border border-gray-200/60 dark:border-slate-700/70 rounded-2xl bg-white/80 dark:bg-slate-900/60 overflow-hidden shadow-sm divide-y divide-gray-200/60 dark:divide-slate-700/70"
+              >
+                {#each mediaServers as server}
+                  <div class="px-4 py-3 flex items-center justify-between">
+                    <div class="flex-1 min-w-0 pr-4">
+                      <p
+                        class="text-sm font-medium dark:text-white truncate"
+                        title={server.url}
+                      >
+                        {server.url}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                      <Button
+                        onclick={() => removeMediaServer(server.url)}
+                        variant="danger"
+                        size="icon"
+                        class="!w-8 !h-8"
+                        title="Remove server"
+                        disabled={isSavingMediaServers}
+                      >
+                        <svg
+                          class="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          ></path>
+                        </svg>
+                      </Button>
+                    </div>
+                  </div>
+                {:else}
+                  <div
+                    class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400"
+                  >
+                    {$t('settings.mediaServers.emptyState')}
                   </div>
                 {/each}
               </div>

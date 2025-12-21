@@ -1527,17 +1527,18 @@
               <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-emerald-400/70"></div>
             {/if}
              <MessageContent
-               content={msg.message}
-               highlight={isSearchActive ? searchQuery : undefined}
-              isOwn={msg.direction === "sent"}
-              onImageClick={openImageViewer}
-              fileUrl={msg.fileUrl}
-              fileType={msg.fileType}
-              fileEncryptionAlgorithm={msg.fileEncryptionAlgorithm}
-              fileKey={msg.fileKey}
-              fileNonce={msg.fileNonce}
-              onMediaLoad={handleMediaLoad}
-            />
+                content={msg.message}
+                highlight={isSearchActive ? searchQuery : undefined}
+               isOwn={msg.direction === "sent"}
+               onImageClick={openImageViewer}
+               fileUrl={msg.fileUrl}
+               fileType={msg.fileType}
+               fileEncryptionAlgorithm={msg.fileEncryptionAlgorithm}
+               fileKey={msg.fileKey}
+               fileNonce={msg.fileNonce}
+               authorNpub={msg.direction === "sent" ? $currentUser?.npub : partnerNpub}
+               onMediaLoad={handleMediaLoad}
+             />
 
             {#if captionForThis}
               <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">

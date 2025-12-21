@@ -3,6 +3,7 @@ import { profileRepo } from '$lib/db/ProfileRepository';
 import { nip19 } from 'nostr-tools';
 import { verifyNip05 } from './Nip05Verifier';
 import { cacheAndroidProfileIdentity, extractKind0Picture, extractKind0Username } from './AndroidProfileCache';
+import { parseBlossomServerListEvent } from './BlossomServers';
 
 export class ProfileResolver {
     
@@ -31,14 +32,14 @@ export class ProfileResolver {
         }
 
         // 2. Fetch from network
-        const { type, data } = nip19.decode(npub);
+        const { data } = nip19.decode(npub);
         const pubkey = data as string;
 
         console.log(`Fetching profile for ${npub}...`);
 
         const filters = [
             {
-                kinds: [0, 10050, 10002],
+                kinds: [0, 10050, 10002, 10063],
                 authors: [pubkey],
                 limit: 10 // Get multiple to ensure we catch both kinds if they exist
             }
@@ -83,13 +84,23 @@ export class ProfileResolver {
         return new Promise<void>((resolve) => {
             let metadata: any = null;
             let messagingRelays: string[] = [];
+            let mediaServers: string[] = [];
             let foundProfile = false;
             let foundMessagingRelays = false;
+            let foundMediaServers = false;
             let foundNip65Relays = false;
  
             const finalize = async () => {
                 const nip05Info = await buildNip05Info(metadata);
-                await profileRepo.cacheProfile(npub, metadata, messagingRelays, nip05Info);
+                await profileRepo.cacheProfile(
+                    npub,
+                    metadata,
+                    {
+                        messagingRelays,
+                        mediaServers: foundMediaServers ? mediaServers : undefined
+                    },
+                    nip05Info
+                );
 
                 const username = extractKind0Username(metadata);
                 if (username) {
@@ -122,6 +133,9 @@ export class ProfileResolver {
                     const parsed = this.parseMessagingRelayList(event);
                     messagingRelays = parsed;
                     foundMessagingRelays = true;
+                } else if (event.kind === 10063 && !foundMediaServers) {
+                    mediaServers = parseBlossomServerListEvent(event);
+                    foundMediaServers = true;
                 } else if (event.kind === 10002 && !foundNip65Relays && !foundMessagingRelays) {
                     const parsed = this.parseNIP65RelayList(event);
                     messagingRelays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));

@@ -26,6 +26,7 @@ export interface Profile {
     npub: string;
     metadata: any; // NIP-01 metadata
     messagingRelays: string[];
+    mediaServers: string[];
     cachedAt: number;
     expiresAt: number;
     nip05Status?: 'valid' | 'invalid' | 'unknown';
@@ -122,6 +123,20 @@ export class NospeakDB extends Dexie {
         // Version 8: Add lastActivityAt to contacts (no index change)
         this.version(8).stores({
             contacts: 'npub'
+        });
+
+        // Version 9: Add mediaServers to profiles
+        this.version(9).stores({
+            profiles: 'npub'
+        }).upgrade(async trans => {
+            const profiles = await trans.table('profiles').toArray();
+            const updates = profiles
+                .filter((p: any) => !Array.isArray((p as any).mediaServers))
+                .map((p: any) => ({ ...p, mediaServers: [] }));
+
+            if (updates.length > 0) {
+                await trans.table('profiles').bulkPut(updates);
+            }
         });
     }
 

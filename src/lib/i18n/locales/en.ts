@@ -192,8 +192,9 @@ const en = {
          categories: {
              general: 'General',
              profile: 'Profile',
-             messagingRelays: 'Messaging Relays',
-             security: 'Security',
+              messagingRelays: 'Messaging Relays',
+              mediaServers: 'Media Servers',
+              security: 'Security',
              about: 'About'
          },
 
@@ -236,21 +237,38 @@ const en = {
             saveButton: 'Save Changes',
             savingButton: 'Saving...'
         },
-         messagingRelays: {
-             description: 'Configure your NIP-17 messaging relays. These relays are used to receive your encrypted messages. For best performance, 2 messaging relays usually work best.',
-             inputPlaceholder: 'wss://relay.example.com',
-             addButton: 'Add',
-             emptyState: 'No relays configured',
-             tooManyWarning: 'Having more than 3 messaging relays may reduce performance and reliability.',
-             saveStatusSuccess: 'Saved relay list to {count} relays.',
-             saveStatusPartial: 'Saved relay list to {succeeded} of {attempted} relays.',
-             saveStatusNone: 'Could not save relay list to any relays.',
-             saveStatusError: 'Error saving relay list. Your settings may not be fully propagated.',
-             savingStatus: 'Saving relay settings…'
-         },
+          messagingRelays: {
+              description: 'Configure your NIP-17 messaging relays. These relays are used to receive your encrypted messages. For best performance, 2 messaging relays usually work best.',
+              inputPlaceholder: 'wss://relay.example.com',
+              addButton: 'Add',
+              emptyState: 'No relays configured',
+              tooManyWarning: 'Having more than 3 messaging relays may reduce performance and reliability.',
+              saveStatusSuccess: 'Saved relay list to {count} relays.',
+              saveStatusPartial: 'Saved relay list to {succeeded} of {attempted} relays.',
+              saveStatusNone: 'Could not save relay list to any relays.',
+              saveStatusError: 'Error saving relay list. Your settings may not be fully propagated.',
+              savingStatus: 'Saving relay settings…'
+          },
+
+          mediaServers: {
+              description: 'Configure your Blossom media servers. These servers are used to store files you upload (profile media and chat attachments).',
+              toggleLabel: 'Use Blossom servers',
+              toggleDescription: 'When enabled, uploads go to your configured Blossom servers instead of nospeak\'s local storage.',
+              toggleDisabledNoServers: 'Add at least one media server to enable Blossom uploads.',
+              toggleAriaEnable: 'Enable Blossom uploads',
+              toggleAriaDisable: 'Disable Blossom uploads',
+              inputPlaceholder: 'https://cdn.example.com',
+              addButton: 'Add',
+              emptyState: 'No servers configured',
+              saveStatusSuccess: 'Saved server list to {count} relays.',
+              saveStatusPartial: 'Saved server list to {succeeded} of {attempted} relays.',
+              saveStatusNone: 'Could not save server list to any relays.',
+              saveStatusError: 'Error saving server list. Your settings may not be fully propagated.',
+              savingStatus: 'Saving media server settings…'
+          },
 
 
-        security: {
+         security: {
             loginMethodTitle: 'Login method',
             loginMethodUnknown: 'Unknown',
             npubLabel: 'Your npub',

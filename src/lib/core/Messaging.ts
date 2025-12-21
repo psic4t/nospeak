@@ -16,6 +16,8 @@ import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
 import { reactionsStore } from '$lib/stores/reactions';
 import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
 import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
+import { getStoredUploadBackend } from './MediaUploadSettings';
+import { uploadToBlossomServers } from './BlossomUpload';
  
  export class MessagingService {
    private debug: boolean = true;
@@ -724,17 +726,31 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
   private async uploadEncryptedMedia(
     encrypted: EncryptedFileResult,
     mediaType: 'image' | 'video' | 'audio',
-    mimeType: string
+    mimeType: string,
+    blossomServers: string[]
   ): Promise<string> {
+    const blob = new Blob([encrypted.ciphertext.buffer as ArrayBuffer], { type: mimeType });
+
+    const backend = getStoredUploadBackend();
+    if (backend === 'blossom' && blossomServers.length > 0) {
+      const result = await uploadToBlossomServers({
+        servers: blossomServers,
+        body: blob,
+        mimeType,
+        sha256: encrypted.hashEncrypted
+      });
+      return result.url;
+    }
+
     const authHeader = await buildUploadAuthHeader();
     if (!authHeader) {
       throw new Error('You must be logged in to upload media');
     }
 
     const formData = new FormData();
-    const blob = new Blob([encrypted.ciphertext.buffer as ArrayBuffer], { type: mimeType });
     formData.append('file', blob, 'encrypted');
     formData.append('type', mediaType);
+
 
     return await new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -819,9 +835,13 @@ import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
     // 2. Encrypt file with AES-GCM
     const encrypted = await encryptFileWithAesGcm(file);
 
-    // 3. Upload encrypted blob to canonical media endpoint using XMLHttpRequest (works on web + Android)
+    // 3. Upload encrypted blob to selected media backend
     const mimeType = file.type || this.mediaTypeToMime(mediaType);
-    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType);
+
+    const senderProfile = await profileRepo.getProfileIgnoreTTL(senderNpub);
+    const blossomServers = (senderProfile as any)?.mediaServers ?? [];
+
+    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers);
 
     // 4. Create Kind 15 rumor
     const now = Math.floor(Date.now() / 1000);

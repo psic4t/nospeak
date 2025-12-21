@@ -21,7 +21,9 @@ export class RelaySettingsService {
             await profileRepo.cacheProfile(
                 currentUserData.npub,
                 profile?.metadata, // keep existing metadata
-                messagingRelays,
+                {
+                    messagingRelays
+                },
                 undefined
             );
         }

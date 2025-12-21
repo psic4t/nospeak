@@ -3,6 +3,10 @@
 
     import FileTypeDropdown from './FileTypeDropdown.svelte';
     import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from '$lib/core/Nip98Auth';
+    import { uploadToBlossomServers, sha256HexFromBlob } from '$lib/core/BlossomUpload';
+    import { getStoredUploadBackend } from '$lib/core/MediaUploadSettings';
+    import { profileRepo } from '$lib/db/ProfileRepository';
+    import { currentUser } from '$lib/stores/auth';
     import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
     import { hapticSelection } from '$lib/utils/haptics';
     import { t } from '$lib/i18n';
@@ -54,6 +58,36 @@
         uploadProgress = 0;
 
         try {
+            const backend = getStoredUploadBackend();
+
+            if (backend === 'blossom') {
+                const user = get(currentUser);
+                if (user) {
+                    const profile = await profileRepo.getProfileIgnoreTTL(user.npub);
+                    const servers = (profile as any)?.mediaServers ?? [];
+
+                    if (servers.length > 0) {
+                        const mimeType = file.type || (type === 'image'
+                            ? 'image/jpeg'
+                            : type === 'video'
+                                ? 'video/mp4'
+                                : 'audio/mpeg');
+
+                        const sha256 = await sha256HexFromBlob(file);
+
+                        const result = await uploadToBlossomServers({
+                            servers,
+                            body: file,
+                            mimeType,
+                            sha256,
+                            onProgress: (percent) => (uploadProgress = percent)
+                        });
+
+                        return result.url;
+                    }
+                }
+            }
+
             const formData = new FormData();
             formData.append('file', file);
             formData.append('type', type);

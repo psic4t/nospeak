@@ -30,7 +30,10 @@ export class ProfileRepository {
     public async cacheProfile(
         npub: string,
         metadata: any,
-        messagingRelays: string[],
+        options: {
+            messagingRelays?: string[];
+            mediaServers?: string[];
+        },
         nip05Info?: {
             status: 'valid' | 'invalid' | 'unknown';
             lastChecked: number;
@@ -39,35 +42,19 @@ export class ProfileRepository {
         }
     ) {
         const now = Date.now();
-        // Check if exists to preserve fields if needed (similar to SQLite implementation)
-        // But IndexedDB put replaces. 
-        // Logic in SQLite:
-        // If hasRelays: replace everything (profile + relays)
-        // If !hasRelays: update profile only, preserve relays.
-        
         const existing = await db.profiles.get(npub);
-        
-        let profile: Profile;
-        
-        if (messagingRelays.length > 0) {
-            // Full update: replace messaging relays and (optionally) metadata
-            profile = {
-                npub,
-                metadata: metadata || existing?.metadata,
-                messagingRelays,
-                cachedAt: now,
-                expiresAt: now + this.ttl
-            };
-        } else {
-            // Profile-only update, preserve existing messaging relays
-            profile = {
-                npub,
-                metadata,
-                messagingRelays: existing?.messagingRelays || [],
-                cachedAt: now,
-                expiresAt: now + this.ttl
-            };
-        }
+
+        const messagingRelays = options.messagingRelays ?? existing?.messagingRelays ?? [];
+        const mediaServers = options.mediaServers ?? (existing as any)?.mediaServers ?? [];
+
+        const profile: Profile = {
+            npub,
+            metadata: metadata ?? existing?.metadata,
+            messagingRelays,
+            mediaServers,
+            cachedAt: now,
+            expiresAt: now + this.ttl
+        };
 
         if (nip05Info) {
             profile.nip05Status = nip05Info.status;

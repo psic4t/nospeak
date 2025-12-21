@@ -194,8 +194,9 @@ const de = {
          categories: {
              general: 'Allgemein',
              profile: 'Profil',
-             messagingRelays: 'Messaging-Relays',
-             security: 'Sicherheit',
+              messagingRelays: 'Messaging-Relays',
+              mediaServers: 'Medienserver',
+              security: 'Sicherheit',
              about: 'Info'
          },
 
@@ -238,15 +239,37 @@ const de = {
             saveButton: 'Änderungen speichern',
             savingButton: 'Speichere…'
         },
-         messagingRelays: {
-             description: 'Konfiguriere deine NIP-17-Messaging-Relays. Diese Relays werden verwendet, um deine verschlüsselten Nachrichten zu empfangen. Für die meisten Nutzer funktionieren 2–3 Messaging-Relays am zuverlässigsten.',
-             inputPlaceholder: 'wss://relay.example.com',
-             addButton: 'Hinzufügen',
-             emptyState: 'Keine Relays konfiguriert',
-             tooManyWarning: 'Mehr als 3 Messaging-Relays können Performance und Zuverlässigkeit verschlechtern.'
-         },
+          messagingRelays: {
+              description: 'Konfiguriere deine NIP-17-Messaging-Relays. Diese Relays werden verwendet, um deine verschlüsselten Nachrichten zu empfangen. Für die meisten Nutzer funktionieren 2–3 Messaging-Relays am zuverlässigsten.',
+              inputPlaceholder: 'wss://relay.example.com',
+              addButton: 'Hinzufügen',
+              emptyState: 'Keine Relays konfiguriert',
+              tooManyWarning: 'Mehr als 3 Messaging-Relays können Performance und Zuverlässigkeit verschlechtern.',
+              saveStatusSuccess: 'Relay-Liste auf {count} Relays gespeichert.',
+              saveStatusPartial: 'Relay-Liste auf {succeeded} von {attempted} Relays gespeichert.',
+              saveStatusNone: 'Relay-Liste konnte auf keinem Relay gespeichert werden.',
+              saveStatusError: 'Fehler beim Speichern der Relay-Liste. Einstellungen sind möglicherweise nicht vollständig propagiert.',
+              savingStatus: 'Relay-Einstellungen werden gespeichert…'
+          },
 
-        security: {
+          mediaServers: {
+              description: 'Konfiguriere deine Blossom-Medienserver. Diese Server speichern Dateien, die du hochlädst (Profilmedien und Chat-Anhänge).',
+              toggleLabel: 'Blossom-Server verwenden',
+              toggleDescription: 'Wenn aktiviert, werden Uploads zu deinen Blossom-Servern gesendet statt zu nospeaks lokalem Speicher.',
+              toggleDisabledNoServers: 'Füge mindestens einen Medienserver hinzu, um Blossom-Uploads zu aktivieren.',
+              toggleAriaEnable: 'Blossom-Uploads aktivieren',
+              toggleAriaDisable: 'Blossom-Uploads deaktivieren',
+              inputPlaceholder: 'https://cdn.example.com',
+              addButton: 'Hinzufügen',
+              emptyState: 'Keine Server konfiguriert',
+              saveStatusSuccess: 'Serverliste auf {count} Relays gespeichert.',
+              saveStatusPartial: 'Serverliste auf {succeeded} von {attempted} Relays gespeichert.',
+              saveStatusNone: 'Serverliste konnte auf keinem Relay gespeichert werden.',
+              saveStatusError: 'Fehler beim Speichern der Serverliste. Einstellungen sind möglicherweise nicht vollständig propagiert.',
+              savingStatus: 'Medienserver-Einstellungen werden gespeichert…'
+          },
+
+         security: {
             loginMethodTitle: 'Anmeldemethode',
             loginMethodUnknown: 'Unbekannt',
             npubLabel: 'Dein npub',
