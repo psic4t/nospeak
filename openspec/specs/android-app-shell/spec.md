@@ -153,38 +153,6 @@ When running inside the Android Capacitor app shell, the messaging experience SH
 - **THEN** the app SHALL still load the main chat interface shell from local assets as defined by the existing Android Capacitor App Shell requirements
 - **AND** the system SHALL treat URL previews as unavailable, rendering only the message text and clickable links without preview cards.
 
-### Requirement: Android Media Upload via Remote NIP-98 Authenticated Endpoint
-When running inside the Android Capacitor app shell, the messaging experience SHALL upload selected media attachments using the configured upload backend selected in Settings → Media Servers.
-
-- If Blossom uploads are enabled and the user has at least one configured Blossom server, the Android client SHALL upload to Blossom using `PUT /upload` and Blossom authorization (kind `24242`) as defined by the `messaging` Media Upload Support requirement.
-- Otherwise, the Android client SHALL upload to the canonical nospeak media upload endpoint `https://nospeak.chat/api/upload` using HTTPS POST with a valid NIP-98 Authorization header.
-
-#### Scenario: Android app uploads media via Blossom servers
-- **GIVEN** the user is running nospeak inside the Android Capacitor app
-- **AND** the user has enabled Blossom uploads in Settings → Media Servers
-- **AND** the user has at least one configured Blossom server URL
-- **WHEN** the user selects an image, video, or audio file and the upload is initiated
-- **THEN** the Android client SHALL send a `PUT /upload` request to the first configured Blossom server with a valid Blossom authorization event (kind `24242`)
-- **AND** upon successful upload, the returned blob URL SHALL be used by the messaging UI according to the `messaging` specification.
-
-#### Scenario: Android app uploads media via nospeak endpoint when Blossom disabled
-- **GIVEN** the user is running nospeak inside the Android Capacitor app
-- **AND** the user has disabled Blossom uploads (or Blossom is unavailable due to no configured servers)
-- **WHEN** the upload is initiated
-- **THEN** the Android client SHALL send an HTTPS POST request to `https://nospeak.chat/api/upload` that includes a valid NIP-98 Authorization header for the current Nostr session
-- **AND** upon successful upload, the returned media URL SHALL be used by the messaging UI according to the `messaging` specification.
-
-#### Scenario: Android upload failure does not break messaging
-- **GIVEN** the user is running nospeak inside the Android Capacitor app
-- **WHEN** the selected upload backend is unreachable or rejects the upload request
-- **THEN** the Android client SHALL display a non-blocking error message indicating that the media upload failed
-- **AND** the rest of the messaging UI (including text sending, history scrolling, and media rendering for previously uploaded content) SHALL continue to function normally.
-
-#### Scenario: Web behavior remains unchanged outside Android shell
-- **GIVEN** the user is accessing nospeak via a standard web browser (not inside the Android Capacitor app)
-- **WHEN** they upload media using the web messaging UI
-- **THEN** the client SHALL upload media according to the `messaging` Media Upload Support requirement and the Settings → Media Servers preference.
-
 ### Requirement: Android Native Dialog Integration for Messaging
 When running inside the Android Capacitor app shell, the messaging experience SHALL use Android-native dialogs and sheets via Capacitor plugins where appropriate for confirmations, media selection, error states, and sharing, while preserving the existing messaging semantics defined in `specs/messaging/spec.md`.
 
@@ -596,4 +564,28 @@ The Android Capacitor app shell SHALL ensure that Android background messaging i
 - **AND** the Android device reboots (or the app is updated)
 - **WHEN** the Android boot/package-replace receiver evaluates whether to start background messaging
 - **THEN** it MAY start the Android background messaging foreground service according to the existing background messaging requirements.
+
+### Requirement: Android Media Upload via Blossom Servers
+When running inside the Android Capacitor app shell, the messaging experience SHALL upload selected media attachments using Blossom servers.
+
+- If the user has one or more configured Blossom servers, the Android client SHALL upload to Blossom using `PUT /upload` and Blossom authorization (kind `24242`) as defined by the `messaging` Media Upload Support requirement.
+- If the user has zero configured Blossom servers and initiates an upload, the Android client SHALL automatically configure the default Blossom server list `https://blossom.primal.net` and `https://24242.io`, SHALL display an in-app informational modal indicating these servers were set, and SHALL then upload using Blossom as normal.
+
+#### Scenario: Android app uploads media via Blossom servers
+- **GIVEN** the user has at least one configured Blossom server URL
+- **WHEN** the user selects an image, video, or audio file and the upload is initiated
+- **THEN** the Android client SHALL send a `PUT /upload` request to the first configured Blossom server with a valid Blossom authorization event (kind `24242`)
+- **AND** upon successful upload, the returned blob URL SHALL be used by the messaging UI according to the `messaging` specification.
+
+#### Scenario: Android app auto-configures Blossom servers when missing
+- **GIVEN** the user has zero configured Blossom servers
+- **WHEN** the user initiates a media upload
+- **THEN** the client SHALL automatically set the Blossom servers to `https://blossom.primal.net` and `https://24242.io`
+- **AND** the client SHALL display an informational modal indicating these servers were set automatically
+- **AND** the upload SHALL proceed using Blossom servers.
+
+#### Scenario: Android upload failure does not break messaging
+- **WHEN** a Blossom server is unreachable or rejects the upload request
+- **THEN** the Android client SHALL display a non-blocking error message indicating that the media upload failed
+- **AND** the rest of the messaging UI (including text sending, history scrolling, and media rendering for previously uploaded content) SHALL continue to function normally.
 

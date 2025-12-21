@@ -129,7 +129,13 @@ const en = {
             captionLabel: 'Caption (optional)',
             cancelButton: 'Cancel',
             sendButtonIdle: 'Send',
-            sendButtonSending: 'Sending…'
+            sendButtonSending: 'Sending…',
+            uploadButtonIdle: 'Upload',
+            uploadButtonUploading: 'Uploading…'
+        },
+        mediaServersAutoConfigured: {
+            title: 'Media servers configured',
+            message: 'No Blossom servers were configured. We added {server1} and {server2}.\n\nYou can change these in Settings → Media Servers.'
         }
     },
     chat: {
@@ -185,7 +191,8 @@ const en = {
         mediaErrors: {
             cameraErrorTitle: 'Camera error',
             cameraErrorMessage: 'Failed to capture photo'
-        }
+        },
+        mediaUnavailable: 'This media is no longer available.'
     },
         settings: {
          title: 'Settings',
@@ -258,11 +265,7 @@ const en = {
 
           mediaServers: {
               description: 'Configure your Blossom media servers. These servers are used to store files you upload (profile media and chat attachments).',
-              toggleLabel: 'Use Blossom servers',
-              toggleDescription: 'When enabled, uploads go to your configured Blossom servers instead of nospeak\'s local storage.',
-              toggleDisabledNoServers: 'Add at least one media server to enable Blossom uploads.',
-              toggleAriaEnable: 'Enable Blossom uploads',
-              toggleAriaDisable: 'Disable Blossom uploads',
+
               inputPlaceholder: 'https://cdn.example.com',
               addButton: 'Add',
               emptyState: 'No servers configured',

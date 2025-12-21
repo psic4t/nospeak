@@ -28,37 +28,32 @@ The message input area SHALL provide a media upload button instead of displaying
 - **AND** sending the message occurs via the mobile keyboard's send/enter action
 
 ### Requirement: Media Upload Support
-The system SHALL allow users to upload images, videos, and MP3 audio files as encrypted attachments in NIP-17 conversations. The upload destination SHALL be selected based on the user’s Settings → Media Servers preference.
+The system SHALL allow users to upload images, videos, and MP3 audio files as encrypted attachments in NIP-17 conversations.
 
-- If the user has enabled Blossom uploads and has at least one configured Blossom server, the client SHALL upload the encrypted blob to Blossom servers using BUD-03 server ordering and Blossom authorization events (kind `24242`) as defined by BUD-01/BUD-02.
-- Otherwise, the client SHALL upload the encrypted blob to the canonical nospeak upload endpoint `https://nospeak.chat/api/upload` using HTTPS POST with a valid NIP-98 Authorization header.
+Uploads SHALL be performed using Blossom servers:
+- If the user has one or more configured Blossom servers, the client SHALL upload the encrypted blob to Blossom servers using BUD-03 server ordering and Blossom authorization events (kind `24242`) as defined by BUD-01/BUD-02.
+- If the user has zero configured Blossom servers and attempts an upload, the client SHALL automatically configure the default Blossom server list `https://blossom.primal.net` and `https://24242.io`, SHALL display an in-app informational modal indicating these servers were set, and SHALL then upload using Blossom as normal.
 
-When Blossom uploads are enabled:
+When Blossom uploads are used:
 - The client MUST attempt to upload the blob to at least the first configured Blossom server.
 - The client SHOULD also upload (or otherwise mirror) the blob to the remaining configured servers on a best-effort basis.
 
 #### Scenario: User sends image file message using Blossom servers
-- **GIVEN** the user has enabled Blossom uploads in Settings → Media Servers
-- **AND** the user has at least one configured Blossom server URL
+- **GIVEN** the user has at least one configured Blossom server URL
 - **WHEN** the user selects an image file and confirms sending from the preview
 - **THEN** the client SHALL upload the encrypted image blob to the first configured Blossom server using `PUT /upload` with a valid Blossom authorization event (kind `24242` with `t=upload` and an `x` tag matching the uploaded blob’s SHA-256)
 - **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the returned blob `url`
 - **AND** the client SHOULD then attempt to upload or mirror the blob to remaining configured Blossom servers without blocking the message send.
 
-#### Scenario: User sends video file message using local uploads
-- **GIVEN** the user has disabled Blossom uploads in Settings → Media Servers
-- **WHEN** the user selects a video file and confirms sending from the preview
-- **THEN** the client SHALL upload the encrypted video blob to `https://nospeak.chat/api/upload` using HTTPS POST with a valid NIP-98 Authorization header
-- **AND** upon successful upload, the system SHALL create and send a NIP-17 Kind 15 file message whose content is the resulting `/api/user_media/<filename>` URL.
-
-#### Scenario: Blossom toggle disabled when no servers configured
+#### Scenario: User uploads with no configured Blossom servers
 - **GIVEN** the user has zero configured Blossom servers
-- **WHEN** the user views Settings → Media Servers
-- **THEN** the Blossom upload toggle is disabled
-- **AND** sending file messages SHALL use the local nospeak upload endpoint with NIP-98 authorization.
+- **WHEN** the user attempts to upload an image, video, or MP3 audio file
+- **THEN** the client SHALL automatically set the Blossom servers to `https://blossom.primal.net` and `https://24242.io`
+- **AND** the client SHALL display an informational modal indicating these servers were set automatically
+- **AND** the upload SHALL proceed using Blossom servers.
 
 #### Scenario: Upload failure is non-blocking
-- **WHEN** the user attempts to upload an image, video, or MP3 audio file and the selected upload backend is unreachable or rejects the upload
+- **WHEN** the user attempts to upload an image, video, or MP3 audio file and a Blossom server is unreachable or rejects the upload
 - **THEN** an error message SHALL be displayed
 - **AND** the rest of the messaging UI (including text sending, history scrolling, and media rendering for previously uploaded content) SHALL continue to function normally.
 
@@ -634,7 +629,7 @@ The messaging interface SHALL provide an in-app image viewer for inline message 
 - **THEN** the viewer SHALL reset the zoom level and panning offsets so that the image returns to a fit-to-screen state.
 
 ### Requirement: Camera Capture for Message Media Upload
-The message input area SHALL provide a camera capture option labeled "Take photo" in the media upload affordance on supported devices so that users can capture and send photos directly from the chat UI. Camera-captured photos SHALL be treated as image uploads that use the existing NIP-98 authenticated media upload endpoint and rendering semantics, and the client SHALL resize captured photos client-side to a maximum dimension of 2048px (width or height) and encode them as JPEG before upload when feasible.
+The message input area SHALL provide a camera capture option labeled "Take photo" in the media upload affordance on supported devices so that users can capture and send photos directly from the chat UI. Camera-captured photos SHALL be treated as image uploads that use the same Blossom upload behaviour defined by the Media Upload Support requirement, and the client SHALL resize captured photos client-side to a maximum dimension of 2048px (width or height) and encode them as JPEG before upload when feasible.
 
 #### Scenario: Camera capture option available on mobile and Android app shell
 - **GIVEN** the user is composing a message in the chat input
@@ -647,10 +642,10 @@ The message input area SHALL provide a camera capture option labeled "Take photo
 - **AND** the user successfully captures a photo using the device camera
 - **WHEN** the client processes the captured image
 - **THEN** the client SHALL resize the photo so that neither width nor height exceeds 2048px while preserving aspect ratio
-- **AND** the client SHALL encode the resized photo as a JPEG with reasonable quality before uploading it as an image to the canonical media upload endpoint using a valid NIP-98 Authorization header.
+- **AND** the client SHALL encode the resized photo as a JPEG with reasonable quality before uploading it as an image using Blossom servers.
 
 #### Scenario: Captured photo URL is inserted into message input
-- **GIVEN** a captured photo has been successfully uploaded as an image via the media upload endpoint
+- **GIVEN** a captured photo has been successfully uploaded as an image using Blossom servers
 - **WHEN** the upload completes successfully
 - **THEN** the resulting media URL SHALL be inserted into the message input content using the same format as existing image uploads
 - **AND** when the message is sent, the photo SHALL be rendered inline in the conversation according to existing media rendering rules.
@@ -659,7 +654,7 @@ The message input area SHALL provide a camera capture option labeled "Take photo
 - **GIVEN** the user selects "Take photo" from the media upload dropdown
 - **WHEN** camera access is denied, the capture is cancelled, or the capture operation fails
 - **THEN** the system SHALL display a non-blocking error or informational message indicating that the photo could not be captured or uploaded
-- **AND** the rest of the messaging input and sending behavior SHALL remain usable.
+- **AND** the rest of the messaging input and sending behaviour SHALL remain usable.
 
 ### Requirement: Desktop Message List Page-Key Scrolling
 On desktop devices, the chat interface message list SHALL support PageUp, PageDown, Home, and End keys for scrolling long conversations while a chat is active, including when the message input has focus.
@@ -843,7 +838,7 @@ The messaging interface SHALL render reactions as aggregated emoji chips directl
 - **AND** SHALL avoid performing reaction aggregation work for messages that are scrolled far above or below the current view, while still preserving stored reaction data for those messages.
 
 ### Requirement: NIP-17 Kind 15 File Messages
-The messaging experience SHALL represent binary attachments (such as images, videos, and audio files) sent over encrypted direct messages as unsigned NIP-17 file message rumors using Kind 15, sealed and gift-wrapped via the existing NIP-59 DM pipeline. Each file message SHALL carry enough metadata in its tags to describe the media type, basic size information, and content hashes, and SHALL reference an HTTPS URL where the encrypted file bytes can be fetched when sent by nospeak.
+The messaging experience SHALL represent binary attachments (such as images, videos, and audio files) sent over encrypted direct messages as unsigned NIP-17 file message rumors using Kind 15, sealed and gift-wrapped via the existing NIP-59 DM pipeline. Each file message SHALL carry enough metadata in its tags to describe the media type, basic size information, and content hashes, and SHALL reference an HTTPS URL where the encrypted file bytes can be fetched.
 
 #### Scenario: Sending a file as a NIP-17 Kind 15 DM
 - **GIVEN** the user is composing a one-to-one encrypted conversation and chooses an image, video, or audio file from the media upload affordance
@@ -853,8 +848,7 @@ The messaging experience SHALL represent binary attachments (such as images, vid
   - a `file-type` tag containing the original MIME type (for example, `image/jpeg`, `video/mp4`, or `audio/mpeg`)
   - an `x` tag containing the SHA-256 hash of the uploaded file bytes (encrypted or plaintext)
   - a `size` tag indicating the file size in bytes
-- **AND** the rumor `.content` SHALL be set to an HTTPS URL served via the nospeak media API under the `/api/user_media` path that points to the stored file
-- **AND** the client SHALL seal this Kind 15 rumor (kind 13) and gift-wrap it (kind 1059) using the same NIP-59 pipeline used for Kind 14 chat messages.
+- **AND** the rumor `.content` SHALL be set to the HTTPS URL returned from the Blossom upload.
 
 #### Scenario: Receiving and displaying a NIP-17 Kind 15 DM
 - **GIVEN** the messaging service unwraps a NIP-59 gift-wrap whose inner rumor is Kind 15
@@ -1296,4 +1290,14 @@ When running inside the Android Capacitor app shell with background messaging en
 - **THEN** it SHALL use an importance level equivalent to `IMPORTANCE_HIGH`
 - **AND** it SHALL enable sound and vibration by default
 - **AND** it SHALL allow lockscreen content visibility (subject to user OS privacy settings).
+
+### Requirement: Legacy nospeak internal media URLs render a placeholder
+The messaging UI SHALL treat `https://nospeak.chat/api/user_media/...` URLs as deprecated internal-storage media links and SHALL NOT attempt to fetch or render them as media.
+
+#### Scenario: Legacy internal media URL renders placeholder
+- **GIVEN** a message contains a media URL whose origin is `https://nospeak.chat`
+- **AND** the URL pathname starts with `/api/user_media/`
+- **WHEN** the message is rendered in the conversation UI
+- **THEN** the UI SHALL render a placeholder indicating the media is unavailable
+- **AND** the UI SHALL NOT attempt to load or decrypt bytes from that URL.
 

@@ -70,6 +70,7 @@ export function initAndroidBackNavigation(): void {
             return;
         }
 
+
         const profileState = get(profileModalState);
         if (profileState.isOpen) {
             closeProfileModal();

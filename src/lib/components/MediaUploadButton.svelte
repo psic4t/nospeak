@@ -2,29 +2,22 @@
     import { get } from 'svelte/store';
 
     import FileTypeDropdown from './FileTypeDropdown.svelte';
-    import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from '$lib/core/Nip98Auth';
-    import { uploadToBlossomServers, sha256HexFromBlob } from '$lib/core/BlossomUpload';
-    import { getStoredUploadBackend } from '$lib/core/MediaUploadSettings';
-    import { profileRepo } from '$lib/db/ProfileRepository';
-    import { currentUser } from '$lib/stores/auth';
+
     import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
     import { hapticSelection } from '$lib/utils/haptics';
     import { t } from '$lib/i18n';
 
 
 
-    let { onFileSelect, inline = false, allowedTypes = ['image', 'video'], dmEncrypted = false } = $props<{
-        onFileSelect: (file: File, type: 'image' | 'video' | 'audio', url?: string) => void;
+    let { onFileSelect, inline = false, allowedTypes = ['image', 'video'] } = $props<{
+        onFileSelect: (file: File, type: 'image' | 'video' | 'audio') => void;
         inline?: boolean;
         allowedTypes?: ('image' | 'video' | 'audio')[];
-        dmEncrypted?: boolean; // when true, caller handles encryption/upload (DM attachments)
     }>();
 
     let showDropdown = $state(false);
     let dropdownElement = $state<HTMLElement | undefined>();
     let buttonElement = $state<HTMLElement | undefined>();
-    let isUploading = $state(false);
-    let uploadProgress = $state(0);
 
     const MAX_WIDTH = 2048;
     const MAX_HEIGHT = 2048;
@@ -52,112 +45,6 @@
          openFileSelector(type);
      }
 
-
-    async function uploadFile(file: File, type: 'image' | 'video' | 'audio') {
-        isUploading = true;
-        uploadProgress = 0;
-
-        try {
-            const backend = getStoredUploadBackend();
-
-            if (backend === 'blossom') {
-                const user = get(currentUser);
-                if (user) {
-                    const profile = await profileRepo.getProfileIgnoreTTL(user.npub);
-                    const servers = (profile as any)?.mediaServers ?? [];
-
-                    if (servers.length > 0) {
-                        const mimeType = file.type || (type === 'image'
-                            ? 'image/jpeg'
-                            : type === 'video'
-                                ? 'video/mp4'
-                                : 'audio/mpeg');
-
-                        const sha256 = await sha256HexFromBlob(file);
-
-                        const result = await uploadToBlossomServers({
-                            servers,
-                            body: file,
-                            mimeType,
-                            sha256,
-                            onProgress: (percent) => (uploadProgress = percent)
-                        });
-
-                        return result.url;
-                    }
-                }
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('type', type);
-
-            const authHeader = await buildUploadAuthHeader();
-            if (!authHeader) {
-                throw new Error('You must be logged in to upload media');
-            }
-
-            const xhr = new XMLHttpRequest();
-
-            // Track upload progress
-            xhr.upload.addEventListener('progress', (e) => {
-                if (e.lengthComputable) {
-                    uploadProgress = Math.round((e.loaded / e.total) * 100);
-                }
-            });
-
-            // Set timeout for upload (30 seconds)
-            const uploadTimeout = setTimeout(() => {
-                xhr.abort();
-                throw new Error('Upload timeout - please try again');
-            }, 30000);
-
-            // Return a promise that resolves when upload is complete
-            const uploadPromise = new Promise<string>((resolve, reject) => {
-                xhr.onload = () => {
-                    clearTimeout(uploadTimeout);
-                    if (xhr.status === 200) {
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            if (response.success) {
-                                resolve(response.url);
-                            } else {
-                                reject(new Error(response.error || 'Upload failed'));
-                            }
-                        } catch (e) {
-                            reject(new Error('Invalid response from server'));
-                        }
-                    } else if (xhr.status === 413) {
-                        reject(new Error('File too large'));
-                    } else if (xhr.status === 400) {
-                        reject(new Error('Invalid file type or size'));
-                    } else {
-                        reject(new Error(`Upload failed with status ${xhr.status}`));
-                    }
-                };
-
-                xhr.onerror = () => {
-                    clearTimeout(uploadTimeout);
-                    reject(new Error('Network error during upload'));
-                };
-
-                xhr.onabort = () => {
-                    clearTimeout(uploadTimeout);
-                    reject(new Error('Upload was cancelled'));
-                };
-            });
-
-            xhr.open('POST', CANONICAL_UPLOAD_URL);
-            xhr.setRequestHeader('Authorization', authHeader);
-            xhr.send(formData);
-
-            const fileUrl = await uploadPromise;
-            return fileUrl;
-        } finally {
-            isUploading = false;
-            uploadProgress = 0;
-        }
-    }
 
     function resizeImageBlobToFile(blob: Blob, filenameBase: string): Promise<File> {
         return new Promise((resolve, reject) => {
@@ -240,13 +127,7 @@
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
                 try {
-                    if (dmEncrypted) {
-                        // For DM attachments, let the caller handle encryption and upload
-                        onFileSelect(file, type);
-                    } else {
-                        const fileUrl = await uploadFile(file, type);
-                        onFileSelect(file, type, fileUrl);
-                    }
+                    onFileSelect(file, type);
                 } catch (error) {
                     console.error('Upload failed:', error);
                     alert(`Upload failed: ${(error as Error).message}`);
@@ -275,12 +156,7 @@
                     : file.name || 'photo';
 
                 const resizedFile = await resizeImageBlobToFile(file, baseName);
-                if (dmEncrypted) {
-                    onFileSelect(resizedFile, 'image');
-                } else {
-                    const fileUrl = await uploadFile(resizedFile, 'image');
-                    onFileSelect(resizedFile, 'image', fileUrl);
-                }
+                onFileSelect(resizedFile, 'image');
             } catch (error) {
                 console.error('Upload failed:', error);
                 alert(`Upload failed: ${(error as Error).message}`);
@@ -315,12 +191,7 @@
                 const blob = await response.blob();
 
                 const resizedFile = await resizeImageBlobToFile(blob, `photo-${Date.now()}`);
-                if (dmEncrypted) {
-                    onFileSelect(resizedFile, 'image');
-                } else {
-                    const fileUrl = await uploadFile(resizedFile, 'image');
-                    onFileSelect(resizedFile, 'image', fileUrl);
-                }
+                onFileSelect(resizedFile, 'image');
             } catch (error) {
                 console.error('Camera capture failed:', error);
                 await nativeDialogService.alert({
@@ -371,38 +242,26 @@
         bind:this={buttonElement}
         type="button"
         onclick={toggleDropdown}
-        disabled={isUploading}
         class={inline
             ? "flex-shrink-0 h-8 w-8 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden active:scale-90 transition-transform duration-100 ease-out"
             : "flex-shrink-0 h-10 w-10 hover:opacity-80 cursor-pointer flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden active:scale-90 transition-all duration-100 ease-out"}
-        title={
-             isUploading
-                 ? `${$t('chat.mediaMenu.uploadMediaTooltip')}... ${uploadProgress}%`
-                 : $t('chat.mediaMenu.uploadMediaTooltip')
-         }
+        title={$t('chat.mediaMenu.uploadMediaTooltip')}
     >
-        {#if isUploading}
-            <div class="absolute inset-0 bg-blue-500 opacity-20" style={`width: ${uploadProgress}%`}></div>
-            <div class="relative z-10 text-xs font-bold text-gray-700 dark:text-gray-300">
-                {uploadProgress}%
-            </div>
-        {:else}
-            <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="text-gray-600 dark:text-gray-300"
-            >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-        {/if}
+        <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-gray-600 dark:text-gray-300"
+        >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
     </button>
 
     {#if showDropdown}

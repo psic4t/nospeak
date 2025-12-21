@@ -15,8 +15,6 @@ import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
 import { reactionsStore } from '$lib/stores/reactions';
 import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
-import { buildUploadAuthHeader, CANONICAL_UPLOAD_URL } from './Nip98Auth';
-import { getStoredUploadBackend } from './MediaUploadSettings';
 import { uploadToBlossomServers } from './BlossomUpload';
  
  export class MessagingService {
@@ -731,72 +729,18 @@ import { uploadToBlossomServers } from './BlossomUpload';
   ): Promise<string> {
     const blob = new Blob([encrypted.ciphertext.buffer as ArrayBuffer], { type: mimeType });
 
-    const backend = getStoredUploadBackend();
-    if (backend === 'blossom' && blossomServers.length > 0) {
-      const result = await uploadToBlossomServers({
-        servers: blossomServers,
-        body: blob,
-        mimeType,
-        sha256: encrypted.hashEncrypted
-      });
-      return result.url;
+    if (blossomServers.length === 0) {
+      throw new Error('No Blossom servers configured');
     }
 
-    const authHeader = await buildUploadAuthHeader();
-    if (!authHeader) {
-      throw new Error('You must be logged in to upload media');
-    }
-
-    const formData = new FormData();
-    formData.append('file', blob, 'encrypted');
-    formData.append('type', mediaType);
-
-
-    return await new Promise<string>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      // Optional: we could hook up progress here later if needed
-      const uploadTimeout = setTimeout(() => {
-        xhr.abort();
-        reject(new Error('Upload timeout - please try again'));
-      }, 30000);
-
-      xhr.onload = () => {
-        clearTimeout(uploadTimeout);
-        if (xhr.status === 200) {
-          try {
-            const response = JSON.parse(xhr.responseText) as { success?: boolean; url?: string; error?: string };
-            if (response.success && response.url) {
-              resolve(response.url);
-            } else {
-              reject(new Error(response.error || 'Upload failed'));
-            }
-          } catch {
-            reject(new Error('Invalid response from server while uploading file message'));
-          }
-        } else if (xhr.status === 413) {
-          reject(new Error('File too large'));
-        } else if (xhr.status === 400) {
-          reject(new Error('Invalid file type or size'));
-        } else {
-          reject(new Error(`Upload failed with status ${xhr.status}`));
-        }
-      };
-
-      xhr.onerror = () => {
-        clearTimeout(uploadTimeout);
-        reject(new Error('Network error during upload'));
-      };
-
-      xhr.onabort = () => {
-        clearTimeout(uploadTimeout);
-        reject(new Error('Upload was cancelled'));
-      };
-
-      xhr.open('POST', CANONICAL_UPLOAD_URL);
-      xhr.setRequestHeader('Authorization', authHeader);
-      xhr.send(formData);
+    const result = await uploadToBlossomServers({
+      servers: blossomServers,
+      body: blob,
+      mimeType,
+      sha256: encrypted.hashEncrypted
     });
+
+    return result.url;
   }
 
   public async sendFileMessage(

@@ -1,5 +1,5 @@
 // FileWatcherService has been deprecated.
-// Media files are now served via the dynamic
-// route at src/routes/user_media/[filename]/+server.ts.
+// This service was previously used for local media storage.
+// Local `user_media` storage has been removed in favor of Blossom.
 
 export {}; // keep this file as a stub to avoid runtime imports.

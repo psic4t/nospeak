@@ -130,9 +130,15 @@ const de = {
             captionLabel: 'Beschriftung (optional)',
             cancelButton: 'Abbrechen',
             sendButtonIdle: 'Senden',
-            sendButtonSending: 'Senden…'
+            sendButtonSending: 'Senden…',
+            uploadButtonIdle: 'Hochladen',
+            uploadButtonUploading: 'Wird hochgeladen…'
+        },
+        mediaServersAutoConfigured: {
+            title: 'Medienserver konfiguriert',
+            message: 'Es waren keine Blossom-Server konfiguriert. Wir haben {server1} und {server2} hinzugefügt.\n\nDu kannst diese später unter Einstellungen → Medienserver ändern.'
         }
-
+ 
     },
     chat: {
         sendFailedTitle: 'Senden fehlgeschlagen',
@@ -187,7 +193,8 @@ const de = {
         mediaErrors: {
             cameraErrorTitle: 'Kamerafehler',
             cameraErrorMessage: 'Foto konnte nicht aufgenommen werden'
-        }
+        },
+        mediaUnavailable: 'Dieses Medium ist nicht mehr verfügbar.'
     },
         settings: {
          title: 'Einstellungen',
@@ -260,11 +267,7 @@ const de = {
 
           mediaServers: {
               description: 'Konfiguriere deine Blossom-Medienserver. Diese Server speichern Dateien, die du hochlädst (Profilmedien und Chat-Anhänge).',
-              toggleLabel: 'Blossom-Server verwenden',
-              toggleDescription: 'Wenn aktiviert, werden Uploads zu deinen Blossom-Servern gesendet statt zu nospeaks lokalem Speicher.',
-              toggleDisabledNoServers: 'Füge mindestens einen Medienserver hinzu, um Blossom-Uploads zu aktivieren.',
-              toggleAriaEnable: 'Blossom-Uploads aktivieren',
-              toggleAriaDisable: 'Blossom-Uploads deaktivieren',
+
               inputPlaceholder: 'https://cdn.example.com',
               addButton: 'Hinzufügen',
               emptyState: 'Keine Server konfiguriert',

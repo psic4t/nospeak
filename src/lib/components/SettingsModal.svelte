@@ -3,6 +3,8 @@
   import { relaySettingsService } from "$lib/core/RelaySettingsService";
   import { mediaServerSettingsService } from "$lib/core/MediaServerSettingsService";
   import { normalizeBlossomServerUrl } from "$lib/core/BlossomServers";
+  import { uploadToBlossomServers, sha256HexFromBlob } from "$lib/core/BlossomUpload";
+  import { DEFAULT_BLOSSOM_SERVERS, ensureDefaultBlossomServersForCurrentUser } from "$lib/core/DefaultBlossomServers";
   import { profileService } from "$lib/core/ProfileService";
   import { authService } from "$lib/core/AuthService";
   import { currentUser } from "$lib/stores/auth";
@@ -11,9 +13,11 @@
   import { getCurrentThemeMode, setThemeMode } from "$lib/stores/theme.svelte";
   import type { ThemeMode } from "$lib/stores/theme";
   import MediaUploadButton from "./MediaUploadButton.svelte";
+  import AttachmentPreviewModal from "./AttachmentPreviewModal.svelte";
   import { isAndroidNative, isMobileWeb, nativeDialogService } from "$lib/core/NativeDialogs";
   import { applyAndroidBackgroundMessaging, openAndroidAppBatterySettings } from "$lib/core/BackgroundMessaging";
   import { fade } from "svelte/transition";
+  import { get } from "svelte/store";
   import { glassModal } from "$lib/utils/transitions";
   import { t } from "$lib/i18n";
   import { nip19 } from "nostr-tools";
@@ -142,21 +146,111 @@
   let newMediaServerUrl = $state("");
   let isSavingMediaServers = $state(false);
   let mediaServerSaveStatus = $state<string | null>(null);
-  let blossomUploadsEnabled = $state(false);
   let mediaServersLoaded = $state(false);
 
-  function handlePictureUpload(file: File, type: "image" | "video" | "audio", url?: string) {
-    if (url) {
-      profilePicture = url;
-      saveProfile();
+  type ProfileMediaTarget = 'picture' | 'banner';
+
+  let showProfileMediaPreview = $state(false);
+  let pendingProfileMediaFile = $state<File | null>(null);
+  let pendingProfileMediaTarget = $state<ProfileMediaTarget | null>(null);
+  let pendingProfileMediaObjectUrl = $state<string | null>(null);
+  let pendingProfileMediaError = $state<string | null>(null);
+  let pendingProfileMediaServersHint = $state<string | null>(null);
+  let isEnsuringProfileMediaServers = $state(false);
+  let isUploadingProfileMedia = $state(false);
+
+  function resetProfileMediaPreview() {
+    showProfileMediaPreview = false;
+    pendingProfileMediaFile = null;
+    pendingProfileMediaTarget = null;
+    pendingProfileMediaError = null;
+    pendingProfileMediaServersHint = null;
+    isEnsuringProfileMediaServers = false;
+
+    if (pendingProfileMediaObjectUrl) {
+      URL.revokeObjectURL(pendingProfileMediaObjectUrl);
+      pendingProfileMediaObjectUrl = null;
     }
   }
 
-  function handleBannerUpload(file: File, type: "image" | "video" | "audio", url?: string) {
-    if (url) {
-      profileBanner = url;
-      saveProfile();
+  function openProfileMediaPreview(target: ProfileMediaTarget, file: File) {
+    if (pendingProfileMediaObjectUrl) {
+      URL.revokeObjectURL(pendingProfileMediaObjectUrl);
+      pendingProfileMediaObjectUrl = null;
     }
+
+    pendingProfileMediaTarget = target;
+    pendingProfileMediaFile = file;
+    pendingProfileMediaError = null;
+    pendingProfileMediaServersHint = null;
+    pendingProfileMediaObjectUrl = URL.createObjectURL(file);
+    showProfileMediaPreview = true;
+
+    isEnsuringProfileMediaServers = true;
+    void (async () => {
+      try {
+        const ensured = await ensureDefaultBlossomServersForCurrentUser();
+        if (ensured.didSetDefaults) {
+          pendingProfileMediaServersHint = get(t)('modals.mediaServersAutoConfigured.message', {
+            values: {
+              server1: DEFAULT_BLOSSOM_SERVERS[0],
+              server2: DEFAULT_BLOSSOM_SERVERS[1]
+            }
+          }) as string;
+        }
+      } catch {
+        // Best-effort
+      } finally {
+        isEnsuringProfileMediaServers = false;
+      }
+    })();
+  }
+
+  async function confirmProfileMediaUpload() {
+    if (!pendingProfileMediaFile || !pendingProfileMediaTarget) {
+      return;
+    }
+
+    if (isUploadingProfileMedia) {
+      return;
+    }
+
+    isUploadingProfileMedia = true;
+    pendingProfileMediaError = null;
+
+    try {
+      const ensured = await ensureDefaultBlossomServersForCurrentUser();
+      const mimeType = pendingProfileMediaFile.type || 'image/jpeg';
+      const sha256 = await sha256HexFromBlob(pendingProfileMediaFile);
+
+      const result = await uploadToBlossomServers({
+        servers: ensured.servers,
+        body: pendingProfileMediaFile,
+        mimeType,
+        sha256
+      });
+
+      if (pendingProfileMediaTarget === 'picture') {
+        profilePicture = result.url;
+      } else {
+        profileBanner = result.url;
+      }
+
+      await saveProfile();
+      resetProfileMediaPreview();
+    } catch (e) {
+      pendingProfileMediaError = (e as Error).message;
+    } finally {
+      isUploadingProfileMedia = false;
+    }
+  }
+
+  function handlePictureUpload(file: File, _type: "image" | "video" | "audio") {
+    openProfileMediaPreview('picture', file);
+  }
+
+  function handleBannerUpload(file: File, _type: "image" | "video" | "audio") {
+    openProfileMediaPreview('banner', file);
   }
 
   async function loadProfile() {
@@ -405,7 +499,6 @@
           notificationsEnabled?: boolean;
           urlPreviewsEnabled?: boolean;
           backgroundMessagingEnabled?: boolean;
-          uploadBackend?: "local" | "blossom";
         };
         notificationsEnabled = settings.notificationsEnabled !== false;
         urlPreviewsEnabled =
@@ -413,12 +506,10 @@
             ? settings.urlPreviewsEnabled
             : true;
         backgroundMessagingEnabled = isAndroidApp ? settings.backgroundMessagingEnabled !== false : false;
-        blossomUploadsEnabled = settings.uploadBackend === "blossom";
       } else {
         notificationsEnabled = true;
         urlPreviewsEnabled = true;
         backgroundMessagingEnabled = isAndroidApp;
-        blossomUploadsEnabled = false;
       }
 
       themeMode = getCurrentThemeMode();
@@ -435,8 +526,7 @@
         ...existingSettings,
         notificationsEnabled,
         urlPreviewsEnabled,
-        backgroundMessagingEnabled,
-        uploadBackend: blossomUploadsEnabled ? "blossom" : "local"
+        backgroundMessagingEnabled
       };
       localStorage.setItem("nospeak-settings", JSON.stringify(settings));
     }
@@ -458,11 +548,6 @@
     }
   });
 
-  $effect(() => {
-    if (mediaServersLoaded && mediaServers.length === 0 && blossomUploadsEnabled) {
-      blossomUploadsEnabled = false;
-    }
-  });
 
   async function toggleNotifications() {
     // State is already updated by the Toggle component
@@ -638,6 +723,30 @@
 </script>
 
 {#if isOpen}
+  {#if showProfileMediaPreview && pendingProfileMediaFile}
+    <AttachmentPreviewModal
+      isOpen={showProfileMediaPreview}
+      file={pendingProfileMediaFile}
+      mediaType={'image'}
+      objectUrl={pendingProfileMediaObjectUrl}
+      title={$t('modals.attachmentPreview.title') as string}
+      imageAlt={$t('modals.attachmentPreview.imageAlt') as string}
+      noPreviewText={$t('modals.attachmentPreview.noPreview') as string}
+      captionLabel={$t('modals.attachmentPreview.captionLabel') as string}
+      captionPlaceholder={$t('chat.inputPlaceholder') as string}
+      cancelText={$t('modals.attachmentPreview.cancelButton') as string}
+      confirmTextIdle={$t('modals.attachmentPreview.uploadButtonIdle') as string}
+      confirmTextBusy={$t('modals.attachmentPreview.uploadButtonUploading') as string}
+      captionEnabled={false}
+      error={pendingProfileMediaError}
+      hint={pendingProfileMediaServersHint}
+      isBusy={isUploadingProfileMedia}
+      disableConfirm={isUploadingProfileMedia || isEnsuringProfileMediaServers}
+      onCancel={resetProfileMediaPreview}
+      onConfirm={() => void confirmProfileMediaUpload()}
+    />
+  {/if}
+
   <div
     in:fade={{ duration: 130 }}
     out:fade={{ duration: 110 }}
@@ -1462,36 +1571,6 @@
                 {$t('settings.mediaServers.description')}
               </p>
 
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex-1 min-w-0">
-                  <label
-                    for="blossom-uploads-toggle"
-                    class="font-medium dark:text-white"
-                  >
-                    {$t('settings.mediaServers.toggleLabel')}
-                  </label>
-                  <p class="text-sm text-gray-600 dark:text-slate-400">
-                    {$t('settings.mediaServers.toggleDescription')}
-                  </p>
-                </div>
-                <Toggle
-                  id="blossom-uploads-toggle"
-                  bind:checked={blossomUploadsEnabled}
-                  disabled={mediaServers.length === 0}
-                  aria-label={
-                    blossomUploadsEnabled
-                      ? ($t('settings.mediaServers.toggleAriaDisable') as string)
-                      : ($t('settings.mediaServers.toggleAriaEnable') as string)
-                  }
-                  class="ml-4"
-                />
-              </div>
-
-              {#if mediaServers.length === 0}
-                <p class="text-xs text-gray-600 dark:text-slate-400">
-                  {$t('settings.mediaServers.toggleDisabledNoServers')}
-                </p>
-              {/if}
 
               <div class="flex gap-2">
                 <Input

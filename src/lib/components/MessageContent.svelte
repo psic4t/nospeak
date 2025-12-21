@@ -9,6 +9,7 @@
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { profileResolver } from '$lib/core/ProfileResolver';
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
+    import { t } from '$lib/i18n';
 
     let {
         content,
@@ -338,25 +339,14 @@
         }, 300); // 300ms debounce
     });
 
-    function getDownloadUrl(url: string): string {
+    const NOSPEAK_INTERNAL_MEDIA_ORIGIN = 'https://nospeak.chat';
+
+    function isLegacyNospeakUserMediaUrl(url: string): boolean {
         try {
             const u = new URL(url);
-
-            if (u.pathname.startsWith('/api/user_media/')) {
-                return url;
-            }
-
-            if (u.pathname.startsWith('/user_media/')) {
-                const segments = u.pathname.split('/');
-                const filename = segments[segments.length - 1];
-                if (!filename) return url;
-                return `${u.origin}/api/user_media/${filename}`;
-            }
-
-            // Blossom (and other) URLs should be fetched as-is.
-            return url;
+            return u.origin === NOSPEAK_INTERNAL_MEDIA_ORIGIN && u.pathname.startsWith('/api/user_media/');
         } catch {
-            return url;
+            return false;
         }
     }
 
@@ -389,7 +379,7 @@
     }
 
     async function fetchCiphertextWithBlossomFallback(originalUrl: string): Promise<Uint8Array> {
-        const primaryUrl = getDownloadUrl(originalUrl);
+        const primaryUrl = originalUrl;
 
         try {
             return await fetchCiphertext(primaryUrl);
@@ -438,6 +428,9 @@
         if (!fileUrl || fileEncryptionAlgorithm !== 'aes-gcm' || !fileKey || !fileNonce) {
             return;
         }
+        if (isLegacyNospeakUserMediaUrl(fileUrl)) {
+            return;
+        }
         if (decryptedUrl || decryptError) {
             return;
         }
@@ -450,6 +443,9 @@
 
     async function decryptAttachment() {
         if (!fileUrl || fileEncryptionAlgorithm !== 'aes-gcm' || !fileKey || !fileNonce) {
+            return;
+        }
+        if (isLegacyNospeakUserMediaUrl(fileUrl)) {
             return;
         }
 
@@ -476,8 +472,15 @@
  <div bind:this={container} class={`whitespace-pre-wrap break-words leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
 
      {#if fileUrl && fileEncryptionAlgorithm === 'aes-gcm' && fileKey && fileNonce}
-         <div class="space-y-2">
-             {#if decryptedUrl}
+          <div class="space-y-2">
+              {#if isLegacyNospeakUserMediaUrl(fileUrl)}
+                  <div class="my-1 px-3 py-2 rounded-xl bg-gray-100/70 dark:bg-slate-800/60 border border-gray-200/60 dark:border-slate-700/60">
+                      <div class="typ-meta text-xs text-gray-600 dark:text-slate-300">
+                          {$t('chat.mediaUnavailable')}
+                      </div>
+                  </div>
+              {:else if decryptedUrl}
+
                  {#if isImageMime(fileType) || isImage(decryptedUrl)}
                       {#if onImageClick}
                           <button
@@ -514,8 +517,15 @@
              {/if}
          </div>
      {:else if fileUrl}
-         <div class="space-y-2">
-             {#if isImageMime(fileType) || isImage(fileUrl)}
+          <div class="space-y-2">
+              {#if isLegacyNospeakUserMediaUrl(fileUrl)}
+                  <div class="my-1 px-3 py-2 rounded-xl bg-gray-100/70 dark:bg-slate-800/60 border border-gray-200/60 dark:border-slate-700/60">
+                      <div class="typ-meta text-xs text-gray-600 dark:text-slate-300">
+                          {$t('chat.mediaUnavailable')}
+                      </div>
+                  </div>
+              {:else if isImageMime(fileType) || isImage(fileUrl)}
+
                  {#if onImageClick}
                      <button
                          type="button"
@@ -545,9 +555,16 @@
      {:else}
          {#each parts as part, i}
               {#if part.match(/^https?:\/\//)}
-                  {#if youTubeEmbed && youTubeEmbedsEnabled && i === youTubeEmbed.partIndex}
-                      <YouTubeEmbed videoId={youTubeEmbed.videoId} />
-                  {:else if isImage(part)}
+                   {#if youTubeEmbed && youTubeEmbedsEnabled && i === youTubeEmbed.partIndex}
+                       <YouTubeEmbed videoId={youTubeEmbed.videoId} />
+                   {:else if isLegacyNospeakUserMediaUrl(part)}
+                       <div class="my-1 px-3 py-2 rounded-xl bg-gray-100/70 dark:bg-slate-800/60 border border-gray-200/60 dark:border-slate-700/60">
+                           <div class="typ-meta text-xs text-gray-600 dark:text-slate-300">
+                               {$t('chat.mediaUnavailable')}
+                           </div>
+                       </div>
+                   {:else if isImage(part)}
+
 
                       {#if onImageClick}
                           <button

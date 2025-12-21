@@ -9,6 +9,8 @@ import { writable } from 'svelte/store';
      isOpen: false,
      npub: null
  });
+
+
  
  export const scanContactQrResultState = writable<{ isOpen: boolean; npub: string | null }>({
      isOpen: false,
@@ -30,4 +32,6 @@ import { writable } from 'svelte/store';
  export function closeScanContactQrResult() {
      scanContactQrResultState.set({ isOpen: false, npub: null });
  }
+
+
 

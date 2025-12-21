@@ -34,6 +34,7 @@
    import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
    import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
  
+
    const { showSettingsModal, showManageContactsModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
  
    let { children } = $props();
@@ -54,14 +55,16 @@
 
   // Close all modals when user logs out
   $effect(() => {
-     if (!$currentUser) {
-         showSettingsModal.set(false);
-         showManageContactsModal.set(false);
-         showRelayStatusModal.set(false);
-         showScanContactQrModal.set(false);
-         closeScanContactQrResult();
-         closeProfileModal();
-     }
+         if (!$currentUser) {
+             showSettingsModal.set(false);
+             showManageContactsModal.set(false);
+             showRelayStatusModal.set(false);
+             showScanContactQrModal.set(false);
+              closeScanContactQrResult();
+              closeProfileModal();
+
+         }
+
    });
 
   // Keep PWA app badge in sync with unread counts
@@ -308,15 +311,17 @@
     {/if}
 
     <!-- Modals Layer (Outside Glass Container) -->
-    <RelayStatusModal 
-      isOpen={$showRelayStatusModal} 
-      close={() => showRelayStatusModal.set(false)} 
-    />
-    
-    <SettingsModal 
-      isOpen={$showSettingsModal} 
-      close={() => showSettingsModal.set(false)} 
-    />
+     <RelayStatusModal 
+       isOpen={$showRelayStatusModal} 
+       close={() => showRelayStatusModal.set(false)} 
+     />
+
+
+     <SettingsModal 
+       isOpen={$showSettingsModal} 
+       close={() => showSettingsModal.set(false)} 
+     />
+
 
      <ManageContactsModal 
       isOpen={$showManageContactsModal} 

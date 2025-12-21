@@ -257,11 +257,20 @@ The Settings experience SHALL adapt its layout and navigation pattern to the use
 ### Requirement: Media Servers Settings Category
 The Settings interface SHALL provide a "Media Servers" category that allows users to view and manage their Blossom media server configuration.
 
-#### Scenario: Settings sidebar shows Media Servers category
+Media uploads in nospeak (chat attachments and profile media) SHALL always use Blossom servers derived from this configuration. The Settings UI SHALL NOT provide any toggle to select a non-Blossom upload backend.
+
+#### Scenario: Settings shows Media Servers category and server list
 - **GIVEN** the user is authenticated and opens the Settings modal
 - **WHEN** the Settings sidebar categories are rendered
 - **THEN** the sidebar SHALL contain a "Media Servers" entry
-- **AND** selecting this entry SHALL display the Media Servers configuration view.
+- **AND** selecting this entry SHALL display the Media Servers configuration view
+- **AND** the view SHALL display an ordered list of configured Blossom server URLs.
+
+#### Scenario: User cannot disable Blossom uploads
+- **GIVEN** the user has opened Settings → Media Servers
+- **WHEN** the Media Servers view is rendered
+- **THEN** the UI SHALL NOT display a "Use Blossom servers" toggle (or any upload-backend toggle)
+- **AND** uploads SHALL always use Blossom servers.
 
 ### Requirement: Media Servers Add/Remove Behavior
 The Media Servers settings view SHALL allow the user to add and remove Blossom media server URLs, and any changes SHALL update the locally cached server list and publish an updated replaceable Nostr event `kind:10063` containing ordered `server` tags.
@@ -280,22 +289,6 @@ The Media Servers settings view SHALL allow the user to add and remove Blossom m
 - **THEN** the removed URL SHALL no longer appear in the server list
 - **AND** the updated server list SHALL be saved to the user's local profile cache
 - **AND** the client SHALL publish an updated `kind:10063` server list event that no longer includes the removed URL.
-
-### Requirement: Upload Backend Toggle
-The Settings interface SHALL provide a user-facing toggle under Settings → Media Servers that selects whether uploads use nospeak’s local upload endpoint or the user’s configured Blossom servers.
-
-#### Scenario: Blossom mode toggle is disabled when no servers configured
-- **GIVEN** the user has selected Settings → Media Servers
-- **AND** the user has zero configured media server URLs
-- **WHEN** the Media Servers view is rendered
-- **THEN** the "Use Blossom servers" toggle SHALL be disabled (greyed out)
-- **AND** uploads SHALL use the local nospeak upload endpoint.
-
-#### Scenario: User enables Blossom uploads when servers exist
-- **GIVEN** the user has at least one configured media server URL
-- **WHEN** the user enables the "Use Blossom servers" toggle
-- **THEN** the system SHALL persist the preference per device
-- **AND** subsequent uploads SHALL use Blossom servers according to the `messaging` specification.
 
 ### Requirement: Notifications Toggle in Settings
 The Settings interface SHALL provide a notifications option under Settings → General that controls whether the application attempts to show message and reaction notifications on the current device.
