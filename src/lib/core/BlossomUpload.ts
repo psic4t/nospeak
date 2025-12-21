@@ -9,6 +9,18 @@ export interface BlossomBlobDescriptor {
     uploaded: number;
 }
 
+class BlossomHttpError extends Error {
+    public readonly status: number;
+    public readonly reason: string | null;
+
+    public constructor(message: string, params: { status: number; reason: string | null }) {
+        super(message);
+        this.name = 'BlossomHttpError';
+        this.status = params.status;
+        this.reason = params.reason;
+    }
+}
+
 function getSubtle(): SubtleCrypto {
     if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
         return window.crypto.subtle;
@@ -103,6 +115,71 @@ async function putUpload(params: {
     });
 }
 
+async function putMirror(params: {
+    server: string;
+    url: string;
+    sha256: string;
+}): Promise<BlossomBlobDescriptor> {
+    const authHeader = await buildBlossomUploadAuthHeader({
+        sha256: params.sha256,
+        content: 'Mirror blob'
+    });
+
+    if (!authHeader) {
+        throw new Error('You must be logged in to upload media');
+    }
+
+    return await new Promise<BlossomBlobDescriptor>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        const uploadTimeout = setTimeout(() => {
+            xhr.abort();
+            reject(new Error('Upload timeout - please try again'));
+        }, 30000);
+
+        xhr.onload = () => {
+            clearTimeout(uploadTimeout);
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const descriptor = JSON.parse(xhr.responseText) as BlossomBlobDescriptor;
+                    if (!descriptor?.url) {
+                        reject(new Error('Invalid response from Blossom server'));
+                        return;
+                    }
+                    resolve(descriptor);
+                } catch {
+                    reject(new Error('Invalid response from Blossom server'));
+                }
+                return;
+            }
+
+            const reason = xhr.getResponseHeader('X-Reason');
+            reject(
+                new BlossomHttpError(`Mirror failed with status ${xhr.status}`, {
+                    status: xhr.status,
+                    reason
+                })
+            );
+        };
+
+        xhr.onerror = () => {
+            clearTimeout(uploadTimeout);
+            reject(new Error('Network error during upload'));
+        };
+
+        xhr.onabort = () => {
+            clearTimeout(uploadTimeout);
+            reject(new Error('Upload was cancelled'));
+        };
+
+        xhr.open('PUT', `${params.server}/mirror`);
+        xhr.setRequestHeader('Authorization', authHeader);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ url: params.url }));
+    });
+}
+
 export async function uploadToBlossomServers(params: {
     servers: string[];
     body: Blob;
@@ -148,6 +225,7 @@ export async function uploadToBlossomServers(params: {
     void mirrorToRemainingServers({
         servers: normalizedServers,
         primaryServer: primary.server,
+        primaryUrl: primary.descriptor.url,
         body: params.body,
         mimeType: params.mimeType,
         sha256
@@ -163,23 +241,39 @@ export async function uploadToBlossomServers(params: {
 async function mirrorToRemainingServers(params: {
     servers: string[];
     primaryServer: string;
+    primaryUrl: string;
     body: Blob;
     mimeType: string;
     sha256: string;
 }): Promise<void> {
     const targets = params.servers.filter((s) => s !== params.primaryServer);
+    const unsupportedMirrorStatuses = new Set([404, 405, 501]);
 
     await Promise.allSettled(
         targets.map(async (server) => {
             try {
-                await putUpload({
+                await putMirror({
                     server,
-                    body: params.body,
-                    mimeType: params.mimeType,
+                    url: params.primaryUrl,
                     sha256: params.sha256
                 });
+                return;
             } catch (e) {
-                console.warn('Blossom mirror upload failed', { server, error: e });
+                if (e instanceof BlossomHttpError && unsupportedMirrorStatuses.has(e.status)) {
+                    try {
+                        await putUpload({
+                            server,
+                            body: params.body,
+                            mimeType: params.mimeType,
+                            sha256: params.sha256
+                        });
+                    } catch (fallbackError) {
+                        console.warn('Blossom mirror fallback upload failed', { server, error: fallbackError });
+                    }
+                    return;
+                }
+
+                console.warn('Blossom mirror request failed', { server, error: e });
             }
         })
     );
