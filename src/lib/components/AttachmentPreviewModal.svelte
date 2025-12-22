@@ -205,8 +205,8 @@
             </div>
 
             {#if hint}
-                <div class="px-3 py-2 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/60">
-                    <div class="typ-meta text-xs text-blue-800 dark:text-blue-200 whitespace-pre-wrap">
+                <div class="px-3 py-2 rounded-xl bg-blue-50/10 dark:bg-blue-950/30 border border-blue-500/10 dark:border-blue-900/60">
+                    <div class="typ-meta text-xs text-gray-900 dark:text-blue-200 whitespace-pre-wrap">
                         {hint}
                     </div>
                 </div>
