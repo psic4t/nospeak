@@ -597,8 +597,8 @@
              {/if}
          {/each}
 
-          {#if preview}
-             <div class="mt-2 mb-1 overflow-hidden max-w-full">
+         {#if preview}
+            <div class="mt-2 mb-1 overflow-hidden">
                 <a
                     href={preview.url}
                     target="_blank"
@@ -606,7 +606,7 @@
                     class="block w-full max-w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500/70 overflow-hidden rounded-xl bg-white/20 dark:bg-slate-800/50 md:bg-white/10 md:dark:bg-slate-800/30 md:backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50 hover:bg-white/20 dark:hover:bg-slate-800/50 transition-colors"
                 >
                     <div class="flex flex-col sm:flex-row gap-0 sm:gap-0 h-auto sm:h-28">
-                        <div class="w-full sm:w-28 sm:shrink-0 h-24 sm:h-full bg-gray-100/50 dark:bg-slate-800/50 flex items-center justify-center overflow-hidden">
+                        <div class="w-full sm:w-28 sm:shrink-0 h-32 sm:h-full bg-gray-100/50 dark:bg-slate-800/50 flex items-center justify-center overflow-hidden">
                             {#if preview.image}
                                 <img src={preview.image} alt="" class="w-full h-full object-cover" loading="lazy" onload={() => onMediaLoad?.()} />
                             {:else}
@@ -615,7 +615,7 @@
                                 </svg>
                             {/if}
                         </div>
-                        <div class="min-w-0 p-2 sm:p-3 flex flex-col justify-center overflow-hidden">
+                        <div class="min-w-0 p-3 flex flex-col justify-center overflow-hidden">
                              {#if preview.title}
                                  <h1 class="m-0 typ-section truncate text-gray-900 dark:text-white leading-tight mb-1">
                                      {preview.title}
