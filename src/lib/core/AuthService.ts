@@ -10,6 +10,7 @@ import { connectionManager } from './connection/instance';
 import { messagingService } from './Messaging';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { syncAndroidBackgroundMessagingFromPreference, disableAndroidBackgroundMessaging } from './BackgroundMessaging';
+import { syncUnifiedPushFromPreference, stopUnifiedPush } from './UnifiedPushService';
 import { contactRepo } from '$lib/db/ContactRepository';
 import { profileResolver } from './ProfileResolver';
 import { messageRepo } from '$lib/db/MessageRepository';
@@ -269,12 +270,16 @@ export class AuthService {
                  console.error('Failed to start app-global message subscriptions after login flow:', e);
              });
  
-             // Sync Android background messaging with the saved preference once startup flow completes
-             syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                 console.error('Failed to sync Android background messaging preference after login flow:', e);
-             });
-         }
-     }
+              // Sync Android background messaging with the saved preference once startup flow completes
+              syncAndroidBackgroundMessagingFromPreference().catch(e => {
+                  console.error('Failed to sync Android background messaging preference after login flow:', e);
+              });
+
+              syncUnifiedPushFromPreference().catch(e => {
+                  console.error('Failed to sync UnifiedPush preference after login flow:', e);
+              });
+          }
+      }
 
 
     public async restore(): Promise<boolean> {
@@ -350,6 +355,10 @@ export class AuthService {
                     console.error('Failed to sync Android background messaging preference after local restore:', e);
                 });
 
+                await syncUnifiedPushFromPreference().catch(e => {
+                    console.error('Failed to sync UnifiedPush preference after local restore:', e);
+                });
+
                 return true;
             } else if (method === 'nip07') {
                 if (!window.nostr) {
@@ -372,10 +381,14 @@ export class AuthService {
                  });
  
                  await syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                     console.error('Failed to sync Android background messaging preference after nip07 restore:', e);
+                      console.error('Failed to sync Android background messaging preference after nip07 restore:', e);
+                  });
+
+                 await syncUnifiedPushFromPreference().catch(e => {
+                     console.error('Failed to sync UnifiedPush preference after nip07 restore:', e);
                  });
- 
-                 return true;
+
+                  return true;
             } else if (method === 'amber') {
                 const cachedHex = localStorage.getItem('nospeak:amber_pubkey_hex');
  
@@ -400,10 +413,14 @@ export class AuthService {
                  });
  
                  await syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                     console.error('Failed to sync Android background messaging preference after amber restore:', e);
+                      console.error('Failed to sync Android background messaging preference after amber restore:', e);
+                  });
+
+                 await syncUnifiedPushFromPreference().catch(e => {
+                     console.error('Failed to sync UnifiedPush preference after amber restore:', e);
                  });
- 
-                 return true;
+
+                  return true;
             } else if (method === 'nip46') {
                 // Legacy NIP-46 sessions are no longer supported; clear persisted keys and require re-login.
                 localStorage.removeItem(NIP46_SECRET_KEY);
@@ -427,7 +444,11 @@ export class AuthService {
         await disableAndroidBackgroundMessaging().catch(e => {
              console.error('Failed to disable Android background messaging on logout:', e);
          });
- 
+
+        await stopUnifiedPush().catch(e => {
+            console.error('Failed to stop UnifiedPush on logout:', e);
+        });
+
          // Stop app-global message subscriptions before tearing down connections
          messagingService.stopSubscriptions();
 

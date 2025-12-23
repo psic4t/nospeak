@@ -220,6 +220,18 @@ export function isUnifiedPushEnabled(): boolean {
     return loadSettings().enabled;
 }
 
+export async function syncUnifiedPushFromPreference(): Promise<void> {
+    if (Capacitor.getPlatform() !== 'android' || !isAndroidNative()) {
+        return;
+    }
+
+    const settings = loadSettings();
+
+    if (settings.enabled && settings.serverUrl) {
+        await startUnifiedPush(settings.serverUrl);
+    }
+}
+
 export function isValidServerUrl(url: string): boolean {
     if (!url || typeof url !== 'string') {
         return false;
