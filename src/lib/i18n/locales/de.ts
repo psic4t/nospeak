@@ -196,16 +196,17 @@ const de = {
         },
         mediaUnavailable: 'Dieses Medium ist nicht mehr verfügbar.'
     },
-        settings: {
-         title: 'Einstellungen',
-         categories: {
-             general: 'Allgemein',
-             profile: 'Profil',
-              messagingRelays: 'Messaging-Relays',
-              mediaServers: 'Medienserver',
-              security: 'Sicherheit',
-             about: 'Info'
-         },
+         settings: {
+          title: 'Einstellungen',
+          categories: {
+              general: 'Allgemein',
+              profile: 'Profil',
+               messagingRelays: 'Messaging-Relays',
+               mediaServers: 'Medienserver',
+               security: 'Sicherheit',
+               unifiedPush: 'UnifiedPush',
+              about: 'Info'
+          },
 
         general: {
             appearanceLabel: 'Darstellung',
@@ -265,20 +266,41 @@ const de = {
               savingStatus: 'Relay-Einstellungen werden gespeichert…'
           },
 
-          mediaServers: {
-              description: 'Konfiguriere deine Blossom-Medienserver. Diese Server speichern Dateien, die du hochlädst (Profilmedien und Chat-Anhänge).',
-
-              inputPlaceholder: 'https://cdn.example.com',
-              addButton: 'Hinzufügen',
-              emptyState: 'Keine Server konfiguriert',
-              saveStatusSuccess: 'Serverliste auf {count} Relays gespeichert.',
-              saveStatusPartial: 'Serverliste auf {succeeded} von {attempted} Relays gespeichert.',
-              saveStatusNone: 'Serverliste konnte auf keinem Relay gespeichert werden.',
-              saveStatusError: 'Fehler beim Speichern der Serverliste. Einstellungen sind möglicherweise nicht vollständig propagiert.',
-              savingStatus: 'Medienserver-Einstellungen werden gespeichert…'
-          },
-
-         security: {
+           mediaServers: {
+               description: 'Konfiguriere deine Blossom-Medienserver. Diese Server speichern Dateien, die du hochlädst (Profilmedien und Chat-Anhänge).',
+ 
+               inputPlaceholder: 'https://cdn.example.com',
+               addButton: 'Hinzufügen',
+               emptyState: 'Keine Server konfiguriert',
+               saveStatusSuccess: 'Serverliste auf {count} Relays gespeichert.',
+               saveStatusPartial: 'Serverliste auf {succeeded} von {attempted} Relays gespeichert.',
+               saveStatusNone: 'Serverliste konnte auf keinem Relay gespeichert werden.',
+               saveStatusError: 'Fehler beim Speichern der Serverliste. Einstellungen sind möglicherweise nicht vollständig propagiert.',
+               savingStatus: 'Medienserver-Einstellungen werden gespeichert…'
+           },
+ 
+           unifiedPush: {
+               description: 'Konfiguriere UnifiedPush, um Push-Benachrichtigungen von ntfy-kompatiblen Servern zu empfangen.',
+               enableLabel: 'UnifiedPush aktivieren',
+               enableDescription: 'nospeak als UnifiedPush-Distributor verwenden',
+               toggleEnableAria: 'UnifiedPush aktivieren',
+               toggleDisableAria: 'UnifiedPush deaktivieren',
+               serverUrlLabel: 'Server-URL',
+               serverUrlPlaceholder: 'https://ntfy.sh',
+               topicsLabel: 'Themen',
+               topicPlaceholder: 'z.B. alerts, backups',
+               topicsEmpty: 'Noch keine Themen konfiguriert. Füge dein erstes Thema hinzu, um Push-Benachrichtigungen zu erhalten.',
+               registeredAppsLabel: 'Registrierte Apps',
+               uninstalledBadge: 'Deinstalliert',
+               noDescription: 'Keine Beschreibung',
+               registrationsEmpty: 'Noch keine Apps für Push-Benachrichtigungen registriert. Installiere UnifiedPush-kompatible Apps, um sie hier zu sehen.',
+               removeTopicTitle: 'Thema entfernen',
+               removeRegistrationTitle: 'Registrierung entfernen',
+               sendTestPush: 'Testbenachrichtigung senden',
+               sending: 'Sende…'
+           },
+ 
+          security: {
             loginMethodTitle: 'Anmeldemethode',
             loginMethodUnknown: 'Unbekannt',
             npubLabel: 'Dein npub',

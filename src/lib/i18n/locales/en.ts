@@ -194,16 +194,17 @@ const en = {
         },
         mediaUnavailable: 'This media is no longer available.'
     },
-        settings: {
-         title: 'Settings',
-         categories: {
-             general: 'General',
-             profile: 'Profile',
-              messagingRelays: 'Messaging Relays',
-              mediaServers: 'Media Servers',
-              security: 'Security',
-             about: 'About'
-         },
+         settings: {
+          title: 'Settings',
+          categories: {
+              general: 'General',
+              profile: 'Profile',
+               messagingRelays: 'Messaging Relays',
+               mediaServers: 'Media Servers',
+               security: 'Security',
+               unifiedPush: 'UnifiedPush',
+              about: 'About'
+          },
 
         general: {
             appearanceLabel: 'Appearance',
@@ -263,21 +264,42 @@ const en = {
               savingStatus: 'Saving relay settings…'
           },
 
-          mediaServers: {
-              description: 'Configure your Blossom media servers. These servers are used to store files you upload (profile media and chat attachments).',
-
-              inputPlaceholder: 'https://cdn.example.com',
-              addButton: 'Add',
-              emptyState: 'No servers configured',
-              saveStatusSuccess: 'Saved server list to {count} relays.',
-              saveStatusPartial: 'Saved server list to {succeeded} of {attempted} relays.',
-              saveStatusNone: 'Could not save server list to any relays.',
-              saveStatusError: 'Error saving server list. Your settings may not be fully propagated.',
-              savingStatus: 'Saving media server settings…'
-          },
-
-
-         security: {
+           mediaServers: {
+               description: 'Configure your Blossom media servers. These servers are used to store files you upload (profile media and chat attachments).',
+ 
+               inputPlaceholder: 'https://cdn.example.com',
+               addButton: 'Add',
+               emptyState: 'No servers configured',
+               saveStatusSuccess: 'Saved server list to {count} relays.',
+               saveStatusPartial: 'Saved server list to {succeeded} of {attempted} relays.',
+               saveStatusNone: 'Could not save server list to any relays.',
+               saveStatusError: 'Error saving server list. Your settings may not be fully propagated.',
+               savingStatus: 'Saving media server settings…'
+           },
+ 
+           unifiedPush: {
+               description: 'Configure UnifiedPush to receive push notifications from ntfy-compatible servers.',
+               enableLabel: 'Enable UnifiedPush',
+               enableDescription: 'Allow nospeak to act as a UnifiedPush distributor',
+               toggleEnableAria: 'Enable UnifiedPush',
+               toggleDisableAria: 'Disable UnifiedPush',
+               serverUrlLabel: 'Server URL',
+               serverUrlPlaceholder: 'https://ntfy.sh',
+               topicsLabel: 'Topics',
+               topicPlaceholder: 'e.g. alerts, backups',
+               topicsEmpty: 'No topics configured yet. Add your first topic to start receiving push notifications.',
+               registeredAppsLabel: 'Registered Apps',
+               uninstalledBadge: 'Uninstalled',
+               noDescription: 'No description',
+               registrationsEmpty: 'No apps have registered for push notifications yet. Install UnifiedPush-compatible apps to see them here.',
+               removeTopicTitle: 'Remove topic',
+               removeRegistrationTitle: 'Remove registration',
+               sendTestPush: 'Send Test Push',
+               sending: 'Sending...'
+           },
+ 
+ 
+          security: {
             loginMethodTitle: 'Login method',
             loginMethodUnknown: 'Unknown',
             npubLabel: 'Your npub',

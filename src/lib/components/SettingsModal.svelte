@@ -1124,7 +1124,7 @@
                   </svg>
                 </div>
                 <span class="typ-section">
-                  UnifiedPush
+                  {$t("settings.categories.unifiedPush")}
                 </span>
               </div>
               <svg
@@ -1219,7 +1219,7 @@
               {:else if activeCategory === "Security"}
               {$t('settings.categories.security')}
             {:else if activeCategory === "UnifiedPush"}
-              UnifiedPush
+              {$t("settings.categories.unifiedPush")}
             {:else if activeCategory === "About"}
               {$t('settings.categories.about')}
               {/if}
@@ -1940,7 +1940,7 @@
           {:else if activeCategory === "UnifiedPush"}
             <div class="space-y-6">
               <p class="text-sm text-gray-600 dark:text-slate-400">
-                Configure UnifiedPush to receive push notifications from ntfy-compatible servers.
+                {$t("settings.unifiedPush.description")}
               </p>
 
               <div class="flex items-start justify-between gap-4">
@@ -1949,10 +1949,10 @@
                     for="unifiedpush-enabled-toggle"
                     class="typ-section dark:text-white"
                   >
-                    Enable UnifiedPush
+                    {$t("settings.unifiedPush.enableLabel")}
                   </label>
                   <p class="text-sm text-gray-600 dark:text-slate-400">
-                    Allow nospeak to act as a UnifiedPush distributor
+                    {$t("settings.unifiedPush.enableDescription")}
                   </p>
                 </div>
                 <Toggle
@@ -1961,8 +1961,8 @@
                   onclick={() => void unifiedPush.setEnabled(unifiedPushEnabled)}
                   aria-label={
                     unifiedPushEnabled
-                      ? "Disable UnifiedPush"
-                      : "Enable UnifiedPush"
+                      ? $t("settings.unifiedPush.toggleDisableAria")
+                      : $t("settings.unifiedPush.toggleEnableAria")
                   }
                   class="ml-4"
                 />
@@ -1975,14 +1975,14 @@
                       for="unifiedpush-server-url"
                       class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
                     >
-                      Server URL
+                      {$t("settings.unifiedPush.serverUrlLabel")}
                     </label>
                     <div class="flex gap-2">
                       <Input
                         id="unifiedpush-server-url"
                         bind:value={unifiedPushServerUrl}
                         type="url"
-                        placeholder="https://ntfy.sh"
+                        placeholder={$t("settings.unifiedPush.serverUrlPlaceholder")}
                         class="flex-1"
                       />
                       <Button
@@ -1994,19 +1994,19 @@
                         variant="primary"
                         disabled={unifiedPushLoading}
                       >
-                        Save
+                        {$t("common.save")}
                       </Button>
                     </div>
                   </div>
 
                   <div>
                     <p class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1">
-                      Topics
+                      {$t("settings.unifiedPush.topicsLabel")}
                     </p>
                     <div class="flex gap-2 mb-2">
                       <Input
                         bind:value={newUnifiedPushTopic}
-                        placeholder="e.g. alerts, backups"
+                        placeholder={$t("settings.unifiedPush.topicPlaceholder")}
                         class="flex-1"
                         onkeydown={(e: KeyboardEvent) => {
                           if (e.key === "Enter") {
@@ -2065,7 +2065,7 @@
                                 variant="danger"
                                 size="icon"
                                 class="!w-8 !h-8"
-                                title="Remove topic"
+                                title={$t("settings.unifiedPush.removeTopicTitle")}
                                 disabled={unifiedPushLoading}
                               >
                                 <svg
@@ -2088,14 +2088,14 @@
                       </div>
                     {:else}
                       <div class="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400">
-                        No topics configured yet. Add your first topic to start receiving push notifications.
+                        {$t("settings.unifiedPush.topicsEmpty")}
                       </div>
                     {/if}
                   </div>
 
                   <div>
                     <p class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1">
-                      Registered Apps
+                      {$t("settings.unifiedPush.registeredAppsLabel")}
                     </p>
                     {#if unifiedPushRegistrations.length > 0}
                       <div
@@ -2108,15 +2108,15 @@
                                 <p class="text-sm font-medium dark:text-white">
                                   {reg.packageName}
                                 </p>
-                                {#if reg.installed === false}
-                                  <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                                    Uninstalled
-                                  </span>
+                                 {#if reg.installed === false}
+                                   <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                                     {$t("settings.unifiedPush.uninstalledBadge")}
+                                   </span>
                                 {/if}
-                              </div>
-                              <p class="text-xs text-gray-600 dark:text-slate-400">
-                                {reg.message || "No description"}
-                              </p>
+                               </div>
+                               <p class="text-xs text-gray-600 dark:text-slate-400">
+                                 {reg.message || $t("settings.unifiedPush.noDescription")}
+                               </p>
                               <p class="text-xs text-gray-500 dark:text-slate-500 font-mono truncate" title={reg.endpoint}>
                                 {reg.endpoint}
                               </p>
@@ -2131,7 +2131,7 @@
                                 variant="danger"
                                 size="icon"
                                 class="!w-8 !h-8"
-                                title="Remove registration"
+                                title={$t("settings.unifiedPush.removeRegistrationTitle")}
                                 disabled={unifiedPushLoading}
                               >
                                 <svg
@@ -2154,7 +2154,7 @@
                       </div>
                     {:else}
                       <div class="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400">
-                        No apps have registered for push notifications yet. Install UnifiedPush-compatible apps to see them here.
+                        {$t("settings.unifiedPush.registrationsEmpty")}
                       </div>
                     {/if}
                   </div>
@@ -2189,9 +2189,9 @@
                             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                           ></path>
                         </svg>
-                        Sending...
+                        {$t("settings.unifiedPush.sending")}
                       {:else}
-                        Send Test Push
+                        {$t("settings.unifiedPush.sendTestPush")}
                       {/if}
                     </Button>
                   </div>
