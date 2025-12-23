@@ -2165,7 +2165,7 @@
                         unifiedPush.clearError();
                         await unifiedPush.sendTestPush();
                       }}
-                      variant="ghost"
+                      variant="primary"
                       disabled={unifiedPushLoading || !unifiedPushServerUrl}
                     >
                       {#if unifiedPushLoading}
