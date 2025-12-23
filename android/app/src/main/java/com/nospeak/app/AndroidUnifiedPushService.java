@@ -92,7 +92,7 @@ public class AndroidUnifiedPushService extends Service {
     public void onCreate() {
         super.onCreate();
         client = new OkHttpClient.Builder()
-                .pingInterval(60, TimeUnit.SECONDS)
+                .pingInterval(240, TimeUnit.SECONDS)
                 .readTimeout(0, TimeUnit.MILLISECONDS)
                 .build();
         handler = new Handler(Looper.getMainLooper());
