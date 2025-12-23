@@ -30,6 +30,8 @@
   import Input from '$lib/components/ui/Input.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import Toggle from '$lib/components/ui/Toggle.svelte';
+  import { unifiedPush } from '$lib/stores/unifiedPush';
+  import type { UnifiedPushRegistration } from '$lib/core/UnifiedPushService';
  
   const packageVersion = __APP_VERSION__;
 
@@ -47,7 +49,7 @@
   let isSupported = $state(false);
   let isLoaded = $state(false);
 
-  type Category = "General" | "Profile" | "Messaging Relays" | "Media Servers" | "About" | "Security";
+  type Category = "General" | "Profile" | "Messaging Relays" | "Media Servers" | "About" | "Security" | "UnifiedPush";
   type AuthMethod = "local" | "nip07" | "amber" | "nip46" | "unknown";
 
   let activeCategory = $state<Category | null>(isMobile ? null : "General");
@@ -148,6 +150,16 @@
   let isSavingMediaServers = $state(false);
   let mediaServerSaveStatus = $state<string | null>(null);
   let mediaServersLoaded = $state(false);
+
+  // UnifiedPush settings
+  let unifiedPushEnabled = $state(false);
+  let unifiedPushServerUrl = $state("");
+  let unifiedPushTopics = $state<string[]>([]);
+  let unifiedPushRegistrations = $state<UnifiedPushRegistration[]>([]);
+  let newUnifiedPushTopic = $state("");
+  let unifiedPushLoading = $state(false);
+  let unifiedPushError = $state<string | null>(null);
+  let unifiedPushLastServerUrl = $state<string | null>(null);
 
   type ProfileMediaTarget = 'picture' | 'banner';
 
@@ -491,6 +503,67 @@
       // Sync language selector with current language store
       languageValue = $language;
     }
+
+    // UnifiedPush state sync
+    $effect(() => {
+      if (isOpen && activeCategory === "UnifiedPush") {
+        void unifiedPush.initialize();
+      }
+    });
+
+    // Keep UnifiedPush UI state in sync with the store (topics/enabled update immediately).
+    // Server URL is only synced when the user has not edited it.
+    $effect(() => {
+      const unsubscribe = unifiedPush.subscribe((settings) => {
+        unifiedPushEnabled = settings.enabled;
+        unifiedPushTopics = settings.topics || [];
+
+        const storeServerUrl = settings.serverUrl || "";
+
+        if (!isOpen || activeCategory !== "UnifiedPush") {
+          unifiedPushServerUrl = storeServerUrl;
+          unifiedPushLastServerUrl = storeServerUrl;
+          return;
+        }
+
+        if (unifiedPushLastServerUrl === null) {
+          unifiedPushLastServerUrl = storeServerUrl;
+        }
+
+        const canSyncServerUrl = !unifiedPushServerUrl || unifiedPushServerUrl === unifiedPushLastServerUrl;
+        if (canSyncServerUrl) {
+          unifiedPushServerUrl = storeServerUrl;
+        }
+
+        unifiedPushLastServerUrl = storeServerUrl;
+      });
+
+      return unsubscribe;
+    });
+
+    // Subscribe to unifiedPush store for registrations
+    $effect(() => {
+      const unsubscribe = unifiedPush.registrations.subscribe((regs) => {
+        unifiedPushRegistrations = regs;
+      });
+      return unsubscribe;
+    });
+
+    // Subscribe to unifiedPush loading state
+    $effect(() => {
+      const unsubscribe = unifiedPush.loading.subscribe((loading) => {
+        unifiedPushLoading = loading;
+      });
+      return unsubscribe;
+    });
+
+    // Subscribe to unifiedPush error state
+    $effect(() => {
+      const unsubscribe = unifiedPush.error.subscribe((error) => {
+        unifiedPushError = error;
+      });
+      return unsubscribe;
+    });
 
     if (isOpen && !isLoaded) {
       isSupported = notificationService.isSupported();
@@ -1025,7 +1098,48 @@
             >
               <path d="M9 18l6-6-6-6"></path>
             </svg>
-          </button>
+          </button> 
+
+          {#if isAndroidApp}
+            <button
+              class={getCategoryCardClasses("UnifiedPush")}
+              onclick={() => {
+                activeCategory = "UnifiedPush";
+                showMobileContent = true;
+              }}
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-6 h-6 flex items-center justify-center dark:text-slate-100 flex-shrink-0">
+                  <svg
+                    class="w-5 h-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h12s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                  </svg>
+                </div>
+                <span class="typ-section">
+                  UnifiedPush
+                </span>
+              </div>
+              <svg
+                class="w-4 h-4 text-gray-500 dark:text-slate-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              stroke-linejoin="round"
+              >
+                <path d="M9 18l6-6-6-6"></path>
+              </svg>
+            </button>
+          {/if}
 
           <button
             class={getCategoryCardClasses("About")}
@@ -1103,9 +1217,11 @@
               {:else if activeCategory === "Media Servers"}
                 {$t('settings.categories.mediaServers')}
               {:else if activeCategory === "Security"}
-                {$t('settings.categories.security')}
-              {:else if activeCategory === "About"}
-                {$t('settings.categories.about')}
+              {$t('settings.categories.security')}
+            {:else if activeCategory === "UnifiedPush"}
+              UnifiedPush
+            {:else if activeCategory === "About"}
+              {$t('settings.categories.about')}
               {/if}
             </h3>
           </div>
@@ -1820,6 +1936,275 @@
                   </Button>
                 </div>
               </div>
+            </div>
+          {:else if activeCategory === "UnifiedPush"}
+            <div class="space-y-6">
+              <p class="text-sm text-gray-600 dark:text-slate-400">
+                Configure UnifiedPush to receive push notifications from ntfy-compatible servers.
+              </p>
+
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                  <label
+                    for="unifiedpush-enabled-toggle"
+                    class="typ-section dark:text-white"
+                  >
+                    Enable UnifiedPush
+                  </label>
+                  <p class="text-sm text-gray-600 dark:text-slate-400">
+                    Allow nospeak to act as a UnifiedPush distributor
+                  </p>
+                </div>
+                <Toggle
+                  id="unifiedpush-enabled-toggle"
+                  bind:checked={unifiedPushEnabled}
+                  onclick={() => void unifiedPush.setEnabled(unifiedPushEnabled)}
+                  aria-label={
+                    unifiedPushEnabled
+                      ? "Disable UnifiedPush"
+                      : "Enable UnifiedPush"
+                  }
+                  class="ml-4"
+                />
+              </div>
+
+              {#if unifiedPushEnabled && notificationsEnabled}
+                <div class="space-y-4">
+                  <div>
+                    <label
+                      for="unifiedpush-server-url"
+                      class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
+                    >
+                      Server URL
+                    </label>
+                    <div class="flex gap-2">
+                      <Input
+                        id="unifiedpush-server-url"
+                        bind:value={unifiedPushServerUrl}
+                        type="url"
+                        placeholder="https://ntfy.sh"
+                        class="flex-1"
+                      />
+                      <Button
+                        onclick={async () => {
+                          unifiedPush.clearError();
+                          await unifiedPush.setServerUrl(unifiedPushServerUrl);
+                          await unifiedPush.setEnabled(true);
+                        }}
+                        variant="primary"
+                        disabled={unifiedPushLoading}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1">
+                      Topics
+                    </p>
+                    <div class="flex gap-2 mb-2">
+                      <Input
+                        bind:value={newUnifiedPushTopic}
+                        placeholder="e.g. alerts, backups"
+                        class="flex-1"
+                        onkeydown={(e: KeyboardEvent) => {
+                          if (e.key === "Enter") {
+                            void (async () => {
+                              unifiedPush.clearError();
+                              await unifiedPush.addTopic(newUnifiedPushTopic);
+                              newUnifiedPushTopic = "";
+                            })();
+                          }
+                        }}
+                      />
+                      <Button
+                        onclick={async () => {
+                          unifiedPush.clearError();
+                          await unifiedPush.addTopic(newUnifiedPushTopic);
+                          newUnifiedPushTopic = "";
+                        }}
+                        variant="primary"
+                        size="icon"
+                        disabled={unifiedPushLoading || !newUnifiedPushTopic}
+                      >
+                        <svg
+                          class="w-5 h-5"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </Button>
+                    </div>
+
+                    {#if unifiedPushTopics.length > 0}
+                      <div
+                        class="border border-gray-200/60 dark:border-slate-700/70 rounded-2xl bg-white/80 dark:bg-slate-900/60 overflow-hidden shadow-sm divide-y divide-gray-200/60 dark:divide-slate-700/70"
+                      >
+                        {#each unifiedPushTopics as topic}
+                          <div class="px-4 py-3 flex items-center justify-between">
+                            <div class="flex-1 min-w-0 pr-4">
+                              <p
+                                class="text-sm font-medium dark:text-white"
+                              >
+                                {topic}
+                              </p>
+                            </div>
+                            <div class="flex items-center gap-4">
+                              <Button
+                                onclick={async () => {
+                                  unifiedPush.clearError();
+                                  await unifiedPush.removeTopic(topic);
+                                }}
+                                variant="danger"
+                                size="icon"
+                                class="!w-8 !h-8"
+                                title="Remove topic"
+                                disabled={unifiedPushLoading}
+                              >
+                                <svg
+                                  class="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  ></path>
+                                </svg>
+                              </Button>
+                            </div>
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400">
+                        No topics configured yet. Add your first topic to start receiving push notifications.
+                      </div>
+                    {/if}
+                  </div>
+
+                  <div>
+                    <p class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1">
+                      Registered Apps
+                    </p>
+                    {#if unifiedPushRegistrations.length > 0}
+                      <div
+                        class="border border-gray-200/60 dark:border-slate-700/70 rounded-2xl bg-white/80 dark:bg-slate-900/60 overflow-hidden shadow-sm divide-y divide-gray-200/60 dark:divide-slate-700/70"
+                      >
+                        {#each unifiedPushRegistrations as reg}
+                          <div class="px-4 py-3 flex items-start justify-between gap-3">
+                            <div class="space-y-1 flex-1 min-w-0">
+                              <div class="flex items-center gap-2">
+                                <p class="text-sm font-medium dark:text-white">
+                                  {reg.packageName}
+                                </p>
+                                {#if reg.installed === false}
+                                  <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                                    Uninstalled
+                                  </span>
+                                {/if}
+                              </div>
+                              <p class="text-xs text-gray-600 dark:text-slate-400">
+                                {reg.message || "No description"}
+                              </p>
+                              <p class="text-xs text-gray-500 dark:text-slate-500 font-mono truncate" title={reg.endpoint}>
+                                {reg.endpoint}
+                              </p>
+                            </div>
+
+                            {#if reg.removable}
+                              <Button
+                                onclick={async () => {
+                                  unifiedPush.clearError();
+                                  await unifiedPush.removeRegistration(reg.token);
+                                }}
+                                variant="danger"
+                                size="icon"
+                                class="!w-8 !h-8"
+                                title="Remove registration"
+                                disabled={unifiedPushLoading}
+                              >
+                                <svg
+                                  class="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  ></path>
+                                </svg>
+                              </Button>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400">
+                        No apps have registered for push notifications yet. Install UnifiedPush-compatible apps to see them here.
+                      </div>
+                    {/if}
+                  </div>
+
+                  <div class="pt-4 border-t dark:border-slate-700">
+                    <Button
+                      onclick={async () => {
+                        unifiedPush.clearError();
+                        await unifiedPush.sendTestPush();
+                      }}
+                      variant="ghost"
+                      disabled={unifiedPushLoading || !unifiedPushServerUrl}
+                    >
+                      {#if unifiedPushLoading}
+                        <svg
+                          class="animate-spin h-4 w-4 mr-2"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                          ></circle>
+                          <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        Sending...
+                      {:else}
+                        Send Test Push
+                      {/if}
+                    </Button>
+                  </div>
+                </div>
+              {/if}
+
+              {#if unifiedPushError}
+                <div class="mt-4 p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800">
+                  <p class="text-sm text-red-700 dark:text-red-300">
+                    {unifiedPushError}
+                  </p>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>

@@ -25,6 +25,7 @@ const config: CapacitorConfig = {
     App: {
       disableBackButtonHandler: false,
     },
+    AndroidUnifiedPush: {},
   },
 };
 

@@ -23,10 +23,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidNip55SignerPlugin.class);
         registerPlugin(AndroidShareTargetPlugin.class);
         registerPlugin(AndroidTapSoundPlugin.class);
- 
+        registerPlugin(AndroidUnifiedPushPlugin.class);
+  
         super.onCreate(savedInstanceState);
 
- 
+  
         // Enable edge-to-edge layout and delegate safe areas to the web UI
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
     }
