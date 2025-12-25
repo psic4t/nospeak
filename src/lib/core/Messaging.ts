@@ -264,6 +264,7 @@ import { uploadToBlossomServers } from './BlossomUpload';
       // Default text (Kind 14) path
       const parentTag = rumor.tags.find(t => t[0] === 'e');
       const parentRumorId = parentTag?.[1];
+      const location = this.parseLocationFromRumor(rumor);
 
       return {
         recipientNpub: partnerNpub,
@@ -274,7 +275,8 @@ import { uploadToBlossomServers } from './BlossomUpload';
         direction,
         createdAt: Date.now(),
         rumorKind: rumor.kind,
-        parentRumorId
+        parentRumorId,
+        location
       };
     } catch (e) {
       console.error('Failed to create message from rumor:', e);
@@ -282,6 +284,24 @@ import { uploadToBlossomServers } from './BlossomUpload';
     }
   }
 
+  private parseLocationFromRumor(rumor: NostrEvent): { latitude: number; longitude: number } | undefined {
+    const locationTag = rumor.tags.find(t => t[0] === 'location' && !!t[1]);
+    const raw = locationTag?.[1] || (rumor.content?.startsWith('geo:') ? rumor.content.slice('geo:'.length) : undefined);
+
+    if (!raw) {
+      return undefined;
+    }
+
+    const [latitudeText, longitudeText] = raw.split(',');
+    const latitude = Number(latitudeText);
+    const longitude = Number(longitudeText);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return undefined;
+    }
+
+    return { latitude, longitude };
+  }
 
   private async processRumor(rumor: NostrEvent, originalEventId: string) {
     const s = get(signer);
@@ -710,6 +730,97 @@ import { uploadToBlossomServers } from './BlossomUpload';
     return rumorId;
   }
 
+  public async sendLocationMessage(recipientNpub: string, latitude: number, longitude: number): Promise<string> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const senderPubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(senderPubkey);
+    const { data: recipientPubkey } = nip19.decode(recipientNpub);
+
+    const recipientRelays = await this.getMessagingRelays(recipientNpub);
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+
+    if (recipientRelays.length === 0) {
+      throw new Error('Contact has no messaging relays configured');
+    }
+
+    const allRelays = [...new Set([...recipientRelays, ...senderRelays])];
+
+    if (this.debug) console.log('Sending location message to relays:', { recipientRelays, senderRelays });
+
+    for (const url of allRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
+
+    const locationValue = `${latitude},${longitude}`;
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 14,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: `geo:${locationValue}`,
+      tags: [
+        ['p', recipientPubkey as string],
+        ['location', locationValue]
+      ]
+    };
+
+    const rumorId = getEventHash(rumor as NostrEvent);
+
+    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
+    initRelaySendStatus(giftWrap.id, recipientNpub, recipientRelays.length);
+
+    const publishResult = await publishWithDeadline({
+      connectionManager,
+      event: giftWrap,
+      relayUrls: recipientRelays,
+      deadlineMs: 5000,
+      onRelaySuccess: (url) => registerRelaySuccess(giftWrap.id, url),
+    });
+
+    if (publishResult.successfulRelays.length === 0) {
+      throw new Error('Failed to send message to any relay');
+    }
+
+    const successfulRelaySet = new Set(publishResult.successfulRelays);
+
+    for (const url of recipientRelays) {
+      if (!successfulRelaySet.has(url)) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+
+    for (const url of senderRelays) {
+      await retryQueue.enqueue(selfGiftWrap, url);
+    }
+
+    await messageRepo.saveMessage({
+      recipientNpub,
+      message: rumor.content || '',
+      sentAt: (rumor.created_at || 0) * 1000,
+      eventId: selfGiftWrap.id,
+      rumorId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: 14,
+      location: {
+        latitude,
+        longitude
+      }
+    });
+
+    await this.autoAddContact(recipientNpub);
+
+    return rumorId;
+  }
 
   private mediaTypeToMime(type: 'image' | 'video' | 'audio'): string {
     if (type === 'image') {

@@ -6,19 +6,29 @@
     import Button from '$lib/components/ui/Button.svelte';
     import Textarea from '$lib/components/ui/Textarea.svelte';
 
+    type Mode = 'media' | 'location';
+
+    export type LocationPoint = {
+        latitude: number;
+        longitude: number;
+    };
+
     let {
         isOpen,
-        file,
-        mediaType,
-        objectUrl,
+        mode = 'media',
+        location = null,
+        openMapText = '',
+        file = null,
+        mediaType = 'image',
+        objectUrl = null,
         title,
-        imageAlt,
-        noPreviewText,
-        captionLabel,
-        captionPlaceholder,
+        imageAlt = '',
+        noPreviewText = '',
+        captionLabel = '',
+        captionPlaceholder = '',
         cancelText,
-        confirmTextIdle,
-        confirmTextBusy,
+        confirmTextIdle = '',
+        confirmTextBusy = '',
         captionEnabled = true,
         caption = $bindable(''),
         error = null,
@@ -26,20 +36,23 @@
         isBusy = false,
         disableConfirm = false,
         onCancel,
-        onConfirm
+        onConfirm = () => undefined
     } = $props<{
         isOpen: boolean;
-        file: File;
-        mediaType: 'image' | 'video' | 'audio';
-        objectUrl: string | null;
+        mode?: Mode;
+        location?: LocationPoint | null;
+        openMapText?: string;
+        file?: File | null;
+        mediaType?: 'image' | 'video' | 'audio';
+        objectUrl?: string | null;
         title: string;
-        imageAlt: string;
-        noPreviewText: string;
-        captionLabel: string;
-        captionPlaceholder: string;
+        imageAlt?: string;
+        noPreviewText?: string;
+        captionLabel?: string;
+        captionPlaceholder?: string;
         cancelText: string;
-        confirmTextIdle: string;
-        confirmTextBusy: string;
+        confirmTextIdle?: string;
+        confirmTextBusy?: string;
         captionEnabled?: boolean;
         caption?: string;
         error?: string | null;
@@ -47,11 +60,31 @@
         isBusy?: boolean;
         disableConfirm?: boolean;
         onCancel: () => void;
-        onConfirm: () => void;
+        onConfirm?: () => void;
     }>();
 
     const isAndroidShell = isAndroidCapacitorShell();
     const useFullWidth = isAndroidShell || isMobileWeb();
+
+    const isLocationMode = $derived(mode === 'location');
+
+    function buildOsmEmbedUrl(point: LocationPoint): string {
+        const padding = 0.01;
+        const left = point.longitude - padding;
+        const right = point.longitude + padding;
+        const bottom = point.latitude - padding;
+        const top = point.latitude + padding;
+
+        return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${point.latitude},${point.longitude}`;
+    }
+
+    function buildOsmOpenUrl(point: LocationPoint): string {
+        return `https://www.openstreetmap.org/?mlat=${point.latitude}&mlon=${point.longitude}&zoom=15`;
+    }
+
+    const mapUrl = $derived(location ? buildOsmEmbedUrl(location) : null);
+    const openMapUrl = $derived(location ? buildOsmOpenUrl(location) : null);
+    const showLocationConfirm = $derived(isLocationMode && !!confirmTextIdle);
 
     // Bottom sheet drag state (Android only)
     const BOTTOM_SHEET_ACTIVATION_THRESHOLD = 8;
@@ -213,7 +246,16 @@
             {/if}
 
             <div class="rounded-xl overflow-hidden bg-gray-100/80 dark:bg-slate-800/80 flex items-center justify-center min-h-[160px]">
-                {#if mediaType === 'image' && objectUrl}
+                {#if isLocationMode && location && mapUrl}
+                    <iframe
+                        src={mapUrl}
+                        width="100%"
+                        height="300"
+                        frameborder="0"
+                        class="w-full"
+                        title={title}
+                    ></iframe>
+                {:else if mediaType === 'image' && objectUrl}
                     <img src={objectUrl} alt={imageAlt} class="max-h-64 w-full object-contain" />
                 {:else if mediaType === 'video' && objectUrl}
                     <!-- svelte-ignore a11y_media_has_caption -->
@@ -225,7 +267,7 @@
                 {/if}
             </div>
 
-            {#if captionEnabled}
+            {#if captionEnabled && !isLocationMode}
                 <div>
                     <label class="typ-meta block mb-1 text-gray-600 dark:text-slate-300">
                         {captionLabel}
@@ -248,30 +290,46 @@
                 <Button onclick={onCancel} disabled={isBusy}>
                     {cancelText}
                 </Button>
-                <Button
-                    variant="primary"
-                    onclick={onConfirm}
-                    disabled={isBusy || disableConfirm}
-                >
-                    {#if isBusy}
-                        <svg
-                            class="animate-spin h-4 w-4 text-white mr-2"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                            <path
-                                class="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                            />
-                        </svg>
-                        <span>{confirmTextBusy}</span>
-                    {:else}
-                        {confirmTextIdle}
-                    {/if}
-                </Button>
+
+                {#if isLocationMode && !showLocationConfirm}
+                    <Button
+                        variant="primary"
+                        onclick={() => {
+                            if (!openMapUrl) {
+                                return;
+                            }
+                            window.open(openMapUrl, '_blank', 'noopener,noreferrer');
+                        }}
+                        disabled={!openMapUrl}
+                    >
+                        {openMapText}
+                    </Button>
+                {:else}
+                    <Button
+                        variant="primary"
+                        onclick={onConfirm}
+                        disabled={isBusy || disableConfirm}
+                    >
+                        {#if isBusy}
+                            <svg
+                                class="animate-spin h-4 w-4 text-white mr-2"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <path
+                                    class="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                />
+                            </svg>
+                            <span>{confirmTextBusy}</span>
+                        {:else}
+                            {confirmTextIdle}
+                        {/if}
+                    </Button>
+                {/if}
             </div>
         </div>
     </div>

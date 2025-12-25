@@ -139,6 +139,11 @@ const de = {
             uploadButtonIdle: 'Hochladen',
             uploadButtonUploading: 'Wird hochgeladen…'
         },
+        locationPreview: {
+            title: 'Standort',
+            closeButton: 'Schließen',
+            openInOpenStreetMap: 'In OpenStreetMap öffnen'
+        },
         mediaServersAutoConfigured: {
             title: 'Medienserver konfiguriert',
             message: 'Es waren keine Blossom-Server konfiguriert. Wir haben {server1} und {server2} hinzugefügt.\n\nDu kannst diese später unter Einstellungen → Medienserver ändern.'
@@ -148,6 +153,10 @@ const de = {
     chat: {
         sendFailedTitle: 'Senden fehlgeschlagen',
         sendFailedMessagePrefix: 'Nachricht konnte nicht gesendet werden: ',
+        location: {
+            errorTitle: 'Standortfehler',
+            errorMessage: 'Standort konnte nicht abgerufen werden. Bitte überprüfe die Berechtigungen.'
+        },
         relative: {
             justNow: 'gerade eben',
             minutes: 'vor {count} Minute',
@@ -191,6 +200,7 @@ const de = {
         mediaMenu: {
             uploadMediaTooltip: 'Medien hochladen',
             takePhoto: 'Foto aufnehmen',
+            location: 'Standort',
             image: 'Bild',
             video: 'Video',
             audio: 'Musik'

@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidNotificationRouterPlugin.class);
         registerPlugin(AndroidNip55SignerPlugin.class);
         registerPlugin(AndroidShareTargetPlugin.class);
+        registerPlugin(AndroidLocationPlugin.class);
         registerPlugin(AndroidTapSoundPlugin.class);
         registerPlugin(AndroidUnifiedPushPlugin.class);
   

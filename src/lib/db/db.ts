@@ -20,6 +20,10 @@ export interface Message {
     fileEncryptionAlgorithm?: string; // e.g. "aes-gcm" for nospeak-sent files
     fileKey?: string;
     fileNonce?: string;
+    location?: {
+        latitude: number;
+        longitude: number;
+    };
 }
 
 export interface Profile {

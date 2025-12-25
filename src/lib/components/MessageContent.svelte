@@ -22,7 +22,8 @@
         fileKey = undefined,
         fileNonce = undefined,
         authorNpub = undefined,
-        onMediaLoad = undefined
+        onMediaLoad = undefined,
+        location = undefined
     } = $props<{
         content: string;
         highlight?: string;
@@ -35,6 +36,7 @@
         fileNonce?: string;
         authorNpub?: string;
         onMediaLoad?: () => void;
+        location?: { latitude: number; longitude: number };
     }>();
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -98,6 +100,23 @@
     }
 
     const highlightNeedle = $derived((highlight ?? '').trim());
+
+    function buildOsmEmbedUrl(point: { latitude: number; longitude: number }): string {
+        const padding = 0.01;
+        const left = point.longitude - padding;
+        const right = point.longitude + padding;
+        const bottom = point.latitude - padding;
+        const top = point.latitude + padding;
+
+        return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${point.latitude},${point.longitude}`;
+    }
+
+    function buildOsmOpenUrl(point: { latitude: number; longitude: number }): string {
+        return `https://www.openstreetmap.org/?mlat=${point.latitude}&mlon=${point.longitude}&zoom=15`;
+    }
+
+    const mapUrl = $derived(location ? buildOsmEmbedUrl(location) : null);
+    const openMapUrl = $derived(location ? buildOsmOpenUrl(location) : null);
 
     function escapeRegExp(value: string): string {
         return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -471,7 +490,41 @@
  
  <div bind:this={container} class={`whitespace-pre-wrap break-words leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
 
-     {#if fileUrl && fileEncryptionAlgorithm === 'aes-gcm' && fileKey && fileNonce}
+     {#if location}
+         <div class="my-1">
+             <div class="flex items-center gap-2 typ-meta text-xs font-semibold text-gray-600 dark:text-slate-300 leading-none">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                     <circle cx="12" cy="10" r="3" />
+                 </svg>
+                 <span>{$t('modals.locationPreview.title')}</span>
+             </div>
+
+             {#if mapUrl}
+                 <div class="rounded-xl overflow-hidden bg-gray-100/80 dark:bg-slate-800/80 border border-gray-200/60 dark:border-slate-700/60">
+                     <iframe
+                         src={mapUrl}
+                         width="100%"
+                         height="220"
+                         frameborder="0"
+                         class="w-full"
+                         title="Location map"
+                     ></iframe>
+                 </div>
+             {/if}
+
+             {#if openMapUrl}
+                 <a
+                     href={openMapUrl}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     class="typ-meta text-xs underline hover:opacity-80"
+                 >
+                     {$t('modals.locationPreview.openInOpenStreetMap')}
+                 </a>
+             {/if}
+         </div>
+     {:else if fileUrl && fileEncryptionAlgorithm === 'aes-gcm' && fileKey && fileNonce}
           <div class="space-y-2">
               {#if isLegacyNospeakUserMediaUrl(fileUrl)}
                   <div class="my-1 px-3 py-2 rounded-xl bg-gray-100/70 dark:bg-slate-800/60 border border-gray-200/60 dark:border-slate-700/60">

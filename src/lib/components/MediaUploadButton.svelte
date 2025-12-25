@@ -11,8 +11,10 @@
 
     type Variant = 'chat' | 'default';
 
-    let { onFileSelect, inline, variant: variantProp = 'default', allowedTypes = ['image', 'video'] } = $props<{
+    let { onFileSelect, onShareLocation, showLocationOption = false, inline, variant: variantProp = 'default', allowedTypes = ['image', 'video'] } = $props<{
         onFileSelect: (file: File, type: 'image' | 'video' | 'audio') => void;
+        onShareLocation?: () => void;
+        showLocationOption?: boolean;
         inline?: boolean;
         variant?: Variant;
         allowedTypes?: ('image' | 'video' | 'audio')[];
@@ -44,11 +46,22 @@
         showDropdown = false;
     }
 
-     function handleFileTypeSelect(type: 'image' | 'video' | 'audio') {
-         closeDropdown();
-         hapticSelection();
-         openFileSelector(type);
-     }
+      function handleFileTypeSelect(type: 'image' | 'video' | 'audio') {
+          closeDropdown();
+          hapticSelection();
+          openFileSelector(type);
+      }
+
+      function handleShareLocation() {
+          if (!onShareLocation) {
+              return;
+          }
+
+          closeDropdown();
+          hapticSelection();
+          onShareLocation();
+      }
+
 
 
     function resizeImageBlobToFile(blob: Blob, filenameBase: string): Promise<File> {
@@ -278,6 +291,8 @@
                 onFileTypeSelect={handleFileTypeSelect}
                 showCameraOption={isAndroidNativeEnv || isMobileWebEnv}
                 onTakePhoto={handleTakePhoto}
+                showLocationOption={showLocationOption}
+                onShareLocation={handleShareLocation}
                 allowedTypes={allowedTypes}
             />
         </div>

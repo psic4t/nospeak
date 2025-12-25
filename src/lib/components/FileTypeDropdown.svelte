@@ -5,11 +5,15 @@
          onFileTypeSelect,
          showCameraOption = false,
          onTakePhoto,
+         showLocationOption = false,
+         onShareLocation,
          allowedTypes = ['image', 'video']
      } = $props<{
          onFileTypeSelect: (type: 'image' | 'video' | 'audio') => void;
          showCameraOption?: boolean;
          onTakePhoto?: () => void;
+         showLocationOption?: boolean;
+         onShareLocation?: () => void;
          allowedTypes?: ('image' | 'video' | 'audio')[];
      }>();
  
@@ -32,6 +36,12 @@
      function handleTakePhotoClick() {
          if (onTakePhoto) {
              onTakePhoto();
+         }
+     }
+
+     function handleShareLocationClick() {
+         if (onShareLocation) {
+             onShareLocation();
          }
      }
  </script>
@@ -59,6 +69,29 @@
                 <circle cx="12" cy="13" r="4" />
             </svg>
             <span>{$t('chat.mediaMenu.takePhoto')}</span>
+        </button>
+    {/if}
+    {#if showLocationOption && onShareLocation}
+        <button
+            type="button"
+            onclick={handleShareLocationClick}
+            class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+        >
+            <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-gray-600 dark:text-gray-300"
+            >
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span>{$t('chat.mediaMenu.location')}</span>
         </button>
     {/if}
     {#if showImage}

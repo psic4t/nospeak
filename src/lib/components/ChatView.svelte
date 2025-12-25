@@ -30,6 +30,7 @@
   import { get } from 'svelte/store';
   import { isCaptionMessage, getCaptionForParent } from '$lib/core/captionGrouping';
   import { buildChatHistorySearchResults } from '$lib/core/chatHistorySearch';
+  import { getCurrentPosition } from '$lib/core/LocationService';
   import Button from '$lib/components/ui/Button.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
 
@@ -369,6 +370,10 @@
   let pendingMediaError = $state<string | null>(null);
   let pendingMediaServersHint = $state<string | null>(null);
   let isEnsuringMediaServers = $state(false);
+
+  let showLocationPreview = $state(false);
+  let pendingLocation = $state<{ latitude: number; longitude: number } | null>(null);
+
 
   // Context menu state
   let contextMenu = $state({
@@ -873,9 +878,52 @@
         });
         inputText = text; // Restore text on failure
       });
-  }
+   }
 
-  function resetMediaPreview() {
+   async function handleLocationSelect(latitude: number, longitude: number) {
+     if (!partnerNpub) {
+       return;
+     }
+
+     const optimisticEventId = makeOptimisticEventId();
+     const optimistic: Message = {
+       recipientNpub: partnerNpub,
+       message: `geo:${latitude},${longitude}`,
+       sentAt: makeOptimisticSentAtMs(),
+       eventId: optimisticEventId,
+       direction: 'sent',
+       createdAt: Date.now(),
+       rumorKind: 14,
+       location: {
+         latitude,
+         longitude
+       }
+     };
+
+     optimisticMessages = [...optimisticMessages, optimistic];
+     scrollToBottom();
+
+     void messagingService
+       .sendLocationMessage(partnerNpub, latitude, longitude)
+       .then(() => {
+         if (isDestroyed) return;
+         clearUnreadMarkersForChat();
+         scrollToBottom();
+         hapticLightImpact();
+       })
+       .catch(async (e: unknown) => {
+         if (isDestroyed) return;
+         console.error('Failed to send location message:', e);
+         clearRelayStatus();
+         removeOptimisticMessage(optimisticEventId);
+         await nativeDialogService.alert({
+           title: translate('chat.sendFailedTitle'),
+           message: translate('chat.sendFailedMessagePrefix') + (e as Error).message,
+         });
+       });
+   }
+
+   function resetMediaPreview() {
     showMediaPreview = false;
     pendingMediaCaption = "";
     pendingMediaError = null;
@@ -890,6 +938,7 @@
     pendingMediaFile = null;
     pendingMediaType = null;
   }
+
 
   function openMediaPreview(file: File, type: 'image' | 'video' | 'audio') {
     if (pendingMediaObjectUrl) {
@@ -1053,7 +1102,10 @@
 
   async function copyMessage() {
     if (!contextMenu.message) return;
-    await copyTextToClipboard(contextMenu.message.message);
+
+    const location = contextMenu.message.location;
+    const content = location ? `${location.latitude},${location.longitude}` : contextMenu.message.message;
+    await copyTextToClipboard(content);
   }
 
   function handleMouseDown(e: MouseEvent, message: Message) {
@@ -1115,6 +1167,34 @@
 
     openMediaPreview(file, type);
   }
+
+  function resetLocationPreview() {
+    showLocationPreview = false;
+    pendingLocation = null;
+  }
+
+  function confirmSendLocation() {
+    if (!pendingLocation) {
+      return;
+    }
+
+    const { latitude, longitude } = pendingLocation;
+    resetLocationPreview();
+    void handleLocationSelect(latitude, longitude);
+  }
+
+  async function handleShareLocation() {
+    try {
+      const { latitude, longitude } = await getCurrentPosition();
+      pendingLocation = { latitude, longitude };
+      showLocationPreview = true;
+    } catch (e) {
+      await nativeDialogService.alert({
+        title: translate('chat.location.errorTitle'),
+        message: translate('chat.location.errorMessage')
+      });
+    }
+  }
 </script>
 
 <svelte:head>
@@ -1150,6 +1230,23 @@
       onConfirm={() => void confirmSendMedia()}
     />
   {/if}
+
+  {#if showLocationPreview && pendingLocation}
+    <AttachmentPreviewModal
+      isOpen={showLocationPreview}
+      mode="location"
+      location={pendingLocation}
+      title={$t('modals.locationPreview.title') as string}
+      cancelText={$t('modals.attachmentPreview.cancelButton') as string}
+      confirmTextIdle={$t('modals.attachmentPreview.sendButtonIdle') as string}
+      confirmTextBusy={$t('modals.attachmentPreview.sendButtonSending') as string}
+      isBusy={isSending}
+      disableConfirm={isSending}
+      onCancel={resetLocationPreview}
+      onConfirm={confirmSendLocation}
+    />
+  {/if}
+
 
   {#if partnerNpub}
     <div
@@ -1386,9 +1483,10 @@
                fileEncryptionAlgorithm={msg.fileEncryptionAlgorithm}
                fileKey={msg.fileKey}
                fileNonce={msg.fileNonce}
-               authorNpub={msg.direction === "sent" ? $currentUser?.npub : partnerNpub}
-               onMediaLoad={handleMediaLoad}
-             />
+                authorNpub={msg.direction === "sent" ? $currentUser?.npub : partnerNpub}
+                onMediaLoad={handleMediaLoad}
+                location={msg.location}
+              />
 
             {#if captionForThis}
               <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">
@@ -1474,7 +1572,13 @@
       <div
         class="flex-1 flex items-center bg-white/90 dark:bg-slate-800/90 border border-gray-200 dark:border-slate-700 rounded-3xl px-4 py-1.5 gap-2 shadow-inner focus-within:ring-2 focus-within:ring-blue-500/50 transition-all"
       >
-        <MediaUploadButton onFileSelect={handleFileSelect} variant="chat" allowedTypes={["image", "video", "audio"]} />
+        <MediaUploadButton
+          onFileSelect={handleFileSelect}
+          showLocationOption={true}
+          onShareLocation={() => void handleShareLocation()}
+          variant="chat"
+          allowedTypes={["image", "video", "audio"]}
+        />
         <textarea
           bind:this={inputElement}
           bind:value={inputText}

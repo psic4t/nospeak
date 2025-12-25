@@ -138,6 +138,11 @@ const en = {
             uploadButtonIdle: 'Upload',
             uploadButtonUploading: 'Uploading…'
         },
+        locationPreview: {
+            title: 'Location',
+            closeButton: 'Close',
+            openInOpenStreetMap: 'Open in OpenStreetMap'
+        },
         mediaServersAutoConfigured: {
             title: 'Media servers configured',
             message: 'No Blossom servers were configured. We added {server1} and {server2}.\n\nYou can change these in Settings → Media Servers.'
@@ -146,6 +151,10 @@ const en = {
     chat: {
         sendFailedTitle: 'Send failed',
         sendFailedMessagePrefix: 'Failed to send message: ',
+        location: {
+            errorTitle: 'Location Error',
+            errorMessage: 'Failed to get your location. Please check permissions.'
+        },
         relative: {
             justNow: 'just now',
             minutes: '{count} min ago',
@@ -189,6 +198,7 @@ const en = {
         mediaMenu: {
             uploadMediaTooltip: 'Upload media',
             takePhoto: 'Take photo',
+            location: 'Location',
             image: 'Image',
             video: 'Video',
             audio: 'Music'
