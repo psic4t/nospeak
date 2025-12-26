@@ -72,6 +72,12 @@ android {
                 signingConfig signingConfigs.release
             }
         }
+        fdroid {
+            initWith release
+            signingConfig null
+            debuggable false
+            matchingFallbacks = ['release']
+        }
     }
 }
 
