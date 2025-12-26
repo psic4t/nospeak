@@ -4,6 +4,7 @@
   import { authService } from "$lib/core/AuthService";
   import { initRuntimeConfig } from "$lib/core/runtimeConfig";
   import { onMount } from "svelte";
+  import { pwaInfo } from 'virtual:pwa-info';
   import { goto } from "$app/navigation";
    import { page } from "$app/state";
    import { hapticSelection } from "$lib/utils/haptics";
@@ -44,6 +45,8 @@
   let showProfileRefreshBanner = $state(false);
   let profileRefreshMessage = $state("");
   let isAndroidApp = $state(false);
+
+  const webManifestLinkTag = pwaInfo?.webManifest.linkTag ?? "";
 
   // Global click handler for link vibration
   function handleGlobalClick(e: MouseEvent) {
@@ -281,6 +284,7 @@
 </script>
 
 <svelte:head>
+  {@html webManifestLinkTag}
   <title>nospeak</title>
 </svelte:head>
 

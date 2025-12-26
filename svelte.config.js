@@ -26,6 +26,9 @@ const config = {
 					out: 'build',
 					static: true
 				}),
+			serviceWorker: {
+				register: false
+			},
 			csrf: {
 				trustedOrigins: ['*']
 			}

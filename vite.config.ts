@@ -1,9 +1,9 @@
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
-import { VitePWA } from 'vite-plugin-pwa';
 import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { SvelteKitPWA } from '@vite-pwa/sveltekit';
+import { defineConfig } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,7 +15,7 @@ export default defineConfig({
 	},
 	plugins: [
 		sveltekit(),
-		VitePWA({
+		SvelteKitPWA({
 			strategies: 'injectManifest',
 			srcDir: 'src',
 			filename: 'service-worker.ts',
