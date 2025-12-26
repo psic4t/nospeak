@@ -211,7 +211,10 @@ export class ConnectionManager {
 
         for (const health of this.relays.values()) {
             if (health.relay) {
-                health.relay.close();
+                try {
+                    health.relay.close();
+                } catch {
+                }
             }
         }
         
@@ -297,7 +300,10 @@ export class ConnectionManager {
         const health = this.relays.get(url);
         if (health) {
             if (health.relay) {
-                health.relay.close();
+                try {
+                    health.relay.close();
+                } catch {
+                }
             }
             this.clearSubscriptionsForRelay(url);
             this.relays.delete(url);
@@ -583,7 +589,10 @@ export class ConnectionManager {
         } catch (e) {
             health.isConnected = false;
             if (health.relay) {
-                health.relay.close();
+                try {
+                    health.relay.close();
+                } catch {
+                }
                 health.relay = null;
             }
             throw e;
@@ -621,7 +630,10 @@ export class ConnectionManager {
 
             const cleanup = () => {
                 for (const { sub } of subs) {
-                    sub.close();
+                    try {
+                        sub.close();
+                    } catch {
+                    }
                 }
                 clearTimeout(timer);
             };
@@ -672,7 +684,10 @@ export class ConnectionManager {
         return () => {
             this.subscriptions.delete(subEntry);
             for (const s of subEntry.subMap.values()) {
-                s.close();
+                try {
+                    s.close();
+                } catch {
+                }
             }
             subEntry.subMap.clear();
         };
