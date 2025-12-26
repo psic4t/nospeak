@@ -47,6 +47,17 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    flavorDimensions "distribution"
+
+    productFlavors {
+        prod {
+            dimension "distribution"
+        }
+        fdroid {
+            dimension "distribution"
+        }
+    }
+
     signingConfigs {
         create("release") {
             def storeFilePath = project.findProperty("RELEASE_STORE_FILE") ?: System.getenv("RELEASE_STORE_FILE")
@@ -64,6 +75,7 @@ android {
             }
         }
     }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -73,12 +85,6 @@ android {
             if (releaseSigningConfig != null && releaseSigningConfig.storeFile != null) {
                 signingConfig releaseSigningConfig
             }
-        }
-        fdroid {
-            initWith release
-            signingConfig null
-            debuggable false
-            matchingFallbacks = ['release']
         }
     }
 }

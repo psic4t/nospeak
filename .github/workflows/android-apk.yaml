@@ -55,18 +55,18 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
-      - name: Build signed release APK
+      - name: Build signed prod release APK
         working-directory: android
-        run: ./gradlew assembleRelease
+        run: ./gradlew :app:assembleProdRelease
       - name: Rename APK with release tag
         working-directory: android
         run: |
           VERSION="${RELEASE_TAG#v}"  # strips leading 'v' if present
-          SRC="app/build/outputs/apk/release/app-release.apk"
-          DST="app/build/outputs/apk/release/nospeak.apk"
+          SRC="app/build/outputs/apk/prod/release/app-prod-release.apk"
+          DST="app/build/outputs/apk/prod/release/nospeak.apk"
           cp "$SRC" "$DST"
       - name: Attach APK to GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'release' && github.event.action == 'published'
         with:
-          files: android/app/build/outputs/apk/release/nospeak.apk
+          files: android/app/build/outputs/apk/prod/release/nospeak.apk
