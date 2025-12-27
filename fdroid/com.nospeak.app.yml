@@ -15,11 +15,11 @@ Repo: https://github.com/psic4t/nospeak.git
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 0.9.16.1
-CurrentVersionCode: 90161
+CurrentVersionCode: 9016
 
 Builds:
-  - versionName: 0.9.16.1
-    versionCode: 90161
+  - versionName: v0.9.16.1
+    versionCode: 9016
     commit: v0.9.16.1
     subdir: android
     sudo:
@@ -40,3 +40,4 @@ Builds:
       - echo "sdk.dir=$$SDK$$" > local.properties
     gradle:
       - yes
+    output: app/build/outputs/apk/release/app-release-unsigned.apk
