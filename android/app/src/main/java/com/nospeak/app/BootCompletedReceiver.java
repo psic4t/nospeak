@@ -25,10 +25,5 @@ public class BootCompletedReceiver extends BroadcastReceiver {
         }
 
         ContextCompat.startForegroundService(context, serviceIntent);
-
-        Intent unifiedPushIntent = AndroidUnifiedPushPrefs.buildStartServiceIntent(context);
-        if (unifiedPushIntent != null) {
-            ContextCompat.startForegroundService(context, unifiedPushIntent);
-        }
     }
 }

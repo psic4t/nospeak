@@ -9,9 +9,8 @@ import { goto } from '$app/navigation';
 import { connectionManager } from './connection/instance';
 import { messagingService } from './Messaging';
 import { profileRepo } from '$lib/db/ProfileRepository';
-import { syncAndroidBackgroundMessagingFromPreference, disableAndroidBackgroundMessaging } from './BackgroundMessaging';
-import { syncUnifiedPushFromPreference, stopUnifiedPush } from './UnifiedPushService';
-import { contactRepo } from '$lib/db/ContactRepository';
+ import { syncAndroidBackgroundMessagingFromPreference, disableAndroidBackgroundMessaging } from './BackgroundMessaging';
+ import { contactRepo } from '$lib/db/ContactRepository';
 import { profileResolver } from './ProfileResolver';
 import { messageRepo } from '$lib/db/MessageRepository';
 import { beginLoginSyncFlow, completeLoginSyncFlow, setLoginSyncActiveStep } from '$lib/stores/sync';
@@ -274,10 +273,6 @@ export class AuthService {
               syncAndroidBackgroundMessagingFromPreference().catch(e => {
                   console.error('Failed to sync Android background messaging preference after login flow:', e);
               });
-
-              syncUnifiedPushFromPreference().catch(e => {
-                  console.error('Failed to sync UnifiedPush preference after login flow:', e);
-              });
           }
       }
 
@@ -355,10 +350,6 @@ export class AuthService {
                     console.error('Failed to sync Android background messaging preference after local restore:', e);
                 });
 
-                await syncUnifiedPushFromPreference().catch(e => {
-                    console.error('Failed to sync UnifiedPush preference after local restore:', e);
-                });
-
                 return true;
             } else if (method === 'nip07') {
                 if (!window.nostr) {
@@ -381,14 +372,10 @@ export class AuthService {
                  });
  
                  await syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                      console.error('Failed to sync Android background messaging preference after nip07 restore:', e);
-                  });
+                       console.error('Failed to sync Android background messaging preference after nip07 restore:', e);
+                   });
 
-                 await syncUnifiedPushFromPreference().catch(e => {
-                     console.error('Failed to sync UnifiedPush preference after nip07 restore:', e);
-                 });
-
-                  return true;
+                   return true;
             } else if (method === 'amber') {
                 const cachedHex = localStorage.getItem('nospeak:amber_pubkey_hex');
  
@@ -413,14 +400,10 @@ export class AuthService {
                  });
  
                  await syncAndroidBackgroundMessagingFromPreference().catch(e => {
-                      console.error('Failed to sync Android background messaging preference after amber restore:', e);
-                  });
+                       console.error('Failed to sync Android background messaging preference after amber restore:', e);
+                   });
 
-                 await syncUnifiedPushFromPreference().catch(e => {
-                     console.error('Failed to sync UnifiedPush preference after amber restore:', e);
-                 });
-
-                  return true;
+                   return true;
             } else if (method === 'nip46') {
                 // Legacy NIP-46 sessions are no longer supported; clear persisted keys and require re-login.
                 localStorage.removeItem(NIP46_SECRET_KEY);
@@ -439,15 +422,11 @@ export class AuthService {
         return false;
     }
 
-    public async logout() {
+     public async logout() {
         // Ensure Android background messaging is stopped before tearing down connections
         await disableAndroidBackgroundMessaging().catch(e => {
              console.error('Failed to disable Android background messaging on logout:', e);
          });
-
-        await stopUnifiedPush().catch(e => {
-            console.error('Failed to stop UnifiedPush on logout:', e);
-        });
 
          // Stop app-global message subscriptions before tearing down connections
          messagingService.stopSubscriptions();

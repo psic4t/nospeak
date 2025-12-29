@@ -1,26 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
- 
-     <queries>
-         <intent>
-             <action android:name="android.intent.action.VIEW" />
-             <category android:name="android.intent.category.BROWSABLE" />
-             <data android:scheme="nostrsigner" />
-         </intent>
+     <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-         <!-- Allow package visibility checks for UnifiedPush connectors -->
-         <intent>
-             <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
-         </intent>
-         <intent>
-             <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
-         </intent>
-         <intent>
-             <action android:name="org.unifiedpush.android.connector.MESSAGE" />
-         </intent>
-     </queries>
- 
-      <!-- Permissions -->
+      <queries>
+          <intent>
+              <action android:name="android.intent.action.VIEW" />
+              <category android:name="android.intent.category.BROWSABLE" />
+              <data android:scheme="nostrsigner" />
+          </intent>
+      </queries>
+
+       <!-- Permissions -->
        <uses-permission android:name="android.permission.INTERNET" />
        <uses-permission android:name="android.permission.CAMERA" />
        <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -106,49 +95,49 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
-        </receiver>
+     </receiver>
 
-        <!-- UnifiedPush distributor receiver -->
-        <receiver
-            android:name=".AndroidUnifiedPushDistributorReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="org.unifiedpush.android.distributor.REGISTER" />
-                <action android:name="org.unifiedpush.android.distributor.UNREGISTER" />
-                <action android:name="org.unifiedpush.android.distributor.MESSAGE_ACK" />
-            </intent-filter>
-        </receiver>
+         <!-- UnifiedPush distributor receiver -->
+         <receiver
+             android:name=".AndroidUnifiedPushDistributorReceiver"
+             android:enabled="false"
+             android:exported="true">
+             <intent-filter>
+                 <action android:name="org.unifiedpush.android.distributor.REGISTER" />
+                 <action android:name="org.unifiedpush.android.distributor.UNREGISTER" />
+                 <action android:name="org.unifiedpush.android.distributor.MESSAGE_ACK" />
+             </intent-filter>
+         </receiver>
 
-        <!-- UnifiedPush distributor link activity -->
-        <activity
-            android:name=".AndroidUnifiedPushDistributorLinkActivity"
-            android:enabled="true"
-            android:exported="true"
-            android:theme="@style/AppTheme.NoActionBar">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="unifiedpush"
-                    android:host="link" />
-            </intent-filter>
-        </activity>
+         <!-- UnifiedPush distributor link activity -->
+         <activity
+             android:name=".AndroidUnifiedPushDistributorLinkActivity"
+             android:enabled="false"
+             android:exported="true"
+             android:theme="@style/AppTheme.NoActionBar">
+             <intent-filter>
+                 <action android:name="android.intent.action.VIEW" />
+                 <category android:name="android.intent.category.DEFAULT" />
+                 <category android:name="android.intent.category.BROWSABLE" />
+                 <data
+                     android:scheme="unifiedpush"
+                     android:host="link" />
+             </intent-filter>
+         </activity>
 
-        <!-- Native foreground service for Android background messaging -->
-        <service
-            android:name=".NativeBackgroundMessagingService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+         <!-- Native foreground service for Android background messaging -->
+         <service
+             android:name=".NativeBackgroundMessagingService"
+             android:enabled="true"
+             android:exported="false"
+             android:foregroundServiceType="dataSync" />
 
-        <!-- UnifiedPush service -->
-        <service
-            android:name=".AndroidUnifiedPushService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+         <!-- UnifiedPush service -->
+         <service
+             android:name=".AndroidUnifiedPushService"
+             android:enabled="false"
+             android:exported="false"
+             android:foregroundServiceType="dataSync" />
     </application>
  
 </manifest>
