@@ -832,10 +832,6 @@
     optimisticMessages = optimisticMessages.filter((m) => m.eventId !== eventId);
   }
 
-  function makeOptimisticSentAtMs(): number {
-    return Math.floor(Date.now() / 1000) * 1000;
-  }
-
   async function send() {
     if (!partnerNpub || !inputText.trim()) return;
 
@@ -845,11 +841,15 @@
       inputElement.style.height = "auto";
     }
 
+    // Capture timestamp once to ensure optimistic and persisted messages match
+    const createdAtSeconds = Math.floor(Date.now() / 1000);
+    const sentAtMs = createdAtSeconds * 1000;
+
     const optimisticEventId = makeOptimisticEventId();
     const optimistic: Message = {
       recipientNpub: partnerNpub,
       message: text,
-      sentAt: makeOptimisticSentAtMs(),
+      sentAt: sentAtMs,
       eventId: optimisticEventId,
       direction: 'sent',
       createdAt: Date.now(),
@@ -860,7 +860,7 @@
     scrollToBottom();
 
     void messagingService
-      .sendMessage(partnerNpub, text)
+      .sendMessage(partnerNpub, text, undefined, createdAtSeconds)
       .then(() => {
         if (isDestroyed) return;
         clearUnreadMarkersForChat();
@@ -885,11 +885,15 @@
        return;
      }
 
+     // Capture timestamp once to ensure optimistic and persisted messages match
+     const createdAtSeconds = Math.floor(Date.now() / 1000);
+     const sentAtMs = createdAtSeconds * 1000;
+
      const optimisticEventId = makeOptimisticEventId();
      const optimistic: Message = {
        recipientNpub: partnerNpub,
        message: `geo:${latitude},${longitude}`,
-       sentAt: makeOptimisticSentAtMs(),
+       sentAt: sentAtMs,
        eventId: optimisticEventId,
        direction: 'sent',
        createdAt: Date.now(),
@@ -904,7 +908,7 @@
      scrollToBottom();
 
      void messagingService
-       .sendLocationMessage(partnerNpub, latitude, longitude)
+       .sendLocationMessage(partnerNpub, latitude, longitude, createdAtSeconds)
        .then(() => {
          if (isDestroyed) return;
          clearUnreadMarkersForChat();
@@ -998,12 +1002,16 @@
     const mediaType = pendingMediaType;
     const caption = pendingMediaCaption.trim();
 
+    // Capture timestamp once to ensure optimistic and persisted messages match
+    const createdAtSeconds = Math.floor(Date.now() / 1000);
+    const sentAtMs = createdAtSeconds * 1000;
+
     const optimisticEventId = makeOptimisticEventId();
     const optimisticUrl = URL.createObjectURL(file);
     const optimistic: Message = {
       recipientNpub: partnerNpub,
       message: '',
-      sentAt: makeOptimisticSentAtMs(),
+      sentAt: sentAtMs,
       eventId: optimisticEventId,
       direction: 'sent',
       createdAt: Date.now(),
@@ -1020,7 +1028,7 @@
 
     void (async () => {
       try {
-        const parentRumorId = await messagingService.sendFileMessage(partnerNpub, file, mediaType);
+        const parentRumorId = await messagingService.sendFileMessage(partnerNpub, file, mediaType, createdAtSeconds);
 
         if (caption.length > 0) {
           await messagingService.sendMessage(partnerNpub, caption, parentRumorId);

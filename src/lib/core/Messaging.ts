@@ -595,7 +595,7 @@ import { uploadToBlossomServers } from './BlossomUpload';
     return { totalFetched, processed: totalFetched };
   }
 
-  public async sendMessage(recipientNpub: string, text: string, parentRumorId?: string) {
+  public async sendMessage(recipientNpub: string, text: string, parentRumorId?: string, createdAtSeconds?: number) {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
  
@@ -634,7 +634,7 @@ import { uploadToBlossomServers } from './BlossomUpload';
     const rumor: Partial<NostrEvent> = {
       kind: 14,
       pubkey: senderPubkey,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: createdAtSeconds ?? Math.floor(Date.now() / 1000),
       content: text,
       tags
     };
@@ -730,7 +730,7 @@ import { uploadToBlossomServers } from './BlossomUpload';
     return rumorId;
   }
 
-  public async sendLocationMessage(recipientNpub: string, latitude: number, longitude: number): Promise<string> {
+  public async sendLocationMessage(recipientNpub: string, latitude: number, longitude: number, createdAtSeconds?: number): Promise<string> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
 
@@ -762,7 +762,7 @@ import { uploadToBlossomServers } from './BlossomUpload';
     const rumor: Partial<NostrEvent> = {
       kind: 14,
       pubkey: senderPubkey,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: createdAtSeconds ?? Math.floor(Date.now() / 1000),
       content: `geo:${locationValue}`,
       tags: [
         ['p', recipientPubkey as string],
@@ -857,7 +857,8 @@ import { uploadToBlossomServers } from './BlossomUpload';
   public async sendFileMessage(
     recipientNpub: string,
     file: File,
-    mediaType: 'image' | 'video' | 'audio'
+    mediaType: 'image' | 'video' | 'audio',
+    createdAtSeconds?: number
   ): Promise<string> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -899,7 +900,7 @@ import { uploadToBlossomServers } from './BlossomUpload';
     const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers);
 
     // 4. Create Kind 15 rumor
-    const now = Math.floor(Date.now() / 1000);
+    const now = createdAtSeconds ?? Math.floor(Date.now() / 1000);
 
     const rumor: Partial<NostrEvent> = {
       kind: 15,
