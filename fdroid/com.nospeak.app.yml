@@ -11,11 +11,12 @@ AutoName: nospeak
 
 RepoType: git
 Repo: https://github.com/psic4t/nospeak.git
+Binaries: https://github.com/psic4t/nospeak/releases/download/v%v/nospeak.apk
 
 Builds:
   - versionName: v0.9.16.1
     versionCode: 90161
-    commit: v0.9.16.1
+    commit: 5772cbd140b4794f43b8633a8d4975035a05ca73
     subdir: android/app
     sudo:
       - echo "deb https://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list
@@ -26,19 +27,15 @@ Builds:
     gradle:
       - yes
     prebuild:
-      - cd .. && npm run build:android
-      - echo "sdk.dir=$$SDK$$" > local.properties
+      - cd ..
+      - npm run build:android
     scandelete:
-      - node_modules/nostr-wasm
-      - node_modules/source-map/lib/mappings.wasm
-      - node_modules/@capacitor/cli/assets
-      - node_modules/esbuild
-      - node_modules/@esbuild
-      - node_modules/svelte-i18n/node_modules/esbuild
-      - node_modules/svelte-i18n/node_modules/@esbuild
+      - node_modules
+
+AllowedAPKSigningKeys: 89a4c57ca633fe444d4067e1dd05168bb93dffb0cf93321af8f801839991600a
 
 AutoUpdateMode: Version
-UpdateCheckMode: Tags ^v?(0\.9\.(16\.[1-9]\d*|(1[7-9]|[2-9]\d)(\.\d+)?)$|[1-9]\d*\.\d+\.\d+.*)$
+UpdateCheckMode: Tags
 UpdateCheckData: package.json|"versionCode":\s*(\d+)|package.json|"version":\s*"([\d.]+)"
 CurrentVersion: 0.9.16.1
 CurrentVersionCode: 90161
