@@ -41,13 +41,49 @@
             }
         };
     }
+
+    function reposition(node: HTMLElement, coords: { x: number, y: number }) {
+        const update = ({ x, y }: { x: number, y: number }) => {
+            const rect = node.getBoundingClientRect();
+            const { innerWidth, innerHeight } = window;
+            const padding = 8;
+
+            let safeX = x;
+            let safeY = y;
+
+            // Horizontal clamping
+            if (safeX + rect.width > innerWidth - padding) {
+                safeX = innerWidth - rect.width - padding;
+            }
+            if (safeX < padding) {
+                safeX = padding;
+            }
+
+            // Vertical clamping
+            if (safeY + rect.height > innerHeight - padding) {
+                safeY = innerHeight - rect.height - padding;
+            }
+            if (safeY < padding) {
+                safeY = padding;
+            }
+
+            node.style.left = `${safeX}px`;
+            node.style.top = `${safeY}px`;
+        };
+
+        update(coords);
+
+        return {
+            update
+        };
+    }
 </script>
 
 {#if isOpen}
     <div 
         use:portal
+        use:reposition={{x, y}}
         class="context-menu fixed bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl py-1 z-[9999] min-w-[140px] outline-none"
-        style="left: {x}px; top: {y}px;"
     >
         <div class="flex px-2 pt-1 pb-1 gap-1 border-b border-gray-200/70 dark:border-slate-700/70">
             {#each ['👍','👎','❤️','😂'] as emoji}
