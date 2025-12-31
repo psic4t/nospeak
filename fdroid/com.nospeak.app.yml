@@ -15,7 +15,7 @@ Repo: https://github.com/psic4t/nospeak.git
 Builds:
   - versionName: v0.9.17
     versionCode: 90170
-    commit: 5772cbd140b4794f43b8633a8d4975035a05ca73
+    commit: 6cd27c5688581f274c2ec2d3070cf9474ba852da
     subdir: android/app
     sudo:
       - echo "deb https://deb.debian.org/debian trixie main" > /etc/apt/sources.list.d/trixie.list
