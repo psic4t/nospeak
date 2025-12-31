@@ -1,7 +1,7 @@
 <script lang="ts">
     import { t } from '$lib/i18n';
 
-    let { x = 0, y = 0, isOpen = false, onClose, onCite, onReact, onCopy } = $props<{
+    let { x = 0, y = 0, isOpen = false, onClose, onCite, onReact, onCopy, message } = $props<{
         x: number;
         y: number;
         isOpen: boolean;
@@ -9,6 +9,7 @@
         onCite: () => void;
         onReact: (emoji: '👍' | '👎' | '❤️' | '😂') => void;
         onCopy: () => void;
+        message?: { sentAt: number } | null;
     }>();
 
     // Close on outside press (pointerdown) so one tap closes,
@@ -96,7 +97,12 @@
                 </button>
             {/each}
         </div>
-        <button 
+        {#if message?.sentAt}
+            <div class="px-4 py-2 text-xs text-gray-600 dark:text-slate-400 border-b border-gray-200/70 dark:border-slate-700/70">
+                {$t('chat.contextMenu.sentAt')}: {new Date(message.sentAt).toLocaleString()}
+            </div>
+        {/if}
+        <button
             class="w-full text-left px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
             onclick={() => { onCite(); onClose(); }}
         >

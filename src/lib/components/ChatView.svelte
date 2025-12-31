@@ -1633,4 +1633,5 @@
   onCite={citeMessage}
   onReact={reactToMessage}
   onCopy={copyMessage}
+  message={contextMenu.message}
 />

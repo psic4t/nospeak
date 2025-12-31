@@ -187,7 +187,8 @@ const en = {
         inputPlaceholder: 'Type a message...',
         contextMenu: {
             cite: 'Cite',
-            copy: 'Copy'
+            copy: 'Copy',
+            sentAt: 'Sent'
         },
         reactions: {
             cannotReactTitle: 'Cannot React',
