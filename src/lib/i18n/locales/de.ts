@@ -210,9 +210,13 @@ const de = {
             cameraErrorTitle: 'Kamerafehler',
             cameraErrorMessage: 'Foto konnte nicht aufgenommen werden'
         },
-        mediaUnavailable: 'Dieses Medium ist nicht mehr verfügbar.'
+        mediaUnavailable: 'Dieses Medium ist nicht mehr verfügbar.',
+        relayStatus: {
+            sending: 'wird gesendet...',
+            sentToRelays: 'an {successful}/{desired} Relays gesendet'
+        }
     },
-         settings: {
+    settings: {
           title: 'Einstellungen',
           categories: {
               general: 'Allgemein',

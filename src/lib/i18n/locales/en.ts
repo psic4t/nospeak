@@ -208,9 +208,13 @@ const en = {
             cameraErrorTitle: 'Camera error',
             cameraErrorMessage: 'Failed to capture photo'
         },
-        mediaUnavailable: 'This media is no longer available.'
+        mediaUnavailable: 'This media is no longer available.',
+        relayStatus: {
+            sending: 'sending...',
+            sentToRelays: 'sent to {successful}/{desired} relays'
+        }
     },
-         settings: {
+    settings: {
           title: 'Settings',
           categories: {
               general: 'General',

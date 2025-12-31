@@ -1517,14 +1517,14 @@
             {#if $lastRelaySendStatus && $lastRelaySendStatus.recipientNpub === partnerNpub}
               <div class="typ-meta mt-0.5 text-right text-blue-100">
                 {#if $lastRelaySendStatus.successfulRelays === 0}
-                  sending...
+                  {$t('chat.relayStatus.sending')}
                 {:else}
-                  sent to {$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays
+                  {get(t)('chat.relayStatus.sentToRelays', { values: { successful: $lastRelaySendStatus.successfulRelays, desired: $lastRelaySendStatus.desiredRelays } })}
                 {/if}
               </div>
             {:else if msg.eventId && msg.eventId.startsWith('optimistic:')}
               <div class="typ-meta mt-0.5 text-right text-blue-100">
-                sending...
+                {$t('chat.relayStatus.sending')}
               </div>
             {/if}
           {/if}
