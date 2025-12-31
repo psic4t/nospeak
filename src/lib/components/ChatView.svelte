@@ -1117,6 +1117,7 @@
   }
 
   function handleMouseDown(e: MouseEvent, message: Message) {
+    if (window.innerWidth >= 768) return;
     // Start long press timer for touch devices
     longPressTimer = window.setTimeout(() => {
       openContextMenu(e, message);
@@ -1133,6 +1134,7 @@
   }
 
   function handleContextMenu(e: MouseEvent, message: Message) {
+    if (window.innerWidth >= 768) return;
     openContextMenu(e, message);
   }
 
