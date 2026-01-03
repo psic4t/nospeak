@@ -7,6 +7,6 @@ license: GPL-3.0-or-later
 builder: npub142gywvjkq0dv6nupggyn2euhx4nduwc7yz5f24ah9rpmunr2s39se3xrj0
 homepage: https://nospeak.chat
 tags: chat messaging blossom end-to-end-encryption nostr nip-17
-icon: static/nospeak-transparent-inner.png
+icon: static/nospeak-white-inner.png
 remote_metadata:
   - github
