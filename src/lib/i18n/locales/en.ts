@@ -13,6 +13,7 @@ const en = {
         loginButton: 'Login',
         connecting: 'Connecting...',
         generateKeypairLink: 'Generate new keypair',
+        downloadAndroidApp: 'Download Android App',
         amber: {
             title: 'Login with Amber',
             helper: 'Scan this QR code with Amber or use the buttons below.',
