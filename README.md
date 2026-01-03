@@ -206,7 +206,7 @@ Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 - **NIP-55**: Android native signer integration (Amber and similar)
 
 ## License
-Copyright (C) 2025 psic4t
+Copyright (C) 2026 psic4t
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
