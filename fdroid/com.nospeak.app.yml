@@ -10,8 +10,8 @@ IssueTracker: https://github.com/psic4t/nospeak/issues
 AutoName: nospeak
 
 RepoType: git
-Repo: https://github.com/psic4t/nospeak.git
 
+Repo: https://github.com/psic4t/nospeak.git
 Builds:
   - versionName: v0.9.17
     versionCode: 90170
