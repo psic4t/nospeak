@@ -379,7 +379,7 @@
           </div>
           {#if contact.lastMessageText}
             <div
-              class="text-xs text-gray-800 dark:text-slate-300 truncate md:hidden"
+              class="typ-body text-gray-800 dark:text-slate-300 truncate md:hidden"
             >
               {contact.lastMessageText}
             </div>
