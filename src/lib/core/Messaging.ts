@@ -32,6 +32,10 @@ import { uploadToBlossomServers } from './BlossomUpload';
  
     private activeSubscriptionUnsub: (() => void) | null = null;
     private activeSubscriptionPubkey: string | null = null;
+
+    // Timestamp (seconds) when the current session started. Used to suppress
+    // notifications for messages sent before the app was opened.
+    private sessionStartedAt: number = 0;
  
     // Listen for incoming messages
     public listenForMessages(publicKey: string): () => void {
@@ -101,6 +105,9 @@ import { uploadToBlossomServers } from './BlossomUpload';
        this.activeSubscriptionPubkey = null;
      }
  
+     // Capture session start time to suppress notifications for old messages
+     this.sessionStartedAt = Math.floor(Date.now() / 1000);
+
      const unsub = this.listenForMessages(pubkey);
      this.activeSubscriptionUnsub = unsub;
      this.activeSubscriptionPubkey = pubkey;
@@ -330,7 +337,8 @@ import { uploadToBlossomServers } from './BlossomUpload';
       }
 
       // Don't show notifications for messages fetched during history sync
-      if (!this.isFetchingHistory) {
+      // or for messages sent before the current session started
+      if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
         await notificationService.showNewMessageNotification(message.recipientNpub, message.message);
       }
 
@@ -396,7 +404,9 @@ import { uploadToBlossomServers } from './BlossomUpload';
           console.error('Failed to mark contact activity for reaction:', activityError);
         }
 
-        if (!this.isFetchingHistory) {
+        // Don't show notifications for reactions during history sync
+        // or for reactions sent before the current session started
+        if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
           try {
             await notificationService.showReactionNotification(partnerNpub, content);
           } catch (notifyError) {
