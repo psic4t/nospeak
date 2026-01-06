@@ -137,6 +137,7 @@
                      ? "w-full rounded-t-3xl rounded-b-none max-h-[90vh] p-6"
                      : "w-full max-w-lg max-h-[80vh] rounded-3xl p-8"
              }`}
+             class:android-safe-area-bottom={isAndroidApp}
              style:transform={isAndroidApp ? `translateY(${bottomSheetDragY}px)` : undefined}
         >
             {#if isAndroidApp}

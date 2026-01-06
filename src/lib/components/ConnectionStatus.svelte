@@ -7,7 +7,7 @@
     const isAndroidApp = isAndroidNative();
 </script>
 
-<div class={`absolute bottom-0 left-0 right-0 z-20 p-2 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex ${
+<div class={`absolute bottom-0 left-0 right-0 z-20 p-2 p-2-safe-bottom border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex ${
     isAndroidApp ? 'justify-end' : 'justify-center'
 }`}>
     <Button 

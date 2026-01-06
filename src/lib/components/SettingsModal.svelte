@@ -770,6 +770,7 @@
           ? "w-full rounded-t-3xl rounded-b-none max-h-[90vh]"
           : "w-full h-full rounded-none md:max-w-4xl md:mx-4 md:h-[600px] md:rounded-3xl"
       }`}
+      class:android-safe-area-bottom={isAndroidApp}
       style:transform={isAndroidApp ? `translateY(${bottomSheetDragY}px)` : undefined}
     >
       {#if isAndroidApp}

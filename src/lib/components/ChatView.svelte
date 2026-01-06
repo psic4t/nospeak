@@ -1371,7 +1371,7 @@
   <div
     bind:this={chatContainer}
     tabindex="-1"
-    class="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-28 pt-20 space-y-4 custom-scrollbar native-scroll focus:outline-none focus:ring-0"
+    class="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-safe-offset-28 pt-20 space-y-4 custom-scrollbar native-scroll focus:outline-none focus:ring-0"
     onscroll={handleScroll}
     onpointerdown={activateMessageWindow}
   >
@@ -1585,7 +1585,7 @@
   </div>
 
   <div
-    class="absolute bottom-0 left-0 right-0 z-20 p-4 border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-lg transition-all duration-150 ease-out"
+    class="absolute bottom-0 left-0 right-0 z-20 p-4 p-4-safe-bottom border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-lg transition-all duration-150 ease-out"
   >
     <form
       onsubmit={(e) => {

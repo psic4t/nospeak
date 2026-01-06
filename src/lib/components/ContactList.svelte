@@ -300,7 +300,7 @@
     </div>
   </div>
 
-  <div class="flex-1 overflow-y-auto custom-scrollbar native-scroll pt-[120px] pb-16">
+  <div class="flex-1 overflow-y-auto custom-scrollbar native-scroll pt-[120px] pb-safe-offset-16">
     {#if $contactsStore.length === 0}
       <div class="space-y-3 p-3 animate-pulse">
         {#each Array(5) as _}

@@ -90,9 +90,31 @@
      padding-top: env(safe-area-inset-top);
  }
  
+ .android-safe-area-bottom {
+     padding-bottom: env(safe-area-inset-bottom);
+ }
+ 
  .android-safe-area-vert {
      padding-top: env(safe-area-inset-top);
      padding-bottom: env(safe-area-inset-bottom);
+ }
+
+ /* Combined padding: use greater of base padding OR safe area */
+ .p-2-safe-bottom {
+     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+ }
+
+ .p-4-safe-bottom {
+     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+ }
+
+ /* Scroll container padding: base padding PLUS safe area */
+ .pb-safe-offset-16 {
+     padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+ }
+
+ .pb-safe-offset-28 {
+     padding-bottom: calc(7rem + env(safe-area-inset-bottom));
  }
  
  @layer components {
