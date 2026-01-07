@@ -2,7 +2,7 @@
     import { hapticSelection } from '$lib/utils/haptics';
 
     // Props interface using Svelte 5 $props
-    type Variant = 'filled-tonal' | 'primary' | 'ghost' | 'danger';
+    type Variant = 'filled-tonal' | 'primary' | 'ghost' | 'danger' | 'outlined-chip';
     type Size = 'sm' | 'md' | 'lg' | 'icon';
 
     let { 
@@ -37,7 +37,8 @@
         'filled-tonal': "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]",
         primary: "bg-[rgb(var(--color-lavender-rgb))] text-white dark:text-[rgb(var(--color-crust-rgb))] shadow-md hover:bg-[rgb(var(--color-lavender-rgb)/0.9)] active:bg-[rgb(var(--color-lavender-rgb)/0.8)] hover:shadow-lg",
         ghost: "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-blue-500/5 dark:hover:bg-blue-500/10 active:bg-blue-500/10 dark:active:bg-blue-500/20 hover:text-gray-900 dark:hover:text-white border border-transparent focus-visible:ring-[rgb(var(--color-lavender-rgb)/0.45)] focus-visible:ring-inset",
-        danger: "bg-[rgb(var(--color-red-rgb))] text-white dark:text-[rgb(var(--color-crust-rgb))] shadow-md hover:bg-[rgb(var(--color-red-rgb)/0.9)] active:bg-[rgb(var(--color-red-rgb)/0.8)] hover:shadow-lg"
+        danger: "bg-[rgb(var(--color-red-rgb))] text-white dark:text-[rgb(var(--color-crust-rgb))] shadow-md hover:bg-[rgb(var(--color-red-rgb)/0.9)] active:bg-[rgb(var(--color-red-rgb)/0.8)] hover:shadow-lg",
+        'outlined-chip': "bg-transparent !rounded-lg border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800 active:bg-gray-200 dark:active:bg-slate-700 shadow-sm"
     };
 
     // Size styles

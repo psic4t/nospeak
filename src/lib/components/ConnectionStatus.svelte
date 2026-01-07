@@ -12,6 +12,7 @@
 }`}>
     <Button 
         onclick={() => showRelayStatusModal.set(true)}
+        variant="outlined-chip"
         size="sm"
         class={`gap-2 ${isAndroidApp ? 'mr-2' : ''}`}
     >
