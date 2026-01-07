@@ -453,7 +453,8 @@
       }
     }
 
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Send on Ctrl+Enter or Cmd+Enter (desktop)
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
       send();
     }
@@ -1726,48 +1727,48 @@
           class="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 text-sm md:text-base dark:text-white disabled:opacity-50 resize-none overflow-hidden placeholder:text-gray-400 dark:placeholder:text-slate-500 py-1"
           placeholder={$t('chat.inputPlaceholder')}
         ></textarea>
-
-        {#if showVoiceButton}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            class="flex-shrink-0"
-            onclick={openVoiceSheet}
-            aria-label="Record voice message"
-          >
-            <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          </Button>
-        {/if}
-
-        {#if inputText.trim().length > 0}
-          <Button
-            type="submit"
-            variant="primary"
-            size="icon"
-            class="hidden md:inline-flex flex-shrink-0"
-            disabled={isSending}
-            aria-label="Send message"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="9 6 15 12 9 18"></polyline>
-            </svg>
-          </Button>
-        {/if}
       </div>
+
+      {#if showVoiceButton}
+        <Button
+          type="button"
+          variant="primary"
+          size="icon"
+          class="flex-shrink-0"
+          onclick={openVoiceSheet}
+          aria-label="Record voice message"
+        >
+          <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+        </Button>
+      {/if}
+
+      {#if inputText.trim().length > 0}
+        <Button
+          type="submit"
+          variant="primary"
+          size="icon"
+          class="flex-shrink-0"
+          disabled={isSending}
+          aria-label="Send message"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="9 6 15 12 9 18"></polyline>
+          </svg>
+        </Button>
+      {/if}
     </form>
   </div>
 </div>
