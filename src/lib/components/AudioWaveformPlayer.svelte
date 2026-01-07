@@ -4,7 +4,7 @@
 
     let { url, isOwn = false } = $props<{ url: string; isOwn?: boolean }>();
 
-    const BAR_COUNT = 60;
+    const BAR_COUNT = 40;
 
     const waveformCache = new Map<string, number[]>();
     const waveformPromises = new Map<string, Promise<number[]>>();
@@ -155,20 +155,8 @@
     }
 </script>
 
-<!-- svelte-ignore a11y_media_has_caption -->
-<audio
-    bind:this={audioElement}
-    src={url}
-    onloadedmetadata={handleLoadedMetadata}
-    ontimeupdate={handleTimeUpdate}
-    onplay={handlePlay}
-    onpause={handlePause}
-    onended={handleEnded}
-    class="hidden"
-></audio>
-
 <div
-    class={`flex items-center gap-3 px-3 py-2 rounded-xl border text-[11px] min-w-[220px] max-w-full bg-white/20 dark:bg-slate-800/50 md:bg-white/10 md:dark:bg-slate-800/30 md:backdrop-blur-sm border-gray-200/50 dark:border-slate-700/50 transition-colors ${
+    class={`flex items-center gap-3 px-3 py-1.5 rounded-xl border text-[11px] min-w-[160px] max-w-full bg-white/20 dark:bg-slate-800/50 md:bg-white/10 md:dark:bg-slate-800/30 md:backdrop-blur-sm border-gray-200/50 dark:border-slate-700/50 transition-colors ${
         isOwn ? 'text-blue-50' : 'text-gray-900 dark:text-slate-100'
     }`}
 >
@@ -209,11 +197,7 @@
         {/if}
     </button>
 
-    <div class="flex-1 flex flex-col gap-2 min-w-0">
-        <div class="text-[11px] font-semibold truncate tracking-wide">
-            Audio
-        </div>
-
+    <div class="flex-1 flex flex-col gap-1 min-w-0">
         <WaveformBars
             peaks={peaks}
             barCount={BAR_COUNT}
@@ -234,3 +218,16 @@
         {formatTime(currentTime)} / {formatTime(duration)}
     </div>
 </div>
+
+<!-- svelte-ignore a11y_media_has_caption -->
+<audio
+    bind:this={audioElement}
+    src={url}
+    onloadedmetadata={handleLoadedMetadata}
+    ontimeupdate={handleTimeUpdate}
+    onplay={handlePlay}
+    onpause={handlePause}
+    onended={handleEnded}
+    class="hidden"
+    style="display: none !important; position: absolute; width: 0; height: 0;"
+></audio>

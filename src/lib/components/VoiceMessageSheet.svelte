@@ -59,7 +59,7 @@
     let errorListener: PluginListenerHandle | null = $state(null);
 
     // Shared state
-    const WAVEFORM_BAR_COUNT = 60;
+    const WAVEFORM_BAR_COUNT = 40;
     let rawPeaks = $state<number[]>([]);
 
     let previewDuration = $state(0);

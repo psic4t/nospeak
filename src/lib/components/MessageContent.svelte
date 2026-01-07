@@ -554,10 +554,10 @@
                      <div class="my-1">
                          <video controls src={decryptedUrl} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
                      </div>
-                 {:else if isAudioMime(fileType) || isAudio(decryptedUrl)}
-                     <div class="mt-2 mb-1">
-                         <AudioWaveformPlayer url={decryptedUrl} isOwn={isOwn} />
-                     </div>
+              {:else if isAudioMime(fileType) || isAudio(decryptedUrl)}
+                      <div class="mb-1">
+                          <AudioWaveformPlayer url={decryptedUrl} isOwn={isOwn} />
+                      </div>
                  {:else}
                      <a href={decryptedUrl} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">Download attachment</a>
                  {/if}
@@ -597,10 +597,10 @@
                  <div class="my-1">
                      <video controls src={fileUrl} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
                  </div>
-             {:else if isAudioMime(fileType) || isAudio(fileUrl)}
-                 <div class="mt-2 mb-1">
-                     <AudioWaveformPlayer url={fileUrl} isOwn={isOwn} />
-                 </div>
+              {:else if isAudioMime(fileType) || isAudio(fileUrl)}
+                  <div class="mb-1">
+                      <AudioWaveformPlayer url={fileUrl} isOwn={isOwn} />
+                  </div>
              {:else}
                  <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">Download attachment</a>
              {/if}
@@ -638,10 +638,10 @@
                      <div class="my-1">
                          <video controls src={part} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
                      </div>
-                 {:else if isAudio(part)}
-                     <div class="mt-2 mb-1">
-                         <AudioWaveformPlayer url={part} isOwn={isOwn} />
-                     </div>
+                  {:else if isAudio(part)}
+                      <div class="mb-1">
+                          <AudioWaveformPlayer url={part} isOwn={isOwn} />
+                      </div>
                  {:else}
                      <a href={part} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">{part}</a>
                  {/if}
