@@ -1411,7 +1411,7 @@
       {#if partnerNpub !== 'ALL'}
         <!-- Mobile overlay search input (covers username area) -->
         <div
-          class={`md:hidden absolute top-2 bottom-2 left-24 right-16 z-30 transition-[opacity,transform] duration-200 ease-out ${
+          class={`md:hidden absolute bottom-2 h-11 left-24 right-16 z-30 transition-[opacity,transform] duration-200 ease-out ${
             isSearchOpen
               ? 'opacity-100 translate-x-0 pointer-events-auto'
               : 'opacity-0 translate-x-2 pointer-events-none'
