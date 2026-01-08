@@ -98,7 +98,7 @@
         // Reset playback state when URL changes.
         currentTime = 0;
         isPlaying = false;
-        isLoading = true;
+        isLoading = false;
         duration = 0;
 
         updateDurationFromCache(url);
@@ -119,13 +119,17 @@
         }
 
         if (audioElement.paused) {
+            // With preload="none", we need to load first if not ready
+            if (audioElement.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+                audioElement.load();
+            }
             audioElement
                 .play()
                 .then(() => {
                     isPlaying = true;
                 })
                 .catch((e) => {
-                    console.error('Failed to play audio', e);
+                    console.error('[AudioPlayer] Failed to play audio', e);
                 });
         } else {
             audioElement.pause();
@@ -139,7 +143,6 @@
 
         updateDurationFromElement();
         updateDurationFromCache(url);
-        isLoading = false;
     }
 
     function handleDurationChange(): void {
@@ -264,13 +267,13 @@
 <audio
     bind:this={audioElement}
     src={url}
-    preload="metadata"
+    preload="none"
     onloadedmetadata={handleLoadedMetadata}
     ondurationchange={handleDurationChange}
     ontimeupdate={handleTimeUpdate}
     onplay={handlePlay}
     onpause={handlePause}
     onended={handleEnded}
-    class="hidden"
-    style="display: none !important; position: absolute; width: 0; height: 0;"
+    class="sr-only"
+    style="width: 1px; height: 1px; opacity: 0; pointer-events: none;"
 ></audio>
