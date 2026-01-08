@@ -27,6 +27,7 @@
   import { hapticSelection } from "$lib/utils/haptics";
   import type { Language } from "$lib/i18n";
   import Button from '$lib/components/ui/Button.svelte';
+  import Chip from '$lib/components/ui/Chip.svelte';
   import Input from '$lib/components/ui/Input.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import Toggle from '$lib/components/ui/Toggle.svelte';
@@ -411,6 +412,14 @@
     await saveMediaServerSettings();
   }
 
+  function setPrimaryMediaServer(url: string) {
+    const index = mediaServers.findIndex((s) => s.url === url);
+    if (index <= 0) return; // Already primary or not found
+
+    const server = mediaServers[index];
+    mediaServers = [server, ...mediaServers.filter((s) => s.url !== url)];
+    saveMediaServerSettings();
+  }
 
   async function addRelay() {
 
@@ -1622,17 +1631,44 @@
               <div
                 class="border border-gray-200/60 dark:border-slate-700/70 rounded-2xl bg-white/80 dark:bg-slate-900/60 overflow-hidden shadow-sm divide-y divide-gray-200/60 dark:divide-slate-700/70"
               >
-                {#each mediaServers as server}
+                {#each mediaServers as server, index}
                   <div class="px-4 py-3 flex items-center justify-between">
-                    <div class="flex-1 min-w-0 pr-4">
+                    <div class="flex-1 min-w-0 pr-4 flex items-center gap-2">
                       <p
                         class="text-sm font-medium dark:text-white truncate"
                         title={server.url}
                       >
                         {server.url}
                       </p>
+                      {#if index === 0}
+                        <Chip>{$t('settings.mediaServers.primary')}</Chip>
+                      {/if}
                     </div>
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                      {#if index > 0}
+                        <Button
+                          onclick={() => setPrimaryMediaServer(server.url)}
+                          variant="ghost"
+                          size="icon"
+                          class="!w-8 !h-8"
+                          title={$t('settings.mediaServers.setAsPrimary')}
+                          disabled={isSavingMediaServers}
+                        >
+                          <svg
+                            class="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M5 15l7-7 7 7"
+                            />
+                          </svg>
+                        </Button>
+                      {/if}
                       <Button
                         onclick={() => removeMediaServer(server.url)}
                         variant="danger"

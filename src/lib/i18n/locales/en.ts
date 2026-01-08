@@ -325,7 +325,9 @@ const en = {
                saveStatusPartial: 'Saved server list to {succeeded} of {attempted} relays.',
                saveStatusNone: 'Could not save server list to any relays.',
                saveStatusError: 'Error saving server list. Your settings may not be fully propagated.',
-               savingStatus: 'Saving media server settings…'
+               savingStatus: 'Saving media server settings…',
+               primary: 'Primary',
+               setAsPrimary: 'Set as primary'
            },
  
            unifiedPush: {

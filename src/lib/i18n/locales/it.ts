@@ -318,9 +318,11 @@ const it = {
             emptyState: 'Nessun server configurato',
             saveStatusSuccess: 'Elenco server salvato su {count} relays.',
             saveStatusPartial: 'Elenco server salvato su {succeeded} relays su {attempted}.',
-            saveStatusNone: 'Impossibile salvare l’elenco server su qualsiasi relay.',
-            saveStatusError: 'Errore durante il salvataggio dell’elenco server. Le impostazioni potrebbero non essere propagate completamente.',
-            savingStatus: 'Salvataggio impostazioni server multimediali…'
+            saveStatusNone: "Impossibile salvare l'elenco server su qualsiasi relay.",
+            saveStatusError: "Errore durante il salvataggio dell'elenco server. Le impostazioni potrebbero non essere propagate completamente.",
+            savingStatus: 'Salvataggio impostazioni server multimediali…',
+            primary: 'Principale',
+            setAsPrimary: 'Imposta come principale'
         },
 
         unifiedPush: {

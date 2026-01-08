@@ -320,7 +320,9 @@ const es = {
             saveStatusPartial: 'Guardada la lista de servidores en {succeeded} de {attempted} relays.',
             saveStatusNone: 'No se pudo guardar la lista de servidores en ningún relay.',
             saveStatusError: 'Error al guardar la lista de servidores. Es posible que tus ajustes no se propaguen completamente.',
-            savingStatus: 'Guardando ajustes de servidores de medios…'
+            savingStatus: 'Guardando ajustes de servidores de medios…',
+            primary: 'Principal',
+            setAsPrimary: 'Establecer como principal'
         },
 
         unifiedPush: {

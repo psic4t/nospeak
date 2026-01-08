@@ -327,7 +327,9 @@ const de = {
                saveStatusPartial: 'Serverliste auf {succeeded} von {attempted} Relays gespeichert.',
                saveStatusNone: 'Serverliste konnte auf keinem Relay gespeichert werden.',
                saveStatusError: 'Fehler beim Speichern der Serverliste. Einstellungen sind möglicherweise nicht vollständig propagiert.',
-               savingStatus: 'Medienserver-Einstellungen werden gespeichert…'
+               savingStatus: 'Medienserver-Einstellungen werden gespeichert…',
+               primary: 'Primär',
+               setAsPrimary: 'Als primär festlegen'
            },
  
            unifiedPush: {

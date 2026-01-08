@@ -318,9 +318,11 @@ const fr = {
             emptyState: 'Aucun serveur configuré',
             saveStatusSuccess: 'Liste des serveurs enregistrée sur {count} relays.',
             saveStatusPartial: 'Liste des serveurs enregistrée sur {succeeded} relays sur {attempted}.',
-            saveStatusNone: "Impossible d’enregistrer la liste des serveurs sur un relay.",
-            saveStatusError: "Erreur lors de l’enregistrement de la liste des serveurs. Vos paramètres peuvent ne pas être entièrement propagés.",
-            savingStatus: 'Enregistrement des paramètres des serveurs médias…'
+            saveStatusNone: "Impossible d'enregistrer la liste des serveurs sur un relay.",
+            saveStatusError: "Erreur lors de l'enregistrement de la liste des serveurs. Vos paramètres peuvent ne pas être entièrement propagés.",
+            savingStatus: 'Enregistrement des paramètres des serveurs médias…',
+            primary: 'Principal',
+            setAsPrimary: 'Définir comme principal'
         },
 
         unifiedPush: {
