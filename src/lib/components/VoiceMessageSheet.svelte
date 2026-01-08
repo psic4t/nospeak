@@ -38,6 +38,10 @@
         maxDurationMs?: number;
     }>();
 
+    const effectiveMaxDurationMs = $derived(
+        isFinite(maxDurationMs) && maxDurationMs > 0 ? maxDurationMs : VOICE_MESSAGE_MAX_DURATION_MS
+    );
+
     // Determine if we should use native Android recording
     const useNativeRecording = Capacitor.getPlatform() === 'android' && AndroidMicrophone !== null;
 
@@ -76,6 +80,7 @@
 
     let previewAudio = $state<HTMLAudioElement | null>(null);
     let isPreviewPlaying = $state(false);
+    let previewRafId: number | null = $state(null);
     let isStopping = $state(false);
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -94,6 +99,8 @@
     }
 
     function cleanupPreview(): void {
+        stopPreviewSync();
+
         try {
             previewAudio?.pause();
         } catch {
@@ -217,12 +224,28 @@
         return nowMs - startedAtMs - pausedTotalMs;
     }
 
-    function startTicker(): void {
-        if (ticker) {
-            clearInterval(ticker);
+    function stopTicker(): void {
+        if (!ticker) {
+            return;
         }
+        try {
+            clearInterval(ticker);
+        } catch {
+            // ignore
+        }
+        ticker = null;
+    }
+
+    function startTicker(): void {
+        stopTicker();
 
         ticker = window.setInterval(() => {
+            // Ensure the recording timer does not run past "Done".
+            if (recordingState !== 'recording' && recordingState !== 'paused') {
+                stopTicker();
+                return;
+            }
+
             const nextElapsed = computeElapsedMs(Date.now());
             elapsedMs = nextElapsed;
 
@@ -236,7 +259,7 @@
                     }
                 }
 
-                if (isVoiceDurationExceeded(nextElapsed, maxDurationMs)) {
+                if (isVoiceDurationExceeded(nextElapsed, effectiveMaxDurationMs)) {
                     void stopRecording();
                 }
             }
@@ -521,9 +544,12 @@
         }
 
         isStopping = true;
+        stopTicker();
 
         const finalElapsed = computeElapsedMs(Date.now());
-        elapsedMs = Math.min(finalElapsed, maxDurationMs);
+        elapsedMs = Math.min(finalElapsed, effectiveMaxDurationMs);
+        previewDuration = elapsedMs / 1000;
+        previewCurrentTime = 0;
 
         if (useNativeRecording && AndroidMicrophone) {
             await stopNativeRecording();
@@ -705,6 +731,39 @@
     // Preview controls
     // ─────────────────────────────────────────────────────────────────────────────
 
+    function stopPreviewSync(): void {
+        if (previewRafId === null) {
+            return;
+        }
+        try {
+            window.cancelAnimationFrame(previewRafId);
+        } catch {
+            // ignore
+        }
+        previewRafId = null;
+    }
+
+    function startPreviewSync(): void {
+        stopPreviewSync();
+
+        const tick = () => {
+            if (!previewAudio) {
+                previewRafId = null;
+                return;
+            }
+
+            previewCurrentTime = previewAudio.currentTime || 0;
+
+            if (!previewAudio.paused && !previewAudio.ended) {
+                previewRafId = window.requestAnimationFrame(tick);
+            } else {
+                previewRafId = null;
+            }
+        };
+
+        previewRafId = window.requestAnimationFrame(tick);
+    }
+
     function togglePreview(): void {
         if (!previewAudio) {
             return;
@@ -719,10 +778,12 @@
 
     function handlePreviewPlay(): void {
         isPreviewPlaying = true;
+        startPreviewSync();
     }
 
     function handlePreviewPause(): void {
         isPreviewPlaying = false;
+        stopPreviewSync();
     }
 
     function handlePreviewLoadedMetadata(): void {
@@ -748,6 +809,7 @@
 
     function handlePreviewEnded(): void {
         isPreviewPlaying = false;
+        stopPreviewSync();
         previewCurrentTime = previewDuration;
     }
 
@@ -838,7 +900,7 @@
                 <h2 class="typ-title dark:text-white">Voice message</h2>
 
                 <div class="typ-meta text-xs tabular-nums text-gray-600 dark:text-slate-300">
-                    {timerLabel} / {formatDurationMs(maxDurationMs)}
+                    {timerLabel} / {formatDurationMs(effectiveMaxDurationMs)}
                 </div>
             </div>
 
@@ -889,7 +951,7 @@
             <audio
                 bind:this={previewAudio}
                 src={recordedUrl ?? ''}
-                class="hidden"
+                class="sr-only"
                 onloadedmetadata={handlePreviewLoadedMetadata}
                 ontimeupdate={handlePreviewTimeUpdate}
                 onplay={handlePreviewPlay}
