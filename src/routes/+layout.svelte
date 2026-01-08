@@ -44,7 +44,7 @@
   let isInitialized = $state(false);
   let showProfileRefreshBanner = $state(false);
   let profileRefreshMessage = $state("");
-  let isAndroidApp = $state(false);
+  let isAndroidApp = $state(isAndroidNative());
 
   const webManifestLinkTag = pwaInfo?.webManifest.linkTag ?? "";
 
@@ -296,14 +296,14 @@
 
 {#if isInitialized}
   <div
-    class="h-dvh app-shell flex justify-center overflow-hidden relative lg:p-4"
+    class="h-dvh app-shell flex justify-center overflow-hidden relative {isAndroidApp ? '' : 'lg:p-4'}"
   >
 
     {#if page.url.pathname === '/'}
       {@render children()}
     {:else}
       <div 
-        class="w-full max-w-full lg:max-w-7xl xl:max-w-6xl h-full relative z-10 shadow-2xl overflow-hidden lg:rounded-2xl lg:border lg:border-white/20 lg:dark:border-white/10 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl isolate transform-gpu"
+        class="w-full max-w-full h-full relative z-10 shadow-2xl overflow-hidden bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl isolate transform-gpu {isAndroidApp ? '' : 'lg:max-w-7xl xl:max-w-6xl lg:rounded-2xl lg:border lg:border-white/20 lg:dark:border-white/10'}"
         style="mask-image: linear-gradient(black, black); -webkit-mask-image: linear-gradient(black, black);"
       >
         {@render children()}
