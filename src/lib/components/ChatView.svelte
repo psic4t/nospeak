@@ -1613,6 +1613,7 @@
                 authorNpub={msg.direction === "sent" ? $currentUser?.npub : partnerNpub}
                 onMediaLoad={handleMediaLoad}
                 location={msg.location}
+                forceEagerLoad={i >= displayMessages.length - 3}
               />
 
             {#if captionForThis}

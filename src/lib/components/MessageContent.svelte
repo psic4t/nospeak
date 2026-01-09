@@ -23,7 +23,8 @@
         fileNonce = undefined,
         authorNpub = undefined,
         onMediaLoad = undefined,
-        location = undefined
+        location = undefined,
+        forceEagerLoad = false
     } = $props<{
         content: string;
         highlight?: string;
@@ -37,6 +38,7 @@
         authorNpub?: string;
         onMediaLoad?: () => void;
         location?: { latitude: number; longitude: number };
+        forceEagerLoad?: boolean;
     }>();
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -541,12 +543,12 @@
                               class="block my-1 cursor-zoom-in"
                               onclick={() => onImageClick?.(decryptedUrl!, fileUrl)}
                           >
-                              <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                              <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                           </button>
 
                      {:else}
                          <a href={decryptedUrl} target="_blank" rel="noopener noreferrer" class="block my-1">
-                             <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                             <img src={decryptedUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                          </a>
                      {/if}
                  {:else if isVideoMime(fileType) || isVideo(decryptedUrl)}
@@ -585,11 +587,11 @@
                          class="block my-1 cursor-zoom-in"
                          onclick={() => onImageClick?.(fileUrl, fileUrl)}
                      >
-                         <img src={fileUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                         <img src={fileUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                      </button>
                  {:else}
                      <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="block my-1">
-                         <img src={fileUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                         <img src={fileUrl} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                      </a>
                  {/if}
              {:else if isVideoMime(fileType) || isVideo(fileUrl)}
@@ -626,11 +628,11 @@
                               onclick={() => onImageClick?.(part, part)}
                           >
 
-                             <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                             <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                          </button>
                      {:else}
                          <a href={part} target="_blank" rel="noopener noreferrer" class="block my-1">
-                             <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading="lazy" onload={() => onMediaLoad?.()} />
+                             <img src={part} alt="Attachment" class="max-w-full rounded max-h-[300px] object-contain" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                          </a>
                      {/if}
                  {:else if isVideo(part)}
@@ -661,7 +663,7 @@
                     <div class="flex flex-col sm:flex-row gap-0 sm:gap-0 h-auto sm:h-28">
                         <div class="w-full sm:w-28 sm:shrink-0 h-32 sm:h-full bg-gray-100/50 dark:bg-slate-800/50 flex items-center justify-center overflow-hidden">
                             {#if preview.image}
-                                <img src={preview.image} alt="" class="w-full h-full object-cover" loading="lazy" onload={() => onMediaLoad?.()} />
+                                <img src={preview.image} alt="" class="w-full h-full object-cover" loading={forceEagerLoad ? "eager" : "lazy"} onload={() => onMediaLoad?.()} />
                             {:else}
                                 <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
