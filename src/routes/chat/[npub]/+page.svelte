@@ -195,14 +195,60 @@
 
 
     onMount(() => {
-        const handleNewMessage = (event: Event) => {
-            const custom = event as CustomEvent<{ recipientNpub?: string }>;
+        const handleNewMessage = async (event: Event) => {
+            const custom = event as CustomEvent<{ recipientNpub?: string; eventId?: string }>;
             const partner = currentPartner;
             if (!partner) return;
 
-            // For ALL, always refresh; otherwise only refresh when this conversation is affected
-            if (partner === 'ALL' || !custom.detail || custom.detail.recipientNpub === partner) {
+            const { recipientNpub, eventId } = custom.detail || {};
+
+            // For ALL view, always do full refresh
+            if (partner === 'ALL') {
                 refreshMessagesForCurrentPartner();
+                return;
+            }
+
+            // Only handle messages for current partner
+            if (recipientNpub !== partner) {
+                return;
+            }
+
+            // If no eventId, fall back to full refresh
+            if (!eventId) {
+                refreshMessagesForCurrentPartner();
+                return;
+            }
+
+            // Check if message is already displayed
+            if (messages.some(m => m.eventId === eventId)) {
+                return;
+            }
+
+            // Fetch just the new message
+            const newMessage = await messageRepo.getMessageByEventId(eventId);
+            if (!newMessage || newMessage.recipientNpub !== partner) {
+                return;
+            }
+
+            // If message is older than our loaded range, skip it (will be loaded on scroll up)
+            if (oldestLoadedTimestamp !== null && newMessage.sentAt < oldestLoadedTimestamp) {
+                // Re-enable cache paging since there are more messages
+                cacheExhausted = false;
+                return;
+            }
+
+            // Insert at correct position based on sentAt
+            const insertIndex = messages.findIndex(m => m.sentAt > newMessage.sentAt);
+            if (insertIndex === -1) {
+                // New message is newest, append at end
+                messages = [...messages, newMessage];
+            } else {
+                // Insert at correct position
+                messages = [
+                    ...messages.slice(0, insertIndex),
+                    newMessage,
+                    ...messages.slice(insertIndex)
+                ];
             }
         };
 
