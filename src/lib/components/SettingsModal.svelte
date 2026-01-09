@@ -1724,10 +1724,12 @@
                   >
                     License
                   </h4>
-                  <p class="typ-body text-gray-600 dark:text-slate-400">GPL</p>
-                  <p class="text-sm text-gray-600 dark:text-slate-400 mt-1">
-                    CC by-nc-nd psic4t
-                  </p>
+                  <div class="typ-body text-gray-600 dark:text-slate-400 space-y-2">
+                    <p>nospeak Copyright (C) 2026 psic4t</p>
+                    <p>nospeak is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
+                    <p>nospeak is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.</p>
+                    <p>You should have received a copy of the GNU General Public License along with nospeak. If not, see <a href="https://www.gnu.org/licenses/" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-800 dark:hover:text-slate-200">https://www.gnu.org/licenses/</a>.</p>
+                  </div>
                 </div>
               </div>
             </div>
