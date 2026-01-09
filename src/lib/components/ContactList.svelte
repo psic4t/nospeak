@@ -97,11 +97,17 @@
     const contactsData = await Promise.all(
       dbContacts.map(async (c) => {
         const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
-        const lastMsgs = await messageRepo.getMessages(c.npub, 1);
-        const lastMsg = lastMsgs[0];
+        // Fetch recent messages for display and unread calculation
+        const recentMsgs = await messageRepo.getMessages(c.npub, 10);
+        const lastMsg = recentMsgs[recentMsgs.length - 1]; // Most recent for display
         const lastMsgTime = lastMsg ? lastMsg.sentAt : 0;
+        // For unread indicator, only consider received messages (not sent from other clients)
+        const lastReceivedMsg = recentMsgs
+          .filter((m) => m.direction === "received")
+          .pop();
+        const lastReceivedTime = lastReceivedMsg ? lastReceivedMsg.sentAt : 0;
         const lastActivityTime = Math.max(
-          lastMsgTime || 0,
+          lastReceivedTime,
           c.lastActivityAt || 0,
         );
 
