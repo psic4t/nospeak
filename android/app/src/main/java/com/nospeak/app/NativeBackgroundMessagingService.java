@@ -98,6 +98,9 @@ public class NativeBackgroundMessagingService extends Service {
     public static final String EXTRA_SUMMARY = "summary";
     public static final String EXTRA_NOTIFICATIONS_ENABLED = "notificationsEnabled";
 
+    public static final String ACTION_SET_ACTIVE_CONVERSATION = "com.nospeak.app.SET_ACTIVE_CONVERSATION";
+    public static final String EXTRA_ACTIVE_CONVERSATION_PUBKEY = "activeConversationPubkey";
+
     public static final String EXTRA_ROUTE_KIND = "nospeak_route_kind";
     public static final String EXTRA_ROUTE_PARTNER_PUBKEY_HEX = "nospeak_partner_pubkey_hex";
 
@@ -151,6 +154,8 @@ public class NativeBackgroundMessagingService extends Service {
 
     private int currentPingSeconds = ACTIVE_PING_SECONDS;
     private boolean lockedProfileActive = false;
+
+    private volatile String activeConversationPubkeyHex = null;
 
     private long screenOffAtMs = 0L;
     private boolean isCharging = false;
@@ -431,7 +436,11 @@ public class NativeBackgroundMessagingService extends Service {
             return START_STICKY;
         }
 
-
+        if (ACTION_SET_ACTIVE_CONVERSATION.equals(action)) {
+            String pubkey = intent.getStringExtra(EXTRA_ACTIVE_CONVERSATION_PUBKEY);
+            activeConversationPubkeyHex = (pubkey != null && !pubkey.isEmpty()) ? pubkey : null;
+            return START_STICKY;
+        }
 
         return START_STICKY;
     }
@@ -754,6 +763,12 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         String partnerPubkeyHex = rumor.pubkeyHex;
+
+        // Suppress notification only if user is actively viewing this specific conversation
+        if (shouldSuppressNotificationForConversation(partnerPubkeyHex)) {
+            return;
+        }
+
         String preview = resolveRumorPreview(rumor);
         if (preview == null) {
             return;
@@ -1444,10 +1459,6 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     private boolean shouldEmitMessageNotification() {
-        if (MainActivity.isAppVisible()) {
-            return false;
-        }
-
         if (!notificationsEnabled) {
             return false;
         }
@@ -1464,6 +1475,18 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         return true;
+    }
+
+    private boolean shouldSuppressNotificationForConversation(String partnerPubkeyHex) {
+        if (!MainActivity.isAppVisible()) {
+            return false;
+        }
+
+        if (activeConversationPubkeyHex == null || activeConversationPubkeyHex.isEmpty()) {
+            return false;
+        }
+
+        return activeConversationPubkeyHex.equalsIgnoreCase(partnerPubkeyHex);
     }
 
     private void loadPersistedSeenEventIds() {

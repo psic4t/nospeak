@@ -210,6 +210,17 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setActiveConversation(PluginCall call) {
+        String pubkeyHex = call.getString("pubkeyHex", null);
+
+        Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
+        intent.setAction(NativeBackgroundMessagingService.ACTION_SET_ACTIVE_CONVERSATION);
+        intent.putExtra(NativeBackgroundMessagingService.EXTRA_ACTIVE_CONVERSATION_PUBKEY, pubkeyHex);
+        ContextCompat.startForegroundService(getContext(), intent);
+        call.resolve();
+    }
+
+    @PluginMethod
     public void stop(PluginCall call) {
         AndroidBackgroundMessagingPrefs.setEnabled(getContext(), false);
 

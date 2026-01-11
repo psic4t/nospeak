@@ -1,3 +1,6 @@
+import { nip19 } from 'nostr-tools';
+import { syncActiveConversationToNative } from '$lib/core/BackgroundMessaging';
+
 export interface UnreadChatState {
     messages: string[];
     reactions: string[];
@@ -38,6 +41,18 @@ function normalizeChatState(state: Partial<UnreadChatState> | undefined): Unread
     };
 }
 
+function npubToHex(npub: string): string | null {
+    try {
+        const decoded = nip19.decode(npub);
+        if (decoded.type === 'npub' && typeof decoded.data === 'string') {
+            return decoded.data;
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
 let activeConversationNpub: string | null = null;
 let appIsVisible = true;
 let appHasFocus = true;
@@ -47,10 +62,16 @@ let focusTrackingCleanup: (() => void) | null = null;
 
 export function setActiveConversation(npub: string) {
     activeConversationNpub = npub;
+
+    const hex = npubToHex(npub);
+    if (hex) {
+        void syncActiveConversationToNative(hex);
+    }
 }
 
 export function clearActiveConversation() {
     activeConversationNpub = null;
+    void syncActiveConversationToNative(null);
 }
 
 export function initAppVisibilityAndFocusTracking(): () => void {
@@ -84,7 +105,16 @@ export function initAppVisibilityAndFocusTracking(): () => void {
     };
 
     const handleVisibilityChange = () => {
+        const wasVisible = appIsVisible;
         appIsVisible = document.visibilityState === 'visible';
+
+        // Re-sync active conversation to native when app becomes visible
+        if (!wasVisible && appIsVisible && activeConversationNpub) {
+            const hex = npubToHex(activeConversationNpub);
+            if (hex) {
+                void syncActiveConversationToNative(hex);
+            }
+        }
     };
 
     window.addEventListener('focus', handleFocus);

@@ -81,6 +81,7 @@ interface AndroidBackgroundMessagingPlugin {
     }): Promise<void>;
     update(options: { summary: string }): Promise<void>;
     stop(): Promise<void>;
+    setActiveConversation(options: { pubkeyHex: string | null }): Promise<void>;
 
     getBatteryOptimizationStatus(): Promise<{ isIgnoringBatteryOptimizations: boolean }>;
     requestIgnoreBatteryOptimizations(): Promise<{ started: boolean; reason?: string }>;
@@ -356,3 +357,14 @@ export async function enableAndroidBackgroundMessaging(): Promise<void> {
      await applyAndroidBackgroundMessaging(isBackgroundMessagingPreferenceEnabled());
  }
 
+export async function syncActiveConversationToNative(pubkeyHex: string | null): Promise<void> {
+    if (!isAndroidNative()) {
+        return;
+    }
+
+    try {
+        await AndroidBackgroundMessaging.setActiveConversation({ pubkeyHex });
+    } catch (e) {
+        console.warn('Failed to sync active conversation to native:', e);
+    }
+}
