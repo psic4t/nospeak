@@ -62,7 +62,7 @@
     <!-- Outer: fully rounded, Inner: small rounding -->
     <button
         type="button"
-        class="{baseStyles} {variantStyles} h-11 w-11 p-0 rounded-l-full rounded-r-lg"
+        class="{baseStyles} {variantStyles} h-11 w-11 p-0 rounded-l-[22px] rounded-r-[0.3rem]"
         onclick={handleClick(secondaryOnclick)}
         aria-label={secondaryAriaLabel}
         {disabled}
@@ -76,7 +76,7 @@
     <!-- Outer: fully rounded, Inner: small rounding -->
     <button
         type="button"
-        class="{baseStyles} {variantStyles} h-11 px-5 text-sm rounded-l-lg rounded-r-full"
+        class="{baseStyles} {variantStyles} h-11 px-5 text-sm rounded-l-[0.3rem] rounded-r-[22px]"
         onclick={handleClick(primaryOnclick)}
         {disabled}
     >
