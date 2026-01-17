@@ -17,8 +17,14 @@ export async function discoverUserRelays(npub: string, isCurrentUser: boolean = 
         connectionManager.addTemporaryRelay(url);
     }
 
-    // Wait a bit for connections
-    await new Promise(r => setTimeout(r, 1000));
+    // Wait for at least one discovery relay to connect (max 5 seconds)
+    const maxWait = 5000;
+    const checkInterval = 100;
+    let waited = 0;
+    while (connectionManager.getConnectedRelays().length === 0 && waited < maxWait) {
+        await new Promise(r => setTimeout(r, checkInterval));
+        waited += checkInterval;
+    }
 
     // 2. Resolve Profile (fetches Kind 0 and 10002 and caches them)
     await profileResolver.resolveProfile(npub, true);

@@ -258,6 +258,11 @@
                     ...messages.slice(insertIndex)
                 ];
             }
+
+            // Keep lastReadAt in sync for received messages while viewing
+            if (newMessage.direction === 'received') {
+                contactRepo.markAsRead(partner).catch(console.error);
+            }
         };
 
         if (typeof window !== 'undefined') {
