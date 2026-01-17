@@ -10,6 +10,7 @@
     import { currentUser } from '$lib/stores/auth';
     import { glassModal } from '$lib/utils/transitions';
     import { hapticSelection } from '$lib/utils/haptics';
+
     import { fade } from 'svelte/transition';
     import { get } from 'svelte/store';
 
@@ -26,7 +27,8 @@
 
     let contactCheckNonce = 0;
 
-    const canRefresh = $derived(isContact && !!$currentUser && $currentUser.npub !== npub);
+    const isOwnProfile = $derived(!!$currentUser && $currentUser.npub === npub);
+    const canRefresh = $derived((isContact || isOwnProfile) && !!$currentUser);
 
     $effect(() => {
         if (isOpen && npub) {
@@ -79,8 +81,10 @@
         isRefreshing = true;
 
         try {
-            await discoverUserRelays(npub, false);
+            const isOwn = $currentUser?.npub === npub;
+            await discoverUserRelays(npub, isOwn);
             await loadProfile({ showLoading: false });
+
         } catch (e) {
             console.error('ProfileModal: failed to refresh profile', e);
         } finally {

@@ -96,7 +96,7 @@ export class ProfileResolver {
                     npub,
                     metadata,
                     {
-                        messagingRelays,
+                        messagingRelays: (foundMessagingRelays || foundNip65Relays) ? messagingRelays : undefined,
                         mediaServers: foundMediaServers ? mediaServers : undefined
                     },
                     nip05Info
