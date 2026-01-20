@@ -330,25 +330,37 @@ export class AuthService {
             }
         }
 
-        // 4. Fetch and cache history items from relays
-        // Note: Discovery relays stay connected so autoAddContact can resolve profiles
-        setLoginSyncActiveStep('fetch-history');
-        try {
-            await messagingService.fetchHistory();
-        } catch (error) {
-            console.error(`${context} history fetch failed:`, error);
-            // Track as generic relay error
-            addRelayError('relays', error instanceof Error ? error.message : 'History fetch failed', 'fetch-history');
-        }
-
-        // 5. Fetch and merge contacts from Kind 30000 event
-        // Note: Must happen before discovery relay cleanup so we can query discovery relays
+        // 4. Fetch and merge contacts from Kind 30000 event
+        // Note: Must happen BEFORE history fetch so we have the full contact list
+        // before auto-adding contacts from messages (prevents overwriting saved contacts)
         setLoginSyncActiveStep('fetch-contacts');
         try {
             await contactSyncService.fetchAndMergeContacts();
         } catch (error) {
             console.error(`${context} contact sync failed:`, error);
             // Non-fatal - continue with flow
+        }
+
+        // 5. Fetch and cache history items from relays
+        // Note: Discovery relays stay connected so autoAddContact can resolve profiles
+        // Defer contact publishing during history fetch to batch all changes at the end
+        setLoginSyncActiveStep('fetch-history');
+        messagingService.setDeferContactPublish(true);
+        try {
+            await messagingService.fetchHistory();
+        } catch (error) {
+            console.error(`${context} history fetch failed:`, error);
+            // Track as generic relay error
+            addRelayError('relays', error instanceof Error ? error.message : 'History fetch failed', 'fetch-history');
+        } finally {
+            messagingService.setDeferContactPublish(false);
+        }
+
+        // Publish contacts once after history sync (captures any new contacts from messages)
+        try {
+            await contactSyncService.publishContacts();
+        } catch (error) {
+            console.error(`${context} contact publish after history failed:`, error);
         }
 
         // 6. Fetch and cache user profile
@@ -442,7 +454,8 @@ export class AuthService {
                         }
                     }
 
-
+                    // Fire-and-forget: local contacts are already in IndexedDB,
+                    // autoAddContact will handle any new contacts from messages
                     messagingService
                         .fetchHistory()
                         .catch(e => console.error(`${historyContext} history fetch failed:`, e));

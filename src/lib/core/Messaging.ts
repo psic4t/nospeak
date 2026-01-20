@@ -38,6 +38,9 @@ import { contactSyncService } from './ContactSyncService';
     // Timestamp (seconds) when the current session started. Used to suppress
     // notifications for messages sent before the app was opened.
     private sessionStartedAt: number = 0;
+
+    // When true, autoAddContact skips publishing to Kind 30000 (used during bulk sync)
+    private _deferContactPublish: boolean = false;
  
     // Listen for incoming messages
     public listenForMessages(publicKey: string): () => void {
@@ -1213,6 +1216,14 @@ import { contactSyncService } from './ContactSyncService';
     console.warn('Timeout waiting for relay connections, proceeding with history fetch anyway');
   }
 
+  /**
+   * Control whether autoAddContact defers publishing to Kind 30000.
+   * Use during bulk sync operations to avoid multiple publishes.
+   */
+  public setDeferContactPublish(defer: boolean): void {
+    this._deferContactPublish = defer;
+  }
+
   private async autoAddContact(npub: string, isUnread: boolean = false) {
     try {
       // Check if contact already exists
@@ -1228,8 +1239,10 @@ import { contactSyncService } from './ContactSyncService';
         await contactRepo.addContact(npub, lastReadAt, lastActivityAt);
         if (this.debug) console.log(`Auto-added new contact: ${npub}`);
         
-        // Sync contacts to Kind 30000 event
-        await contactSyncService.publishContacts();
+        // Sync contacts to Kind 30000 event (unless deferred during bulk sync)
+        if (!this._deferContactPublish) {
+          await contactSyncService.publishContacts();
+        }
       }
     } catch (error) {
       console.error('Failed to auto-add contact:', error);

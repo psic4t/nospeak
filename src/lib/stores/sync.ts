@@ -39,8 +39,8 @@ const STEP_ORDER: LoginSyncStepId[] = [
     'connect-discovery-relays',
     'fetch-messaging-relays',
     'connect-read-relays',
-    'fetch-history',
     'fetch-contacts',
+    'fetch-history',
     'fetch-user-profile'
 ];
 
@@ -62,13 +62,13 @@ function createInitialSteps(): LoginSyncStep[] {
             status: 'pending'
         },
         {
-            id: 'fetch-history',
-            labelKey: 'sync.steps.fetchHistory',
+            id: 'fetch-contacts',
+            labelKey: 'sync.steps.fetchContacts',
             status: 'pending'
         },
         {
-            id: 'fetch-contacts',
-            labelKey: 'sync.steps.fetchContacts',
+            id: 'fetch-history',
+            labelKey: 'sync.steps.fetchHistory',
             status: 'pending'
         },
         {
