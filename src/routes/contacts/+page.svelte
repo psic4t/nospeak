@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { goto } from '$app/navigation';
     import { contactRepo } from '$lib/db/ContactRepository';
     import { liveQuery } from 'dexie';
@@ -20,6 +20,8 @@
     import { contactSyncService } from '$lib/core/ContactSyncService';
     import { showScanContactQrModal, showManageContactsModal } from '$lib/stores/modals';
     import { overscroll, type OverscrollState } from '$lib/utils/overscroll';
+    import { connectionManager } from '$lib/core/connection/instance';
+    import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
     const isAndroidApp = isAndroidNative();
     
@@ -63,6 +65,21 @@
     let nip05LookupError = $state<string | null>(null);
     let nip05Result = $state<SearchResultWithStatus | null>(null);
     let nip05LookupToken = 0;
+    let discoveryRelaysConnected = false;
+    let addedDiscoveryRelays: string[] = [];
+
+    function cleanupDiscoveryRelays() {
+        for (const url of addedDiscoveryRelays) {
+            connectionManager.removeRelay(url);
+        }
+        addedDiscoveryRelays = [];
+        discoveryRelaysConnected = false;
+    }
+
+    // Cleanup discovery relays when navigating away
+    onDestroy(() => {
+        cleanupDiscoveryRelays();
+    });
 
     const isNpubMode = $derived(newNpub.trim().startsWith('npub') || isValidNip05Format(newNpub.trim()));
 
@@ -186,6 +203,17 @@
             await refreshDisplayContacts(c);
         });
         return () => sub.unsubscribe();
+    });
+
+    // Connect discovery relays on first keystroke
+    $effect(() => {
+        if (!isAndroidApp) return;
+        
+        const query = newNpub.trim();
+        if (query.length > 0 && !discoveryRelaysConnected) {
+            discoveryRelaysConnected = true;
+            addedDiscoveryRelays = connectionManager.connectDiscoveryRelays(getDiscoveryRelays());
+        }
     });
 
     $effect(() => {

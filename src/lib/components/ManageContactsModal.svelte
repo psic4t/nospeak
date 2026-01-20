@@ -19,6 +19,8 @@
     import { goto } from '$app/navigation';
     import { contactSyncService } from '$lib/core/ContactSyncService';
     import { showScanContactQrModal } from '$lib/stores/modals';
+    import { connectionManager } from '$lib/core/connection/instance';
+    import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
     let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
 
@@ -43,6 +45,16 @@
     let nip05LookupError = $state<string | null>(null);
     let nip05Result = $state<SearchResultWithStatus | null>(null);
     let nip05LookupToken = 0;
+    let discoveryRelaysConnected = false;
+    let addedDiscoveryRelays: string[] = [];
+
+    function cleanupDiscoveryRelays() {
+        for (const url of addedDiscoveryRelays) {
+            connectionManager.removeRelay(url);
+        }
+        addedDiscoveryRelays = [];
+        discoveryRelaysConnected = false;
+    }
 
     function resetState() {
         if (searchDebounceId) {
@@ -61,6 +73,7 @@
         isResolvingNip05 = false;
         nip05LookupError = null;
         nip05Result = null;
+        cleanupDiscoveryRelays();
     }
 
     const isNpubMode = $derived(newNpub.trim().startsWith('npub') || isValidNip05Format(newNpub.trim()));
@@ -188,6 +201,18 @@
     $effect(() => {
         if (!isOpen) {
             resetState();
+        }
+    });
+
+    // Connect discovery relays on first keystroke
+    $effect(() => {
+        if (!isOpen) {
+            return;
+        }
+        const query = newNpub.trim();
+        if (query.length > 0 && !discoveryRelaysConnected) {
+            discoveryRelaysConnected = true;
+            addedDiscoveryRelays = connectionManager.connectDiscoveryRelays(getDiscoveryRelays());
         }
     });
 

@@ -933,7 +933,11 @@ export class ConnectionManager {
         });
     }
 
-    public subscribe(filters: any[], onEvent: (event: any) => void): () => void {
+    public subscribe(
+        filters: any[],
+        onEvent: (event: any) => void,
+        options?: { extraRelays?: string[] }
+    ): () => void {
         const subEntry = {
             filters,
             onEvent,
@@ -941,6 +945,19 @@ export class ConnectionManager {
             authRetryMap: new Map<string, boolean>()
         };
         this.subscriptions.add(subEntry);
+
+        // Track which extra relays we add (for cleanup)
+        const addedTemporaryRelays: string[] = [];
+
+        if (options?.extraRelays) {
+            for (const url of options.extraRelays) {
+                // Only add if not already tracked
+                if (!this.relays.has(url)) {
+                    this.addTemporaryRelay(url);
+                    addedTemporaryRelays.push(url);
+                }
+            }
+        }
 
         // Subscribe on currently connected relays
         for (const health of this.relays.values()) {
@@ -955,6 +972,22 @@ export class ConnectionManager {
                 this.safeCloseSubscription(s);
             }
             subEntry.subMap.clear();
+
+            // Cleanup temporary relays that we added
+            for (const url of addedTemporaryRelays) {
+                this.removeRelay(url);
+            }
         };
+    }
+
+    public connectDiscoveryRelays(relayUrls: string[]): string[] {
+        const added: string[] = [];
+        for (const url of relayUrls) {
+            if (!this.relays.has(url)) {
+                this.addTemporaryRelay(url);
+                added.push(url);
+            }
+        }
+        return added;
     }
 }

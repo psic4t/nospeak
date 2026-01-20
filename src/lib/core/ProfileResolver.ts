@@ -4,6 +4,7 @@ import { nip19 } from 'nostr-tools';
 import { verifyNip05 } from './Nip05Verifier';
 import { cacheAndroidProfileIdentity, extractKind0Picture, extractKind0Username } from './AndroidProfileCache';
 import { parseBlossomServerListEvent } from './BlossomServers';
+import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
 export class ProfileResolver {
     
@@ -147,6 +148,8 @@ export class ProfileResolver {
                     cleanup();
                     void finalize();
                 }
+            }, {
+                extraRelays: getDiscoveryRelays()
             });
         });
     }
