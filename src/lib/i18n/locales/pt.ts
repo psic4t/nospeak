@@ -95,7 +95,10 @@ const pt = {
             nip05LookupFailed: 'Falha ao procurar NIP-05',
             nip05NotFound: 'NIP-05 não encontrado',
             nip05InvalidFormat: 'Formato NIP-05 inválido (use nome@dominio.com)',
-            alreadyAdded: 'Já adicionado'
+            alreadyAdded: 'Já adicionado',
+            syncing: 'A sincronizar contactos…',
+            pullToRefresh: 'Puxe para atualizar',
+            releaseToRefresh: 'Solte para atualizar'
         },
         profile: {
             unknownName: 'Desconhecido',
