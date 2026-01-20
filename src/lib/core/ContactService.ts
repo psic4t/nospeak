@@ -9,11 +9,16 @@ export async function addContactByNpub(npub: string): Promise<void> {
         throw new Error('Invalid npub');
     }
 
-    await profileResolver.resolveProfile(trimmed, true);
-    // Initialize lastReadAt and lastActivityAt to now so the contact does not appear unread immediately
+    // Add contact to local DB immediately (fast)
     const now = Date.now();
     await contactRepo.addContact(trimmed, now, now);
     
-    // Sync contacts to Kind 30000 event
-    await contactSyncService.publishContacts();
+    // Fire-and-forget: resolve profile and sync in background
+    profileResolver.resolveProfile(trimmed, true).catch((e) => {
+        console.warn('[ContactService] Background profile resolution failed:', e);
+    });
+    
+    contactSyncService.publishContacts().catch((e) => {
+        console.warn('[ContactService] Background contact sync failed:', e);
+    });
 }

@@ -359,7 +359,9 @@
 
     async function remove(npub: string) {
         await contactRepo.removeContact(npub);
-        await contactSyncService.publishContacts();
+        contactSyncService.publishContacts().catch((e) => {
+            console.warn('[contacts] Background contact sync failed:', e);
+        });
     }
 
     function openChat(npub: string) {

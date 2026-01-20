@@ -76,11 +76,8 @@ export class ContactSyncService {
                 ...connectionManager.getAllRelayHealth().map((h) => h.url)
             ]);
 
-            let attempted = 0;
-            let succeeded = 0;
-
-            for (const relayUrl of allRelays) {
-                attempted++;
+            // Publish to all relays in parallel for better performance
+            const publishToRelay = async (relayUrl: string): Promise<boolean> => {
                 try {
                     let relay = connectionManager.getRelayHealth(relayUrl)?.relay;
                     if (!relay) {
@@ -88,7 +85,7 @@ export class ContactSyncService {
                             relay = await Relay.connect(relayUrl);
                         } catch (e) {
                             console.warn(`[ContactSyncService] Could not connect to ${relayUrl}`);
-                            continue;
+                            return false;
                         }
                     }
 
@@ -117,11 +114,20 @@ export class ContactSyncService {
                     }
 
                     console.log(`[ContactSyncService] Published contacts to ${relayUrl}`);
-                    succeeded++;
+                    return true;
                 } catch (e) {
                     console.error(`[ContactSyncService] Failed to publish contacts to ${relayUrl}:`, e);
+                    return false;
                 }
-            }
+            };
+
+            const relayUrls = Array.from(allRelays);
+            const results = await Promise.allSettled(relayUrls.map(publishToRelay));
+
+            const attempted = relayUrls.length;
+            const succeeded = results.filter(
+                (r) => r.status === 'fulfilled' && r.value === true
+            ).length;
 
             console.log(`[ContactSyncService] Published contacts: ${succeeded}/${attempted} relays succeeded`);
             return { attempted, succeeded, failed: attempted - succeeded };
