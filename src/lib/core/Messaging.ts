@@ -1151,7 +1151,7 @@ import { getMediaPreviewLabel } from '$lib/utils/mediaPreview';
     const seal: Partial<NostrEvent> = {
       kind: 13,
       pubkey: await s.getPublicKey(),
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 172800), // Randomize up to 2 days in past per NIP-17
       content: encryptedRumor,
       tags: []
     };
