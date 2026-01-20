@@ -222,14 +222,12 @@
         console.log("Starting delayed profile and relay refresh after 5 seconds");
         
         const { contactRepo } = await import("$lib/db/ContactRepository");
+        const { contactSyncService } = await import("$lib/core/ContactSyncService");
         const { discoverUserRelays } = await import(
           "$lib/core/connection/Discovery"
         );
         const { profileResolver } = await import("$lib/core/ProfileResolver");
         const { profileRepo } = await import("$lib/db/ProfileRepository");
-
-        // Note: Contact sync now happens during login flow (AuthService step 5)
-        // No need to call fetchAndMergeContacts here anymore
 
         const contacts = await contactRepo.getContacts();
         console.log(
@@ -246,6 +244,8 @@
 
             try {
               await discoverUserRelays(user.npub, true);
+              // Also refresh contact list when profile TTL expired
+              await contactSyncService.fetchAndMergeContacts();
               profileRefreshMessage = "Profile refresh completed";
             } catch (error) {
               console.error("Failed to refresh current user profile:", error);

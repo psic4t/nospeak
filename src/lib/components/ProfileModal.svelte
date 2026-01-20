@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { contactSyncService } from '$lib/core/ContactSyncService';
     import { discoverUserRelays } from '$lib/core/connection/Discovery';
     import { getDisplayedNip05 } from '$lib/core/Nip05Display';
     import type { Profile } from '$lib/db/db';
@@ -83,6 +84,12 @@
         try {
             const isOwn = $currentUser?.npub === npub;
             await discoverUserRelays(npub, isOwn);
+
+            // Also refresh contact list when refreshing own profile
+            if (isOwn) {
+                await contactSyncService.fetchAndMergeContacts();
+            }
+
             await loadProfile({ showLoading: false });
 
         } catch (e) {
