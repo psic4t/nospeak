@@ -356,7 +356,7 @@
 >
     <!-- Header -->
     <div
-        class="absolute top-0 left-0 right-0 z-20 flex flex-col pt-safe bg-white/80 dark:bg-slate-900/80 border-b border-gray-200/50 dark:border-slate-700/70 shadow-sm"
+        class="absolute top-0 left-0 right-0 z-20 flex flex-col pt-safe bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-slate-700/70 shadow-sm"
     >
         <div class="p-4 flex items-center gap-2">
             <button 
