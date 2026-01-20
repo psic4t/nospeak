@@ -30,6 +30,12 @@ const en = {
             useAndLogin: 'Use this keypair and login'
         }
     },
+    chats: {
+        title: 'Chats',
+        emptyHint: 'No chats yet. Tap + to add a contact.',
+        selectPrompt: 'Select a chat to start messaging',
+        addContact: 'Add contact'
+    },
     contacts: {
         title: 'Contacts',
         manage: 'Manage',
@@ -66,6 +72,7 @@ const en = {
             fetchMessagingRelays: "Fetch and cache user's messaging relays",
             connectReadRelays: "Connect to user's messaging relays",
             fetchHistory: 'Fetch and cache history items from relays',
+            fetchContacts: 'Fetch and merge contacts from relays',
             fetchContactProfiles: 'Fetch and cache contact profiles and relay info',
             fetchUserProfile: 'Fetch and cache user profile'
         }
@@ -73,7 +80,9 @@ const en = {
 
          modals: {
           manageContacts: {
-              title: 'Manage Contacts',
+              title: 'Contacts',
+              scanQr: 'Scan QR',
+              scanQrAria: 'Scan QR code to add contact',
               searchPlaceholder: 'npub, NIP-05, or search term',
               addContactAria: 'Add contact',
               searchContactsAria: 'Search contacts',

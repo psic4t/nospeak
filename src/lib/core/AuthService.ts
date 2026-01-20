@@ -29,6 +29,7 @@ import { showEmptyProfileModal } from '$lib/stores/modals';
 import { isAndroidNative } from './NativeDialogs';
 import { notificationService } from './NotificationService';
 import { clearAndroidLocalSecretKey, getAndroidLocalSecretKeyHex, setAndroidLocalSecretKeyHex } from './AndroidLocalSecretKey';
+import { contactSyncService } from './ContactSyncService';
 import { showToast } from '$lib/stores/toast';
 import { get } from 'svelte/store';
 
@@ -340,7 +341,17 @@ export class AuthService {
             addRelayError('relays', error instanceof Error ? error.message : 'History fetch failed', 'fetch-history');
         }
 
-        // 5. Fetch and cache user profile
+        // 5. Fetch and merge contacts from Kind 30000 event
+        // Note: Must happen before discovery relay cleanup so we can query discovery relays
+        setLoginSyncActiveStep('fetch-contacts');
+        try {
+            await contactSyncService.fetchAndMergeContacts();
+        } catch (error) {
+            console.error(`${context} contact sync failed:`, error);
+            // Non-fatal - continue with flow
+        }
+
+        // 6. Fetch and cache user profile
         setLoginSyncActiveStep('fetch-user-profile');
         try {
             await profileResolver.resolveProfile(npub, false);

@@ -17,6 +17,7 @@ import { reactionsStore } from '$lib/stores/reactions';
 import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
 import { uploadToBlossomServers } from './BlossomUpload';
 import { getMediaPreviewLabel } from '$lib/utils/mediaPreview';
+import { contactSyncService } from './ContactSyncService';
  
  export class MessagingService {
    private debug: boolean = true;
@@ -1226,6 +1227,9 @@ import { getMediaPreviewLabel } from '$lib/utils/mediaPreview';
         const lastActivityAt = now;
         await contactRepo.addContact(npub, lastReadAt, lastActivityAt);
         if (this.debug) console.log(`Auto-added new contact: ${npub}`);
+        
+        // Sync contacts to Kind 30000 event
+        await contactSyncService.publishContacts();
       }
     } catch (error) {
       console.error('Failed to auto-add contact:', error);

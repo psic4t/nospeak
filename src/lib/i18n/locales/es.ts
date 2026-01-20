@@ -30,6 +30,12 @@ const es = {
             useAndLogin: 'Usar este par de claves e iniciar sesión'
         }
     },
+    chats: {
+        title: 'Chats',
+        emptyHint: 'Aún no hay chats. Toca + para añadir un contacto.',
+        selectPrompt: 'Selecciona un chat para empezar a enviar mensajes',
+        addContact: 'Añadir contacto'
+    },
     contacts: {
         title: 'Contactos',
         manage: 'Gestionar',
@@ -66,6 +72,7 @@ const es = {
             fetchMessagingRelays: "Obtener y guardar en caché los relays de mensajería del usuario",
             connectReadRelays: "Conectar a los relays de mensajería del usuario",
             fetchHistory: 'Obtener y guardar en caché el historial desde los relays',
+            fetchContacts: 'Obtener y fusionar contactos desde los relays',
             fetchContactProfiles: 'Obtener y guardar en caché perfiles de contactos e info de relays',
             fetchUserProfile: 'Obtener y guardar en caché el perfil del usuario'
         }
@@ -73,7 +80,9 @@ const es = {
 
     modals: {
         manageContacts: {
-            title: 'Gestionar contactos',
+            title: 'Contactos',
+            scanQr: 'Escanear QR',
+            scanQrAria: 'Escanear código QR para añadir contacto',
             searchPlaceholder: 'npub, NIP-05 o término de búsqueda',
             addContactAria: 'Añadir contacto',
             searchContactsAria: 'Buscar contactos',

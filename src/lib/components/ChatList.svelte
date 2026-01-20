@@ -22,13 +22,11 @@
   import { get } from "svelte/store";
   import { isAndroidNative } from "$lib/core/NativeDialogs";
   import Button from "$lib/components/ui/Button.svelte";
-  import SplitButton from "$lib/components/ui/SplitButton.svelte";
   import { getMediaPreviewLabel } from "$lib/utils/mediaPreview";
   import { overscroll } from "$lib/utils/overscroll";
 
   const isAndroidApp = isAndroidNative();
   let myPicture = $state<string | undefined>(undefined);
-  let canScanQr = $state(false);
 
   $effect(() => {
     if (!$currentUser) {
@@ -184,14 +182,6 @@
       );
     }
 
-    if (
-      typeof navigator !== "undefined" &&
-      navigator.mediaDevices &&
-      typeof navigator.mediaDevices.getUserMedia === "function"
-    ) {
-      canScanQr = true;
-    }
-
     return () => {
       console.log("ContactList: Cleaning up liveQuery subscription");
       sub.unsubscribe();
@@ -312,36 +302,7 @@
       </Button>
     </div>
     <div class="px-2 pb-3 flex justify-between items-center">
-      <div class="typ-section dark:text-white">{$t("contacts.title")}</div>
-
-      {#if canScanQr}
-        <SplitButton
-          variant="filled-tonal"
-          primaryLabel={$t("contacts.manage")}
-          primaryOnclick={() => modals.showManageContactsModal.set(true)}
-          secondaryOnclick={() =>
-            (modals as any).showScanContactQrModal.set(true)}
-          secondaryAriaLabel={$t("contacts.scanQrAria")}
-        >
-          {#snippet secondaryIcon()}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          {/snippet}
-        </SplitButton>
-      {:else}
-        <Button onclick={() => modals.showManageContactsModal.set(true)}>
-          {$t("contacts.manage")}
-        </Button>
-      {/if}
+      <div class="typ-section dark:text-white">{$t("chats.title")}</div>
     </div>
   </div>
 
@@ -366,7 +327,7 @@
           </div>
         {/each}
         <div class="text-center text-sm text-gray-700 dark:text-slate-400 mt-4">
-          {$t("contacts.emptyHint")}
+          {$t("chats.emptyHint")}
         </div>
       </div>
     {/if}
@@ -438,6 +399,33 @@
   </div>
 
   <ConnectionStatus />
+
+  <!-- FAB button to open contacts -->
+  <button
+    onclick={() => {
+      hapticSelection();
+      if (isAndroidApp) {
+        goto('/contacts');
+      } else {
+        modals.showManageContactsModal.set(true);
+      }
+    }}
+    class="absolute right-4 w-14 h-14 rounded-full bg-[rgb(var(--color-lavender-rgb))] text-white shadow-lg flex items-center justify-center z-30 hover:scale-105 active:scale-95 transition-transform mb-safe {isAndroidApp ? 'bottom-24' : 'bottom-16'}"
+    aria-label={$t("chats.addContact")}
+  >
+    <svg
+      class="w-7 h-7"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  </button>
 </div>
 
 <style>

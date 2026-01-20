@@ -4,7 +4,7 @@
 
     import { goto } from '$app/navigation';
     import { page } from '$app/state';
-    import ContactList from '$lib/components/ContactList.svelte';
+    import ChatList from '$lib/components/ChatList.svelte';
     import { messageRepo } from '$lib/db/MessageRepository';
     import { fade } from 'svelte/transition';
     import { syncState } from '$lib/stores/sync';
@@ -82,7 +82,7 @@
 
 <div class="flex h-full overflow-hidden bg-transparent">
     <div class={`${isChatOpen ? 'hidden md:block' : 'block'} w-full md:w-80 flex-shrink-0 border-r border-gray-200/50 dark:border-gray-800/50`}>
-        <ContactList />
+        <ChatList />
     </div>
     {#key page.url.pathname}
         <div 

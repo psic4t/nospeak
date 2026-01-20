@@ -30,6 +30,12 @@ const de = {
             useAndLogin: 'Dieses Schlüsselpaar verwenden und anmelden'
         }
     },
+    chats: {
+        title: 'Chats',
+        emptyHint: 'Noch keine Chats. Tippe auf +, um einen Kontakt hinzuzufügen.',
+        selectPrompt: 'Wähle einen Chat aus, um zu schreiben',
+        addContact: 'Kontakt hinzufügen'
+    },
     contacts: {
         title: 'Kontakte',
         manage: 'Verwalten',
@@ -67,6 +73,7 @@ const de = {
             fetchMessagingRelays: 'Messaging-Relays des Nutzers abrufen und zwischenspeichern',
             connectReadRelays: 'Verbindung zu den Messaging-Relays des Nutzers herstellen',
             fetchHistory: 'Verlaufseinträge von Relays abrufen und zwischenspeichern',
+            fetchContacts: 'Kontakte von Relays abrufen und zusammenführen',
             fetchContactProfiles: 'Kontaktprofile und Relay-Informationen abrufen und zwischenspeichern',
             fetchUserProfile: 'Benutzerprofil abrufen und zwischenspeichern'
         }
@@ -74,7 +81,9 @@ const de = {
 
          modals: {
           manageContacts: {
-              title: 'Kontakte verwalten',
+              title: 'Kontakte',
+              scanQr: 'QR scannen',
+              scanQrAria: 'QR-Code scannen um Kontakt hinzuzufügen',
               searchPlaceholder: 'npub, NIP-05 oder Suchbegriff',
               addContactAria: 'Kontakt hinzufügen',
               searchContactsAria: 'Kontakte suchen',

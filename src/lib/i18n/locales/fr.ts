@@ -30,6 +30,12 @@ const fr = {
             useAndLogin: 'Utiliser cette paire de clés et se connecter'
         }
     },
+    chats: {
+        title: 'Discussions',
+        emptyHint: 'Aucune discussion pour le moment. Appuyez sur + pour ajouter un contact.',
+        selectPrompt: 'Sélectionnez une discussion pour commencer à envoyer des messages',
+        addContact: 'Ajouter un contact'
+    },
     contacts: {
         title: 'Contacts',
         manage: 'Gérer',
@@ -66,6 +72,7 @@ const fr = {
             fetchMessagingRelays: "Récupérer et mettre en cache les relays de messagerie de l'utilisateur",
             connectReadRelays: "Se connecter aux relays de messagerie de l'utilisateur",
             fetchHistory: "Récupérer et mettre en cache l'historique depuis les relays",
+            fetchContacts: 'Récupérer et fusionner les contacts depuis les relays',
             fetchContactProfiles: 'Récupérer et mettre en cache les profils de contacts et infos de relays',
             fetchUserProfile: "Récupérer et mettre en cache le profil de l'utilisateur"
         }
@@ -73,7 +80,9 @@ const fr = {
 
     modals: {
         manageContacts: {
-            title: 'Gérer les contacts',
+            title: 'Contacts',
+            scanQr: 'Scanner QR',
+            scanQrAria: 'Scanner le code QR pour ajouter un contact',
             searchPlaceholder: 'npub, NIP-05, ou terme de recherche',
             addContactAria: 'Ajouter un contact',
             searchContactsAria: 'Rechercher des contacts',

@@ -1,103 +1,92 @@
 <script lang="ts">
-     import { contactRepo } from '$lib/db/ContactRepository';
-     import { liveQuery } from 'dexie';
-     import type { ContactItem } from '$lib/db/db';
-      import { addContactByNpub } from '$lib/core/ContactService';
-
-     import { profileRepo } from '$lib/db/ProfileRepository';
-     import Avatar from './Avatar.svelte';
-      import { searchProfiles, type UserSearchResult } from '$lib/core/SearchProfiles';
-      import { verifyNip05ForNpub, resolveNip05ToNpub, type Nip05Status } from '$lib/core/Nip05Verifier';
-       import { getDisplayedNip05 } from '$lib/core/Nip05Display';
-       import { hapticSelection } from '$lib/utils/haptics';
-      import { profileResolver } from '$lib/core/ProfileResolver';
-
-      import { isAndroidNative } from "$lib/core/NativeDialogs";
-      import { fade } from 'svelte/transition';
-      import { glassModal } from '$lib/utils/transitions';
-      import { t } from '$lib/i18n';
-     import { get } from 'svelte/store';
-     import Button from '$lib/components/ui/Button.svelte';
-     import Input from '$lib/components/ui/Input.svelte';
-     import { nip19 } from 'nostr-tools';
+    import { contactRepo } from '$lib/db/ContactRepository';
+    import { liveQuery } from 'dexie';
+    import type { ContactItem } from '$lib/db/db';
+    import { addContactByNpub } from '$lib/core/ContactService';
+    import { profileRepo } from '$lib/db/ProfileRepository';
+    import Avatar from './Avatar.svelte';
+    import { searchProfiles, type UserSearchResult } from '$lib/core/SearchProfiles';
+    import { verifyNip05ForNpub, resolveNip05ToNpub, type Nip05Status } from '$lib/core/Nip05Verifier';
+    import { getDisplayedNip05 } from '$lib/core/Nip05Display';
+    import { hapticSelection } from '$lib/utils/haptics';
+    import { profileResolver } from '$lib/core/ProfileResolver';
+    import { fade } from 'svelte/transition';
+    import { glassModal } from '$lib/utils/transitions';
+    import { t } from '$lib/i18n';
+    import Button from '$lib/components/ui/Button.svelte';
+    import Input from '$lib/components/ui/Input.svelte';
+    import { nip19 } from 'nostr-tools';
+    import { goto } from '$app/navigation';
+    import { contactSyncService } from '$lib/core/ContactSyncService';
+    import { showScanContactQrModal } from '$lib/stores/modals';
 
     let { isOpen, close } = $props<{ isOpen: boolean, close: () => void }>();
-     const isAndroidApp = isAndroidNative();
 
-     
-     let newNpub = $state('');
-     let contacts = $state<ContactItem[]>([]);
-     let isAdding = $state(false);
-     let displayContacts = $state<{
-         npub: string;
-         name: string;
-         picture?: string;
-         shortNpub: string;
-     }[]>([]);
-      type SearchResultWithStatus = UserSearchResult & { nip05Status?: Nip05Status; alreadyAdded?: boolean };
-      let searchResults = $state<SearchResultWithStatus[]>([]);
-      let isSearching = $state(false);
-      let searchError = $state<string | null>(null);
-      let searchToken = 0;
-      let nip05VerifyToken = 0;
-      let searchDebounceId: ReturnType<typeof setTimeout> | null = null;
-      let isResolvingNip05 = $state(false);
-      let nip05LookupError = $state<string | null>(null);
-      let nip05Result = $state<SearchResultWithStatus | null>(null);
-      let nip05LookupToken = 0;
- 
-      const BOTTOM_SHEET_CLOSE_THRESHOLD = 100;
-      const BOTTOM_SHEET_ACTIVATION_THRESHOLD = 6;
-      let bottomSheetDragY = $state(0);
+    let newNpub = $state('');
+    let contacts = $state<ContactItem[]>([]);
+    let isAdding = $state(false);
+    let displayContacts = $state<{
+        npub: string;
+        name: string;
+        picture?: string;
+        shortNpub: string;
+    }[]>([]);
 
-     let isBottomSheetDragging = $state(false);
-     let bottomSheetDragStartY = 0;
+    type SearchResultWithStatus = UserSearchResult & { nip05Status?: Nip05Status; alreadyAdded?: boolean };
+    let searchResults = $state<SearchResultWithStatus[]>([]);
+    let isSearching = $state(false);
+    let searchError = $state<string | null>(null);
+    let searchToken = 0;
+    let nip05VerifyToken = 0;
+    let searchDebounceId: ReturnType<typeof setTimeout> | null = null;
+    let isResolvingNip05 = $state(false);
+    let nip05LookupError = $state<string | null>(null);
+    let nip05Result = $state<SearchResultWithStatus | null>(null);
+    let nip05LookupToken = 0;
 
-         function resetState() {
-
-            if (searchDebounceId) {
-                clearTimeout(searchDebounceId);
-                searchDebounceId = null;
-            }
-
-            newNpub = '';
-            isAdding = false;
-            isSearching = false;
-            searchResults = [];
-            searchError = null;
-            searchToken = 0;
-            nip05VerifyToken = 0;
-            nip05LookupToken = 0;
-            isResolvingNip05 = false;
-            nip05LookupError = null;
-            nip05Result = null;
+    function resetState() {
+        if (searchDebounceId) {
+            clearTimeout(searchDebounceId);
+            searchDebounceId = null;
         }
- 
-  	     const isNpubMode = $derived(newNpub.trim().startsWith('npub') || isValidNip05Format(newNpub.trim()));
 
-     function isValidNip05Format(query: string): boolean {
-         const trimmed = query.trim();
-         const atIndex = trimmed.indexOf('@');
+        newNpub = '';
+        isAdding = false;
+        isSearching = false;
+        searchResults = [];
+        searchError = null;
+        searchToken = 0;
+        nip05VerifyToken = 0;
+        nip05LookupToken = 0;
+        isResolvingNip05 = false;
+        nip05LookupError = null;
+        nip05Result = null;
+    }
 
-         if (atIndex <= 0 || atIndex === trimmed.length - 1) {
-             return false;
-         }
+    const isNpubMode = $derived(newNpub.trim().startsWith('npub') || isValidNip05Format(newNpub.trim()));
 
-         const domain = trimmed.slice(atIndex + 1);
-         const lastDotIndex = domain.lastIndexOf('.');
+    function isValidNip05Format(query: string): boolean {
+        const trimmed = query.trim();
+        const atIndex = trimmed.indexOf('@');
 
-         if (lastDotIndex === -1) {
-             return false;
-         }
+        if (atIndex <= 0 || atIndex === trimmed.length - 1) {
+            return false;
+        }
 
-         const tld = domain.slice(lastDotIndex + 1);
-         if (tld.length < 2) {
-             return false;
-         }
+        const domain = trimmed.slice(atIndex + 1);
+        const lastDotIndex = domain.lastIndexOf('.');
 
-         return true;
-     }
+        if (lastDotIndex === -1) {
+            return false;
+        }
 
+        const tld = domain.slice(lastDotIndex + 1);
+        if (tld.length < 2) {
+            return false;
+        }
+
+        return true;
+    }
 
     function shortenNpub(npub: string): string {
         if (npub.length <= 20) {
@@ -163,9 +152,8 @@
             }
         }
     }
- 
-    async function refreshDisplayContacts(items: ContactItem[]): Promise<void> {
 
+    async function refreshDisplayContacts(items: ContactItem[]): Promise<void> {
         const data = await Promise.all(items.map(async (c) => {
             const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
             const shortNpub = shortenNpub(c.npub);
@@ -189,313 +177,225 @@
         displayContacts = data;
     }
 
-     $effect(() => {
- 	         const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
- 	             contacts = c;
- 	             await refreshDisplayContacts(c);
- 	         });
- 	         return () => sub.unsubscribe();
- 	     });
- 	 
-      $effect(() => {
-          if (!isOpen) {
-              resetState();
-          }
-      });
- 
-  	     $effect(() => {
- 
-           if (!isOpen) {
-               return;
-           }
-  	         const query = newNpub.trim();
+    $effect(() => {
+        const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
+            contacts = c;
+            await refreshDisplayContacts(c);
+        });
+        return () => sub.unsubscribe();
+    });
 
-  	         if (searchDebounceId) {
- 
-              clearTimeout(searchDebounceId);
-              searchDebounceId = null;
-          }
+    $effect(() => {
+        if (!isOpen) {
+            resetState();
+        }
+    });
 
-          if (!query || isNpubMode) {
-              isSearching = false;
-              searchResults = [];
-              searchError = null;
-              isResolvingNip05 = false;
-              nip05LookupError = null;
-              nip05Result = null;
-              return;
-          }
+    $effect(() => {
+        if (!isOpen) {
+            return;
+        }
+        const query = newNpub.trim();
 
-          if (query.length < 3) {
-              isSearching = false;
-              searchResults = [];
-              searchError = null;
-              isResolvingNip05 = false;
-              nip05LookupError = null;
-              nip05Result = null;
-              return;
-          }
+        if (searchDebounceId) {
+            clearTimeout(searchDebounceId);
+            searchDebounceId = null;
+        }
 
-          searchDebounceId = setTimeout(async () => {
-              const currentToken = ++searchToken;
-              isSearching = true;
-              searchError = null;
+        if (!query || isNpubMode) {
+            isSearching = false;
+            searchResults = [];
+            searchError = null;
+            isResolvingNip05 = false;
+            nip05LookupError = null;
+            nip05Result = null;
+            return;
+        }
 
-              try {
-                  const results = await searchProfiles(query, 20);
+        if (query.length < 3) {
+            isSearching = false;
+            searchResults = [];
+            searchError = null;
+            isResolvingNip05 = false;
+            nip05LookupError = null;
+            nip05Result = null;
+            return;
+        }
 
-                  if (currentToken !== searchToken) {
-                      return;
-                  }
+        searchDebounceId = setTimeout(async () => {
+            const currentToken = ++searchToken;
+            isSearching = true;
+            searchError = null;
 
-                  const extended: SearchResultWithStatus[] = results.map((r) => ({ ...r }));
-                  searchResults = sortSearchResults(extended);
-                  startNip05Verification(extended);
-              } catch (e) {
-                  if (currentToken !== searchToken) {
-                      return;
-                  }
-                  console.error('Contact search failed:', e);
-                  searchError = 'Search failed';
-                  searchResults = [];
-              } finally {
-                  if (currentToken === searchToken) {
-                      isSearching = false;
-                  }
-              }
-          }, 300);
-      });
+            try {
+                const results = await searchProfiles(query, 20);
 
-       $effect(() => {
-           if (!isOpen) {
-               return;
-           }
+                if (currentToken !== searchToken) {
+                    return;
+                }
 
-           const query = newNpub.trim();
-
-           if (!isValidNip05Format(query)) {
-               isResolvingNip05 = false;
-               nip05LookupError = null;
-               nip05Result = null;
-               return;
-           }
-
-           (async () => {
-               const currentToken = ++nip05LookupToken;
-
-               isResolvingNip05 = true;
-               nip05LookupError = null;
-               nip05Result = null;
-
-               try {
-                   const hexPubkey = await resolveNip05ToNpub(query);
-                   const npub = nip19.npubEncode(hexPubkey);
-
-                   const existingContact = contacts.find(c => c.npub === npub);
-
-                   await profileResolver.resolveProfile(npub, true);
-                   const profile = await profileRepo.getProfileIgnoreTTL(npub);
-
-                   const name = profile?.metadata?.name ||
-                               profile?.metadata?.display_name ||
-                               profile?.metadata?.displayName ||
-                               shortenNpub(npub);
-
-                   const result: SearchResultWithStatus = {
-                       npub,
-                       name,
-                       picture: profile?.metadata?.picture,
-                       nip05: query,
-                       alreadyAdded: !!existingContact
-                   };
-
-                   if (currentToken === nip05LookupToken) {
-                       nip05Result = result;
-                   }
-               } catch (e: any) {
-                   if (currentToken === nip05LookupToken) {
-                       nip05LookupError = e.message || 'lookup-error';
-                   }
-               } finally {
-                   if (currentToken === nip05LookupToken) {
-                       isResolvingNip05 = false;
-                   }
-               }
-           })();
-       });
- 
-     async function add() {
-         const candidate = newNpub.trim();
-
-         if (candidate.startsWith('npub')) {
-             isAdding = true;
-             try {
-                 await addContactByNpub(candidate);
-                 newNpub = '';
-                 searchResults = [];
-                 searchError = null;
-             } catch (e) {
-                 console.error('Failed to add contact:', e);
-             } finally {
-                 isAdding = false;
-             }
-         }
-     }
- 
-     function selectSearchResult(result: UserSearchResult) {
-         newNpub = result.npub;
-         searchResults = [];
-         searchError = null;
-         isSearching = false;
-     }
- 
-      function remove(npub: string) {
-         contactRepo.removeContact(npub);
-     }
-
-      function handleBottomSheetPointerDown(e: PointerEvent) {
-         if (!isAndroidApp) return;
-         e.preventDefault();
-         isBottomSheetDragging = false;
-         bottomSheetDragStartY = e.clientY;
-         bottomSheetDragY = 0;
-         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-     }
-
-      function handleBottomSheetPointerMove(e: PointerEvent) {
-         if (!isAndroidApp) return;
-         const delta = e.clientY - bottomSheetDragStartY;
-         if (!isBottomSheetDragging) {
-             if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
-                 isBottomSheetDragging = true;
-             } else {
-                 return;
-             }
-         }
-         bottomSheetDragY = delta > 0 ? delta : 0;
-     }
-
-      function handleBottomSheetPointerEnd(e: PointerEvent) {
-         if (!isAndroidApp) return;
-         try {
-             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-         } catch {
-             // ignore if pointer capture was not set
-         }
-         if (!isBottomSheetDragging) {
-             bottomSheetDragY = 0;
-             return;
-         }
-         const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
-         isBottomSheetDragging = false;
-         bottomSheetDragY = 0;
-         if (shouldClose) {
-             hapticSelection();
-             close();
-         }
-       }
-
-       function handleBottomSheetTouchStart(e: TouchEvent) {
-           if (!isAndroidApp) return;
-           if (e.touches.length === 0) return;
-           const touch = e.touches[0];
-           isBottomSheetDragging = false;
-           bottomSheetDragStartY = touch.clientY;
-           bottomSheetDragY = 0;
-       }
-
-       function handleBottomSheetTouchMove(e: TouchEvent) {
-           if (!isAndroidApp) return;
-           if (e.touches.length === 0) return;
-           const touch = e.touches[0];
-           const delta = touch.clientY - bottomSheetDragStartY;
-           if (!isBottomSheetDragging) {
-               if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
-                   isBottomSheetDragging = true;
-               } else {
-                   return;
-               }
-           }
-           bottomSheetDragY = delta > 0 ? delta : 0;
-           e.preventDefault();
-       }
-
-       function handleBottomSheetTouchEnd(e: TouchEvent) {
-           if (!isAndroidApp) return;
-           if (!isBottomSheetDragging) {
-               bottomSheetDragY = 0;
-               return;
-           }
-           const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
-            isBottomSheetDragging = false;
-            bottomSheetDragY = 0;
-            if (shouldClose) {
-                hapticSelection();
-                close();
+                const extended: SearchResultWithStatus[] = results.map((r) => ({ ...r }));
+                searchResults = sortSearchResults(extended);
+                startNip05Verification(extended);
+            } catch (e) {
+                if (currentToken !== searchToken) {
+                    return;
+                }
+                console.error('Contact search failed:', e);
+                searchError = 'Search failed';
+                searchResults = [];
+            } finally {
+                if (currentToken === searchToken) {
+                    isSearching = false;
+                }
             }
+        }, 300);
+    });
 
-       }
-   </script>
+    $effect(() => {
+        if (!isOpen) {
+            return;
+        }
 
+        const query = newNpub.trim();
 
- 
- {#if isOpen}
+        if (!isValidNip05Format(query)) {
+            isResolvingNip05 = false;
+            nip05LookupError = null;
+            nip05Result = null;
+            return;
+        }
 
+        (async () => {
+            const currentToken = ++nip05LookupToken;
+
+            isResolvingNip05 = true;
+            nip05LookupError = null;
+            nip05Result = null;
+
+            try {
+                const hexPubkey = await resolveNip05ToNpub(query);
+                const npub = nip19.npubEncode(hexPubkey);
+
+                const existingContact = contacts.find(c => c.npub === npub);
+
+                await profileResolver.resolveProfile(npub, true);
+                const profile = await profileRepo.getProfileIgnoreTTL(npub);
+
+                const name = profile?.metadata?.name ||
+                            profile?.metadata?.display_name ||
+                            profile?.metadata?.displayName ||
+                            shortenNpub(npub);
+
+                const result: SearchResultWithStatus = {
+                    npub,
+                    name,
+                    picture: profile?.metadata?.picture,
+                    nip05: query,
+                    alreadyAdded: !!existingContact
+                };
+
+                if (currentToken === nip05LookupToken) {
+                    nip05Result = result;
+                }
+            } catch (e: any) {
+                if (currentToken === nip05LookupToken) {
+                    nip05LookupError = e.message || 'lookup-error';
+                }
+            } finally {
+                if (currentToken === nip05LookupToken) {
+                    isResolvingNip05 = false;
+                }
+            }
+        })();
+    });
+
+    async function add() {
+        const candidate = newNpub.trim();
+
+        if (candidate.startsWith('npub')) {
+            isAdding = true;
+            try {
+                await addContactByNpub(candidate);
+                newNpub = '';
+                searchResults = [];
+                searchError = null;
+            } catch (e) {
+                console.error('Failed to add contact:', e);
+            } finally {
+                isAdding = false;
+            }
+        }
+    }
+
+    function selectSearchResult(result: UserSearchResult) {
+        newNpub = result.npub;
+        searchResults = [];
+        searchError = null;
+        isSearching = false;
+    }
+
+    async function remove(npub: string) {
+        await contactRepo.removeContact(npub);
+        await contactSyncService.publishContacts();
+    }
+
+    function openChat(npub: string) {
+        hapticSelection();
+        close();
+        goto(`/chat/${npub}`);
+    }
+</script>
+
+{#if isOpen}
     <div 
         in:fade={{ duration: 130 }}
         out:fade={{ duration: 110 }}
-        class={`fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex justify-center z-50 ${
-            isAndroidApp ? "items-end" : "items-center"
-        }`}
-        class:android-safe-area-top={isAndroidApp}
+        class="fixed inset-0 flex justify-center z-50 items-center bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         tabindex="-1"
-         onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
-         onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
-
+        onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
+        onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
     >
         <div 
-             in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
-             out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-             class={`bg-white dark:bg-slate-900/80 md:bg-white/95 backdrop-blur-xl p-6 shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden outline-none relative transition-transform duration-150 ease-out ${
-                 isAndroidApp
-                     ? "w-full rounded-t-3xl rounded-b-none max-h-[90vh]"
-                     : "w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl"
-             }`}
-             class:android-safe-area-bottom={isAndroidApp}
-             style:transform={isAndroidApp ? `translateY(${bottomSheetDragY}px)` : undefined}
-         >
-             {#if isAndroidApp}
-                 <div
-                     class="absolute top-0 left-1/2 -translate-x-1/2 h-12 w-32"
-                     onpointerdown={handleBottomSheetPointerDown}
-                     onpointermove={handleBottomSheetPointerMove}
-                     onpointerup={handleBottomSheetPointerEnd}
-                     onpointercancel={handleBottomSheetPointerEnd}
-                     ontouchstart={handleBottomSheetTouchStart}
-                     ontouchmove={handleBottomSheetTouchMove}
-                     ontouchend={handleBottomSheetTouchEnd}
-                     ontouchcancel={handleBottomSheetTouchEnd}
-                 >
-                     <div
-                         class="mx-auto mt-2 w-10 h-1.5 rounded-full bg-gray-300 dark:bg-slate-600 touch-none"
-                     ></div>
-                 </div>
-             {/if}
-
-             <Button size="icon" onclick={() => { hapticSelection(); close(); }} aria-label="Close modal" class="hidden md:flex absolute top-4 right-4 z-10 rounded-full">
+            in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
+            out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
+            class="p-6 shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden outline-none relative transition-transform duration-150 ease-out w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl bg-white dark:bg-slate-900/80 md:bg-white/95 backdrop-blur-xl"
+        >
+            <!-- Close button -->
+            <Button size="icon" onclick={() => { hapticSelection(); close(); }} aria-label="Close modal" class="hidden md:flex absolute top-4 right-4 z-10 rounded-full">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </Button>
-            <div class="flex items-center justify-between mb-4 px-1">
-                <div class="flex items-center gap-2">
-                    <h2 class="typ-title dark:text-white">{$t('modals.manageContacts.title')}</h2>
-                </div>
+
+            <div class="flex items-center mb-4 px-1">
+                <h2 class="typ-title dark:text-white">{$t('modals.manageContacts.title')}</h2>
+                <Button 
+                    onclick={() => {
+                        hapticSelection();
+                        close();
+                        showScanContactQrModal.set(true);
+                    }} 
+                    variant="filled-tonal" 
+                    size="sm"
+                    class="ml-3"
+                    aria-label={$t('modals.manageContacts.scanQrAria')}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+                        <path d="M23 19a2 2 0 0 1-2 2h-2v-2h2v-2h2v4z"/>
+                        <path d="M23 9V5a2 2 0 0 0-2-2h-4v2h4v4h2z"/>
+                        <path d="M3 9V5a2 2 0 0 1 2-2h4v2H5v4H3z"/>
+                        <path d="M3 15v4a2 2 0 0 0 2 2h4v-2H5v-4H3z"/>
+                        <path d="M9 9h6v6H9z"/>
+                    </svg>
+                    {$t('modals.manageContacts.scanQr')}
+                </Button>
             </div>
             
             <div class="mb-6">
                 <div class="flex gap-2 relative">
                     <Input 
+                        id="contact-search-input"
                         bind:value={newNpub}
                         placeholder={$t('modals.manageContacts.searchPlaceholder')} 
                         class="flex-1"
@@ -527,81 +427,83 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             {/if}
                         {/if}
-                     </Button>
+                    </Button>
 
-                     {#if isValidNip05Format(newNpub.trim()) && (isResolvingNip05 || nip05LookupError || nip05Result)}
-                         <div class="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl shadow-xl z-10">
-                             {#if isResolvingNip05}
-                                 <div class="px-4 py-3 typ-body text-gray-500 dark:text-slate-400 flex items-center gap-2">
-                                     <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                     </svg>
-                                     <span>{$t('modals.manageContacts.resolvingNip05')}</span>
-                                 </div>
-                             {:else if nip05LookupError}
-                                 <div class="px-4 py-3 typ-body text-red-500">
-                                     {#if nip05LookupError === 'invalid-format'}
-                                         {$t('modals.manageContacts.nip05InvalidFormat')}
-                                     {:else if nip05LookupError === 'not-found'}
-                                         {$t('modals.manageContacts.nip05NotFound')}
-                                     {:else}
-                                         {$t('modals.manageContacts.nip05LookupFailed')}
-                                     {/if}
-                                 </div>
-                             {:else if nip05Result}
-                                 <button
-                                     type="button"
-                                     disabled={nip05Result.alreadyAdded}
-                                     onclick={() => { hapticSelection(); newNpub = nip05Result!.npub; nip05Result = null; }}
-                                     class="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors {nip05Result!.alreadyAdded ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)]'}"
-                                 >
-                                     <Avatar
-                                         npub={nip05Result.npub!}
-                                         src={nip05Result.picture}
-                                         size="sm"
-                                         class="!w-8 !h-8 flex-shrink-0"
-                                     />
-                                      <div class="flex flex-col min-w-0">
-                                          <div class="flex items-center gap-1 min-w-0">
-                                              <span class="font-medium dark:text-gray-100 truncate">
-                                                  {nip05Result.name}
-                                              </span>
-                                              {#if nip05Result.alreadyAdded}
-                                                  <span class="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">
-                                                      {$t('modals.manageContacts.alreadyAdded')}
-                                                  </span>
-                                              {/if}
-                                              {#if nip05Result.nip05}
-                                                  <span class="inline-flex items-center gap-1 typ-meta text-gray-500 dark:text-slate-400 truncate">
-                                                      <svg
-                                                          class="text-green-500 shrink-0"
-                                                          xmlns="http://www.w3.org/2000/svg"
-                                                          width="12"
-                                                          height="12"
-                                                          viewBox="0 0 24 24"
-                                                          fill="none"
-                                                          stroke="currentColor"
-                                                          stroke-width="2"
-                                                          stroke-linecap="round"
-                                                          stroke-linejoin="round">
-                                                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                                                          <path d="m9 12 2 2 4-4"></path>
-                                                      </svg>
-                                                      <span>{getDisplayedNip05(nip05Result.nip05)}</span>
-                                                  </span>
-                                              {/if}
-                                          </div>
-                                          <span class="typ-meta text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">
-                                              {shortenNpub(nip05Result.npub!)}
-                                          </span>
-                                      </div>
-                                 </button>
-                             {/if}
-                         </div>
-                     {/if}
+                    <!-- NIP-05 lookup results -->
+                    {#if isValidNip05Format(newNpub.trim()) && (isResolvingNip05 || nip05LookupError || nip05Result)}
+                        <div class="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl shadow-xl z-10">
+                            {#if isResolvingNip05}
+                                <div class="px-4 py-3 typ-body text-gray-500 dark:text-slate-400 flex items-center gap-2">
+                                    <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>{$t('modals.manageContacts.resolvingNip05')}</span>
+                                </div>
+                            {:else if nip05LookupError}
+                                <div class="px-4 py-3 typ-body text-red-500">
+                                    {#if nip05LookupError === 'invalid-format'}
+                                        {$t('modals.manageContacts.nip05InvalidFormat')}
+                                    {:else if nip05LookupError === 'not-found'}
+                                        {$t('modals.manageContacts.nip05NotFound')}
+                                    {:else}
+                                        {$t('modals.manageContacts.nip05LookupFailed')}
+                                    {/if}
+                                </div>
+                            {:else if nip05Result}
+                                <button
+                                    type="button"
+                                    disabled={nip05Result.alreadyAdded}
+                                    onclick={() => { hapticSelection(); newNpub = nip05Result!.npub; nip05Result = null; }}
+                                    class="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors {nip05Result.alreadyAdded ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)]'}"
+                                >
+                                    <Avatar
+                                        npub={nip05Result.npub}
+                                        src={nip05Result.picture}
+                                        size="sm"
+                                        class="!w-8 !h-8 flex-shrink-0"
+                                    />
+                                    <div class="flex flex-col min-w-0">
+                                        <div class="flex items-center gap-1 min-w-0">
+                                            <span class="font-medium dark:text-gray-100 truncate">
+                                                {nip05Result.name}
+                                            </span>
+                                            {#if nip05Result.alreadyAdded}
+                                                <span class="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">
+                                                    {$t('modals.manageContacts.alreadyAdded')}
+                                                </span>
+                                            {/if}
+                                            {#if nip05Result.nip05}
+                                                <span class="inline-flex items-center gap-1 typ-meta text-gray-500 dark:text-slate-400 truncate">
+                                                    <svg
+                                                        class="text-green-500 shrink-0"
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="12"
+                                                        height="12"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round">
+                                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                                        <path d="m9 12 2 2 4-4"></path>
+                                                    </svg>
+                                                    <span>{getDisplayedNip05(nip05Result.nip05)}</span>
+                                                </span>
+                                            {/if}
+                                        </div>
+                                        <span class="typ-meta text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">
+                                            {shortenNpub(nip05Result.npub)}
+                                        </span>
+                                    </div>
+                                </button>
+                            {/if}
+                        </div>
+                    {/if}
 
-                     {#if !isNpubMode && newNpub.trim().length >= 3 && (isSearching || searchResults.length > 0 || searchError)}
+                    <!-- Search results -->
+                    {#if !isNpubMode && newNpub.trim().length >= 3 && (isSearching || searchResults.length > 0 || searchError)}
                         <div class="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl shadow-xl max-h-64 overflow-y-auto z-10 custom-scrollbar native-scroll">
                             {#if isSearching}
                                 <div class="px-4 py-3 typ-body text-gray-500 dark:text-slate-400">
@@ -690,29 +592,33 @@
                 </div>
             </div>
 
-            <div class="flex-1 overflow-y-auto space-y-2 mb-6 min-h-[200px] custom-scrollbar native-scroll pr-1">
+            <div class="flex-1 overflow-y-auto mb-6 min-h-[200px] custom-scrollbar native-scroll pr-1">
                 {#if contacts.length === 0}
                     <div class="typ-body text-gray-500 text-center py-8 bg-gray-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
                         {$t('modals.manageContacts.noContacts')}
                     </div>
                 {/if}
                 {#each displayContacts as contact}
-                    <div class="flex justify-between items-center p-3 rounded-full bg-[rgb(var(--color-lavender-rgb)/0.10)] dark:bg-[rgb(var(--color-lavender-rgb)/0.14)] hover:bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.24)] transition-all duration-200 ease-out shadow-sm group">
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div 
+                        class="flex justify-between items-center p-3 my-1.5 rounded-full bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white transition-all duration-200 ease-out group cursor-pointer active:scale-[0.98]"
+                        onclick={() => openChat(contact.npub)}
+                    >
                         <div class="flex items-center gap-3 min-w-0">
                             <Avatar 
                                 npub={contact.npub}
                                 src={contact.picture}
-                                size="sm"
-                                class="!w-10 !h-10 flex-shrink-0"
+                                size="md"
+                                class="!w-12 !h-12 flex-shrink-0"
                             />
                             <div class="flex flex-col min-w-0">
-                                <span class="font-medium dark:text-gray-200 truncate">{contact.name}</span>
-                                 <span class="typ-meta text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">{contact.shortNpub}</span>
-
+                                <span class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]">{contact.name}</span>
+                                <span class="typ-meta text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">{contact.shortNpub}</span>
                             </div>
                         </div>
                         <Button 
-                            onclick={() => remove(contact.npub)}
+                            onclick={(e: MouseEvent) => { e.stopPropagation(); remove(contact.npub); }}
                             variant="danger"
                             size="icon"
                             class="!w-9 !h-9"
@@ -723,8 +629,6 @@
                     </div>
                 {/each}
             </div>
-
-
         </div>
     </div>
 {/if}

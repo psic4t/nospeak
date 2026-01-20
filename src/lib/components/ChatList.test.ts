@@ -62,7 +62,7 @@ function buildLastMessagePreview(messages: TestMessage[]): { lastMessageTime: nu
     };
 }
  
-describe('ContactList last message preview', () => {
+describe('ChatList last message preview', () => {
     it('normalizes whitespace and produces a single-line preview', () => {
         const messages: TestMessage[] = [
             {
@@ -206,9 +206,9 @@ describe('ContactList last message preview', () => {
 });
 
 
-describe('ContactList mobile preview layout', () => {
+describe('ChatList mobile preview layout', () => {
     it('uses a mobile-only last-message preview element', () => {
-        const filePath = join(__dirname, 'ContactList.svelte');
+        const filePath = join(__dirname, 'ChatList.svelte');
         const content = readFileSync(filePath, 'utf8');
  
         // Ensure we render a conditional lastMessageText preview
@@ -219,31 +219,29 @@ describe('ContactList mobile preview layout', () => {
     });
 });
 
-describe('ContactList header QR button', () => {
+describe('ChatList header QR button', () => {
     it('renders a QR trigger next to the avatar', () => {
-        const filePath = join(__dirname, 'ContactList.svelte');
+        const filePath = join(__dirname, 'ChatList.svelte');
         const content = readFileSync(filePath, 'utf8');
  
         expect(content).toContain('aria-label="Show nostr QR code"');
     });
 });
 
-describe('ContactList header scan QR button', () => {
-    it('renders a camera-capable scan QR trigger next to the contacts title', () => {
-        const filePath = join(__dirname, 'ContactList.svelte');
+describe('ChatList FAB button', () => {
+    it('renders a FAB button to open contacts modal', () => {
+        const filePath = join(__dirname, 'ChatList.svelte');
         const content = readFileSync(filePath, 'utf8');
  
-        expect(content).toContain('contacts.scanQrAria');
-        expect(content).toContain('showScanContactQrModal');
-        expect(content).toContain('canScanQr');
-        expect(content).toContain('navigator.mediaDevices.getUserMedia');
+        expect(content).toContain('showManageContactsModal');
+        expect(content).toContain('chats.addContact');
     });
 });
  
 
-describe('ContactList Android native long-press behavior', () => {
+describe('ChatList Android native long-press behavior', () => {
     it('suppresses the WebView copy/share context menu', () => {
-        const filePath = join(__dirname, 'ContactList.svelte');
+        const filePath = join(__dirname, 'ChatList.svelte');
         const content = readFileSync(filePath, 'utf8');
  
         expect(content).toContain('oncontextmenu');

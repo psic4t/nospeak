@@ -314,7 +314,7 @@ When Android background messaging is enabled and delegated to the native Android
 - **AND** it SHALL suppress notifications for rumors outside the configured backlog guard window.
 
 ### Requirement: Manage Contacts Modal Contact Display
-The Manage Contacts modal SHALL display each contact using their profile picture and resolved username when available, with the shortened npub still visible but visually secondary.
+The Manage Contacts modal SHALL display each contact using their profile picture and resolved username when available, with the shortened npub still visible but visually secondary. Clicking a contact row SHALL close the modal and navigate to the chat view for that contact.
 
 #### Scenario: Contact with cached profile metadata
 - **GIVEN** the user opens the Manage Contacts modal
@@ -337,6 +337,13 @@ The Manage Contacts modal SHALL display each contact using their profile picture
 - **THEN** Contact C appears in the modal with their profile picture avatar when available
 - **AND** Contact C's username is displayed as the primary text when available
 - **AND** Contact C's shortened npub remains visible as secondary text
+
+#### Scenario: Contact click navigates to chat
+- **GIVEN** the user has opened the Manage Contacts modal
+- **AND** the modal displays a list of existing contacts
+- **WHEN** the user clicks on a contact row (not the remove button)
+- **THEN** the modal SHALL close
+- **AND** the system SHALL navigate to `/chat/<npub>` for the selected contact
 
 ### Requirement: Manage Contacts Search via NIP-50 Relay
 The Manage Contacts modal SHALL support searching for users by name or phrase using a dedicated NIP-50 search relay, by NIP-05 identifier using web-based lookup, and by `npub` for direct entry, while preserving the existing direct-add behavior for `npub` inputs.
@@ -575,15 +582,15 @@ The messaging interface SHALL detect HTTP(S) URLs in message content that are no
 - **AND** when no meaningful metadata beyond such generic text is available, the system MAY omit the preview card entirely while leaving the original link clickable in the message text.
 
 ### Requirement: Mobile contacts header shows app name
-The contacts sidebar header on mobile-sized layouts SHALL display the nospeak app name label next to the current user's avatar so that users can clearly recognize the app context when viewing or switching contacts.
+The chats sidebar header on mobile-sized layouts SHALL display the nospeak app name label next to the current user's avatar so that users can clearly recognize the app context when viewing or switching chats.
 
-#### Scenario: Mobile contacts header includes app name
-- **GIVEN** the user is authenticated and viewing the contacts list
+#### Scenario: Mobile chats header includes app name
+- **GIVEN** the user is authenticated and viewing the chats list
 - **AND** the viewport corresponds to a mobile-sized layout (for example, screen width <= 768px or native mobile shell)
-- **WHEN** the contacts sidebar header is rendered
+- **WHEN** the chats sidebar header is rendered
 - **THEN** the current user's avatar is shown
 - **AND** a textual "nospeak" label appears adjacent to the avatar within the same header grouping
-- **AND** the existing settings control remains accessible on the opposite side of the header without overlapping the label.
+- **AND** the existing settings control remains accessible on the opposite side of the header without overlapping the label
 
 ### Requirement: Local Message Notifications for New Messages
 When message notifications are enabled for the current device and the platform has granted notification permission, the messaging experience SHALL surface user-visible notifications for newly received messages using the platform-appropriate mechanism (browser notifications on web, OS-level notifications in the Android app) while the application is running.

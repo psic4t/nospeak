@@ -228,6 +228,9 @@
         const { profileResolver } = await import("$lib/core/ProfileResolver");
         const { profileRepo } = await import("$lib/db/ProfileRepository");
 
+        // Note: Contact sync now happens during login flow (AuthService step 5)
+        // No need to call fetchAndMergeContacts here anymore
+
         const contacts = await contactRepo.getContacts();
         console.log(
           `Refreshing profiles for ${contacts.length} contacts after delay`,
