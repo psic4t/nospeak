@@ -485,7 +485,7 @@
             {#if item.isGroup}
               <!-- Group icon indicator -->
               <svg
-                class="shrink-0 text-gray-400 dark:text-slate-500"
+                class="shrink-0 text-gray-600 dark:text-slate-300"
                 xmlns="http://www.w3.org/2000/svg"
                 width="14"
                 height="14"
