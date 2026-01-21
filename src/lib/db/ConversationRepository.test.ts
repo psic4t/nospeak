@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveConversationId, isGroupConversationId, generateGroupTitle } from './ConversationRepository';
+import { deriveConversationId, isGroupConversationId, generateGroupTitle, shouldReplaceConversationSubject } from './ConversationRepository';
 
 describe('deriveConversationId', () => {
     const selfPubkey = 'aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111';
@@ -84,5 +84,28 @@ describe('generateGroupTitle', () => {
         const result = generateGroupTitle(names, 20);
         
         expect(result.length).toBeLessThanOrEqual(20);
+    });
+});
+
+describe('shouldReplaceConversationSubject', () => {
+    it('returns true when existing has no subjectUpdatedAt', () => {
+        expect(shouldReplaceConversationSubject(undefined, undefined, 1000, 'b')).toBe(true);
+    });
+
+    it('returns true when incoming is newer', () => {
+        expect(shouldReplaceConversationSubject(1000, 'a', 2000, 'b')).toBe(true);
+    });
+
+    it('returns false when incoming is older', () => {
+        expect(shouldReplaceConversationSubject(2000, 'b', 1000, 'c')).toBe(false);
+    });
+
+    it('uses rumor id as tie-breaker when timestamps match', () => {
+        expect(shouldReplaceConversationSubject(1000, 'a', 1000, 'b')).toBe(true);
+        expect(shouldReplaceConversationSubject(1000, 'b', 1000, 'a')).toBe(false);
+    });
+
+    it('returns true when timestamps match and existing rumor id is missing', () => {
+        expect(shouldReplaceConversationSubject(1000, undefined, 1000, 'a')).toBe(true);
     });
 });

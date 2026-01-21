@@ -76,6 +76,32 @@ export function generateGroupTitle(names: string[], maxLength: number = 50): str
     return includedNames.join(', ');
 }
 
+export function shouldReplaceConversationSubject(
+    existingUpdatedAt: number | undefined,
+    existingRumorId: string | undefined,
+    incomingUpdatedAt: number,
+    incomingRumorId: string
+): boolean {
+    if (existingUpdatedAt === undefined) {
+        return true;
+    }
+
+    if (incomingUpdatedAt > existingUpdatedAt) {
+        return true;
+    }
+
+    if (incomingUpdatedAt < existingUpdatedAt) {
+        return false;
+    }
+
+    // Same timestamp; use deterministic tie-breaker.
+    if (!existingRumorId) {
+        return true;
+    }
+
+    return incomingRumorId > existingRumorId;
+}
+
 export class ConversationRepository {
     /**
      * Emit an event when a conversation is updated
@@ -128,6 +154,36 @@ export class ConversationRepository {
      */
     public async updateSubject(id: string, subject: string): Promise<void> {
         await db.conversations.update(id, { subject });
+        this.emitConversationUpdated(id, subject);
+    }
+
+    /**
+     * Update subject/title using an incoming rumor timestamp and rumor id.
+     * Ensures the newest subject wins even if messages arrive out of order.
+     */
+    public async updateSubjectFromRumor(
+        id: string,
+        subject: string,
+        rumorCreatedAtMs: number,
+        rumorId: string
+    ): Promise<void> {
+        const existing = await this.getConversation(id);
+        const shouldReplace = shouldReplaceConversationSubject(
+            existing?.subjectUpdatedAt,
+            existing?.subjectUpdatedRumorId,
+            rumorCreatedAtMs,
+            rumorId
+        );
+
+        if (!shouldReplace) {
+            return;
+        }
+
+        await db.conversations.update(id, {
+            subject,
+            subjectUpdatedAt: rumorCreatedAtMs,
+            subjectUpdatedRumorId: rumorId
+        });
         this.emitConversationUpdated(id, subject);
     }
 

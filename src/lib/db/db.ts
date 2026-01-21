@@ -35,6 +35,11 @@ export interface Conversation {
     isGroup: boolean;
     participants: string[]; // npubs of all participants
     subject?: string; // group chat title
+    // When subject was last updated from a NIP-17 rumor.
+    // Used to prevent older subject-bearing messages from overwriting newer ones
+    // during out-of-order sync.
+    subjectUpdatedAt?: number; // ms since epoch (rumor.created_at * 1000)
+    subjectUpdatedRumorId?: string; // tie-breaker for same-second updates
     lastActivityAt: number;
     lastReadAt?: number;
     createdAt: number;

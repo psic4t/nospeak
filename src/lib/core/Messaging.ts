@@ -348,13 +348,16 @@ import type { Conversation } from '$lib/db/db';
       const existing = await conversationRepo.getConversation(conversationId);
       const subjectTag = rumor.tags.find(t => t[0] === 'subject');
       const subject = subjectTag?.[1];
+      const hasSubjectTag = !!subjectTag;
+      const rumorCreatedAtMs = (rumor.created_at || 0) * 1000;
+      const rumorId = getEventHash(rumor);
       const now = Date.now();
       
       if (existing) {
         // Update last activity and subject if newer
         await conversationRepo.markActivity(conversationId, now);
-        if (subject && subject !== existing.subject) {
-          await conversationRepo.updateSubject(conversationId, subject);
+        if (hasSubjectTag && subject && subject !== existing.subject) {
+          await conversationRepo.updateSubjectFromRumor(conversationId, subject, rumorCreatedAtMs, rumorId);
         }
       } else {
         // Create new conversation
@@ -363,6 +366,8 @@ import type { Conversation } from '$lib/db/db';
           isGroup: true,
           participants: participantNpubs,
           subject,
+          subjectUpdatedAt: hasSubjectTag && subject ? rumorCreatedAtMs : undefined,
+          subjectUpdatedRumorId: hasSubjectTag && subject ? rumorId : undefined,
           lastActivityAt: now,
           createdAt: now
         };
