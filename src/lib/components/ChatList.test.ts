@@ -211,8 +211,8 @@ describe('ChatList mobile preview layout', () => {
         const filePath = join(__dirname, 'ChatList.svelte');
         const content = readFileSync(filePath, 'utf8');
  
-        // Ensure we render a conditional lastMessageText preview
-        expect(content).toContain('contact.lastMessageText');
+        // Ensure we render a conditional lastMessageText preview (item.lastMessageText for unified chat list)
+        expect(content).toContain('item.lastMessageText');
  
         // Ensure the preview line is marked as mobile-only via md:hidden
         expect(content).toContain('truncate md:hidden');

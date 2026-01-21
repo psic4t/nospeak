@@ -165,7 +165,7 @@ export class NotificationService {
         }
     }
 
-    public async showNewMessageNotification(senderNpub: string, message: string) {
+    public async showNewMessageNotification(senderNpub: string, message: string, conversationId?: string) {
         // Reload settings so changes in Settings modal take effect
         this.loadSettings();
 
@@ -177,6 +177,9 @@ export class NotificationService {
             return;
         }
 
+        // Use conversationId for navigation URL (falls back to senderNpub for 1-on-1 chats)
+        const chatId = conversationId || senderNpub;
+
         if (typeof document !== 'undefined') {
             const hasFocus = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
             const isVisible = document.visibilityState === 'visible';
@@ -185,8 +188,8 @@ export class NotificationService {
             if (typeof window !== 'undefined') {
                 const path = window.location.pathname;
                 if (path.startsWith('/chat/')) {
-                    const currentNpub = decodeURIComponent(path.slice('/chat/'.length).replace(/\/$/, ''));
-                    isSameConversation = currentNpub === senderNpub;
+                    const currentConvId = decodeURIComponent(path.slice('/chat/'.length).replace(/\/$/, ''));
+                    isSameConversation = currentConvId === chatId;
                 }
             }
  
@@ -213,11 +216,11 @@ export class NotificationService {
         }
 
         if (this.isAndroidNativeEnv) {
-            await this.showAndroidNotification(senderNpub, senderName, senderPicture, message);
+            await this.showAndroidNotification(chatId, senderName, senderPicture, message);
             return;
         }
 
-        await this.showWebNotification(senderNpub, senderName, senderPicture, message);
+        await this.showWebNotification(chatId, senderName, senderPicture, message);
     }
 
     private async resolveAndroidNotificationLargeIcon(senderNpub: string, senderPicture: string | undefined): Promise<string | undefined> {
@@ -265,7 +268,7 @@ export class NotificationService {
         }
     }
 
-    private async showAndroidNotification(senderNpub: string, senderName: string, senderPicture: string | undefined, message: string) {
+    private async showAndroidNotification(chatId: string, senderName: string, senderPicture: string | undefined, message: string) {
         try {
             await this.ensureAndroidChannel();
 
@@ -275,7 +278,7 @@ export class NotificationService {
             }
 
             const id = Math.floor(Date.now() % 2147483647);
-            const largeIcon = await this.resolveAndroidNotificationLargeIcon(senderNpub, senderPicture);
+            const largeIcon = await this.resolveAndroidNotificationLargeIcon(chatId, senderPicture);
 
             const notification: any = {
                 id,
@@ -284,7 +287,7 @@ export class NotificationService {
                 channelId: ANDROID_MESSAGE_CHANNEL_ID,
                 smallIcon: 'ic_stat_nospeak',
                 extra: {
-                    url: `/chat/${senderNpub}`
+                    url: `/chat/${chatId}`
                 }
             };
 
@@ -300,7 +303,7 @@ export class NotificationService {
         }
     }
 
-    private async showWebNotification(senderNpub: string, senderName: string, senderPicture: string | undefined, message: string) {
+    private async showWebNotification(chatId: string, senderName: string, senderPicture: string | undefined, message: string) {
         // Check if we have permission
         if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
             return;
@@ -326,22 +329,22 @@ export class NotificationService {
             if (swRegistration) {
                 await swRegistration.showNotification(`New message from ${senderName}`, {
                     body: message,
-                    icon: getNotificationAvatarUrl(senderNpub, senderPicture),
+                    icon: getNotificationAvatarUrl(chatId, senderPicture),
                     badge: DEFAULT_NOTIFICATION_ICON,
-                    tag: `message-${senderNpub}`, // Group notifications by sender
+                    tag: `message-${chatId}`, // Group notifications by conversation
                     requireInteraction: false,
                     silent: false,
                     data: {
-                        url: `/chat/${senderNpub}`
+                        url: `/chat/${chatId}`
                     }
                 });
             } else if (typeof Notification !== 'undefined') {
                 // Fallback for non-SW environments
                 const notification = new Notification(`New message from ${senderName}`, {
                     body: message,
-                    icon: getNotificationAvatarUrl(senderNpub, senderPicture),
+                    icon: getNotificationAvatarUrl(chatId, senderPicture),
                     badge: DEFAULT_NOTIFICATION_ICON,
-                    tag: `message-${senderNpub}`, // Group notifications by sender
+                    tag: `message-${chatId}`, // Group notifications by conversation
                     requireInteraction: false,
                     silent: false
                 });
@@ -350,8 +353,8 @@ export class NotificationService {
                 notification.onclick = () => {
                     if (typeof window !== 'undefined') {
                         window.focus();
-                        // Navigate to the sender's chat
-                        window.location.href = `/chat/${senderNpub}`;
+                        // Navigate to the conversation
+                        window.location.href = `/chat/${chatId}`;
                     }
                     notification.close();
                 };
@@ -563,11 +566,11 @@ export class NotificationService {
 let notificationServiceInstance: NotificationService | null = null;
 
  export const notificationService = {
-     showNewMessageNotification: (senderNpub: string, message: string) => {
+     showNewMessageNotification: (senderNpub: string, message: string, conversationId?: string) => {
          if (!notificationServiceInstance) {
              notificationServiceInstance = new NotificationService();
          }
-         return notificationServiceInstance.showNewMessageNotification(senderNpub, message);
+         return notificationServiceInstance.showNewMessageNotification(senderNpub, message, conversationId);
      },
      showReactionNotification: (senderNpub: string, emoji: string) => {
          if (!notificationServiceInstance) {

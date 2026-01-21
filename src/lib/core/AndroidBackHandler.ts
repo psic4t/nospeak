@@ -9,6 +9,7 @@ import {
     showManageContactsModal,
     showEmptyProfileModal,
     showUserQrModal,
+    showCreateGroupModal,
     profileModalState,
     closeProfileModal
 } from '$lib/stores/modals';
@@ -79,6 +80,11 @@ export function initAndroidBackNavigation(): void {
 
         if (get(showUserQrModal)) {
             showUserQrModal.set(false);
+            return;
+        }
+
+        if (get(showCreateGroupModal)) {
+            showCreateGroupModal.set(false);
             return;
         }
 

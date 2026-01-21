@@ -102,7 +102,7 @@ public class NativeBackgroundMessagingService extends Service {
     public static final String EXTRA_ACTIVE_CONVERSATION_PUBKEY = "activeConversationPubkey";
 
     public static final String EXTRA_ROUTE_KIND = "nospeak_route_kind";
-    public static final String EXTRA_ROUTE_PARTNER_PUBKEY_HEX = "nospeak_partner_pubkey_hex";
+    public static final String EXTRA_ROUTE_CONVERSATION_ID = "nospeak_conversation_id";
 
     private static final String ROUTE_KIND_CHAT = "chat";
 
@@ -822,10 +822,17 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
-        String partnerPubkeyHex = rumor.pubkeyHex;
+        // Sender's pubkey (for notification title/avatar)
+        String senderPubkeyHex = rumor.pubkeyHex;
+        
+        // Extract p-tags to determine if this is a group message
+        java.util.List<String> pTagPubkeys = extractPTagPubkeys(rumor.tags);
+        
+        // Derive conversation ID (16-char hash for groups, partner pubkey for 1-on-1)
+        String conversationId = deriveConversationId(pTagPubkeys, senderPubkeyHex, currentPubkeyHex);
 
         // Suppress notification only if user is actively viewing this specific conversation
-        if (shouldSuppressNotificationForConversation(partnerPubkeyHex)) {
+        if (shouldSuppressNotificationForConversation(conversationId)) {
             return;
         }
 
@@ -838,7 +845,7 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
  
-        showConversationActivityNotification(partnerPubkeyHex, preview);
+        showConversationActivityNotification(senderPubkeyHex, conversationId, preview);
 
         if (rumorCreatedAtSeconds > notificationCutoffSeconds) {
             notificationCutoffSeconds = rumorCreatedAtSeconds;
@@ -848,7 +855,13 @@ public class NativeBackgroundMessagingService extends Service {
 
     private static final int AVATAR_TARGET_PX = 192;
 
-    private void showConversationActivityNotification(String partnerPubkeyHex, String latestPreview) {
+    /**
+     * Shows a notification for conversation activity.
+     * @param senderPubkeyHex The sender's pubkey (for profile lookup - name/avatar)
+     * @param conversationId The conversation ID for navigation (pubkey hex for 1-on-1, 16-char hash for groups)
+     * @param latestPreview The message preview text
+     */
+    private void showConversationActivityNotification(String senderPubkeyHex, String conversationId, String latestPreview) {
         if (!shouldEmitMessageNotification()) {
             return;
         }
@@ -858,20 +871,23 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
-        int notificationId = Math.abs(partnerPubkeyHex.hashCode());
+        // Use conversationId for notification grouping (so group messages are grouped together)
+        int notificationId = Math.abs(conversationId.hashCode());
         int requestCode = notificationId + 2000;
 
-        String body = buildCombinedActivityBody(partnerPubkeyHex, latestPreview);
-        PendingIntent pendingIntent = buildChatPendingIntent(partnerPubkeyHex, requestCode);
+        String body = buildCombinedActivityBody(conversationId, latestPreview);
+        // Use conversationId for navigation intent (opens correct chat - group or 1-on-1)
+        PendingIntent pendingIntent = buildChatPendingIntent(conversationId, requestCode);
 
-        AndroidProfileCachePrefs.Identity identity = AndroidProfileCachePrefs.get(getApplicationContext(), partnerPubkeyHex);
+        // Use sender's pubkey for profile lookup (name and avatar of message sender)
+        AndroidProfileCachePrefs.Identity identity = AndroidProfileCachePrefs.get(getApplicationContext(), senderPubkeyHex);
         String title = identity != null && identity.username != null && !identity.username.trim().isEmpty()
                 ? identity.username.trim()
                 : "New activity";
         String pictureUrl = identity != null ? identity.pictureUrl : null;
 
-        Bitmap avatar = resolveCachedAvatarBitmap(partnerPubkeyHex, pictureUrl);
-        long timestampMs = getConversationLastTimestampMs(partnerPubkeyHex);
+        Bitmap avatar = resolveCachedAvatarBitmap(senderPubkeyHex, pictureUrl);
+        long timestampMs = getConversationLastTimestampMs(conversationId);
 
         Person userPerson = new Person.Builder()
                 .setName("You")
@@ -879,26 +895,27 @@ public class NativeBackgroundMessagingService extends Service {
 
         Person.Builder senderPersonBuilder = new Person.Builder()
                 .setName(title)
-                .setKey(partnerPubkeyHex);
+                .setKey(senderPubkeyHex);
         if (avatar != null) {
             senderPersonBuilder.setIcon(IconCompat.createWithBitmap(avatar));
         }
         Person senderPerson = senderPersonBuilder.build();
 
+        boolean isGroup = isGroupConversationId(conversationId);
         NotificationCompat.MessagingStyle messagingStyle = new NotificationCompat.MessagingStyle(userPerson)
                 .setConversationTitle(title)
-                .setGroupConversation(false);
+                .setGroupConversation(isGroup);
         messagingStyle.addMessage(new NotificationCompat.MessagingStyle.Message(body, timestampMs, senderPerson));
 
-        String conversationId = buildConversationId(partnerPubkeyHex);
+        String shortcutConversationId = buildShortcutConversationId(conversationId);
         String avatarKey = pictureUrl != null ? computeAvatarKey(pictureUrl.trim()) : null;
         boolean shortcutAvailable = false;
         if (!lockedProfileActive) {
-            shortcutAvailable = ensureConversationShortcut(partnerPubkeyHex, title, senderPerson, avatar, avatarKey);
+            shortcutAvailable = ensureConversationShortcut(conversationId, title, senderPerson, avatar, avatarKey);
         }
 
         if (!lockedProfileActive && avatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
-            fetchConversationAvatar(partnerPubkeyHex, pictureUrl.trim());
+            fetchConversationAvatar(senderPubkeyHex, pictureUrl.trim());
         }
 
         NotificationCompat.Builder builder = buildConversationNotificationBuilder(
@@ -908,7 +925,7 @@ public class NativeBackgroundMessagingService extends Service {
                 senderPerson,
                 messagingStyle,
                 avatar,
-                shortcutAvailable ? conversationId : null
+                shortcutAvailable ? shortcutConversationId : null
         );
 
         // Refreshes should never re-alert (vibrate/sound).
@@ -917,32 +934,32 @@ public class NativeBackgroundMessagingService extends Service {
         manager.notify(notificationId, builder.build());
     }
 
-    private static String buildConversationId(String partnerPubkeyHex) {
-        return "chat_" + partnerPubkeyHex;
+    private static String buildShortcutConversationId(String conversationId) {
+        return "chat_" + conversationId;
     }
 
-    private Intent buildChatIntent(String partnerPubkeyHex) {
+    private Intent buildChatIntent(String conversationId) {
         Intent intent = new Intent(this, MainActivity.class);
         intent.setAction(Intent.ACTION_VIEW);
         intent.addCategory(Intent.CATEGORY_DEFAULT);
-        intent.setData(Uri.parse("nospeak://chat/" + partnerPubkeyHex));
+        intent.setData(Uri.parse("nospeak://chat/" + conversationId));
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.putExtra(EXTRA_ROUTE_KIND, ROUTE_KIND_CHAT);
-        intent.putExtra(EXTRA_ROUTE_PARTNER_PUBKEY_HEX, partnerPubkeyHex);
+        intent.putExtra(EXTRA_ROUTE_CONVERSATION_ID, conversationId);
         return intent;
     }
 
-    private PendingIntent buildChatPendingIntent(String partnerPubkeyHex, int requestCode) {
+    private PendingIntent buildChatPendingIntent(String conversationId, int requestCode) {
         return PendingIntent.getActivity(
                 this,
                 requestCode,
-                buildChatIntent(partnerPubkeyHex),
+                buildChatIntent(conversationId),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
     }
 
     private boolean ensureConversationShortcut(
-            String partnerPubkeyHex,
+            String conversationId,
             String title,
             Person senderPerson,
             Bitmap avatar,
@@ -950,16 +967,16 @@ public class NativeBackgroundMessagingService extends Service {
     ) {
         boolean wasPublished;
         synchronized (conversationShortcutsPublished) {
-            wasPublished = conversationShortcutsPublished.contains(partnerPubkeyHex);
+            wasPublished = conversationShortcutsPublished.contains(conversationId);
         }
 
         boolean shouldPublish = !wasPublished;
 
         if (avatar != null && avatarKey != null && !avatarKey.isEmpty()) {
             synchronized (conversationShortcutAvatarKeys) {
-                String existingKey = conversationShortcutAvatarKeys.get(partnerPubkeyHex);
+                String existingKey = conversationShortcutAvatarKeys.get(conversationId);
                 if (existingKey == null || !avatarKey.equals(existingKey)) {
-                    conversationShortcutAvatarKeys.put(partnerPubkeyHex, avatarKey);
+                    conversationShortcutAvatarKeys.put(conversationId, avatarKey);
                     shouldPublish = true;
                 }
             }
@@ -969,10 +986,10 @@ public class NativeBackgroundMessagingService extends Service {
             return true;
         }
 
-        String shortcutId = buildConversationId(partnerPubkeyHex);
+        String shortcutId = buildShortcutConversationId(conversationId);
         ShortcutInfoCompat.Builder shortcutBuilder = new ShortcutInfoCompat.Builder(this, shortcutId)
                 .setShortLabel(title)
-                .setIntent(buildChatIntent(partnerPubkeyHex))
+                .setIntent(buildChatIntent(conversationId))
                 .setLongLived(true)
                 .setPerson(senderPerson);
 
@@ -988,7 +1005,7 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         synchronized (conversationShortcutsPublished) {
-            conversationShortcutsPublished.add(partnerPubkeyHex);
+            conversationShortcutsPublished.add(conversationId);
         }
 
         return true;
@@ -1177,11 +1194,13 @@ public class NativeBackgroundMessagingService extends Service {
                 .setGroupConversation(false);
         messagingStyle.addMessage(new NotificationCompat.MessagingStyle.Message(body, timestampMs, senderPerson));
 
-        String conversationId = buildConversationId(partnerPubkeyHex);
+        // For 1-on-1 chats, the conversationId is the partner's pubkey hex
+        String conversationId = partnerPubkeyHex;
+        String shortcutConversationId = buildShortcutConversationId(conversationId);
         String avatarKey = pictureUrl != null ? computeAvatarKey(pictureUrl.trim()) : null;
         boolean shortcutAvailable = false;
         if (!lockedProfileActive) {
-            shortcutAvailable = ensureConversationShortcut(partnerPubkeyHex, title, senderPerson, avatar, avatarKey);
+            shortcutAvailable = ensureConversationShortcut(conversationId, title, senderPerson, avatar, avatarKey);
         }
  
         if (!lockedProfileActive && avatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
@@ -1199,7 +1218,7 @@ public class NativeBackgroundMessagingService extends Service {
                 senderPerson,
                 messagingStyle,
                 avatar,
-                shortcutAvailable ? conversationId : null
+                shortcutAvailable ? shortcutConversationId : null
         );
 
         // Refreshes should never re-alert (vibrate/sound).
@@ -2356,6 +2375,104 @@ public class NativeBackgroundMessagingService extends Service {
         String content;
         JSONArray tags;
         long createdAtSeconds;
+    }
+
+    /**
+     * Extracts all p-tag values (pubkey hexes) from rumor tags.
+     * @param tags The tags JSONArray from the rumor
+     * @return List of pubkey hex strings from p-tags
+     */
+    private java.util.List<String> extractPTagPubkeys(JSONArray tags) {
+        java.util.List<String> pubkeys = new java.util.ArrayList<>();
+        if (tags == null) {
+            return pubkeys;
+        }
+        for (int i = 0; i < tags.length(); i++) {
+            JSONArray tag = tags.optJSONArray(i);
+            if (tag != null && tag.length() >= 2) {
+                String tagName = tag.optString(0, "");
+                if ("p".equals(tagName)) {
+                    String pubkey = tag.optString(1, null);
+                    if (pubkey != null && !pubkey.isEmpty()) {
+                        pubkeys.add(pubkey);
+                    }
+                }
+            }
+        }
+        return pubkeys;
+    }
+
+    /**
+     * Derives a deterministic conversation ID from participant pubkeys.
+     * For 1-on-1 chats (1 other person), returns the partner's pubkey hex.
+     * For group chats (2+ others), returns a 16-character SHA256 hash of sorted participant pubkeys.
+     * 
+     * This must match the JavaScript implementation in ConversationRepository.ts
+     * 
+     * @param pTagPubkeys List of pubkey hexes from p-tags
+     * @param senderPubkeyHex The sender's pubkey hex
+     * @param selfPubkeyHex The current user's pubkey hex
+     * @return conversationId string (pubkey hex for 1-on-1, 16-char hash for groups)
+     */
+    private String deriveConversationId(java.util.List<String> pTagPubkeys, String senderPubkeyHex, String selfPubkeyHex) {
+        // Collect all participant pubkeys: p-tags + sender
+        java.util.Set<String> allParticipants = new java.util.HashSet<>(pTagPubkeys);
+        if (senderPubkeyHex != null && !senderPubkeyHex.isEmpty()) {
+            allParticipants.add(senderPubkeyHex);
+        }
+        
+        // Filter out self to determine if this is 1-on-1 or group
+        java.util.List<String> others = new java.util.ArrayList<>();
+        for (String p : allParticipants) {
+            if (!p.equalsIgnoreCase(selfPubkeyHex)) {
+                others.add(p);
+            }
+        }
+        
+        if (others.size() == 1) {
+            // 1-on-1 chat: return the partner's pubkey hex
+            // (The JS version returns npub, but we use hex here and convert at intent building)
+            return others.get(0);
+        }
+        
+        // Group chat: hash all participants (including self)
+        if (selfPubkeyHex != null && !selfPubkeyHex.isEmpty()) {
+            allParticipants.add(selfPubkeyHex);
+        }
+        
+        // Sort and concatenate
+        java.util.List<String> sorted = new java.util.ArrayList<>(allParticipants);
+        java.util.Collections.sort(sorted);
+        StringBuilder sb = new StringBuilder();
+        for (String p : sorted) {
+            sb.append(p);
+        }
+        
+        // SHA256 hash and take first 16 characters
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(sb.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexSb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hexSb.append(String.format("%02x", b));
+            }
+            return hexSb.substring(0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            // Fallback to sender pubkey if hash fails
+            return senderPubkeyHex;
+        }
+    }
+
+    /**
+     * Checks if a conversation ID represents a group chat.
+     * Group IDs are 16-character hex hashes; 1-on-1 IDs are 64-character pubkey hexes.
+     */
+    private boolean isGroupConversationId(String conversationId) {
+        if (conversationId == null) {
+            return false;
+        }
+        // Group conversation IDs are 16-char hashes; 1-on-1 IDs are 64-char pubkey hexes
+        return conversationId.length() == 16;
     }
 
     private void showGenericEncryptedMessageNotification() {

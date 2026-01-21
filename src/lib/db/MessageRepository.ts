@@ -2,6 +2,16 @@ import { db, type Message } from './db';
 import Dexie from 'dexie';
 
 export class MessageRepository {
+    /**
+     * Check if a message belongs to a group conversation.
+     * A message is a group message if it has a conversationId that differs from recipientNpub.
+     */
+    private isGroupMessage(msg: Message): boolean {
+        // Group messages have a conversationId that is a hash (not an npub)
+        // For 1-on-1 messages, conversationId either doesn't exist or equals recipientNpub
+        return !!msg.conversationId && msg.conversationId !== msg.recipientNpub;
+    }
+
     public async getMessages(recipientNpub: string, limit: number = 50, beforeTimestamp?: number): Promise<Message[]> {
         let collection;
         
@@ -26,8 +36,16 @@ export class MessageRepository {
                 .reverse();
         }
 
-        const items = await collection.limit(limit).toArray();
-        return items.reverse(); // Return in chronological order
+        // Fetch more than needed to account for filtering out group messages
+        const items = await collection.limit(limit * 2).toArray();
+        
+        // Filter out group messages (they have a conversationId that differs from recipientNpub)
+        // This ensures group messages don't appear in 1-on-1 chat views
+        const filtered = recipientNpub === 'ALL' 
+            ? items 
+            : items.filter(m => !this.isGroupMessage(m));
+        
+        return filtered.slice(0, limit).reverse(); // Return in chronological order
     }
 
     public async getConversationPage(recipientNpub: string, pageSize: number = 50, beforeTimestamp?: number): Promise<Message[]> {
@@ -44,6 +62,7 @@ export class MessageRepository {
             window.dispatchEvent(new CustomEvent('nospeak:new-message', {
                 detail: {
                     recipientNpub: msg.recipientNpub,
+                    conversationId: msg.conversationId,
                     direction: msg.direction,
                     eventId: msg.eventId,
                 }
@@ -131,17 +150,71 @@ export class MessageRepository {
             )
             .toArray();
 
-        const filtered = items.filter((m) => m.recipientNpub === recipientNpub);
-
-        if (filtered.length !== items.length) {
-            console.warn('getAllMessagesFor: filtered out mismatched recipient messages', {
-                requested: recipientNpub,
-                total: items.length,
-                kept: filtered.length,
-            });
-        }
+        // Filter to only include messages for this 1-on-1 conversation:
+        // 1. recipientNpub must match (sanity check for index range)
+        // 2. Must NOT be a group message (conversationId differs from recipientNpub)
+        const filtered = items.filter((m) => 
+            m.recipientNpub === recipientNpub && !this.isGroupMessage(m)
+        );
 
         return filtered.sort((a, b) => a.sentAt - b.sentAt);
+    }
+
+    /**
+     * Get messages for a conversation by conversationId.
+     * Works for both 1-on-1 (npub) and group (hash) conversations.
+     */
+    public async getMessagesByConversationId(conversationId: string, limit: number = 50, beforeTimestamp?: number): Promise<Message[]> {
+        let collection;
+        
+        collection = db.messages
+            .where('[conversationId+sentAt]')
+            .between(
+                [conversationId, Dexie.minKey],
+                [conversationId, beforeTimestamp || Dexie.maxKey],
+                true, // include lower
+                false // exclude upper
+            )
+            .reverse();
+
+        const items = await collection.limit(limit).toArray();
+        return items.reverse(); // Return in chronological order
+    }
+
+    /**
+     * Get all messages for a conversation by conversationId.
+     */
+    public async getAllMessagesByConversationId(conversationId: string): Promise<Message[]> {
+        const items = await db.messages
+            .where('[conversationId+sentAt]')
+            .between(
+                [conversationId, Dexie.minKey],
+                [conversationId, Dexie.maxKey],
+                true,
+                true
+            )
+            .toArray();
+
+        return items.sort((a, b) => a.sentAt - b.sentAt);
+    }
+
+    /**
+     * Get the most recent message for a conversation.
+     */
+    public async getLastMessageForConversation(conversationId: string): Promise<Message | undefined> {
+        const items = await db.messages
+            .where('[conversationId+sentAt]')
+            .between(
+                [conversationId, Dexie.minKey],
+                [conversationId, Dexie.maxKey],
+                true,
+                true
+            )
+            .reverse()
+            .limit(1)
+            .toArray();
+
+        return items[0];
     }
 }
 

@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Message } from "$lib/db/db";
+  import type { Message, Conversation } from "$lib/db/db";
   import { messageRepo } from "$lib/db/MessageRepository";
   import { profileRepo } from "$lib/db/ProfileRepository";
   import { messagingService } from "$lib/core/Messaging";
   import { ensureDefaultBlossomServersForCurrentUser } from "$lib/core/DefaultBlossomServers";
   import { runtimeConfig } from "$lib/core/runtimeConfig";
   import Avatar from "./Avatar.svelte";
+  import GroupAvatar from "./GroupAvatar.svelte";
   import MessageContent from "./MessageContent.svelte";
   import ContextMenu from "./ContextMenu.svelte";
   import MessageReactions from "./MessageReactions.svelte";
@@ -34,6 +35,7 @@
   import { buildChatHistorySearchResults } from '$lib/core/chatHistorySearch';
   import { getCurrentPosition } from '$lib/core/LocationService';
   import { isVoiceRecordingSupported } from '$lib/core/VoiceRecorder';
+  import { generateGroupTitle } from '$lib/db/ConversationRepository';
   import Button from '$lib/components/ui/Button.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import CircularProgress from '$lib/components/ui/CircularProgress.svelte';
@@ -41,6 +43,8 @@
    let {
      messages = [],
      partnerNpub,
+     isGroup = false,
+     groupConversation = null,
      onLoadMore,
      isFetchingHistory = false,
       canRequestNetworkHistory = false,
@@ -52,6 +56,8 @@
    } = $props<{
      messages: Message[];
      partnerNpub?: string;
+     isGroup?: boolean;
+     groupConversation?: Conversation | null;
      onLoadMore?: () => void;
      isFetchingHistory?: boolean;
      canRequestNetworkHistory?: boolean;
@@ -61,6 +67,92 @@
       initialSharedMedia?: { file: File; mediaType: 'image' | 'video' | 'audio' } | null;
       initialSharedText?: string | null;
    }>();
+   
+   // Group chat display state
+   let groupTitle = $state<string>('');
+   // Cache participant profiles: { name, picture }
+   let participantProfiles = $state<Map<string, { name: string; picture?: string }>>(new Map());
+   
+   // Load group title and participant profiles
+   $effect(() => {
+       if (!isGroup || !groupConversation) {
+           groupTitle = '';
+           return;
+       }
+       
+       // Use subject if available, otherwise generate from participant names
+       if (groupConversation.subject) {
+           groupTitle = groupConversation.subject;
+       } else {
+           // Generate title from participant names
+           void (async () => {
+               const names = await Promise.all(
+                   groupConversation.participants
+                       .filter((p: string) => p !== $currentUser?.npub)
+                       .slice(0, 5)
+                       .map(async (npub: string) => {
+                           const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                           const name = profile?.metadata?.name || 
+                                        profile?.metadata?.display_name || 
+                                        npub.slice(0, 8) + '...';
+                           const picture = profile?.metadata?.picture;
+                           participantProfiles.set(npub, { name, picture });
+                           return name;
+                       })
+               );
+               groupTitle = generateGroupTitle(names);
+               participantProfiles = new Map(participantProfiles);
+           })();
+       }
+   });
+   
+   // Helper to get participant name from cache or npub
+   function getParticipantName(npub: string): string {
+       return participantProfiles.get(npub)?.name || npub.slice(0, 8) + '...';
+   }
+   
+   // Helper to get participant picture from cache
+   function getParticipantPicture(npub: string): string | undefined {
+       return participantProfiles.get(npub)?.picture;
+   }
+   
+   // Load participant profile on demand (for message sender attribution)
+   async function loadParticipantProfile(npub: string): Promise<{ name: string; picture?: string }> {
+       if (participantProfiles.has(npub)) {
+           return participantProfiles.get(npub)!;
+       }
+       const profile = await profileRepo.getProfileIgnoreTTL(npub);
+       const name = profile?.metadata?.name || 
+                    profile?.metadata?.display_name || 
+                    npub.slice(0, 8) + '...';
+       const picture = profile?.metadata?.picture;
+       const profileData = { name, picture };
+       participantProfiles.set(npub, profileData);
+       participantProfiles = new Map(participantProfiles);
+       return profileData;
+   }
+   
+   // Load profiles for all message senders in view
+   $effect(() => {
+       if (!isGroup || !messages.length) return;
+       
+       // Collect unique sender npubs that we don't have profiles for
+       const unknownSenders = new Set<string>();
+       for (const msg of messages) {
+           if (msg.senderNpub && !participantProfiles.has(msg.senderNpub)) {
+               unknownSenders.add(msg.senderNpub);
+           }
+       }
+       
+       // Load profiles for unknown senders
+       if (unknownSenders.size > 0) {
+           void (async () => {
+               for (const npub of unknownSenders) {
+                   await loadParticipantProfile(npub);
+               }
+           })();
+       }
+   });
  
     let inputText = $state("");
 
@@ -853,7 +945,10 @@
   }
 
   async function send() {
-    if (!partnerNpub || !inputText.trim()) return;
+    if (!inputText.trim()) return;
+    // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
+    if (!isGroup && !partnerNpub) return;
+    if (isGroup && !groupConversation) return;
 
     const text = inputText;
     inputText = ""; // Clear immediately for UX
@@ -867,20 +962,32 @@
 
     const optimisticEventId = makeOptimisticEventId();
     const optimistic: Message = {
-      recipientNpub: partnerNpub,
+      recipientNpub: isGroup ? groupConversation!.participants[0] : partnerNpub!,
       message: text,
       sentAt: sentAtMs,
       eventId: optimisticEventId,
       direction: 'sent',
       createdAt: Date.now(),
       rumorKind: 14,
+      // Group-specific fields
+      ...(isGroup && groupConversation ? {
+        conversationId: groupConversation.id,
+        senderNpub: $currentUser?.npub,
+        participants: groupConversation.participants,
+      } : {}),
     };
 
     optimisticMessages = [...optimisticMessages, optimistic];
     scrollToBottom();
 
     void messagingService
-      .sendMessage(partnerNpub, text, undefined, createdAtSeconds)
+      .sendMessage(
+        isGroup ? null : partnerNpub!,
+        text,
+        undefined,
+        createdAtSeconds,
+        isGroup ? groupConversation!.id : undefined
+      )
       .then(() => {
         if (isDestroyed) return;
         clearUnreadMarkersForChat();
@@ -901,9 +1008,9 @@
    }
 
    async function handleLocationSelect(latitude: number, longitude: number) {
-     if (!partnerNpub) {
-       return;
-     }
+     // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
+     if (!isGroup && !partnerNpub) return;
+     if (isGroup && !groupConversation) return;
 
      // Capture timestamp once to ensure optimistic and persisted messages match
      const createdAtSeconds = Math.floor(Date.now() / 1000);
@@ -911,7 +1018,7 @@
 
      const optimisticEventId = makeOptimisticEventId();
      const optimistic: Message = {
-       recipientNpub: partnerNpub,
+       recipientNpub: isGroup ? groupConversation!.participants[0] : partnerNpub!,
        message: `geo:${latitude},${longitude}`,
        sentAt: sentAtMs,
        eventId: optimisticEventId,
@@ -921,14 +1028,26 @@
        location: {
          latitude,
          longitude
-       }
+       },
+       // Group-specific fields
+       ...(isGroup && groupConversation ? {
+         conversationId: groupConversation.id,
+         senderNpub: $currentUser?.npub,
+         participants: groupConversation.participants,
+       } : {}),
      };
 
      optimisticMessages = [...optimisticMessages, optimistic];
      scrollToBottom();
 
      void messagingService
-       .sendLocationMessage(partnerNpub, latitude, longitude, createdAtSeconds)
+       .sendLocationMessage(
+         isGroup ? null : partnerNpub!,
+         latitude,
+         longitude,
+         createdAtSeconds,
+         isGroup ? groupConversation!.id : undefined
+       )
        .then(() => {
          if (isDestroyed) return;
          clearUnreadMarkersForChat();
@@ -1014,9 +1133,12 @@
   }
 
   async function confirmSendMedia() {
-    if (!partnerNpub || !pendingMediaFile || !pendingMediaType) {
+    if (!pendingMediaFile || !pendingMediaType) {
       return;
     }
+    // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
+    if (!isGroup && !partnerNpub) return;
+    if (isGroup && !groupConversation) return;
 
     const file = pendingMediaFile;
     const mediaType = pendingMediaType;
@@ -1029,7 +1151,7 @@
     const optimisticEventId = makeOptimisticEventId();
     const optimisticUrl = URL.createObjectURL(file);
     const optimistic: Message = {
-      recipientNpub: partnerNpub,
+      recipientNpub: isGroup ? groupConversation!.participants[0] : partnerNpub!,
       message: '',
       sentAt: sentAtMs,
       eventId: optimisticEventId,
@@ -1038,6 +1160,12 @@
       rumorKind: 15,
       fileUrl: optimisticUrl,
       fileType: file.type || mediaTypeToMime(mediaType),
+      // Group-specific fields
+      ...(isGroup && groupConversation ? {
+        conversationId: groupConversation.id,
+        senderNpub: $currentUser?.npub,
+        participants: groupConversation.participants,
+      } : {}),
     };
 
     optimisticMessages = [...optimisticMessages, optimistic];
@@ -1048,10 +1176,22 @@
 
     void (async () => {
       try {
-        const parentRumorId = await messagingService.sendFileMessage(partnerNpub, file, mediaType, createdAtSeconds);
+        const parentRumorId = await messagingService.sendFileMessage(
+          isGroup ? null : partnerNpub!,
+          file,
+          mediaType,
+          createdAtSeconds,
+          isGroup ? groupConversation!.id : undefined
+        );
 
         if (caption.length > 0) {
-          await messagingService.sendMessage(partnerNpub, caption, parentRumorId);
+          await messagingService.sendMessage(
+            isGroup ? null : partnerNpub!,
+            caption,
+            parentRumorId,
+            undefined,
+            isGroup ? groupConversation!.id : undefined
+          );
         }
 
         if (isDestroyed) return;
@@ -1247,9 +1387,9 @@
   );
 
   async function sendVoiceMessage(file: File): Promise<void> {
-    if (!partnerNpub) {
-      return;
-    }
+    // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
+    if (!isGroup && !partnerNpub) return;
+    if (isGroup && !groupConversation) return;
 
     // Best-effort: ensure default Blossom servers exist.
     try {
@@ -1265,7 +1405,7 @@
     const optimisticUrl = URL.createObjectURL(file);
 
     const optimistic: Message = {
-      recipientNpub: partnerNpub,
+      recipientNpub: isGroup ? groupConversation!.participants[0] : partnerNpub!,
       message: '',
       sentAt: sentAtMs,
       eventId: optimisticEventId,
@@ -1274,6 +1414,12 @@
       rumorKind: 15,
       fileUrl: optimisticUrl,
       fileType: file.type || 'audio/webm',
+      // Group-specific fields
+      ...(isGroup && groupConversation ? {
+        conversationId: groupConversation.id,
+        senderNpub: $currentUser?.npub,
+        participants: groupConversation.participants,
+      } : {}),
     };
 
     optimisticMessages = [...optimisticMessages, optimistic];
@@ -1281,7 +1427,13 @@
 
     void (async () => {
       try {
-        await messagingService.sendFileMessage(partnerNpub, file, 'audio', createdAtSeconds);
+        await messagingService.sendFileMessage(
+          isGroup ? null : partnerNpub!,
+          file,
+          'audio',
+          createdAtSeconds,
+          isGroup ? groupConversation!.id : undefined
+        );
 
         if (isDestroyed) return;
 
@@ -1381,7 +1533,7 @@
   {/if}
 
 
-  {#if partnerNpub}
+  {#if partnerNpub || isGroup}
     <div
       class="absolute top-0 left-0 right-0 z-20 p-2 pt-safe min-h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm transition-all duration-150 ease-out"
     >
@@ -1398,7 +1550,24 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
             </svg>
         </button>
-        {#if partnerNpub}
+        {#if isGroup && groupConversation}
+          <!-- Group chat avatar and title -->
+          <div class="flex items-center gap-2">
+              <GroupAvatar 
+                  participants={groupConversation.participants.filter((p: string) => p !== $currentUser?.npub)} 
+                  size="sm" 
+                  class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
+              />
+          </div>
+          <div class="flex flex-col">
+              <span class="font-bold dark:text-white text-left truncate max-w-[200px]">
+                  {groupTitle || $t('chat.group.defaultTitle')}
+              </span>
+              <span class="text-xs text-gray-500 dark:text-slate-400">
+                  {get(t)('chat.group.participantsShort', { values: { count: groupConversation.participants.length } })}
+              </span>
+          </div>
+        {:else if partnerNpub}
           <button
               class="hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
               onclick={() => partnerNpub && openProfile(partnerNpub)}
@@ -1411,16 +1580,16 @@
                   class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
               />
           </button>
+          <button
+              onclick={() => partnerNpub && openProfile(partnerNpub)}
+              class="font-bold hover:underline dark:text-white text-left"
+          >
+              {partnerName || partnerNpub.slice(0, 10) + "..."}
+          </button>
         {/if}
-        <button
-            onclick={() => partnerNpub && openProfile(partnerNpub)}
-            class="font-bold hover:underline dark:text-white text-left"
-        >
-            {partnerName || partnerNpub.slice(0, 10) + "..."}
-        </button>
       </div>
 
-      {#if partnerNpub !== 'ALL'}
+      {#if (partnerNpub && partnerNpub !== 'ALL') || isGroup}
         <!-- Mobile overlay search input (covers username area) -->
         <div
           class={`md:hidden absolute bottom-2 h-11 left-24 right-16 z-30 transition-[opacity,transform] duration-200 ease-out ${
@@ -1581,18 +1750,34 @@
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={isAndroidShell ? { duration: 0 } : { y: 20, duration: 300, easing: cubicOut }}
       >
-        {#if msg.direction === "received" && partnerNpub && !caption}
-          <button
-            class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
-            onclick={() => partnerNpub && openProfile(partnerNpub)}
-          >
-            <Avatar
-              npub={partnerNpub}
-              src={partnerPicture}
-              size="md"
-              class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
-            />
-          </button>
+        {#if msg.direction === "received" && !caption}
+          {#if isGroup && msg.senderNpub}
+            <!-- Group message: show sender's avatar -->
+            <button
+              class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
+              onclick={() => msg.senderNpub && openProfile(msg.senderNpub)}
+            >
+              <Avatar
+                npub={msg.senderNpub}
+                src={getParticipantPicture(msg.senderNpub)}
+                size="md"
+                class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
+              />
+            </button>
+          {:else if partnerNpub}
+            <!-- 1-on-1 chat: show partner's avatar -->
+            <button
+              class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
+              onclick={() => partnerNpub && openProfile(partnerNpub)}
+            >
+              <Avatar
+                npub={partnerNpub}
+                src={partnerPicture}
+                size="md"
+                class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
+              />
+            </button>
+          {/if}
         {/if}
 
         <div
@@ -1613,6 +1798,17 @@
             {#if hasUnreadMarker}
               <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-emerald-400/70"></div>
             {/if}
+            
+            <!-- Sender name for group messages -->
+            {#if isGroup && msg.direction === "received" && msg.senderNpub}
+              <button
+                class="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1 hover:underline cursor-pointer"
+                onclick={() => msg.senderNpub && openProfile(msg.senderNpub)}
+              >
+                {getParticipantName(msg.senderNpub)}
+              </button>
+            {/if}
+            
              <MessageContent
                 content={msg.message}
                 highlight={isSearchActive ? searchQuery : undefined}

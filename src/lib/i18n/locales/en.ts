@@ -99,6 +99,7 @@ const en = {
               syncing: 'Syncing contacts…',
               pullToRefresh: 'Pull to refresh',
               releaseToRefresh: 'Release to refresh',
+              createGroup: 'Create group',
               contextMenu: {
                   openMenu: 'Open menu',
                   delete: 'Delete'
@@ -108,6 +109,15 @@ const en = {
                   message: 'Are you sure you want to delete {name}?',
                   confirm: 'Delete'
               }
+          },
+          createGroup: {
+              title: 'Create Group Chat',
+              searchPlaceholder: 'Search contacts',
+              selectedCount: '{count} selected',
+              minContactsHint: 'Select at least 2 contacts',
+              createButton: 'Create Group',
+              creating: 'Creating...',
+              noContacts: 'No contacts to add to group'
           },
          profile: {
               unknownName: 'Unknown',
@@ -219,7 +229,14 @@ const en = {
         empty: {
             noMessagesTitle: 'No messages yet',
             forContact: 'Start the conversation with {name}.',
+            forGroup: 'Start the conversation in {name}.',
             generic: 'Select a contact to start chatting.'
+        },
+        group: {
+            defaultTitle: 'Group Chat',
+            participants: '{count} participants',
+            participantsShort: '{count}',
+            viewMembers: 'View members'
         },
         inputPlaceholder: 'Type a message...',
         contextMenu: {

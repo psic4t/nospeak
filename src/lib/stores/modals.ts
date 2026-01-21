@@ -5,6 +5,7 @@ import { writable } from 'svelte/store';
  export const showEmptyProfileModal = writable(false);
  export const showUserQrModal = writable(false);
  export const showScanContactQrModal = writable(false);
+ export const showCreateGroupModal = writable(false);
  export const profileModalState = writable<{ isOpen: boolean; npub: string | null }>({
      isOpen: false,
      npub: null

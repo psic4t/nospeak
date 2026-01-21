@@ -12,7 +12,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class AndroidNotificationRouterPlugin extends Plugin {
 
     private static final String EXTRA_ROUTE_KIND = "nospeak_route_kind";
-    private static final String EXTRA_ROUTE_PARTNER_PUBKEY_HEX = "nospeak_partner_pubkey_hex";
+    private static final String EXTRA_ROUTE_CONVERSATION_ID = "nospeak_conversation_id";
 
     @PluginMethod
     public void getInitialRoute(PluginCall call) {
@@ -43,14 +43,14 @@ public class AndroidNotificationRouterPlugin extends Plugin {
         }
 
         String kind = intent.getStringExtra(EXTRA_ROUTE_KIND);
-        String partnerPubkeyHex = intent.getStringExtra(EXTRA_ROUTE_PARTNER_PUBKEY_HEX);
-        if (kind == null || kind.isEmpty() || partnerPubkeyHex == null || partnerPubkeyHex.isEmpty()) {
+        String conversationId = intent.getStringExtra(EXTRA_ROUTE_CONVERSATION_ID);
+        if (kind == null || kind.isEmpty() || conversationId == null || conversationId.isEmpty()) {
             return null;
         }
 
         JSObject payload = new JSObject();
         payload.put("kind", kind);
-        payload.put("partnerPubkeyHex", partnerPubkeyHex);
+        payload.put("conversationId", conversationId);
         return payload;
     }
 }

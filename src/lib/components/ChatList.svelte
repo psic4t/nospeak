@@ -8,12 +8,14 @@
   import { authService } from "$lib/core/AuthService";
   import { contactRepo } from "$lib/db/ContactRepository";
   import { messageRepo } from "$lib/db/MessageRepository";
+  import { conversationRepo, generateGroupTitle, isGroupConversationId } from "$lib/db/ConversationRepository";
   import { liveQuery } from "dexie";
   import { profileRepo } from "$lib/db/ProfileRepository";
-  import type { ContactItem } from "$lib/db/db";
+  import type { ContactItem, Conversation } from "$lib/db/db";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import Avatar from "./Avatar.svelte";
+  import GroupAvatar from "./GroupAvatar.svelte";
   import { hapticSelection } from "$lib/utils/haptics";
   import { onMount } from "svelte";
 
@@ -24,6 +26,22 @@
   import Button from "$lib/components/ui/Button.svelte";
   import { getMediaPreviewLabel } from "$lib/utils/mediaPreview";
   import { overscroll } from "$lib/utils/overscroll";
+
+  // Extended contact type that includes group chats
+  interface ChatListItem {
+    id: string; // npub for contacts, conversationId for groups
+    isGroup: boolean;
+    name: string;
+    picture?: string;
+    participants?: string[]; // Only for groups
+    hasUnread: boolean;
+    lastMessageTime: number;
+    nip05?: string;
+    nip05Status?: 'valid' | 'invalid' | 'unknown';
+    lastMessageText?: string;
+  }
+
+  let chatItems = $state<ChatListItem[]>([]);
 
   const isAndroidApp = isAndroidNative();
   let myPicture = $state<string | undefined>(undefined);
@@ -64,10 +82,11 @@
     return text;
   }
 
-  async function refreshContacts(dbContacts: ContactItem[]): Promise<void> {
-    console.log("ContactList: Processing contacts from DB:", dbContacts.length);
+  async function refreshChatList(dbContacts: ContactItem[]): Promise<void> {
+    console.log("ChatList: Processing contacts from DB:", dbContacts.length);
 
-    const contactsData = await Promise.all(
+    // 1. Process regular 1-on-1 contacts
+    const contactItems: ChatListItem[] = await Promise.all(
       dbContacts.map(async (c) => {
         const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
         // Fetch recent messages for display and unread calculation
@@ -117,7 +136,8 @@
           nip05Status = profile.nip05Status;
         }
         return {
-          npub: c.npub,
+          id: c.npub,
+          isGroup: false,
           name: name,
           picture: picture,
           hasUnread: lastActivityTime > (c.lastReadAt || 0),
@@ -129,48 +149,134 @@
       }),
     );
 
-    // Filter out contacts with no messages (no chat yet)
-    const contactsWithMessages = contactsData.filter(c => c.lastMessageTime > 0);
+    // 2. Process group conversations
+    const groupConversations = await conversationRepo.getGroupConversations();
+    console.log("ChatList: Processing group conversations:", groupConversations.length);
 
-    const sortedContacts = contactsWithMessages.sort(
+    const groupItems: ChatListItem[] = await Promise.all(
+      groupConversations.map(async (conv) => {
+        // Get the last message for this conversation
+        const lastMsg = await messageRepo.getLastMessageForConversation(conv.id);
+        const lastMsgTime = lastMsg ? lastMsg.sentAt : conv.lastActivityAt;
+
+        let lastMessageText = "";
+        if (lastMsg) {
+          if (lastMsg.fileUrl && lastMsg.fileType) {
+            lastMessageText = getMediaPreviewLabel(lastMsg.fileType);
+          } else {
+            lastMessageText = (lastMsg.message || "").replace(/\s+/g, " ").trim();
+          }
+
+          // For group messages, show sender name if it's not from us
+          if (lastMessageText && lastMsg.direction === "sent") {
+            lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
+          } else if (lastMessageText && lastMsg.senderNpub) {
+            // Get sender's name
+            const senderProfile = await profileRepo.getProfileIgnoreTTL(lastMsg.senderNpub);
+            const senderName = senderProfile?.metadata?.name || 
+                               senderProfile?.metadata?.display_name ||
+                               lastMsg.senderNpub.slice(0, 8) + '...';
+            lastMessageText = `${senderName}: ${lastMessageText}`;
+          }
+        }
+
+        // Generate group title from participants or use stored subject
+        let groupName = conv.subject;
+        if (!groupName) {
+          // Generate from participant names
+          const participantNames = await Promise.all(
+            conv.participants
+              .filter((p: string) => p !== $currentUser?.npub) // Exclude self
+              .slice(0, 5) // Limit to avoid too many lookups
+              .map(async (npub: string) => {
+                const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                return profile?.metadata?.name || 
+                       profile?.metadata?.display_name || 
+                       npub.slice(0, 8) + '...';
+              })
+          );
+          groupName = generateGroupTitle(participantNames);
+        }
+
+        const hasUnread = conv.lastActivityAt > (conv.lastReadAt || 0);
+
+        return {
+          id: conv.id,
+          isGroup: true,
+          name: groupName,
+          participants: conv.participants,
+          hasUnread,
+          lastMessageTime: lastMsgTime,
+          lastMessageText: lastMessageText || undefined,
+        };
+      }),
+    );
+
+    // 3. Combine and sort all chat items
+    const allItems = [...contactItems, ...groupItems];
+    
+    // Filter out items with no messages
+    const itemsWithMessages = allItems.filter(item => item.lastMessageTime > 0);
+
+    // Sort by last message time (most recent first)
+    const sortedItems = itemsWithMessages.sort(
       (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0),
     );
+    
     console.log(
-      "ContactList: Updating store with",
-      sortedContacts.length,
-      "contacts",
+      "ChatList: Updating with",
+      sortedItems.length,
+      "items (contacts:",
+      contactItems.filter(c => c.lastMessageTime > 0).length,
+      ", groups:",
+      groupItems.length,
+      ")",
     );
-    contactsStore.set(sortedContacts);
+    
+    chatItems = sortedItems;
+    
+    // Also update the contacts store for backward compatibility
+    const contactsOnly = contactItems.filter(c => c.lastMessageTime > 0).map(c => ({
+      npub: c.id,
+      name: c.name,
+      picture: c.picture,
+      hasUnread: c.hasUnread,
+      lastMessageTime: c.lastMessageTime,
+      nip05: c.nip05,
+      nip05Status: c.nip05Status,
+      lastMessageText: c.lastMessageText,
+    }));
+    contactsStore.set(contactsOnly);
   }
 
-  // Sync contacts from DB to store
+  // Sync contacts and group conversations from DB
   // Use onMount instead of $effect to avoid infinite loop when updating store
   onMount(() => {
-    console.log("ContactList: Setting up liveQuery subscription");
+    console.log("ChatList: Setting up liveQuery subscription");
 
     // Watch contacts table changes for reactivity
-    const sub = liveQuery(() => {
-      console.log("ContactList: liveQuery triggered - contacts table changed");
+    const contactsSub = liveQuery(() => {
+      console.log("ChatList: liveQuery triggered - contacts table changed");
       return contactRepo.getContacts();
     }).subscribe(async (dbContacts) => {
-      await refreshContacts(dbContacts as ContactItem[]);
+      await refreshChatList(dbContacts as ContactItem[]);
     });
 
     const handleNewMessage = async () => {
       try {
         const dbContacts = await contactRepo.getContacts();
-        await refreshContacts(dbContacts as ContactItem[]);
+        await refreshChatList(dbContacts as ContactItem[]);
       } catch (e) {
-        console.error("ContactList: Failed to refresh after new message", e);
+        console.error("ChatList: Failed to refresh after new message", e);
       }
     };
 
     const handleProfilesUpdated = async () => {
       try {
         const dbContacts = await contactRepo.getContacts();
-        await refreshContacts(dbContacts as ContactItem[]);
+        await refreshChatList(dbContacts as ContactItem[]);
       } catch (e) {
-        console.error("ContactList: Failed to refresh after profiles updated", e);
+        console.error("ChatList: Failed to refresh after profiles updated", e);
       }
     };
 
@@ -186,8 +292,8 @@
     }
 
     return () => {
-      console.log("ContactList: Cleaning up liveQuery subscription");
-      sub.unsubscribe();
+      console.log("ChatList: Cleaning up liveQuery subscription");
+      contactsSub.unsubscribe();
       if (typeof window !== "undefined") {
         window.removeEventListener(
           "nospeak:new-message",
@@ -201,9 +307,9 @@
     };
   });
 
-  function selectContact(npub: string) {
+  function selectChat(id: string) {
     hapticSelection();
-    goto(`/chat/${npub}`, { invalidateAll: true });
+    goto(`/chat/${id}`, { invalidateAll: true });
   }
 </script>
 
@@ -310,7 +416,7 @@
   </div>
 
   <div class="flex-1 overflow-y-auto custom-scrollbar native-scroll pt-[calc(120px+env(safe-area-inset-top))] pb-safe-offset-16" use:overscroll>
-    {#if $contactsStore.length === 0}
+    {#if chatItems.length === 0}
       <div class="space-y-3 p-3 animate-pulse">
         {#each Array(5) as _}
           <div
@@ -334,11 +440,11 @@
         </div>
       </div>
     {/if}
-    {#each $contactsStore as contact}
+    {#each chatItems as item}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        onclick={() => selectContact(contact.npub)}
+        onclick={() => selectChat(item.id)}
         oncontextmenu={(e) => {
           if (!isAndroidApp) return;
           e.preventDefault();
@@ -350,25 +456,52 @@
         }}
         class:select-none={isAndroidApp}
         class={`p-3 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-200 ease-out group active:scale-[0.98] ${
-          page.url.pathname.includes(contact.npub)
+          page.url.pathname.includes(item.id)
             ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-gray-900 dark:text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
             : "bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
         }`}
       >
-        <Avatar
-          npub={contact.npub}
-          src={contact.picture}
-          size="md"
-          class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
-        />
+        {#if item.isGroup}
+          <GroupAvatar
+            participants={item.participants || []}
+            size="md"
+            class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+          />
+        {:else}
+          <Avatar
+            npub={item.id}
+            src={item.picture}
+            size="md"
+            class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+          />
+        {/if}
 
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1 min-w-0">
             <span
               class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]"
-              >{contact.name}</span
+              >{item.name}</span
             >
-            {#if contact.nip05Status === "valid"}
+            {#if item.isGroup}
+              <!-- Group icon indicator -->
+              <svg
+                class="shrink-0 text-gray-400 dark:text-slate-500"
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            {:else if item.nip05Status === "valid"}
               <svg
                 class="shrink-0 text-green-500"
                 xmlns="http://www.w3.org/2000/svg"
@@ -386,15 +519,15 @@
               </svg>
             {/if}
           </div>
-          {#if contact.lastMessageText}
+          {#if item.lastMessageText}
             <div
               class="typ-body text-gray-800 dark:text-slate-300 truncate md:hidden"
             >
-              {@html parseMarkdownPreview(contact.lastMessageText)}
+              {@html parseMarkdownPreview(item.lastMessageText)}
             </div>
           {/if}
         </div>
-        {#if contact.hasUnread}
+        {#if item.hasUnread}
           <div class="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
         {/if}
       </div>

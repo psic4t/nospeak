@@ -4,10 +4,11 @@
     import { currentUser, signer } from '$lib/stores/auth';
     import { clearActiveConversation, setActiveConversation } from '$lib/stores/unreadMessages';
     import { onMount, tick } from 'svelte';
-    import type { Message } from '$lib/db/db';
+    import type { Message, Conversation } from '$lib/db/db';
     import { messagingService } from '$lib/core/Messaging';
      import { page } from '$app/state';
      import { contactRepo } from '$lib/db/ContactRepository';
+     import { conversationRepo, isGroupConversationId } from '$lib/db/ConversationRepository';
      import { consumePendingAndroidMediaShare, consumePendingAndroidTextShare } from '$lib/stores/androidShare';
      import { isAndroidNative } from '$lib/core/NativeDialogs';
      
@@ -15,17 +16,37 @@
 
 
      let messages = $state<Message[]>([]);
-      let currentPartner = $derived(page.params.npub);
+      // The URL param is called 'npub' but can also be a group conversationId
+      let conversationId = $derived(page.params.npub);
+      // Detect if this is a group conversation
+      let isGroup = $derived(conversationId ? isGroupConversationId(conversationId) : false);
+      // For backward compatibility, keep currentPartner for 1-on-1 chats
+      let currentPartner = $derived(isGroup ? undefined : conversationId);
+      // Group conversation metadata
+      let groupConversation = $state<Conversation | null>(null);
       let isFetchingHistory = $state(false);
+      
+      // Load group conversation metadata when entering a group chat
+      $effect(() => {
+          const convId = conversationId;
+          if (!convId || !isGroup) {
+              groupConversation = null;
+              return;
+          }
+          
+          conversationRepo.getConversation(convId).then((conv) => {
+              groupConversation = conv || null;
+          });
+      });
 
       $effect(() => {
-          const partner = currentPartner;
-          if (!partner || partner === 'ALL') {
+          const convId = conversationId;
+          if (!convId || convId === 'ALL') {
               clearActiveConversation();
               return;
           }
 
-          setActiveConversation(partner);
+          setActiveConversation(convId);
           return () => {
               clearActiveConversation();
           };
@@ -42,12 +63,12 @@
     let initialLoadDone = false;
 
     const canRequestNetworkHistory = $derived(
-        cacheExhausted && networkHistoryStatus !== 'no-more' && networkHistoryStatus !== 'loading'
+        cacheExhausted && networkHistoryStatus !== 'no-more' && networkHistoryStatus !== 'loading' && !isGroup
     );
 
     async function handleLoadMore() {
-        const partner = currentPartner;
-        if (!partner || messages.length === 0 || isFetchingHistory || cacheExhausted) {
+        const convId = conversationId;
+        if (!convId || messages.length === 0 || isFetchingHistory || cacheExhausted) {
             return;
         }
 
@@ -57,7 +78,10 @@
         isFetchingHistory = true;
         try {
             // Step 1: page older messages from local cache only
-            const localOlder = await messageRepo.getConversationPage(partner, PAGE_SIZE, oldest.sentAt);
+            // Use conversationId-based query for both 1-on-1 and groups
+            const localOlder = isGroup 
+                ? await messageRepo.getMessagesByConversationId(convId, PAGE_SIZE, oldest.sentAt)
+                : await messageRepo.getConversationPage(convId, PAGE_SIZE, oldest.sentAt);
 
             if (localOlder.length > 0) {
                 messages = [...localOlder, ...messages];
@@ -79,6 +103,9 @@
     }
 
     async function handleRequestNetworkHistory() {
+        // Network history fetch is not available for group chats (yet)
+        if (isGroup) return;
+        
         const partner = currentPartner;
         if (!partner || messages.length === 0 || !canRequestNetworkHistory) {
             return;
@@ -126,39 +153,44 @@
         }
     }
 
-    async function refreshMessagesForCurrentPartner() {
+    async function refreshMessagesForCurrentConversation() {
         const s = $signer;
-        const partner = currentPartner;
-        if (!s || !partner) return;
+        const convId = conversationId;
+        if (!s || !convId) return;
 
-        const isNewPartner = lastPartner !== partner;
-        if (isNewPartner) {
+        const isNewConversation = lastPartner !== convId;
+        if (isNewConversation) {
             oldestLoadedTimestamp = null;
             cacheExhausted = false;
             networkHistoryStatus = 'idle';
             networkHistorySummary = null;
-            lastPartner = partner;
+            lastPartner = convId;
         }
 
-        const msgs = await messageRepo.getAllMessagesFor(partner);
-        const filtered =
-            partner === 'ALL'
-                ? msgs
-                : msgs.filter((m) => m.recipientNpub === partner);
+        // For group chats, use conversationId-based query
+        // For 1-on-1, use the original recipientNpub-based query for backward compatibility
+        let msgs: Message[];
+        if (isGroup) {
+            msgs = await messageRepo.getAllMessagesByConversationId(convId);
+        } else {
+            msgs = await messageRepo.getAllMessagesFor(convId);
+            // Filter to ensure we only get messages for this conversation
+            msgs = convId === 'ALL' ? msgs : msgs.filter((m) => m.recipientNpub === convId);
+        }
 
-        if (filtered.length === 0) {
+        if (msgs.length === 0) {
             messages = [];
             oldestLoadedTimestamp = null;
             cacheExhausted = false;
         } else {
-            if (oldestLoadedTimestamp === null || isNewPartner) {
-                const startIndex = Math.max(0, filtered.length - PAGE_SIZE);
-                messages = filtered.slice(startIndex);
+            if (oldestLoadedTimestamp === null || isNewConversation) {
+                const startIndex = Math.max(0, msgs.length - PAGE_SIZE);
+                messages = msgs.slice(startIndex);
                 oldestLoadedTimestamp = messages[0].sentAt;
             } else {
-                const startIndex = filtered.findIndex((m) => m.sentAt === oldestLoadedTimestamp);
-                const fromIndex = startIndex >= 0 ? startIndex : Math.max(0, filtered.length - PAGE_SIZE);
-                messages = filtered.slice(fromIndex);
+                const startIndex = msgs.findIndex((m) => m.sentAt === oldestLoadedTimestamp);
+                const fromIndex = startIndex >= 0 ? startIndex : Math.max(0, msgs.length - PAGE_SIZE);
+                messages = msgs.slice(fromIndex);
                 oldestLoadedTimestamp = messages[0].sentAt;
             }
         }
@@ -166,24 +198,30 @@
         // Ensure Svelte flushes async state updates promptly (notably on desktop Chrome)
         await tick();
 
-        if (partner && partner !== 'ALL') {
-            contactRepo.markAsRead(partner).catch(console.error);
+        // Mark as read
+        if (convId && convId !== 'ALL') {
+            if (isGroup) {
+                // Mark group conversation as read
+                conversationRepo.markAsRead(convId).catch(console.error);
+            } else {
+                contactRepo.markAsRead(convId).catch(console.error);
+            }
         }
      }
 
 
-    // Effect to update messages when partner or signer changes
+    // Effect to update messages when conversation or signer changes
      $effect(() => {
          const s = $signer;
-         const partner = currentPartner;
-         if (!s || !partner) return;
+         const convId = conversationId;
+         if (!s || !convId) return;
 
-         // Only refresh if partner actually changed or this is the initial load
-         if (initialLoadDone && partner === lastPartner) {
+         // Only refresh if conversation actually changed or this is the initial load
+         if (initialLoadDone && convId === lastPartner) {
              return;
          }
 
-         refreshMessagesForCurrentPartner();
+         refreshMessagesForCurrentConversation();
          initialLoadDone = true;
      });
 
@@ -204,26 +242,30 @@
 
     onMount(() => {
         const handleNewMessage = async (event: Event) => {
-            const custom = event as CustomEvent<{ recipientNpub?: string; eventId?: string }>;
-            const partner = currentPartner;
-            if (!partner) return;
+            const custom = event as CustomEvent<{ recipientNpub?: string; conversationId?: string; eventId?: string }>;
+            const convId = conversationId;
+            if (!convId) return;
 
-            const { recipientNpub, eventId } = custom.detail || {};
+            const { recipientNpub, conversationId: msgConvId, eventId } = custom.detail || {};
 
             // For ALL view, always do full refresh
-            if (partner === 'ALL') {
-                refreshMessagesForCurrentPartner();
+            if (convId === 'ALL') {
+                refreshMessagesForCurrentConversation();
                 return;
             }
 
-            // Only handle messages for current partner
-            if (recipientNpub !== partner) {
+            // For group chats, check conversationId; for 1-on-1, check recipientNpub
+            const matchesConversation = isGroup 
+                ? msgConvId === convId 
+                : recipientNpub === convId;
+            
+            if (!matchesConversation) {
                 return;
             }
 
             // If no eventId, fall back to full refresh
             if (!eventId) {
-                refreshMessagesForCurrentPartner();
+                refreshMessagesForCurrentConversation();
                 return;
             }
 
@@ -234,7 +276,15 @@
 
             // Fetch just the new message
             const newMessage = await messageRepo.getMessageByEventId(eventId);
-            if (!newMessage || newMessage.recipientNpub !== partner) {
+            if (!newMessage) {
+                return;
+            }
+            
+            // Verify message belongs to this conversation
+            const messageBelongsHere = isGroup 
+                ? newMessage.conversationId === convId
+                : newMessage.recipientNpub === convId;
+            if (!messageBelongsHere) {
                 return;
             }
 
@@ -261,7 +311,11 @@
 
             // Keep lastReadAt in sync for received messages while viewing
             if (newMessage.direction === 'received') {
-                contactRepo.markAsRead(partner).catch(console.error);
+                if (isGroup) {
+                    conversationRepo.markAsRead(convId).catch(console.error);
+                } else {
+                    contactRepo.markAsRead(convId).catch(console.error);
+                }
             }
         };
 
@@ -277,10 +331,12 @@
     });
 </script>
 
-{#key currentPartner}
+{#key conversationId}
     <ChatView
          {messages}
          partnerNpub={currentPartner}
+         {isGroup}
+         {groupConversation}
          onLoadMore={handleLoadMore}
          {isFetchingHistory}
           {canRequestNetworkHistory}

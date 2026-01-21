@@ -20,7 +20,7 @@ import ConfirmDialog from './ConfirmDialog.svelte';
 import { nip19 } from 'nostr-tools';
     import { goto } from '$app/navigation';
     import { contactSyncService } from '$lib/core/ContactSyncService';
-    import { showScanContactQrModal } from '$lib/stores/modals';
+    import { showScanContactQrModal, showCreateGroupModal } from '$lib/stores/modals';
     import { connectionManager } from '$lib/core/connection/instance';
     import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
@@ -478,6 +478,7 @@ import { nip19 } from 'nostr-tools';
         onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
         onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
     >
+        <!-- Web only: Android uses /contacts route instead of this modal -->
         <div 
             in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
             out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
@@ -498,7 +499,7 @@ import { nip19 } from 'nostr-tools';
                     }} 
                     variant="filled-tonal" 
                     size="sm"
-                    class="ml-3"
+                    class="ml-auto md:mr-10"
                     aria-label={$t('modals.manageContacts.scanQrAria')}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
@@ -713,6 +714,29 @@ import { nip19 } from 'nostr-tools';
             </div>
 
             <div class="flex-1 overflow-y-auto mb-6 min-h-[200px] custom-scrollbar native-scroll pr-1">
+                <!-- Create group row -->
+                <button
+                    type="button"
+                    class="flex items-center gap-3 p-3 my-1.5 rounded-full w-full text-left bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white transition-all duration-200 ease-out active:scale-[0.98]"
+                    onclick={() => {
+                        hapticSelection();
+                        close();
+                        showCreateGroupModal.set(true);
+                    }}
+                >
+                    <div class="w-12 h-12 rounded-full bg-[rgb(var(--color-lavender-rgb))] flex items-center justify-center flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </div>
+                    <span class="font-bold text-gray-800 dark:text-slate-100 text-[15px]">
+                        {$t('modals.manageContacts.createGroup')}
+                    </span>
+                </button>
+
                 {#if contacts.length === 0}
                     <div class="typ-body text-gray-500 text-center py-8 bg-gray-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
                         {$t('modals.manageContacts.noContacts')}

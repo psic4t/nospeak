@@ -18,6 +18,8 @@ import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryptio
 import { uploadToBlossomServers } from './BlossomUpload';
 import { getMediaPreviewLabel } from '$lib/utils/mediaPreview';
 import { contactSyncService } from './ContactSyncService';
+import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
+import type { Conversation } from '$lib/db/db';
  
  export class MessagingService {
    private debug: boolean = true;
@@ -156,13 +158,14 @@ import { contactSyncService } from './ContactSyncService';
         throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
       }
 
-      // Validate p tag in rumor (must be for me), except for self-sent cases
+      // Validate p tags in rumor - for group messages, my pubkey must be in at least one p-tag
+      // For self-sent messages, sender pubkey equals my pubkey
       const myPubkey = await s.getPublicKey();
-      const pTag = rumor.tags.find(t => t[0] === 'p');
-      if (!pTag || pTag[1] !== myPubkey) {
-        if (rumor.pubkey !== myPubkey) {
-          throw new Error('Received rumor p tag does not match my public key');
-        }
+      const pTags = rumor.tags.filter(t => t[0] === 'p');
+      const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
+      
+      if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
+        throw new Error('Received rumor does not include my public key in p-tags');
       }
 
       if (rumor.kind === 7) {
@@ -199,13 +202,14 @@ import { contactSyncService } from './ContactSyncService';
         throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
       }
 
-      // Validate p tag in rumor (must be for me), except for self-sent cases
+      // Validate p tags in rumor - for group messages, my pubkey must be in at least one p-tag
+      // For self-sent messages, sender pubkey equals my pubkey
       const myPubkey = await s.getPublicKey();
-      const pTag = rumor.tags.find(t => t[0] === 'p');
-      if (!pTag || pTag[1] !== myPubkey) {
-        if (rumor.pubkey !== myPubkey) {
-          throw new Error('Received rumor p tag does not match my public key');
-        }
+      const pTags = rumor.tags.filter(t => t[0] === 'p');
+      const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
+      
+      if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
+        throw new Error('Received rumor does not include my public key in p-tags');
       }
 
       if (rumor.kind === 7) {
@@ -227,22 +231,46 @@ import { contactSyncService } from './ContactSyncService';
     if (!s) return null;
 
     try {
-      // Determine direction and partner
-      let direction: 'sent' | 'received';
-      let partnerNpub: string;
-
       // My pubkey (hex)
       const myPubkey = await s.getPublicKey();
-
-      if (rumor.pubkey === myPubkey) {
-        direction = 'sent';
-        // Find actual recipient from 'p' tag
-        const pTag = rumor.tags.find(t => t[0] === 'p');
-        const targetHex = pTag ? pTag[1] : myPubkey; // Fallback to self
-        partnerNpub = nip19.npubEncode(targetHex);
+      
+      // Extract all p-tags to determine if this is a group message
+      const pTags = rumor.tags.filter(t => t[0] === 'p');
+      const pTagPubkeys = pTags.map(t => t[1]);
+      const isGroup = pTagPubkeys.length > 1;
+      
+      // Determine direction
+      const direction: 'sent' | 'received' = rumor.pubkey === myPubkey ? 'sent' : 'received';
+      
+      // For group messages: all p-tag pubkeys + sender = participants
+      // For 1-on-1: use traditional partnerNpub logic
+      let partnerNpub: string;
+      let conversationId: string;
+      let participants: string[] | undefined;
+      let senderNpub: string | undefined;
+      
+      if (isGroup) {
+        // Group message: derive conversation ID from all participants (including sender)
+        const allParticipantPubkeys = [...new Set([...pTagPubkeys, rumor.pubkey])];
+        conversationId = deriveConversationId(allParticipantPubkeys, myPubkey);
+        participants = allParticipantPubkeys.map(p => nip19.npubEncode(p));
+        senderNpub = nip19.npubEncode(rumor.pubkey);
+        
+        // For backward compatibility, set partnerNpub to first non-self participant
+        const otherPubkeys = pTagPubkeys.filter(p => p !== myPubkey);
+        partnerNpub = nip19.npubEncode(otherPubkeys[0] || myPubkey);
+        
+        // Create/update conversation entry for group
+        await this.ensureGroupConversation(conversationId, participants, rumor);
       } else {
-        direction = 'received';
-        partnerNpub = nip19.npubEncode(rumor.pubkey);
+        // 1-on-1 message
+        if (direction === 'sent') {
+          const targetHex = pTagPubkeys[0] || myPubkey;
+          partnerNpub = nip19.npubEncode(targetHex);
+        } else {
+          partnerNpub = nip19.npubEncode(rumor.pubkey);
+        }
+        conversationId = partnerNpub;
       }
 
       const rumorId = getEventHash(rumor);
@@ -275,7 +303,10 @@ import { contactSyncService } from './ContactSyncService';
           fileHashPlain: plainHashTag?.[1],
           fileEncryptionAlgorithm: encAlgTag?.[1],
           fileKey: keyTag?.[1],
-          fileNonce: nonceTag?.[1]
+          fileNonce: nonceTag?.[1],
+          conversationId,
+          participants,
+          senderNpub
         };
       }
 
@@ -294,11 +325,51 @@ import { contactSyncService } from './ContactSyncService';
         createdAt: Date.now(),
         rumorKind: rumor.kind,
         parentRumorId,
-        location
+        location,
+        conversationId,
+        participants,
+        senderNpub
       };
     } catch (e) {
       console.error('Failed to create message from rumor:', e);
       return null;
+    }
+  }
+  
+  /**
+   * Ensures a group conversation exists in the database, creating or updating as needed.
+   */
+  private async ensureGroupConversation(
+    conversationId: string,
+    participantNpubs: string[],
+    rumor: NostrEvent
+  ): Promise<void> {
+    try {
+      const existing = await conversationRepo.getConversation(conversationId);
+      const subjectTag = rumor.tags.find(t => t[0] === 'subject');
+      const subject = subjectTag?.[1];
+      const now = Date.now();
+      
+      if (existing) {
+        // Update last activity and subject if newer
+        await conversationRepo.markActivity(conversationId, now);
+        if (subject && subject !== existing.subject) {
+          await conversationRepo.updateSubject(conversationId, subject);
+        }
+      } else {
+        // Create new conversation
+        const conversation: Conversation = {
+          id: conversationId,
+          isGroup: true,
+          participants: participantNpubs,
+          subject,
+          lastActivityAt: now,
+          createdAt: now
+        };
+        await conversationRepo.upsertConversation(conversation);
+      }
+    } catch (e) {
+      console.error('Failed to ensure group conversation:', e);
     }
   }
 
@@ -348,7 +419,10 @@ import { contactSyncService } from './ContactSyncService';
         const notificationBody = (message.fileUrl && message.fileType)
           ? getMediaPreviewLabel(message.fileType)
           : message.message;
-        await notificationService.showNewMessageNotification(message.recipientNpub, notificationBody);
+        // For group messages, use senderNpub (actual sender); for 1-on-1, recipientNpub is the sender
+        const notificationSender = message.senderNpub || message.recipientNpub;
+        // Pass conversationId so notification click navigates to correct chat (group or 1-on-1)
+        await notificationService.showNewMessageNotification(notificationSender, notificationBody, message.conversationId);
       }
 
       // Auto-add unknown contacts
@@ -658,7 +732,22 @@ import { contactSyncService } from './ContactSyncService';
     };
   }
 
-  public async sendMessage(recipientNpub: string, text: string, parentRumorId?: string, createdAtSeconds?: number) {
+  public async sendMessage(
+    recipientNpub: string | null,
+    text: string,
+    parentRumorId?: string,
+    createdAtSeconds?: number,
+    conversationId?: string
+  ): Promise<string> {
+    // If group conversation, delegate to sendGroupMessage
+    if (conversationId) {
+      return this.sendGroupMessage(conversationId, text);
+    }
+
+    if (!recipientNpub) {
+      throw new Error('recipientNpub required for 1-on-1 messages');
+    }
+
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
  
@@ -793,7 +882,147 @@ import { contactSyncService } from './ContactSyncService';
     return rumorId;
   }
 
-  public async sendLocationMessage(recipientNpub: string, latitude: number, longitude: number, createdAtSeconds?: number): Promise<string> {
+  /**
+   * Send a message to a group conversation.
+   * Creates gift-wraps for each participant and publishes to their relays.
+   * 
+   * @param conversationId The group conversation ID (16-char hash)
+   * @param text Message text
+   * @param subject Optional subject/title for the group (typically only on first message)
+   */
+  public async sendGroupMessage(
+    conversationId: string,
+    text: string,
+    subject?: string
+  ): Promise<string> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    // Get conversation to retrieve participants
+    const conversation = await conversationRepo.getConversation(conversationId);
+    if (!conversation || !conversation.isGroup) {
+      throw new Error('Group conversation not found');
+    }
+
+    const senderPubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(senderPubkey);
+
+    // Convert participant npubs to pubkeys
+    const participantPubkeys = conversation.participants.map(npub => {
+      const { data } = nip19.decode(npub);
+      return data as string;
+    });
+
+    // Ensure sender is in participants
+    if (!participantPubkeys.includes(senderPubkey)) {
+      participantPubkeys.push(senderPubkey);
+    }
+
+    // Get relays for all participants and sender
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+    const participantRelaysMap = new Map<string, string[]>();
+
+    for (const npub of conversation.participants) {
+      if (npub !== senderNpub) {
+        const relays = await this.getMessagingRelays(npub);
+        if (relays.length > 0) {
+          participantRelaysMap.set(npub, relays);
+        }
+      }
+    }
+
+    // Collect all relays for temporary connections
+    const allRelays = new Set<string>(senderRelays);
+    for (const relays of participantRelaysMap.values()) {
+      relays.forEach(r => allRelays.add(r));
+    }
+
+    if (this.debug) console.log('Sending group message to', participantRelaysMap.size, 'participants');
+
+    // Connect temporarily for message sending
+    for (const url of allRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    // Cleanup temporary relays after sending attempt
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
+
+    // Create p-tags for all participants (excluding self per NIP-17)
+    const pTags: string[][] = participantPubkeys
+      .filter(p => p !== senderPubkey)
+      .map(p => ['p', p]);
+
+    const tags: string[][] = [...pTags];
+    if (subject) {
+      tags.push(['subject', subject]);
+    }
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 14,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: text,
+      tags
+    };
+
+    const rumorId = getEventHash(rumor as NostrEvent);
+
+    // Send gift-wrap to each participant
+    for (const [npub, relays] of participantRelaysMap) {
+      const { data: recipientPubkey } = nip19.decode(npub);
+      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
+      // Best-effort delivery to each participant
+      for (const url of relays) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
+    // Create self-wrap
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+    for (const url of senderRelays) {
+      await retryQueue.enqueue(selfGiftWrap, url);
+    }
+
+    // Cache locally
+    await messageRepo.saveMessage({
+      recipientNpub: conversation.participants.find(p => p !== senderNpub) || senderNpub,
+      message: text,
+      sentAt: (rumor.created_at || 0) * 1000,
+      eventId: selfGiftWrap.id,
+      rumorId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: 14,
+      conversationId,
+      participants: conversation.participants,
+      senderNpub
+    });
+
+    // Update conversation activity
+    await conversationRepo.markActivity(conversationId);
+
+    return rumorId;
+  }
+
+  public async sendLocationMessage(
+    recipientNpub: string | null,
+    latitude: number,
+    longitude: number,
+    createdAtSeconds?: number,
+    conversationId?: string
+  ): Promise<string> {
+    // If group conversation, delegate to sendGroupLocationMessage
+    if (conversationId) {
+      return this.sendGroupLocationMessage(conversationId, latitude, longitude, createdAtSeconds);
+    }
+
+    if (!recipientNpub) {
+      throw new Error('recipientNpub required for 1-on-1 messages');
+    }
+
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
 
@@ -885,6 +1114,124 @@ import { contactSyncService } from './ContactSyncService';
     return rumorId;
   }
 
+  private async sendGroupLocationMessage(
+    conversationId: string,
+    latitude: number,
+    longitude: number,
+    createdAtSeconds?: number
+  ): Promise<string> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const conversation = await conversationRepo.getConversation(conversationId);
+    if (!conversation) {
+      throw new Error('Group conversation not found');
+    }
+
+    const senderPubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(senderPubkey);
+
+    // Convert participant npubs to pubkeys
+    const participantPubkeys = conversation.participants.map(npub => {
+      const { data } = nip19.decode(npub);
+      return data as string;
+    });
+
+    // Ensure sender is in participants
+    if (!participantPubkeys.includes(senderPubkey)) {
+      participantPubkeys.push(senderPubkey);
+    }
+
+    // Get relays for all participants and sender
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+    const participantRelaysMap = new Map<string, string[]>();
+
+    for (const npub of conversation.participants) {
+      if (npub !== senderNpub) {
+        const relays = await this.getMessagingRelays(npub);
+        if (relays.length > 0) {
+          participantRelaysMap.set(npub, relays);
+        }
+      }
+    }
+
+    // Collect all relays for temporary connections
+    const allRelays = new Set<string>(senderRelays);
+    for (const relays of participantRelaysMap.values()) {
+      relays.forEach(r => allRelays.add(r));
+    }
+
+    if (this.debug) console.log('Sending group location to', participantRelaysMap.size, 'participants');
+
+    // Connect temporarily for message sending
+    for (const url of allRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    // Cleanup temporary relays after sending attempt
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
+
+    // Create p-tags for all participants (excluding self per NIP-17)
+    const pTags: string[][] = participantPubkeys
+      .filter(p => p !== senderPubkey)
+      .map(p => ['p', p]);
+
+    const locationValue = `${latitude},${longitude}`;
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 14,
+      pubkey: senderPubkey,
+      created_at: createdAtSeconds ?? Math.floor(Date.now() / 1000),
+      content: `geo:${locationValue}`,
+      tags: [...pTags, ['location', locationValue]]
+    };
+
+    const rumorId = getEventHash(rumor as NostrEvent);
+
+    // Send gift-wrap to each participant
+    for (const [npub, relays] of participantRelaysMap) {
+      const { data: recipientPubkey } = nip19.decode(npub);
+      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
+      // Best-effort delivery to each participant
+      for (const url of relays) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
+    // Create self-wrap
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+    for (const url of senderRelays) {
+      await retryQueue.enqueue(selfGiftWrap, url);
+    }
+
+    // Cache locally
+    await messageRepo.saveMessage({
+      recipientNpub: conversation.participants.find(p => p !== senderNpub) || senderNpub,
+      message: rumor.content || '',
+      sentAt: (rumor.created_at || 0) * 1000,
+      eventId: selfGiftWrap.id,
+      rumorId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: 14,
+      location: {
+        latitude,
+        longitude
+      },
+      conversationId,
+      participants: conversation.participants,
+      senderNpub
+    });
+
+    // Update conversation activity
+    await conversationRepo.markActivity(conversationId);
+
+    return rumorId;
+  }
+
   private mediaTypeToMime(type: 'image' | 'video' | 'audio'): string {
     if (type === 'image') {
       return 'image/jpeg';
@@ -921,11 +1268,21 @@ import { contactSyncService } from './ContactSyncService';
   }
 
   public async sendFileMessage(
-    recipientNpub: string,
+    recipientNpub: string | null,
     file: File,
     mediaType: 'image' | 'video' | 'audio',
-    createdAtSeconds?: number
+    createdAtSeconds?: number,
+    conversationId?: string
   ): Promise<string> {
+    // If group conversation, delegate to sendGroupFileMessage
+    if (conversationId) {
+      return this.sendGroupFileMessage(conversationId, file, mediaType, createdAtSeconds);
+    }
+
+    if (!recipientNpub) {
+      throw new Error('recipientNpub required for 1-on-1 messages');
+    }
+
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
  
@@ -1058,6 +1415,153 @@ import { contactSyncService } from './ContactSyncService';
     });
 
     await this.autoAddContact(recipientNpub);
+
+    return rumorId;
+  }
+
+  private async sendGroupFileMessage(
+    conversationId: string,
+    file: File,
+    mediaType: 'image' | 'video' | 'audio',
+    createdAtSeconds?: number
+  ): Promise<string> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const conversation = await conversationRepo.getConversation(conversationId);
+    if (!conversation) {
+      throw new Error('Group conversation not found');
+    }
+
+    const senderPubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(senderPubkey);
+
+    // Convert participant npubs to pubkeys
+    const participantPubkeys = conversation.participants.map(npub => {
+      const { data } = nip19.decode(npub);
+      return data as string;
+    });
+
+    // Ensure sender is in participants
+    if (!participantPubkeys.includes(senderPubkey)) {
+      participantPubkeys.push(senderPubkey);
+    }
+
+    // Get relays for all participants and sender
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+    const participantRelaysMap = new Map<string, string[]>();
+
+    for (const npub of conversation.participants) {
+      if (npub !== senderNpub) {
+        const relays = await this.getMessagingRelays(npub);
+        if (relays.length > 0) {
+          participantRelaysMap.set(npub, relays);
+        }
+      }
+    }
+
+    // Collect all relays for temporary connections
+    const allRelays = new Set<string>(senderRelays);
+    for (const relays of participantRelaysMap.values()) {
+      relays.forEach(r => allRelays.add(r));
+    }
+
+    if (this.debug) console.log('Sending group file to', participantRelaysMap.size, 'participants');
+
+    // Connect temporarily for message sending
+    for (const url of allRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    // Cleanup temporary relays after sending attempt
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
+
+    // Encrypt file with AES-GCM
+    const encrypted = await encryptFileWithAesGcm(file);
+
+    // Upload encrypted blob to selected media backend
+    const mimeType = file.type || this.mediaTypeToMime(mediaType);
+
+    const senderProfile = await profileRepo.getProfileIgnoreTTL(senderNpub);
+    const blossomServers = (senderProfile as any)?.mediaServers ?? [];
+
+    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers);
+
+    // Create p-tags for all participants (excluding self per NIP-17)
+    const pTags: string[][] = participantPubkeys
+      .filter(p => p !== senderPubkey)
+      .map(p => ['p', p]);
+
+    const now = createdAtSeconds ?? Math.floor(Date.now() / 1000);
+
+    const tags: string[][] = [
+      ...pTags,
+      ['file-type', mimeType],
+      ['encryption-algorithm', 'aes-gcm'],
+      ['decryption-key', encrypted.key],
+      ['decryption-nonce', encrypted.nonce],
+      ['size', encrypted.size.toString()],
+      ['x', encrypted.hashEncrypted]
+    ];
+
+    if (encrypted.hashPlain) {
+      tags.push(['ox', encrypted.hashPlain]);
+    }
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 15,
+      pubkey: senderPubkey,
+      created_at: now,
+      content: fileUrl,
+      tags
+    };
+
+    const rumorId = getEventHash(rumor as NostrEvent);
+
+    // Send gift-wrap to each participant
+    for (const [npub, relays] of participantRelaysMap) {
+      const { data: recipientPubkey } = nip19.decode(npub);
+      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
+      // Best-effort delivery to each participant
+      for (const url of relays) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
+    // Create self-wrap
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+    for (const url of senderRelays) {
+      await retryQueue.enqueue(selfGiftWrap, url);
+    }
+
+    // Cache locally
+    await messageRepo.saveMessage({
+      recipientNpub: conversation.participants.find(p => p !== senderNpub) || senderNpub,
+      message: '',
+      sentAt: now * 1000,
+      eventId: selfGiftWrap.id,
+      rumorId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: 15,
+      fileUrl,
+      fileType: mimeType,
+      fileSize: encrypted.size,
+      fileHashEncrypted: encrypted.hashEncrypted,
+      fileHashPlain: encrypted.hashPlain,
+      fileEncryptionAlgorithm: 'aes-gcm',
+      fileKey: encrypted.key,
+      fileNonce: encrypted.nonce,
+      conversationId,
+      participants: conversation.participants,
+      senderNpub
+    });
+
+    // Update conversation activity
+    await conversationRepo.markActivity(conversationId);
 
     return rumorId;
   }

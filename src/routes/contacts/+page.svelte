@@ -20,7 +20,7 @@ import ContactContextMenu from '$lib/components/ContactContextMenu.svelte';
 import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 import { nip19 } from 'nostr-tools';
     import { contactSyncService } from '$lib/core/ContactSyncService';
-    import { showScanContactQrModal, showManageContactsModal } from '$lib/stores/modals';
+    import { showScanContactQrModal, showManageContactsModal, showCreateGroupModal } from '$lib/stores/modals';
     import { overscroll, type OverscrollState } from '$lib/utils/overscroll';
     import { connectionManager } from '$lib/core/connection/instance';
     import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
@@ -402,6 +402,11 @@ import { nip19 } from 'nostr-tools';
         showScanContactQrModal.set(true);
     }
 
+    function openCreateGroup() {
+        hapticSelection();
+        showCreateGroupModal.set(true);
+    }
+
     function handleLongPressStart(e: TouchEvent, contact: ContactView) {
         const touch = e.touches[0];
         longPressStartX = touch.clientX;
@@ -730,6 +735,25 @@ import { nip19 } from 'nostr-tools';
                 {/if}
             </div>
         {/if}
+
+        <!-- Create group row -->
+        <button
+            type="button"
+            class="flex items-center gap-3 p-3 my-1.5 rounded-full w-full text-left bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white transition-all duration-200 ease-out active:scale-[0.98]"
+            onclick={openCreateGroup}
+        >
+            <div class="w-12 h-12 rounded-full bg-[rgb(var(--color-lavender-rgb))] flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            </div>
+            <span class="font-bold text-gray-800 dark:text-slate-100 text-[15px]">
+                {$t('modals.manageContacts.createGroup')}
+            </span>
+        </button>
         
         {#if contacts.length === 0}
             <div class="typ-body text-gray-500 text-center py-8 mx-2 bg-gray-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">

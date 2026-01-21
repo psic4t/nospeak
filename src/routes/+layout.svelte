@@ -19,6 +19,7 @@
     import RelayStatusModal from "$lib/components/RelayStatusModal.svelte";
     import SettingsModal from "$lib/components/SettingsModal.svelte";
     import ManageContactsModal from "$lib/components/ManageContactsModal.svelte";
+    import CreateGroupChatModal from "$lib/components/CreateGroupChatModal.svelte";
     import ProfileModal from "$lib/components/ProfileModal.svelte";
     import EmptyProfileModal from "$lib/components/EmptyProfileModal.svelte";
     import UserQrModal from "$lib/components/UserQrModal.svelte";
@@ -38,7 +39,7 @@
     import Toast from "$lib/components/Toast.svelte";
  
 
-   const { showSettingsModal, showManageContactsModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
+   const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
  
    let { children } = $props();
 
@@ -128,8 +129,18 @@
           }
 
           try {
-              const partnerNpub = nip19.npubEncode(payload.partnerPubkeyHex);
-              await goto(`/chat/${encodeURIComponent(partnerNpub)}`);
+              const conversationId = payload.conversationId;
+              // Group conversation IDs are 16-char hex hashes, 1-on-1 are 64-char pubkey hex
+              const isGroup = conversationId.length === 16;
+              
+              if (isGroup) {
+                  // Group chat - use the hash directly
+                  await goto(`/chat/${encodeURIComponent(conversationId)}`);
+              } else {
+                  // 1-on-1 chat - convert pubkey hex to npub
+                  const partnerNpub = nip19.npubEncode(conversationId);
+                  await goto(`/chat/${encodeURIComponent(partnerNpub)}`);
+              }
               routedFromNotification = true;
           } catch (e) {
               console.error('Failed to route Android notification tap:', e);
@@ -338,6 +349,11 @@
      <ManageContactsModal 
       isOpen={$showManageContactsModal} 
       close={() => showManageContactsModal.set(false)} 
+    />
+
+     <CreateGroupChatModal
+      isOpen={$showCreateGroupModal}
+      close={() => showCreateGroupModal.set(false)}
     />
 
      <ScanContactQrModal

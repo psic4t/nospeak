@@ -4,7 +4,7 @@ export type AndroidNotificationRouteKind = 'chat';
 
 export interface AndroidNotificationRoutePayload {
     kind: AndroidNotificationRouteKind;
-    partnerPubkeyHex: string;
+    conversationId: string; // pubkey hex for 1-on-1, 16-char hash for groups
 }
 
 export interface AndroidNotificationRouterPlugin {

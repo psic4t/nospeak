@@ -24,6 +24,20 @@ export interface Message {
         latitude: number;
         longitude: number;
     };
+    // Group chat support (NIP-17)
+    conversationId?: string; // npub for 1-on-1, hash for groups
+    participants?: string[]; // null/undefined for 1-on-1, array of npubs for groups
+    senderNpub?: string; // sender's npub for group messages (to show attribution)
+}
+
+export interface Conversation {
+    id: string; // npub for 1-on-1, hash for groups
+    isGroup: boolean;
+    participants: string[]; // npubs of all participants
+    subject?: string; // group chat title
+    lastActivityAt: number;
+    lastReadAt?: number;
+    createdAt: number;
 }
 
 export interface Profile {
@@ -72,6 +86,7 @@ export class NospeakDB extends Dexie {
     contacts!: Table<ContactItem, string>; // npub as primary key
     retryQueue!: Table<RetryItem, number>;
     reactions!: Table<Reaction, number>;
+    conversations!: Table<Conversation, string>; // conversationId as primary key
  
     constructor() {
         super('NospeakDB');
@@ -140,6 +155,22 @@ export class NospeakDB extends Dexie {
 
             if (updates.length > 0) {
                 await trans.table('profiles').bulkPut(updates);
+            }
+        });
+
+        // Version 10: Add group chat support - conversationId field to messages and conversations table
+        this.version(10).stores({
+            messages: '++id, [recipientNpub+sentAt], &eventId, sentAt, rumorId, [conversationId+sentAt]',
+            conversations: 'id, lastActivityAt'
+        }).upgrade(async trans => {
+            // Populate conversationId from recipientNpub for existing 1-on-1 messages
+            const messages = await trans.table('messages').toArray();
+            const updates = messages
+                .filter((m: any) => !m.conversationId)
+                .map((m: any) => ({ ...m, conversationId: m.recipientNpub }));
+
+            if (updates.length > 0) {
+                await trans.table('messages').bulkPut(updates);
             }
         });
     }
