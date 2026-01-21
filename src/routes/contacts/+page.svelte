@@ -741,7 +741,18 @@ import { nip19 } from 'nostr-tools';
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
                 class="flex justify-between items-center p-3 my-1.5 rounded-full bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white transition-all duration-200 ease-out group cursor-pointer active:scale-[0.98]"
+                class:select-none={isAndroidApp}
+                class:androidNoCallout={isAndroidApp}
                 onclick={() => openChat(contact.npub)}
+                oncontextmenu={(e) => {
+                    if (!isAndroidApp) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                }}
+                onselectstart={(e) => {
+                    if (!isAndroidApp) return;
+                    e.preventDefault();
+                }}
                 ontouchstart={(e) => handleLongPressStart(e, contact)}
                 ontouchend={handleLongPressEnd}
                 ontouchcancel={handleLongPressEnd}
@@ -783,3 +794,11 @@ import { nip19 } from 'nostr-tools';
     onCancel={cancelDelete}
 />
 {/if}
+
+<style>
+    .androidNoCallout :global(*) {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+</style>
