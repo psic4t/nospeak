@@ -236,6 +236,8 @@ const en = {
             defaultTitle: 'Group Chat',
             participants: '{count} participants',
             participantsShort: '{count}',
+            members: 'Members: {count}',
+            membersTitle: 'Members',
             viewMembers: 'View members'
         },
         inputPlaceholder: 'Type a message...',

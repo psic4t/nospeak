@@ -7,6 +7,7 @@
   import { runtimeConfig } from "$lib/core/runtimeConfig";
   import Avatar from "./Avatar.svelte";
   import GroupAvatar from "./GroupAvatar.svelte";
+  import GroupMembersModal from "./GroupMembersModal.svelte";
   import MessageContent from "./MessageContent.svelte";
   import ContextMenu from "./ContextMenu.svelte";
   import MessageReactions from "./MessageReactions.svelte";
@@ -70,6 +71,7 @@
    
    // Group chat display state
    let groupTitle = $state<string>('');
+   let showMembersModal = $state(false);
    // Cache participant profiles: { name, picture }
    let participantProfiles = $state<Map<string, { name: string; picture?: string }>>(new Map());
    
@@ -1563,9 +1565,14 @@
               <span class="font-bold dark:text-white text-left truncate max-w-[200px]">
                   {groupTitle || $t('chat.group.defaultTitle')}
               </span>
-              <span class="text-xs text-gray-500 dark:text-slate-400">
-                  {get(t)('chat.group.participantsShort', { values: { count: groupConversation.participants.length } })}
-              </span>
+              <button
+                  type="button"
+                  class="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:underline cursor-pointer transition-colors text-left"
+                  onclick={() => { hapticSelection(); showMembersModal = true; }}
+                  aria-label={$t('chat.group.viewMembers')}
+              >
+                  {$t('chat.group.members', { values: { count: groupConversation.participants.length } })}
+              </button>
           </div>
         {:else if partnerNpub}
           <button
@@ -1982,6 +1989,15 @@
     </form>
   </div>
 </div>
+
+{#if isGroup && groupConversation}
+  <GroupMembersModal
+    isOpen={showMembersModal}
+    close={() => showMembersModal = false}
+    participants={groupConversation.participants}
+    onMemberClick={(npub) => { showMembersModal = false; openProfile(npub); }}
+  />
+{/if}
 
 <ContextMenu
   isOpen={contextMenu.isOpen}

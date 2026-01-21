@@ -219,7 +219,16 @@ const it = {
         empty: {
             noMessagesTitle: 'Nessun messaggio',
             forContact: 'Inizia la conversazione con {name}.',
+            forGroup: 'Inizia la conversazione in {name}.',
             generic: 'Seleziona un contatto per iniziare a chattare.'
+        },
+        group: {
+            defaultTitle: 'Chat di gruppo',
+            participants: '{count} partecipanti',
+            participantsShort: '{count}',
+            members: 'Membri: {count}',
+            membersTitle: 'Membri',
+            viewMembers: 'Visualizza membri'
         },
         inputPlaceholder: 'Scrivi un messaggio...',
         contextMenu: {

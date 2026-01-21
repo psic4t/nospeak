@@ -219,7 +219,16 @@ const pt = {
         empty: {
             noMessagesTitle: 'Ainda não há mensagens',
             forContact: 'Inicie a conversa com {name}.',
+            forGroup: 'Inicie a conversa em {name}.',
             generic: 'Selecione um contacto para começar a conversar.'
+        },
+        group: {
+            defaultTitle: 'Chat de grupo',
+            participants: '{count} participantes',
+            participantsShort: '{count}',
+            members: 'Membros: {count}',
+            membersTitle: 'Membros',
+            viewMembers: 'Ver membros'
         },
         inputPlaceholder: 'Escreva uma mensagem...',
         contextMenu: {

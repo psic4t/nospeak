@@ -219,7 +219,16 @@ const fr = {
         empty: {
             noMessagesTitle: 'Aucun message pour le moment',
             forContact: 'Commencez la conversation avec {name}.',
+            forGroup: 'Commencez la conversation dans {name}.',
             generic: 'Sélectionnez un contact pour commencer à discuter.'
+        },
+        group: {
+            defaultTitle: 'Discussion de groupe',
+            participants: '{count} participants',
+            participantsShort: '{count}',
+            members: 'Membres : {count}',
+            membersTitle: 'Membres',
+            viewMembers: 'Voir les membres'
         },
         inputPlaceholder: 'Écrire un message...',
         contextMenu: {
