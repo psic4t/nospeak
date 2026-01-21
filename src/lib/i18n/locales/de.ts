@@ -108,7 +108,17 @@ const de = {
                   title: 'Kontakt löschen',
                   message: 'Möchtest du {name} wirklich löschen?',
                   confirm: 'Löschen'
-              }
+              },
+              createGroup: 'Gruppe erstellen'
+          },
+          createGroup: {
+              title: 'Gruppenchat erstellen',
+              searchPlaceholder: 'Kontakte suchen',
+              selectedCount: '{count} ausgewählt',
+              minContactsHint: 'Wähle mindestens 2 Kontakte',
+              createButton: 'Gruppe erstellen',
+              creating: 'Wird erstellt…',
+              noContacts: 'Keine Kontakte zum Hinzufügen'
           },
          profile: {
               unknownName: 'Unbekannt',

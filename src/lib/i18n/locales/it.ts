@@ -107,7 +107,17 @@ const it = {
                 title: 'Elimina contatto',
                 message: 'Sei sicuro di voler eliminare {name}?',
                 confirm: 'Elimina'
-            }
+            },
+            createGroup: 'Crea gruppo'
+        },
+        createGroup: {
+            title: 'Crea chat di gruppo',
+            searchPlaceholder: 'Cerca contatti',
+            selectedCount: '{count} selezionati',
+            minContactsHint: 'Seleziona almeno 2 contatti',
+            createButton: 'Crea gruppo',
+            creating: 'Creazione…',
+            noContacts: 'Nessun contatto da aggiungere al gruppo'
         },
         profile: {
             unknownName: 'Sconosciuto',

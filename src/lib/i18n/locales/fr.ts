@@ -107,7 +107,17 @@ const fr = {
                 title: 'Supprimer le contact',
                 message: 'Voulez-vous vraiment supprimer {name} ?',
                 confirm: 'Supprimer'
-            }
+            },
+            createGroup: 'Créer un groupe'
+        },
+        createGroup: {
+            title: 'Créer une discussion de groupe',
+            searchPlaceholder: 'Rechercher des contacts',
+            selectedCount: '{count} sélectionnés',
+            minContactsHint: 'Sélectionnez au moins 2 contacts',
+            createButton: 'Créer le groupe',
+            creating: 'Création…',
+            noContacts: 'Aucun contact à ajouter au groupe'
         },
         profile: {
             unknownName: 'Inconnu',
