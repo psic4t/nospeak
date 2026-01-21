@@ -78,6 +78,17 @@ export function generateGroupTitle(names: string[], maxLength: number = 50): str
 
 export class ConversationRepository {
     /**
+     * Emit an event when a conversation is updated
+     */
+    private emitConversationUpdated(id: string, subject?: string): void {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('nospeak:conversation-updated', {
+                detail: { conversationId: id, subject }
+            }));
+        }
+    }
+
+    /**
      * Get a conversation by ID
      */
     public async getConversation(id: string): Promise<Conversation | undefined> {
@@ -104,7 +115,12 @@ export class ConversationRepository {
      * Create or update a conversation
      */
     public async upsertConversation(conversation: Conversation): Promise<void> {
+        const existing = await this.getConversation(conversation.id);
         await db.conversations.put(conversation);
+        // Emit update if subject changed
+        if (conversation.subject !== existing?.subject) {
+            this.emitConversationUpdated(conversation.id, conversation.subject);
+        }
     }
 
     /**
@@ -112,6 +128,7 @@ export class ConversationRepository {
      */
     public async updateSubject(id: string, subject: string): Promise<void> {
         await db.conversations.update(id, { subject });
+        this.emitConversationUpdated(id, subject);
     }
 
     /**

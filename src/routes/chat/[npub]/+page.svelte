@@ -319,13 +319,30 @@
             }
         };
 
+        // Listen for conversation updates (e.g., subject changes from incoming messages)
+        const handleConversationUpdated = async (event: Event) => {
+            const custom = event as CustomEvent<{ conversationId?: string; subject?: string }>;
+            const convId = conversationId;
+            const { conversationId: updatedId } = custom.detail || {};
+            
+            // Refresh groupConversation if this is the active group chat
+            if (convId && updatedId === convId && isGroup) {
+                const updated = await conversationRepo.getConversation(convId);
+                if (updated) {
+                    groupConversation = updated;
+                }
+            }
+        };
+
         if (typeof window !== 'undefined') {
             window.addEventListener('nospeak:new-message', handleNewMessage);
+            window.addEventListener('nospeak:conversation-updated', handleConversationUpdated);
         }
 
         return () => {
             if (typeof window !== 'undefined') {
                 window.removeEventListener('nospeak:new-message', handleNewMessage);
+                window.removeEventListener('nospeak:conversation-updated', handleConversationUpdated);
             }
         };
     });

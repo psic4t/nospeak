@@ -280,6 +280,15 @@
       }
     };
 
+    const handleConversationUpdated = async () => {
+      try {
+        const dbContacts = await contactRepo.getContacts();
+        await refreshChatList(dbContacts as ContactItem[]);
+      } catch (e) {
+        console.error("ChatList: Failed to refresh after conversation updated", e);
+      }
+    };
+
     if (typeof window !== "undefined") {
       window.addEventListener(
         "nospeak:new-message",
@@ -288,6 +297,10 @@
       window.addEventListener(
         "nospeak:profiles-updated",
         handleProfilesUpdated as EventListener,
+      );
+      window.addEventListener(
+        "nospeak:conversation-updated",
+        handleConversationUpdated as EventListener,
       );
     }
 
@@ -302,6 +315,10 @@
         window.removeEventListener(
           "nospeak:profiles-updated",
           handleProfilesUpdated as EventListener,
+        );
+        window.removeEventListener(
+          "nospeak:conversation-updated",
+          handleConversationUpdated as EventListener,
         );
       }
     };

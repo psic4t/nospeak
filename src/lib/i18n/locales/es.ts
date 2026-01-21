@@ -238,7 +238,16 @@ const es = {
             participantsShort: '{count}',
             members: 'Miembros: {count}',
             membersTitle: 'Miembros',
-            viewMembers: 'Ver miembros'
+            viewMembers: 'Ver miembros',
+            editName: 'Editar nombre del grupo',
+            editNameTitle: 'Nombre del grupo',
+            editNamePlaceholder: 'Ingresa el nombre del grupo...',
+            editNameHint: 'Dejar vacío para usar nombres de participantes',
+            editNameSave: 'Guardar',
+            editNameCancel: 'Cancelar',
+            nameSavedToast: 'Guardado. Se establecerá con el próximo mensaje.',
+            nameValidationTooLong: 'Nombre muy largo (máx. 100 caracteres)',
+            nameValidationInvalidChars: 'El nombre contiene caracteres inválidos'
         },
         inputPlaceholder: 'Escribe un mensaje...',
         contextMenu: {

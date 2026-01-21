@@ -737,11 +737,12 @@ import type { Conversation } from '$lib/db/db';
     text: string,
     parentRumorId?: string,
     createdAtSeconds?: number,
-    conversationId?: string
+    conversationId?: string,
+    subject?: string
   ): Promise<string> {
     // If group conversation, delegate to sendGroupMessage
     if (conversationId) {
-      return this.sendGroupMessage(conversationId, text);
+      return this.sendGroupMessage(conversationId, text, subject);
     }
 
     if (!recipientNpub) {

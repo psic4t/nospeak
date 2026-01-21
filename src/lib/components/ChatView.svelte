@@ -8,6 +8,8 @@
   import Avatar from "./Avatar.svelte";
   import GroupAvatar from "./GroupAvatar.svelte";
   import GroupMembersModal from "./GroupMembersModal.svelte";
+  import EditGroupNameModal from "./EditGroupNameModal.svelte";
+  import { conversationRepo } from "$lib/db/ConversationRepository";
   import MessageContent from "./MessageContent.svelte";
   import ContextMenu from "./ContextMenu.svelte";
   import MessageReactions from "./MessageReactions.svelte";
@@ -72,6 +74,10 @@
    // Group chat display state
    let groupTitle = $state<string>('');
    let showMembersModal = $state(false);
+   let showEditNameModal = $state(false);
+   let pendingGroupSubject = $state<string | null>(null);
+   let showNameSavedToast = $state(false);
+   let nameSavedToastTimeout: ReturnType<typeof setTimeout> | null = null;
    // Cache participant profiles: { name, picture }
    let participantProfiles = $state<Map<string, { name: string; picture?: string }>>(new Map());
    
@@ -146,15 +152,57 @@
            }
        }
        
-       // Load profiles for unknown senders
-       if (unknownSenders.size > 0) {
-           void (async () => {
-               for (const npub of unknownSenders) {
-                   await loadParticipantProfile(npub);
-               }
-           })();
-       }
-   });
+        // Load profiles for unknown senders
+        if (unknownSenders.size > 0) {
+            void (async () => {
+                for (const npub of unknownSenders) {
+                    await loadParticipantProfile(npub);
+                }
+            })();
+        }
+    });
+
+    // Handle saving group name
+    async function handleSaveGroupName(newName: string): Promise<void> {
+        if (!groupConversation) return;
+        
+        // Clear any existing toast timeout
+        if (nameSavedToastTimeout) {
+            clearTimeout(nameSavedToastTimeout);
+            nameSavedToastTimeout = null;
+        }
+        
+        if (newName === '') {
+            // Clear subject - revert to auto-generated name
+            await conversationRepo.updateSubject(groupConversation.id, '');
+            pendingGroupSubject = ''; // Empty string signals to clear subject in next message
+            // Regenerate title from participant names
+            const names = await Promise.all(
+                groupConversation.participants
+                    .filter((p: string) => p !== $currentUser?.npub)
+                    .slice(0, 5)
+                    .map(async (npub: string) => {
+                        const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                        return profile?.metadata?.name || 
+                               profile?.metadata?.display_name || 
+                               npub.slice(0, 8) + '...';
+                    })
+            );
+            groupTitle = generateGroupTitle(names);
+        } else {
+            // Set new subject
+            await conversationRepo.updateSubject(groupConversation.id, newName);
+            pendingGroupSubject = newName;
+            groupTitle = newName;
+        }
+        
+        // Show toast
+        showNameSavedToast = true;
+        nameSavedToastTimeout = setTimeout(() => {
+            showNameSavedToast = false;
+            nameSavedToastTimeout = null;
+        }, 4000);
+    }
  
     let inputText = $state("");
 
@@ -982,16 +1030,24 @@
     optimisticMessages = [...optimisticMessages, optimistic];
     scrollToBottom();
 
+    // Capture pending subject before sending (will be cleared on success)
+    const subjectToSend = isGroup ? pendingGroupSubject ?? undefined : undefined;
+    
     void messagingService
       .sendMessage(
         isGroup ? null : partnerNpub!,
         text,
         undefined,
         createdAtSeconds,
-        isGroup ? groupConversation!.id : undefined
+        isGroup ? groupConversation!.id : undefined,
+        subjectToSend
       )
       .then(() => {
         if (isDestroyed) return;
+        // Clear pending subject after successful send
+        if (isGroup && pendingGroupSubject !== null) {
+          pendingGroupSubject = null;
+        }
         clearUnreadMarkersForChat();
         scrollToBottom();
         hapticLightImpact();
@@ -1563,10 +1619,31 @@
                   class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
               />
           </div>
-          <div class="flex flex-col">
-              <span class="font-bold dark:text-white text-left truncate max-w-[200px]">
-                  {groupTitle || $t('chat.group.defaultTitle')}
-              </span>
+          <div class="flex flex-col group">
+              <div class="flex items-center gap-1.5">
+                  <span class="font-bold dark:text-white text-left truncate max-w-[180px]">
+                      {groupTitle || $t('chat.group.defaultTitle')}
+                  </span>
+                  <button
+                      type="button"
+                      class="p-1 rounded-full text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all cursor-pointer opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                      onclick={() => { hapticSelection(); showEditNameModal = true; }}
+                      aria-label={$t('chat.group.editName')}
+                  >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                      </svg>
+                  </button>
+                  {#if showNameSavedToast}
+                      <span 
+                          class="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full whitespace-nowrap animate-fade-in"
+                          in:fly={{ x: -10, duration: 200 }}
+                          out:fly={{ x: 10, duration: 150 }}
+                      >
+                          {$t('chat.group.nameSavedToast')}
+                      </span>
+                  {/if}
+              </div>
               <button
                   type="button"
                   class="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:underline cursor-pointer transition-colors text-left"
@@ -1998,6 +2075,12 @@
     close={() => showMembersModal = false}
     participants={groupConversation.participants}
     onMemberClick={(npub) => { showMembersModal = false; openProfile(npub); }}
+  />
+  <EditGroupNameModal
+    isOpen={showEditNameModal}
+    close={() => showEditNameModal = false}
+    currentName={groupConversation.subject || ''}
+    onSave={handleSaveGroupName}
   />
 {/if}
 

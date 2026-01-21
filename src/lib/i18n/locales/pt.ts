@@ -238,7 +238,16 @@ const pt = {
             participantsShort: '{count}',
             members: 'Membros: {count}',
             membersTitle: 'Membros',
-            viewMembers: 'Ver membros'
+            viewMembers: 'Ver membros',
+            editName: 'Editar nome do grupo',
+            editNameTitle: 'Nome do grupo',
+            editNamePlaceholder: 'Digite o nome do grupo...',
+            editNameHint: 'Deixe vazio para usar nomes dos participantes',
+            editNameSave: 'Salvar',
+            editNameCancel: 'Cancelar',
+            nameSavedToast: 'Salvo. Será definido na próxima mensagem.',
+            nameValidationTooLong: 'Nome muito longo (máx. 100 caracteres)',
+            nameValidationInvalidChars: 'O nome contém caracteres inválidos'
         },
         inputPlaceholder: 'Escreva uma mensagem...',
         contextMenu: {
