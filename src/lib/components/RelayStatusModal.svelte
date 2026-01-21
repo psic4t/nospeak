@@ -2,6 +2,7 @@
      import { relayHealths } from '$lib/stores/connection';
       import { ConnectionType, type RelayAuthStatus } from '$lib/core/connection/ConnectionManager';
       import { isAndroidNative } from "$lib/core/NativeDialogs";
+      import { blur } from "$lib/utils/platform";
       import { hapticSelection } from '$lib/utils/haptics';
       import { fade } from 'svelte/transition';
       import { glassModal } from '$lib/utils/transitions';
@@ -14,9 +15,14 @@
 
       const BOTTOM_SHEET_CLOSE_THRESHOLD = 100;
       const BOTTOM_SHEET_ACTIVATION_THRESHOLD = 6;
+      const BOTTOM_SHEET_VELOCITY_THRESHOLD = 0.5; // px/ms - fast swipe threshold
       let bottomSheetDragY = $state(0);
       let isBottomSheetDragging = $state(false);
       let bottomSheetDragStartY = 0;
+      let modalElement: HTMLDivElement | undefined = $state();
+      let lastPointerY = 0;
+      let lastPointerTime = 0;
+      let pointerVelocity = 0;
 
       function formatTime(timestamp: number) {
           if (timestamp === 0) return get(t)('modals.relayStatus.never') as string;
@@ -38,12 +44,20 @@
          isBottomSheetDragging = false;
          bottomSheetDragStartY = e.clientY;
          bottomSheetDragY = 0;
+         
+         // Initialize velocity tracking
+         lastPointerY = e.clientY;
+         lastPointerTime = e.timeStamp;
+         pointerVelocity = 0;
+         
          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
      }
 
       function handleBottomSheetPointerMove(e: PointerEvent) {
          if (!isAndroidApp) return;
+         
          const delta = e.clientY - bottomSheetDragStartY;
+         
          if (!isBottomSheetDragging) {
              if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
                  isBottomSheetDragging = true;
@@ -51,75 +65,76 @@
                  return;
              }
          }
-         bottomSheetDragY = delta > 0 ? delta : 0;
+         
+         // Calculate velocity (px/ms)
+         const timeDelta = e.timeStamp - lastPointerTime;
+         if (timeDelta > 0) {
+             pointerVelocity = (e.clientY - lastPointerY) / timeDelta;
+         }
+         lastPointerY = e.clientY;
+         lastPointerTime = e.timeStamp;
+         
+         const dragY = delta > 0 ? delta : 0;
+         
+         // Direct DOM manipulation - bypasses Svelte reactivity for performance
+         if (modalElement) {
+             modalElement.style.transform = `translateY(${dragY}px)`;
+         }
+         
+         // Store for close decision
+         bottomSheetDragY = dragY;
      }
 
       function handleBottomSheetPointerEnd(e: PointerEvent) {
          if (!isAndroidApp) return;
+         
          try {
              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
          } catch {
              // ignore if pointer capture was not set
          }
+         
          if (!isBottomSheetDragging) {
              bottomSheetDragY = 0;
              return;
          }
-         const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
+         
+         // Close if: dragged past threshold OR velocity exceeds threshold (fast swipe)
+         const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD 
+             || pointerVelocity > BOTTOM_SHEET_VELOCITY_THRESHOLD;
+         
+         // Re-enable CSS transition BEFORE position change (for smooth animation)
          isBottomSheetDragging = false;
-         bottomSheetDragY = 0;
+         
          if (shouldClose) {
-             hapticSelection();
-             close();
+             // Animate off-screen, then close
+             if (modalElement) {
+                 modalElement.style.transform = 'translateY(100%)';
+             }
+             setTimeout(() => {
+                 bottomSheetDragY = 0;
+                 if (modalElement) {
+                     modalElement.style.transform = '';
+                 }
+                 hapticSelection();
+                 close();
+             }, 150);
+         } else {
+             // Snap back to origin with animation
+             bottomSheetDragY = 0;
+             if (modalElement) {
+                 modalElement.style.transform = 'translateY(0)';
+             }
          }
        }
 
-       function handleBottomSheetTouchStart(e: TouchEvent) {
-           if (!isAndroidApp) return;
-           if (e.touches.length === 0) return;
-           const touch = e.touches[0];
-           isBottomSheetDragging = false;
-           bottomSheetDragStartY = touch.clientY;
-           bottomSheetDragY = 0;
-       }
-
-       function handleBottomSheetTouchMove(e: TouchEvent) {
-           if (!isAndroidApp) return;
-           if (e.touches.length === 0) return;
-           const touch = e.touches[0];
-           const delta = touch.clientY - bottomSheetDragStartY;
-           if (!isBottomSheetDragging) {
-               if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
-                   isBottomSheetDragging = true;
-               } else {
-                   return;
-               }
-           }
-           bottomSheetDragY = delta > 0 ? delta : 0;
-           e.preventDefault();
-       }
-
-       function handleBottomSheetTouchEnd(e: TouchEvent) {
-           if (!isAndroidApp) return;
-           if (!isBottomSheetDragging) {
-               bottomSheetDragY = 0;
-               return;
-           }
-           const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD;
-            isBottomSheetDragging = false;
-            bottomSheetDragY = 0;
-            if (shouldClose) {
-                hapticSelection();
-                close();
-            }
-       }
 </script>
 
 {#if isOpen}
     <div 
         in:fade={{ duration: 130 }}
         out:fade={{ duration: 110 }}
-        class={`fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm z-50 flex justify-center ${
+        class={`fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 ${blur('sm')} z-50 flex justify-center ${
             isAndroidApp ? "items-end" : "items-center p-4"
         }`}
         class:android-safe-area-top={isAndroidApp}
@@ -130,31 +145,32 @@
         onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
     >
         <div 
+             bind:this={modalElement}
              in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }}
              out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-             class={`bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden relative outline-none transition-transform duration-150 ease-out ${
+             class={`bg-white/95 dark:bg-slate-900/80 ${blur('xl')} shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden relative outline-none ${
+                 isBottomSheetDragging ? '' : 'transition-transform duration-150 ease-out'
+             } ${
                  isAndroidApp
                      ? "w-full rounded-t-3xl rounded-b-none max-h-[90vh] p-6"
                      : "w-full max-w-lg max-h-[80vh] rounded-3xl p-8"
              }`}
              class:android-safe-area-bottom={isAndroidApp}
-             style:transform={isAndroidApp ? `translateY(${bottomSheetDragY}px)` : undefined}
+             style:will-change={isBottomSheetDragging ? 'transform' : undefined}
         >
             {#if isAndroidApp}
-              <div
-                class="absolute top-0 left-1/2 -translate-x-1/2 h-12 w-32"
-                onpointerdown={handleBottomSheetPointerDown}
-                onpointermove={handleBottomSheetPointerMove}
-                onpointerup={handleBottomSheetPointerEnd}
-                onpointercancel={handleBottomSheetPointerEnd}
-                ontouchstart={handleBottomSheetTouchStart}
-                ontouchmove={handleBottomSheetTouchMove}
-                ontouchend={handleBottomSheetTouchEnd}
-                ontouchcancel={handleBottomSheetTouchEnd}
-              >
+              <div class="absolute top-0 left-0 right-0 h-16 z-20 pointer-events-none">
                 <div
-                  class="mx-auto mt-2 w-10 h-1.5 rounded-full bg-gray-300 dark:bg-slate-600 touch-none"
-                ></div>
+                  class="mx-auto w-32 h-full pointer-events-auto touch-none"
+                  onpointerdown={handleBottomSheetPointerDown}
+                  onpointermove={handleBottomSheetPointerMove}
+                  onpointerup={handleBottomSheetPointerEnd}
+                  onpointercancel={handleBottomSheetPointerEnd}
+                >
+                  <div
+                    class="mx-auto mt-2 w-10 h-1.5 rounded-full bg-gray-300 dark:bg-slate-600"
+                  ></div>
+                </div>
               </div>
             {/if}
 

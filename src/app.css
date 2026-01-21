@@ -84,6 +84,8 @@
     overscroll-behavior-y: contain;
     touch-action: pan-y;
     transform: translateZ(0);
+    will-change: scroll-position;
+    contain: layout style;
  }
 
  /* Prevent long unbroken strings from overflowing message bubbles */
