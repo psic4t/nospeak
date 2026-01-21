@@ -1349,7 +1349,9 @@
   }
 
   async function handleFileSelect(file: File, type: 'image' | 'video' | 'audio') {
-    if (!partnerNpub) return;
+    // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
+    if (!isGroup && !partnerNpub) return;
+    if (isGroup && !groupConversation) return;
 
     openMediaPreview(file, type);
   }
