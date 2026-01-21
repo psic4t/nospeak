@@ -730,11 +730,12 @@ import { nip19 } from 'nostr-tools';
                 >
                     <div class="w-12 h-12 rounded-full bg-[rgb(var(--color-lavender-rgb))] flex items-center justify-center flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M23 19a2 2 0 0 1-2 2h-2v-2h2v-2h2v4z"/>
-                            <path d="M23 9V5a2 2 0 0 0-2-2h-4v2h4v4h2z"/>
-                            <path d="M3 9V5a2 2 0 0 1 2-2h4v2H5v4H3z"/>
-                            <path d="M3 15v4a2 2 0 0 0 2 2h4v-2H5v-4H3z"/>
-                            <path d="M9 9h6v6H9z"/>
+                            <rect x="3" y="3" width="6" height="6"></rect>
+                            <rect x="15" y="3" width="6" height="6"></rect>
+                            <rect x="3" y="15" width="6" height="6"></rect>
+                            <path d="M15 15h2v2h-2z"></path>
+                            <path d="M19 15h2v2h-2z"></path>
+                            <path d="M15 19h2v2h-2z"></path>
                         </svg>
                     </div>
                     <span class="font-bold text-gray-800 dark:text-slate-100 text-[15px]">
