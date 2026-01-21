@@ -102,8 +102,14 @@ export function initAndroidBackNavigation(): void {
             return;
         }
 
-        // 3. Route-level navigation for chat detail vs contact list
+        // 3. Route-level navigation for contacts create-group
         const path = typeof window !== 'undefined' ? window.location.pathname : '';
+        if (path.startsWith('/contacts/create-group')) {
+            await goto('/contacts');
+            return;
+        }
+
+        // 3. Route-level navigation for chat detail vs contact list
         const isChatDetail = path.startsWith('/chat/') && path !== '/chat';
         const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
 

@@ -93,6 +93,10 @@
     }
 
     $effect(() => {
+        if (!isOpen) {
+            return;
+        }
+
         const sub = liveQuery(() => contactRepo.getContacts()).subscribe(async (c) => {
             contacts = c;
             await refreshDisplayContacts(c);

@@ -20,7 +20,7 @@ import ContactContextMenu from '$lib/components/ContactContextMenu.svelte';
 import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 import { nip19 } from 'nostr-tools';
     import { contactSyncService } from '$lib/core/ContactSyncService';
-    import { showScanContactQrModal, showManageContactsModal, showCreateGroupModal } from '$lib/stores/modals';
+    import { showScanContactQrModal, showManageContactsModal } from '$lib/stores/modals';
     import { overscroll, type OverscrollState } from '$lib/utils/overscroll';
     import { connectionManager } from '$lib/core/connection/instance';
     import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
@@ -404,7 +404,7 @@ import { nip19 } from 'nostr-tools';
 
     function openCreateGroup() {
         hapticSelection();
-        showCreateGroupModal.set(true);
+        goto('/contacts/create-group');
     }
 
     function handleLongPressStart(e: TouchEvent, contact: ContactView) {
