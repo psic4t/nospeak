@@ -57,6 +57,11 @@ export class MessageRepository {
         return message || undefined;
     }
 
+    public async getMessageByRumorId(rumorId: string): Promise<Message | undefined> {
+        const message = await db.messages.where('rumorId').equals(rumorId).first();
+        return message || undefined;
+    }
+
     private emitMessageSaved(msg: Message) {
         if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
             window.dispatchEvent(new CustomEvent('nospeak:new-message', {

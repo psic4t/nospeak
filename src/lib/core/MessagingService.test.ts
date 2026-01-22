@@ -42,6 +42,14 @@ vi.mock('$lib/stores/sending', () => ({
 
 vi.mock('$lib/db/ContactRepository');
 vi.mock('$lib/db/MessageRepository');
+vi.mock('$lib/db/ConversationRepository', () => ({
+    conversationRepo: {
+        getConversation: vi.fn().mockResolvedValue(null),
+        markActivity: vi.fn().mockResolvedValue(undefined),
+    },
+    isGroupConversationId: vi.fn().mockReturnValue(false),
+    deriveConversationId: vi.fn().mockReturnValue('test-conversation-id'),
+}));
 vi.mock('$lib/db/ProfileRepository', () => ({
     profileRepo: {
         getProfile: vi.fn().mockResolvedValue({ messagingRelays: ['wss://relay.test'] }),
@@ -119,6 +127,7 @@ describe('MessagingService - Auto-add Contacts', () => {
         vi.mocked(messageRepo.hasMessages).mockResolvedValue(new Set());
         vi.mocked(messageRepo.saveMessage).mockResolvedValue();
         vi.mocked(messageRepo.saveMessages).mockResolvedValue();
+        vi.mocked(messageRepo.getMessageByRumorId).mockResolvedValue(undefined);
 
         // Mock profileResolver
         const { profileResolver } = await import('./ProfileResolver');
@@ -513,9 +522,114 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect(typeof (messaging as any).sendReaction).toBe('function');
         });
 
+        it('sendGroupReaction method is exposed', () => {
+            const messaging = new MessagingService();
+            expect(typeof (messaging as any).sendGroupReaction).toBe('function');
+        });
+
         it('sendFileMessage method is exposed', () => {
             const messaging = new MessagingService();
             expect(typeof (messaging as any).sendFileMessage).toBe('function');
+        });
+
+        it('processReactionRumor uses conversationId for group reactions', async () => {
+            const myPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+            const otherPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+            const groupConversationId = 'group123456789ab';
+            const s: any = {
+                getPublicKey: vi.fn().mockResolvedValue(myPubkey),
+            };
+
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return s;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            // Mock the target message lookup to return a group message
+            vi.mocked(messageRepo.getMessageByRumorId).mockResolvedValue({
+                recipientNpub: 'npub1other',
+                conversationId: groupConversationId,
+                message: 'test',
+                sentAt: Date.now(),
+                eventId: 'event-id',
+                rumorId: 'target-event-id',
+                direction: 'received',
+                createdAt: Date.now(),
+            });
+
+            const messaging = new MessagingService();
+            const rumor: any = {
+                kind: 7,
+                pubkey: otherPubkey,
+                content: '👍',
+                created_at: 789,
+                tags: [
+                    ['p', myPubkey],
+                    ['e', 'target-event-id'],
+                ],
+            };
+
+            const { conversationRepo } = await import('$lib/db/ConversationRepository');
+            const markActivitySpy = vi.spyOn(conversationRepo, 'markActivity').mockResolvedValue();
+            const { contactRepo } = await import('$lib/db/ContactRepository');
+            const contactMarkActivitySpy = vi.spyOn(contactRepo, 'markActivity').mockResolvedValue();
+
+            await (messaging as any).processReactionRumor(rumor, 'wrap-id');
+
+            // For group reactions, should mark conversation activity, not contact activity
+            expect(markActivitySpy).toHaveBeenCalledWith(groupConversationId);
+            expect(contactMarkActivitySpy).not.toHaveBeenCalled();
+        });
+
+        it('processReactionRumor falls back to contact activity for 1-on-1 reactions', async () => {
+            const myPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+            const otherPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+            const s: any = {
+                getPublicKey: vi.fn().mockResolvedValue(myPubkey),
+            };
+
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return s;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            // Mock the target message lookup to return a 1-on-1 message
+            // (conversationId equals recipientNpub for 1-on-1)
+            vi.mocked(messageRepo.getMessageByRumorId).mockResolvedValue({
+                recipientNpub: 'npub1other',
+                conversationId: 'npub1other',
+                message: 'test',
+                sentAt: Date.now(),
+                eventId: 'event-id',
+                rumorId: 'target-event-id',
+                direction: 'received',
+                createdAt: Date.now(),
+            });
+
+            const messaging = new MessagingService();
+            const rumor: any = {
+                kind: 7,
+                pubkey: otherPubkey,
+                content: '❤️',
+                created_at: 456,
+                tags: [
+                    ['p', myPubkey],
+                    ['e', 'target-event-id'],
+                ],
+            };
+
+            const { conversationRepo } = await import('$lib/db/ConversationRepository');
+            const convMarkActivitySpy = vi.spyOn(conversationRepo, 'markActivity').mockResolvedValue();
+            const { contactRepo } = await import('$lib/db/ContactRepository');
+            const contactMarkActivitySpy = vi.spyOn(contactRepo, 'markActivity').mockResolvedValue();
+
+            await (messaging as any).processReactionRumor(rumor, 'wrap-id');
+
+            // For 1-on-1 reactions, should mark contact activity, not conversation activity
+            expect(contactMarkActivitySpy).toHaveBeenCalledTimes(1);
+            expect(convMarkActivitySpy).not.toHaveBeenCalled();
         });
 
         it('createMessageFromRumor calculates rumorId', async () => {

@@ -478,17 +478,40 @@ import type { Conversation } from '$lib/db/db';
 
       const isFromOtherUser = rumor.pubkey !== myPubkey;
       if (isFromOtherUser) {
-        const partnerPubkey = rumor.pubkey;
-        const partnerNpub = nip19.npubEncode(partnerPubkey);
+        const reactionAuthorNpub = nip19.npubEncode(rumor.pubkey);
 
-        const shouldPersistUnread = !isActivelyViewingConversation(partnerNpub);
+        // Look up the target message to determine the conversation context
+        // targetEventId is the rumorId of the message being reacted to
+        const targetMessage = await messageRepo.getMessageByRumorId(targetEventId);
+        
+        // For group messages, use conversationId; for 1-on-1, use recipientNpub (the reaction author)
+        // If we can't find the target message, fall back to reaction author (1-on-1 behavior)
+        const isGroupReaction = targetMessage?.conversationId && 
+          targetMessage.conversationId !== targetMessage.recipientNpub;
+        const conversationKey = isGroupReaction 
+          ? targetMessage!.conversationId! 
+          : reactionAuthorNpub;
+
+        const shouldPersistUnread = !isActivelyViewingConversation(conversationKey);
         if (shouldPersistUnread) {
-          addUnreadReaction(user.npub, partnerNpub, originalEventId);
+          addUnreadReaction(user.npub, conversationKey, originalEventId);
 
           try {
-            await contactRepo.markActivity(partnerNpub, rumor.created_at * 1000);
+            if (isGroupReaction) {
+              // For group reactions, mark conversation activity
+              await conversationRepo.markActivity(targetMessage!.conversationId!);
+              // Dispatch event to trigger ChatList refresh
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nospeak:conversation-updated', {
+                  detail: { conversationId: targetMessage!.conversationId }
+                }));
+              }
+            } else {
+              // For 1-on-1, mark contact activity
+              await contactRepo.markActivity(reactionAuthorNpub, rumor.created_at * 1000);
+            }
           } catch (activityError) {
-            console.error('Failed to mark contact activity for reaction:', activityError);
+            console.error('Failed to mark activity for reaction:', activityError);
           }
         }
 
@@ -496,7 +519,7 @@ import type { Conversation } from '$lib/db/db';
         // or for reactions sent before the current session started
         if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
           try {
-            await notificationService.showReactionNotification(partnerNpub, content);
+            await notificationService.showReactionNotification(reactionAuthorNpub, content);
           } catch (notifyError) {
             console.error('Failed to show reaction notification:', notifyError);
           }
@@ -1699,6 +1722,123 @@ import type { Conversation } from '$lib/db/db';
       targetEventId: targetId,
       reactionEventId: selfGiftWrap.id,
       authorNpub,
+      emoji,
+      createdAt: Date.now()
+    };
+
+    await reactionRepo.upsertReaction(reaction);
+    reactionsStore.applyReactionUpdate(reaction);
+  }
+
+  /**
+   * Send a reaction to a group conversation.
+   * Creates gift-wraps for each participant and publishes to their relays.
+   * 
+   * @param conversationId The group conversation ID (16-char hash)
+   * @param targetMessage Info about the message being reacted to
+   * @param emoji The reaction emoji
+   */
+  public async sendGroupReaction(
+    conversationId: string,
+    targetMessage: { eventId: string; rumorId?: string; direction: 'sent' | 'received'; senderNpub?: string },
+    emoji: '👍' | '👎' | '❤️' | '😂'
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    // Reaction requires a stable rumor ID (NIP-17)
+    if (!targetMessage.rumorId) {
+      console.warn('Cannot react to message without rumorId (likely old message)');
+      return;
+    }
+    const targetId = targetMessage.rumorId;
+
+    // Get conversation to retrieve participants
+    const conversation = await conversationRepo.getConversation(conversationId);
+    if (!conversation || !conversation.isGroup) {
+      throw new Error('Group conversation not found');
+    }
+
+    const senderPubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(senderPubkey);
+
+    // Determine the target message author
+    let targetAuthorPubkey: string;
+    if (targetMessage.direction === 'received' && targetMessage.senderNpub) {
+      // Message was received from someone else in the group
+      const { data } = nip19.decode(targetMessage.senderNpub);
+      targetAuthorPubkey = data as string;
+    } else {
+      // Message was sent by us
+      targetAuthorPubkey = senderPubkey;
+    }
+
+    // Get relays for all participants and sender
+    const senderRelays = await this.getMessagingRelays(senderNpub);
+    const participantRelaysMap = new Map<string, string[]>();
+
+    for (const npub of conversation.participants) {
+      if (npub !== senderNpub) {
+        const relays = await this.getMessagingRelays(npub);
+        if (relays.length > 0) {
+          participantRelaysMap.set(npub, relays);
+        }
+      }
+    }
+
+    // Collect all relays for temporary connections
+    const allRelays = new Set<string>(senderRelays);
+    for (const relays of participantRelaysMap.values()) {
+      relays.forEach(r => allRelays.add(r));
+    }
+
+    if (this.debug) console.log('Sending group reaction to', participantRelaysMap.size, 'participants');
+
+    // Connect temporarily for reaction sending
+    for (const url of allRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    // Create the reaction rumor (kind 7)
+    const rumor: Partial<NostrEvent> = {
+      kind: 7,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: emoji,
+      tags: [
+        ['p', targetAuthorPubkey],
+        ['e', targetId, '', targetAuthorPubkey]
+      ]
+    };
+
+    // Create self-wrap first
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+
+    // Send gift-wrap to each participant
+    for (const [npub, relays] of participantRelaysMap) {
+      const { data: recipientPubkey } = nip19.decode(npub);
+      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+
+      for (const url of relays) {
+        await retryQueue.enqueue(giftWrap, url);
+      }
+    }
+
+    // Send self-wrap to sender's relays
+    for (const url of senderRelays) {
+      await retryQueue.enqueue(selfGiftWrap, url);
+    }
+
+    // Cleanup temporary relays after sending attempt
+    setTimeout(() => {
+      connectionManager.cleanupTemporaryConnections();
+    }, 15000);
+
+    // Store reaction locally
+    const reaction: Omit<Reaction, 'id'> = {
+      targetEventId: targetId,
+      reactionEventId: selfGiftWrap.id,
+      authorNpub: senderNpub,
       emoji,
       createdAt: Date.now()
     };

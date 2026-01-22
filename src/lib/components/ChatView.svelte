@@ -1379,7 +1379,10 @@
   }
 
   async function reactToMessage(emoji: '👍' | '👎' | '❤️' | '😂') {
-    if (!contextMenu.message || !partnerNpub) return;
+    if (!contextMenu.message) return;
+    // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
+    if (!isGroup && !partnerNpub) return;
+    if (isGroup && !groupConversation) return;
 
     hapticSelection();
 
@@ -1392,16 +1395,31 @@
     }
 
     try {
-      await messagingService.sendReaction(
-        partnerNpub,
-        {
-          recipientNpub: contextMenu.message.recipientNpub,
-          eventId: contextMenu.message.eventId,
-          rumorId: contextMenu.message.rumorId,
-          direction: contextMenu.message.direction
-        },
-        emoji
-      );
+      if (isGroup && groupConversation) {
+        // Group chat: send reaction to all participants
+        await messagingService.sendGroupReaction(
+          groupConversation.id,
+          {
+            eventId: contextMenu.message.eventId,
+            rumorId: contextMenu.message.rumorId,
+            direction: contextMenu.message.direction,
+            senderNpub: contextMenu.message.senderNpub
+          },
+          emoji
+        );
+      } else {
+        // 1-on-1 chat: send reaction to single recipient
+        await messagingService.sendReaction(
+          partnerNpub!,
+          {
+            recipientNpub: contextMenu.message.recipientNpub,
+            eventId: contextMenu.message.eventId,
+            rumorId: contextMenu.message.rumorId,
+            direction: contextMenu.message.direction
+          },
+          emoji
+        );
+      }
     } catch (e) {
       console.error('Failed to send reaction:', e);
       await nativeDialogService.alert({
