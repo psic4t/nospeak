@@ -21,23 +21,12 @@ import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 import { nip19 } from 'nostr-tools';
     import { contactSyncService } from '$lib/core/ContactSyncService';
     import { showScanContactQrModal, showManageContactsModal } from '$lib/stores/modals';
-    import { overscroll, type OverscrollState } from '$lib/utils/overscroll';
+    import { overscroll } from '$lib/utils/overscroll';
     import { connectionManager } from '$lib/core/connection/instance';
     import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
     const isAndroidApp = isAndroidNative();
     
-    // Pull-to-refresh state
-    let pullState = $state<OverscrollState>('idle');
-    
-    async function handleRefresh(): Promise<void> {
-        await contactSyncService.fetchAndMergeContacts();
-    }
-    
-    function handlePullStateChange(state: OverscrollState): void {
-        pullState = state;
-    }
-
     // Redirect desktop to /chat and open modal
     onMount(() => {
         if (!isAndroidApp) {
@@ -488,39 +477,9 @@ import { nip19 } from 'nostr-tools';
 
     <!-- Contact list -->
     <div 
-        class="flex-1 overflow-y-auto custom-scrollbar native-scroll pt-[88px] pb-safe px-2" 
-        use:overscroll={{ onRefresh: handleRefresh, onStateChange: handlePullStateChange }}
+        class="flex-1 overflow-y-auto custom-scrollbar native-scroll pt-[128px] pb-safe px-2" 
+        use:overscroll
     >
-        <!-- Pull-to-refresh indicator -->
-        {#if pullState !== 'idle'}
-            <div class="flex items-center justify-center py-3 -mt-2 mb-2">
-                {#if pullState === 'refreshing'}
-                    <div class="flex items-center gap-2 text-gray-500 dark:text-slate-400">
-                        <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span class="typ-body">{$t('modals.manageContacts.syncing')}</span>
-                    </div>
-                {:else if pullState === 'ready'}
-                    <div class="flex items-center gap-2 text-[rgb(var(--color-lavender-rgb))]">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        <span class="typ-body font-medium">{$t('modals.manageContacts.releaseToRefresh')}</span>
-                    </div>
-                {:else}
-                    <div class="flex items-center gap-2 text-gray-400 dark:text-slate-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="7 13 12 18 17 13"></polyline>
-                            <polyline points="7 6 12 11 17 6"></polyline>
-                        </svg>
-                        <span class="typ-body">{$t('modals.manageContacts.pullToRefresh')}</span>
-                    </div>
-                {/if}
-            </div>
-        {/if}
-
         <!-- New contact row -->
         <div class="flex items-center justify-between p-3 my-1.5 rounded-full w-full hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] transition-all duration-200 ease-out">
             <button
