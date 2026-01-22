@@ -109,6 +109,7 @@ const de = {
                   message: 'Möchtest du {name} wirklich löschen?',
                   confirm: 'Löschen'
               },
+              newContact: 'Kontakt hinzufügen',
               createGroup: 'Gruppe erstellen'
           },
           createGroup: {

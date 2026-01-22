@@ -99,6 +99,7 @@ const en = {
               syncing: 'Syncing contacts…',
               pullToRefresh: 'Pull to refresh',
               releaseToRefresh: 'Release to refresh',
+              newContact: 'Add contact',
               createGroup: 'Create group',
               contextMenu: {
                   openMenu: 'Open menu',

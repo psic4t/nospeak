@@ -108,6 +108,7 @@ const fr = {
                 message: 'Voulez-vous vraiment supprimer {name} ?',
                 confirm: 'Supprimer'
             },
+            newContact: 'Ajouter un contact',
             createGroup: 'Créer un groupe'
         },
         createGroup: {

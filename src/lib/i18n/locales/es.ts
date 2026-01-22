@@ -108,6 +108,7 @@ const es = {
                 message: '¿Estás seguro de que quieres eliminar a {name}?',
                 confirm: 'Eliminar'
             },
+            newContact: 'Añadir contacto',
             createGroup: 'Crear grupo'
         },
         createGroup: {
