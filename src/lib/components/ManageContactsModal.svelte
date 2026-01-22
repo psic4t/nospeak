@@ -48,6 +48,7 @@ import { nip19 } from 'nostr-tools';
     let nip05Result = $state<SearchResultWithStatus | null>(null);
     let nip05LookupToken = 0;
     let showSearchField = $state(false);
+    let contactSearchQuery = $state('');
     let discoveryRelaysConnected = false;
     let addedDiscoveryRelays: string[] = [];
 
@@ -69,6 +70,14 @@ import { nip19 } from 'nostr-tools';
     // Track when context menu closes to prevent click-through
     let contextMenuClosedAt = 0;
 
+    const filteredContacts = $derived(() => {
+        if (!contactSearchQuery.trim()) return displayContacts;
+        const query = contactSearchQuery.toLowerCase();
+        return displayContacts.filter((c) =>
+            c.name.toLowerCase().includes(query) || c.npub.toLowerCase().includes(query)
+        );
+    });
+
     function cleanupDiscoveryRelays() {
         for (const url of addedDiscoveryRelays) {
             connectionManager.removeRelay(url);
@@ -84,6 +93,7 @@ import { nip19 } from 'nostr-tools';
         }
 
         newNpub = '';
+        contactSearchQuery = '';
         showSearchField = false;
         isAdding = false;
         isSearching = false;
@@ -496,6 +506,14 @@ import { nip19 } from 'nostr-tools';
             <div class="flex items-center mb-4 px-1">
                 <h2 class="typ-title dark:text-white">{$t('modals.manageContacts.title')}</h2>
             </div>
+
+            <div class="mb-4">
+                <Input
+                    bind:value={contactSearchQuery}
+                    placeholder={$t('modals.createGroup.searchPlaceholder')}
+                    class="w-full"
+                />
+            </div>
             
             <div class="flex-1 overflow-y-auto mb-6 min-h-[200px] custom-scrollbar native-scroll pr-1">
                 <!-- New contact row -->
@@ -777,8 +795,12 @@ import { nip19 } from 'nostr-tools';
                     <div class="typ-body text-gray-500 text-center py-8 bg-gray-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
                         {$t('modals.manageContacts.noContacts')}
                     </div>
+                {:else if filteredContacts().length === 0}
+                    <div class="typ-body text-gray-500 text-center py-8">
+                        {$t('modals.manageContacts.noResults')}
+                    </div>
                 {/if}
-                {#each displayContacts as contact}
+                {#each filteredContacts() as contact (contact.npub)}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div 
