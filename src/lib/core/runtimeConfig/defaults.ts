@@ -13,7 +13,7 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
         'wss://nos.lol',
         'wss://relay.damus.io'
     ],
-    searchRelayUrl: 'wss://relay.nostr.band',
+    searchRelayUrl: 'wss://nostr.wine',
     blasterRelayUrl: 'wss://sendit.nosflare.com',
     defaultBlossomServers: [
         'https://blossom.data.haus',
