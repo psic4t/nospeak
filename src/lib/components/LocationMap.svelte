@@ -10,6 +10,7 @@
         MAP_HEIGHT_BUBBLE,
         buildOsmOpenUrl
     } from '$lib/core/MapUtils';
+    import { isAndroidNative } from '$lib/core/NativeDialogs';
 
     interface Props {
         latitude: number;
@@ -22,9 +23,53 @@
 
     let mapContainer: HTMLDivElement | undefined = $state();
     let map: L.Map | undefined = $state();
+    const isAndroidNativeEnv = $derived(isAndroidNative());
+    // On Android, map starts non-interactive to avoid interfering with message list scrolling.
+    // User must tap once to activate panning/zooming. Auto-deactivates after 5s of no touch.
+    let activated: boolean = $state(false);
+    let deactivateTimer: ReturnType<typeof setTimeout> | undefined = $state();
 
     const point: LocationPoint = $derived({ latitude, longitude });
     const openMapUrl = $derived(buildOsmOpenUrl(point));
+
+    function activateMap() {
+        if (!interactive || !isAndroidNativeEnv || activated) return;
+        activated = true;
+        enableMapInteractions();
+        resetDeactivateTimer();
+    }
+
+    function enableMapInteractions() {
+        if (!map) return;
+        map.dragging.enable();
+        map.touchZoom.enable();
+        map.doubleClickZoom.enable();
+        map.scrollWheelZoom.enable();
+    }
+
+    function disableMapInteractions() {
+        if (!map) return;
+        map.dragging.disable();
+        map.touchZoom.disable();
+        map.doubleClickZoom.disable();
+        map.scrollWheelZoom.disable();
+    }
+
+    function resetDeactivateTimer() {
+        if (deactivateTimer) {
+            clearTimeout(deactivateTimer);
+        }
+        deactivateTimer = setTimeout(() => {
+            activated = false;
+            disableMapInteractions();
+        }, 5000);
+    }
+
+    function handleMapTouchStart() {
+        if (activated) {
+            resetDeactivateTimer();
+        }
+    }
 
     onMount(() => {
         if (!mapContainer) return;
@@ -33,14 +78,17 @@
         import('leaflet').then((L) => {
             if (!mapContainer) return;
 
+            // On Android with interactive=true, start non-interactive (user must tap to activate)
+            const startInteractive = interactive && !isAndroidNativeEnv;
+
             map = L.map(mapContainer, {
-                zoomControl: interactive,
-                dragging: interactive,
-                touchZoom: interactive,
-                scrollWheelZoom: interactive,
-                doubleClickZoom: interactive,
-                boxZoom: interactive,
-                keyboard: interactive,
+                zoomControl: startInteractive,
+                dragging: startInteractive,
+                touchZoom: startInteractive,
+                scrollWheelZoom: startInteractive,
+                doubleClickZoom: startInteractive,
+                boxZoom: startInteractive,
+                keyboard: startInteractive,
                 attributionControl: false
             }).setView([latitude, longitude], MAP_ZOOM);
 
@@ -64,6 +112,9 @@
         });
 
         return () => {
+            if (deactivateTimer) {
+                clearTimeout(deactivateTimer);
+            }
             if (map) {
                 map.remove();
                 map = undefined;
@@ -73,11 +124,27 @@
 </script>
 
 <div class="location-map-wrapper">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-        bind:this={mapContainer}
-        class="rounded-xl overflow-hidden bg-gray-100/80 dark:bg-slate-800/80 border border-gray-200/60 dark:border-slate-700/60"
+        class="relative rounded-xl overflow-hidden bg-gray-100/80 dark:bg-slate-800/80 border border-gray-200/60 dark:border-slate-700/60"
         style="width: 100%; height: {height}px;"
-    ></div>
+        ontouchstart={handleMapTouchStart}
+    >
+        <div
+            bind:this={mapContainer}
+            class="w-full h-full"
+        ></div>
+        {#if isAndroidNativeEnv && interactive && !activated}
+            <!-- Transparent overlay that captures first tap to activate map interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+                class="absolute inset-0 z-[1000]"
+                style="touch-action: pan-y;"
+                onclick={activateMap}
+            ></div>
+        {/if}
+    </div>
     {#if openMapUrl}
         <a
             href={openMapUrl}
