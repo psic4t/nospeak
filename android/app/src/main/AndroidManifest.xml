@@ -98,45 +98,10 @@
             </intent-filter>
      </receiver>
 
-         <!-- UnifiedPush distributor receiver -->
-         <receiver
-             android:name=".AndroidUnifiedPushDistributorReceiver"
-             android:enabled="false"
-             android:exported="true">
-             <intent-filter>
-                 <action android:name="org.unifiedpush.android.distributor.REGISTER" />
-                 <action android:name="org.unifiedpush.android.distributor.UNREGISTER" />
-                 <action android:name="org.unifiedpush.android.distributor.MESSAGE_ACK" />
-             </intent-filter>
-         </receiver>
-
-         <!-- UnifiedPush distributor link activity -->
-         <activity
-             android:name=".AndroidUnifiedPushDistributorLinkActivity"
-             android:enabled="false"
-             android:exported="true"
-             android:theme="@style/AppTheme.NoActionBar">
-             <intent-filter>
-                 <action android:name="android.intent.action.VIEW" />
-                 <category android:name="android.intent.category.DEFAULT" />
-                 <category android:name="android.intent.category.BROWSABLE" />
-                 <data
-                     android:scheme="unifiedpush"
-                     android:host="link" />
-             </intent-filter>
-         </activity>
-
          <!-- Native foreground service for Android background messaging -->
          <service
              android:name=".NativeBackgroundMessagingService"
              android:enabled="true"
-             android:exported="false"
-             android:foregroundServiceType="dataSync" />
-
-         <!-- UnifiedPush service -->
-         <service
-             android:name=".AndroidUnifiedPushService"
-             android:enabled="false"
              android:exported="false"
              android:foregroundServiceType="dataSync" />
     </application>

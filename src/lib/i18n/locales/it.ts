@@ -318,7 +318,6 @@ const it = {
             messagingRelays: 'Relays di messaggistica',
             mediaServers: 'Server multimediali',
             security: 'Sicurezza',
-            unifiedPush: 'UnifiedPush',
             about: 'Informazioni'
         },
 
@@ -388,27 +387,6 @@ const it = {
             savingStatus: 'Salvataggio impostazioni server multimediali…',
             primary: 'Principale',
             setAsPrimary: 'Imposta come principale'
-        },
-
-        unifiedPush: {
-            description: 'Configura UnifiedPush per ricevere notifiche push da server compatibili con ntfy.',
-            enableLabel: 'Abilita UnifiedPush',
-            enableDescription: 'Permetti a nospeak di agire come distributore UnifiedPush',
-            toggleEnableAria: 'Abilita UnifiedPush',
-            toggleDisableAria: 'Disabilita UnifiedPush',
-            serverUrlLabel: 'URL server',
-            serverUrlPlaceholder: 'https://ntfy.sh',
-            topicsLabel: 'Topic',
-            topicPlaceholder: 'es. avvisi, backup',
-            topicsEmpty: 'Nessun topic configurato. Aggiungi il primo topic per iniziare a ricevere notifiche push.',
-            registeredAppsLabel: 'App registrate',
-            uninstalledBadge: 'Disinstallata',
-            noDescription: 'Nessuna descrizione',
-            registrationsEmpty: 'Nessuna app ha ancora registrato notifiche push. Installa app compatibili con UnifiedPush per vederle qui.',
-            removeTopicTitle: 'Rimuovi topic',
-            removeRegistrationTitle: 'Rimuovi registrazione',
-            sendTestPush: 'Invia push di test',
-            sending: 'Invio...'
         },
 
         security: {
