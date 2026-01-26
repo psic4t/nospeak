@@ -272,21 +272,31 @@
          !!(fileWidth && fileHeight && fileBlurhash)
      );
 
-     function renderBlurhash(canvas: HTMLCanvasElement) {
-         if (!fileBlurhash || !fileWidth || !fileHeight) return;
-         try {
-             const pixels = decodeBlurhash(fileBlurhash, 32, 32);
-             const ctx = canvas.getContext('2d');
-             if (!ctx) return;
-             canvas.width = 32;
-             canvas.height = 32;
-             const imageData = ctx.createImageData(32, 32);
-             imageData.data.set(pixels);
-             ctx.putImageData(imageData, 0, 0);
-         } catch {
-             // Silently ignore decode errors
-         }
-     }
+    // Calculate display dimensions for blurhash placeholder
+    // Uses same formula as container CSS: max-height 300px, width scaled proportionally
+    const maxDisplayHeight = 300;
+    const blurhashDisplayHeight = $derived(
+        fileHeight ? Math.min(fileHeight, maxDisplayHeight) : 0
+    );
+    const blurhashDisplayWidth = $derived(
+        fileWidth && fileHeight ? Math.round(fileWidth * blurhashDisplayHeight / fileHeight) : 0
+    );
+
+    function renderBlurhash(canvas: HTMLCanvasElement) {
+        if (!fileBlurhash || !blurhashDisplayWidth || !blurhashDisplayHeight) return;
+        try {
+            const pixels = decodeBlurhash(fileBlurhash, blurhashDisplayWidth, blurhashDisplayHeight);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            canvas.width = blurhashDisplayWidth;
+            canvas.height = blurhashDisplayHeight;
+            const imageData = ctx.createImageData(blurhashDisplayWidth, blurhashDisplayHeight);
+            imageData.data.set(pixels);
+            ctx.putImageData(imageData, 0, 0);
+        } catch {
+            // Silently ignore decode errors
+        }
+    }
 
      function handleRealMediaLoad() {
          mediaLoaded = true;
@@ -556,20 +566,20 @@
 
                  {#if isImageMime(fileType) || isImage(decryptedUrl)}
                      {#if hasBlurhashPlaceholder}
-                         <div class="my-1 relative overflow-hidden rounded" style="aspect-ratio: {fileWidth}/{fileHeight}; max-height: 300px; max-width: min(100%, {fileWidth! * 300 / fileHeight!}px);">
+                         <div class="my-1 relative overflow-hidden rounded" style="max-width: {blurhashDisplayWidth}px;">
                              {#if !mediaLoaded}
-                                 <canvas bind:this={blurhashCanvas} class="absolute inset-0 w-full h-full rounded"></canvas>
+                                 <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                              {/if}
                              {#if onImageClick}
                                  <button
                                      type="button"
-                                     class="block w-full h-full cursor-zoom-in"
+                                     class="{mediaLoaded ? 'relative' : 'absolute inset-0'} block w-full h-full cursor-zoom-in"
                                      onclick={() => onImageClick?.(decryptedUrl!, fileUrl)}
                                  >
                                      <img src={decryptedUrl} alt="Attachment" class="w-full h-full object-contain rounded" loading={forceEagerLoad ? "eager" : "lazy"} onload={handleRealMediaLoad} />
                                  </button>
                              {:else}
-                                 <a href={decryptedUrl} target="_blank" rel="noopener noreferrer" class="block w-full h-full">
+                                 <a href={decryptedUrl} target="_blank" rel="noopener noreferrer" class="{mediaLoaded ? 'relative' : 'absolute inset-0'} block w-full h-full">
                                      <img src={decryptedUrl} alt="Attachment" class="w-full h-full object-contain rounded" loading={forceEagerLoad ? "eager" : "lazy"} onload={handleRealMediaLoad} />
                                  </a>
                              {/if}
@@ -593,11 +603,11 @@
                  {:else if isVideoMime(fileType) || isVideo(decryptedUrl)}
                      <!-- svelte-ignore a11y_media_has_caption -->
                      {#if hasBlurhashPlaceholder}
-                         <div class="my-1 relative overflow-hidden rounded" style="aspect-ratio: {fileWidth}/{fileHeight}; max-height: 300px; max-width: min(100%, {fileWidth! * 300 / fileHeight!}px);">
+                         <div class="my-1 relative overflow-hidden rounded" style="max-width: {blurhashDisplayWidth}px;">
                              {#if !mediaLoaded}
-                                 <canvas bind:this={blurhashCanvas} class="absolute inset-0 w-full h-full rounded"></canvas>
+                                 <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                              {/if}
-                             <video controls src={decryptedUrl} class="w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
+                             <video controls src={decryptedUrl} class="{mediaLoaded ? 'relative' : 'absolute inset-0'} w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
                          </div>
                      {:else}
                      <div class="my-1">
@@ -613,8 +623,8 @@
                  {/if}
              {:else}
                  {#if hasBlurhashPlaceholder}
-                     <div class="my-1 relative overflow-hidden rounded" style="aspect-ratio: {fileWidth}/{fileHeight}; max-height: 300px; max-width: min(100%, {fileWidth! * 300 / fileHeight!}px);">
-                         <canvas bind:this={blurhashCanvas} class="absolute inset-0 w-full h-full rounded"></canvas>
+                     <div class="my-1 relative overflow-hidden rounded" style="max-width: {blurhashDisplayWidth}px;">
+                         <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                          {#if isDecrypting}
                              <div class="absolute inset-0 flex items-center justify-center">
                                  <div class="typ-meta text-xs text-white/80 bg-black/30 px-2 py-1 rounded">Decrypting...</div>
@@ -644,20 +654,20 @@
                   </div>
               {:else if isImageMime(fileType) || isImage(fileUrl)}
                  {#if hasBlurhashPlaceholder}
-                     <div class="my-1 relative overflow-hidden rounded" style="aspect-ratio: {fileWidth}/{fileHeight}; max-height: 300px; max-width: min(100%, {fileWidth! * 300 / fileHeight!}px);">
+                     <div class="my-1 relative overflow-hidden rounded" style="max-width: {blurhashDisplayWidth}px;">
                          {#if !mediaLoaded}
-                             <canvas bind:this={blurhashCanvas} class="absolute inset-0 w-full h-full rounded"></canvas>
+                             <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                          {/if}
                          {#if onImageClick}
                              <button
                                  type="button"
-                                 class="block w-full h-full cursor-zoom-in"
+                                 class="{mediaLoaded ? 'relative' : 'absolute inset-0'} block w-full h-full cursor-zoom-in"
                                  onclick={() => onImageClick?.(fileUrl!, fileUrl)}
                              >
                                  <img src={fileUrl} alt="Attachment" class="w-full h-full object-contain rounded" loading={forceEagerLoad ? "eager" : "lazy"} onload={handleRealMediaLoad} />
                              </button>
                          {:else}
-                             <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="block w-full h-full">
+                             <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="{mediaLoaded ? 'relative' : 'absolute inset-0'} block w-full h-full">
                                  <img src={fileUrl} alt="Attachment" class="w-full h-full object-contain rounded" loading={forceEagerLoad ? "eager" : "lazy"} onload={handleRealMediaLoad} />
                              </a>
                          {/if}
@@ -680,11 +690,11 @@
              {:else if isVideoMime(fileType) || isVideo(fileUrl)}
                  <!-- svelte-ignore a11y_media_has_caption -->
                  {#if hasBlurhashPlaceholder}
-                     <div class="my-1 relative overflow-hidden rounded" style="aspect-ratio: {fileWidth}/{fileHeight}; max-height: 300px; max-width: min(100%, {fileWidth! * 300 / fileHeight!}px);">
+                     <div class="my-1 relative overflow-hidden rounded" style="max-width: {blurhashDisplayWidth}px;">
                          {#if !mediaLoaded}
-                             <canvas bind:this={blurhashCanvas} class="absolute inset-0 w-full h-full rounded"></canvas>
+                             <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                          {/if}
-                         <video controls src={fileUrl} class="w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
+                         <video controls src={fileUrl} class="{mediaLoaded ? 'relative' : 'absolute inset-0'} w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
                      </div>
                  {:else}
                  <div class="my-1">
