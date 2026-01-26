@@ -1,5 +1,7 @@
 import type { Signer } from './Signer';
 import type { NostrEvent } from 'nostr-tools';
+import { get } from 'svelte/store';
+import { signerMismatch } from '$lib/stores/signerMismatch';
 
 declare global {
     interface Window {
@@ -68,6 +70,7 @@ export class Nip07Signer implements Signer {
 
     async signEvent(event: Partial<NostrEvent>): Promise<NostrEvent> {
         this.checkExtension();
+        this.checkMismatch();
         console.log('[NIP-07] signEvent() called for kind:', event.kind, 'operation count:', ++Nip07Signer.operationCount);
         return this.queueOperation(async () => {
             return window.nostr!.signEvent(event);
@@ -76,6 +79,7 @@ export class Nip07Signer implements Signer {
 
     async encrypt(recipient: string, message: string): Promise<string> {
         this.checkExtension();
+        this.checkMismatch();
         if (!window.nostr!.nip44) {
             throw new Error('Extension does not support NIP-44');
         }
@@ -112,6 +116,7 @@ export class Nip07Signer implements Signer {
 
     async decrypt(sender: string, ciphertext: string): Promise<string> {
         this.checkExtension();
+        this.checkMismatch();
         if (!window.nostr!.nip44) {
             throw new Error('Extension does not support NIP-44');
         }
@@ -190,6 +195,17 @@ export class Nip07Signer implements Signer {
         }
     }
 
+    /**
+     * Check if there's a signer account mismatch. If so, throw an error
+     * to prevent any signing operations with the wrong account.
+     */
+    private checkMismatch() {
+        const mismatchState = get(signerMismatch);
+        if (mismatchState?.detected) {
+            throw new Error('Signer account mismatch - operation blocked. Please switch to the correct account in your signer extension and reload.');
+        }
+    }
+
     // Static method to clear cache (useful for logout)
     public static clearCache(): void {
         Nip07Signer.cachedPublicKey = null;
@@ -199,5 +215,18 @@ export class Nip07Signer implements Signer {
         Nip07Signer.operationQueue = Promise.resolve();
         Nip07Signer.operationCount = 0;
         Nip07Signer.lastOperationTime = 0;
+    }
+
+    /**
+     * Get the current signer's public key directly from the extension,
+     * bypassing the cache. Used for verifying the active account matches
+     * the logged-in user.
+     */
+    public static async getCurrentSignerPubkeyUncached(): Promise<string> {
+        if (!window.nostr) {
+            throw new Error('Nostr extension not found');
+        }
+        console.log('[NIP-07] getCurrentSignerPubkeyUncached() - bypassing cache');
+        return window.nostr.getPublicKey();
     }
 }

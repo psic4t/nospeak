@@ -403,6 +403,13 @@ const pt = {
             dangerZoneDescription: 'Terminar sessão irá remover todos os dados em cache deste dispositivo.',
             logoutButton: 'Terminar sessão'
         }
+    },
+    signerMismatch: {
+        title: 'Conta não corresponde',
+        description: 'A extensão do assinante do navegador tem uma conta diferente ativa daquela com que iniciou sessão.',
+        expectedAccount: 'Conectado como',
+        actualAccount: 'Conta ativa do assinante',
+        instructions: 'Por favor, mude para a conta correta na sua extensão de assinante e recarregue esta página.'
     }
 };
 

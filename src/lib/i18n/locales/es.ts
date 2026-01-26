@@ -403,6 +403,13 @@ const es = {
             dangerZoneDescription: 'Cerrar sesión eliminará todos los datos en caché de este dispositivo.',
             logoutButton: 'Cerrar sesión'
         }
+    },
+    signerMismatch: {
+        title: 'Cuenta no coincide',
+        description: 'Tu extensión de firmante del navegador tiene una cuenta diferente activa a la que iniciaste sesión.',
+        expectedAccount: 'Conectado como',
+        actualAccount: 'Cuenta activa del firmante',
+        instructions: 'Por favor, cambia a la cuenta correcta en tu extensión de firmante y recarga esta página.'
     }
 };
 

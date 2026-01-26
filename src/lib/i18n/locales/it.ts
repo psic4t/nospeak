@@ -403,6 +403,13 @@ const it = {
             dangerZoneDescription: 'Il logout rimuoverà tutti i dati in cache da questo dispositivo.',
             logoutButton: 'Logout'
         }
+    },
+    signerMismatch: {
+        title: 'Account non corrispondente',
+        description: "L'estensione del firmatario del browser ha un account diverso attivo rispetto a quello con cui hai effettuato l'accesso.",
+        expectedAccount: 'Connesso come',
+        actualAccount: 'Account attivo del firmatario',
+        instructions: "Passa all'account corretto nell'estensione del firmatario e ricarica questa pagina."
     }
 };
 

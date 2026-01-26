@@ -411,6 +411,13 @@ const de = {
             dangerZoneDescription: 'Abmelden entfernt alle zwischengespeicherten Daten von diesem Gerät.',
             logoutButton: 'Abmelden'
         }
+    },
+    signerMismatch: {
+        title: 'Konto stimmt nicht überein',
+        description: 'Deine Browser-Signer-Erweiterung hat ein anderes Konto aktiv als das, mit dem du dich angemeldet hast.',
+        expectedAccount: 'Angemeldet als',
+        actualAccount: 'Signer aktives Konto',
+        instructions: 'Bitte wechsle in deiner Signer-Erweiterung zum richtigen Konto und lade diese Seite neu.'
     }
 };
 

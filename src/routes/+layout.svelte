@@ -26,9 +26,11 @@
     import ScanContactQrResultModal from "$lib/components/ScanContactQrResultModal.svelte";
     import * as modals from "$lib/stores/modals";
     import SyncProgressModal from "$lib/components/SyncProgressModal.svelte";
+    import SignerMismatchModal from "$lib/components/SignerMismatchModal.svelte";
  
  
    import { syncState } from "$lib/stores/sync";
+   import { signerMismatch } from "$lib/stores/signerMismatch";
 
    import { configureAndroidStatusBar } from "$lib/core/StatusBar";
    import { initLanguage } from "$lib/stores/language";
@@ -486,8 +488,16 @@
      {/if}
  
      {#if $showEmptyProfileModal}
-         <EmptyProfileModal isOpen={$showEmptyProfileModal} />
-     {/if}
+          <EmptyProfileModal isOpen={$showEmptyProfileModal} />
+      {/if}
+
+      <!-- Signer mismatch modal - highest z-index, non-dismissible -->
+      {#if $signerMismatch?.detected && $signerMismatch.expectedPubkey && $signerMismatch.actualPubkey}
+          <SignerMismatchModal
+              expectedPubkey={$signerMismatch.expectedPubkey}
+              actualPubkey={$signerMismatch.actualPubkey}
+          />
+      {/if}
  
       <ImageViewerOverlay />
       <Toast />

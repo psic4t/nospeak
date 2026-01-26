@@ -398,7 +398,7 @@ const en = {
            },
  
  
-          security: {
+           security: {
             loginMethodTitle: 'Login method',
             loginMethodUnknown: 'Unknown',
             npubLabel: 'Your npub',
@@ -409,6 +409,13 @@ const en = {
             dangerZoneDescription: 'Logging out will remove all cached data from this device.',
             logoutButton: 'Logout'
         }
+    },
+    signerMismatch: {
+        title: 'Account Mismatch',
+        description: 'Your browser signer extension has a different account active than the one you logged in with.',
+        expectedAccount: 'Logged in as',
+        actualAccount: 'Signer active account',
+        instructions: 'Please switch to the correct account in your signer extension and reload this page.'
     }
 };
 

@@ -403,6 +403,13 @@ const fr = {
             dangerZoneDescription: "Se déconnecter supprimera toutes les données en cache de cet appareil.",
             logoutButton: 'Se déconnecter'
         }
+    },
+    signerMismatch: {
+        title: 'Compte non correspondant',
+        description: "Votre extension de signature a un compte différent actif de celui avec lequel vous vous êtes connecté.",
+        expectedAccount: 'Connecté en tant que',
+        actualAccount: 'Compte actif du signataire',
+        instructions: 'Veuillez passer au bon compte dans votre extension de signature et recharger cette page.'
     }
 };
 

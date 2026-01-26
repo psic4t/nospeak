@@ -32,6 +32,8 @@ import { clearAndroidLocalSecretKey, getAndroidLocalSecretKeyHex, setAndroidLoca
 import { contactSyncService } from './ContactSyncService';
 import { showToast } from '$lib/stores/toast';
 import { get } from 'svelte/store';
+import { signerVerificationService } from './SignerVerification';
+import { clearSignerMismatch, setSignerMismatch } from '$lib/stores/signerMismatch';
 
 // Helper for hex conversion
 function bytesToHex(bytes: Uint8Array): string {
@@ -189,6 +191,11 @@ export class AuthService {
             currentUser.set({ npub });
 
             localStorage.setItem(AUTH_METHOD_KEY, 'nip07');
+            // Store expected pubkey for signer verification
+            localStorage.setItem('nospeak:nip07_expected_pubkey', pubkey);
+
+            // Start periodic signer verification for NIP-07
+            signerVerificationService.startPeriodicVerification(pubkey);
 
             // Navigate to chat and start ordered login history flow in background
             goto('/chat');
@@ -514,17 +521,43 @@ export class AuthService {
                 return true;
             } else if (method === 'nip07') {
                 if (!window.nostr) {
-                    // Wait a bit? Or fail.
+                    // Extension not available, cannot restore
+                    return false;
                 }
+
+                // Get the expected pubkey from storage (if we have it from previous login)
+                const expectedPubkeyHex = localStorage.getItem('nospeak:nip07_expected_pubkey');
  
                 const s = new Nip07Signer();
                 const pubkey = await s.getPublicKey();
                 const npub = nip19.npubEncode(pubkey);
+
+                // Verify the current signer matches the expected account
+                if (expectedPubkeyHex && pubkey !== expectedPubkeyHex) {
+                    console.warn('[AuthService] NIP-07 account mismatch on restore!', {
+                        expected: expectedPubkeyHex.substring(0, 16) + '...',
+                        actual: pubkey.substring(0, 16) + '...'
+                    });
+                    // Set mismatch state - this will show the blocking modal
+                    setSignerMismatch(expectedPubkeyHex, pubkey);
+                    // Still set up the session so user can see the modal
+                    signer.set(s);
+                    currentUser.set({ npub: nip19.npubEncode(expectedPubkeyHex) });
+                    return true; // Return true so app shows (with blocking modal)
+                }
  
                 await s.requestNip44Permissions();
  
                 signer.set(s);
                 currentUser.set({ npub });
+
+                // Store expected pubkey if not already stored
+                if (!expectedPubkeyHex) {
+                    localStorage.setItem('nospeak:nip07_expected_pubkey', pubkey);
+                }
+
+                // Start periodic signer verification
+                signerVerificationService.startPeriodicVerification(pubkey);
  
                 await ensureRelaysAndHistory(npub, 'Restoration');
  
@@ -584,6 +617,10 @@ export class AuthService {
     }
 
      public async logout() {
+        // Stop signer verification and clear mismatch state
+        signerVerificationService.stopPeriodicVerification();
+        clearSignerMismatch();
+
         // Ensure Android background messaging is stopped before tearing down connections
         await disableAndroidBackgroundMessaging().catch(e => {
              console.error('Failed to disable Android background messaging on logout:', e);
@@ -597,6 +634,7 @@ export class AuthService {
          });
 
          localStorage.removeItem(STORAGE_KEY);
+         localStorage.removeItem('nospeak:nip07_expected_pubkey');
 
         localStorage.removeItem(AUTH_METHOD_KEY);
         localStorage.removeItem(NIP46_SECRET_KEY);
