@@ -28,6 +28,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidLocationPlugin.class);
         registerPlugin(AndroidTapSoundPlugin.class);
         registerPlugin(AndroidMicrophonePlugin.class);
+        registerPlugin(AndroidMediaCachePlugin.class);
   
         super.onCreate(savedInstanceState);
 

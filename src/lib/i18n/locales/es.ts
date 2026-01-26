@@ -387,7 +387,9 @@ const es = {
             saveStatusError: 'Error al guardar la lista de servidores. Es posible que tus ajustes no se propaguen completamente.',
             savingStatus: 'Guardando ajustes de servidores de medios…',
             primary: 'Principal',
-            setAsPrimary: 'Establecer como principal'
+            setAsPrimary: 'Establecer como principal',
+            mediaCacheLabel: 'Caché de medios',
+            mediaCacheDescription: 'Guarda los medios vistos en tu galería para acceso sin conexión. Los archivos pueden gestionarse en tu aplicación Fotos.'
         },
 
         security: {

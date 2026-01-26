@@ -392,7 +392,9 @@ const en = {
                saveStatusError: 'Error saving server list. Your settings may not be fully propagated.',
                savingStatus: 'Saving media server settings…',
                primary: 'Primary',
-               setAsPrimary: 'Set as primary'
+               setAsPrimary: 'Set as primary',
+               mediaCacheLabel: 'Media Cache',
+               mediaCacheDescription: 'Save viewed media to your gallery for offline access. Files can be managed in your Photos app.'
            },
  
  

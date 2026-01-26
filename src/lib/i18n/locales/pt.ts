@@ -387,7 +387,9 @@ const pt = {
             saveStatusError: 'Erro ao guardar a lista de servidores. As suas definições podem não ser totalmente propagadas.',
             savingStatus: 'A guardar definições de servidores de media…',
             primary: 'Principal',
-            setAsPrimary: 'Definir como principal'
+            setAsPrimary: 'Definir como principal',
+            mediaCacheLabel: 'Cache de media',
+            mediaCacheDescription: 'Guarde os media visualizados na sua galeria para acesso offline. Os ficheiros podem ser geridos na sua app Fotos.'
         },
 
         security: {

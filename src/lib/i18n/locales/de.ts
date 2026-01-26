@@ -394,7 +394,9 @@ const de = {
                saveStatusError: 'Fehler beim Speichern der Serverliste. Einstellungen sind möglicherweise nicht vollständig propagiert.',
                savingStatus: 'Medienserver-Einstellungen werden gespeichert…',
                primary: 'Primär',
-               setAsPrimary: 'Als primär festlegen'
+               setAsPrimary: 'Als primär festlegen',
+               mediaCacheLabel: 'Medien-Cache',
+               mediaCacheDescription: 'Speichere angesehene Medien in deiner Galerie für Offline-Zugriff. Dateien können in deiner Fotos-App verwaltet werden.'
            },
  
 

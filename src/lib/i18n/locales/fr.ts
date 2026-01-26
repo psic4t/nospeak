@@ -387,7 +387,9 @@ const fr = {
             saveStatusError: "Erreur lors de l'enregistrement de la liste des serveurs. Vos paramètres peuvent ne pas être entièrement propagés.",
             savingStatus: 'Enregistrement des paramètres des serveurs médias…',
             primary: 'Principal',
-            setAsPrimary: 'Définir comme principal'
+            setAsPrimary: 'Définir comme principal',
+            mediaCacheLabel: 'Cache média',
+            mediaCacheDescription: 'Enregistrez les médias consultés dans votre galerie pour un accès hors ligne. Les fichiers peuvent être gérés dans votre application Photos.'
         },
 
         security: {

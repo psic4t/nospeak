@@ -46,6 +46,7 @@
   let notificationsEnabled = $state(true);
   let urlPreviewsEnabled = $state(true);
   let backgroundMessagingEnabled = $state(isAndroidApp);
+  let mediaCacheEnabled = $state(false);
   let isSupported = $state(false);
   let isLoaded = $state(false);
 
@@ -510,6 +511,7 @@
           notificationsEnabled?: boolean;
           urlPreviewsEnabled?: boolean;
           backgroundMessagingEnabled?: boolean;
+          mediaCacheEnabled?: boolean;
         };
         notificationsEnabled = settings.notificationsEnabled !== false;
         urlPreviewsEnabled =
@@ -517,10 +519,12 @@
             ? settings.urlPreviewsEnabled
             : true;
         backgroundMessagingEnabled = isAndroidApp ? settings.backgroundMessagingEnabled !== false : false;
+        mediaCacheEnabled = isAndroidApp ? settings.mediaCacheEnabled === true : false;
       } else {
         notificationsEnabled = true;
         urlPreviewsEnabled = true;
         backgroundMessagingEnabled = isAndroidApp;
+        mediaCacheEnabled = false;
       }
 
       themeMode = getCurrentThemeMode();
@@ -537,7 +541,8 @@
         ...existingSettings,
         notificationsEnabled,
         urlPreviewsEnabled,
-        backgroundMessagingEnabled
+        backgroundMessagingEnabled,
+        mediaCacheEnabled
       };
       localStorage.setItem("nospeak-settings", JSON.stringify(settings));
     }
@@ -1716,6 +1721,30 @@
                   </div>
                 {/each}
               </div>
+
+              {#if isAndroidApp}
+                <div class="flex items-start justify-between gap-4 pt-4 border-t dark:border-slate-700">
+                  <div class="flex-1 min-w-0">
+                    <label
+                      for="media-cache-toggle"
+                      class="font-medium text-gray-900 dark:text-white"
+                    >
+                      {$t("settings.mediaServers.mediaCacheLabel")}
+                    </label>
+                    <p class="text-sm text-gray-600 dark:text-slate-400">
+                      {$t("settings.mediaServers.mediaCacheDescription")}
+                    </p>
+                  </div>
+                  <Toggle
+                    id="media-cache-toggle"
+                    bind:checked={mediaCacheEnabled}
+                    aria-label={
+                      mediaCacheEnabled ? "Disable media cache" : "Enable media cache"
+                    }
+                    class="ml-4"
+                  />
+                </div>
+              {/if}
             </div>
 
           {:else if activeCategory === "About"}

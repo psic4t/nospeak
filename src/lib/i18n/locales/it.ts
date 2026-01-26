@@ -387,7 +387,9 @@ const it = {
             saveStatusError: "Errore durante il salvataggio dell'elenco server. Le impostazioni potrebbero non essere propagate completamente.",
             savingStatus: 'Salvataggio impostazioni server multimediali…',
             primary: 'Principale',
-            setAsPrimary: 'Imposta come principale'
+            setAsPrimary: 'Imposta come principale',
+            mediaCacheLabel: 'Cache multimediale',
+            mediaCacheDescription: 'Salva i media visualizzati nella tua galleria per l\'accesso offline. I file possono essere gestiti nell\'app Foto.'
         },
 
         security: {

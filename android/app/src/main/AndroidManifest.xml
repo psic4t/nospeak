@@ -19,6 +19,10 @@
       <!-- For saving downloaded files to shared Documents on older Android -->
       <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
       <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+      <!-- For media cache on Android 13+ (API 33) -->
+      <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+      <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+      <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
 
     <!-- Required for dataSync foreground service on Android 14+ / targetSdk 35 -->

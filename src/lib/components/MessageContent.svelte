@@ -10,6 +10,7 @@
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { profileResolver } from '$lib/core/ProfileResolver';
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
+    import { saveToMediaCache, isMediaCacheEnabled } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
     import { t } from '$lib/i18n';
 
@@ -496,6 +497,8 @@
             return;
         }
 
+        const mimeType = fileType || 'application/octet-stream';
+
         try {
             isDecrypting = true;
             decryptError = null;
@@ -503,11 +506,22 @@
             const ciphertextBuffer = await fetchCiphertextWithBlossomFallback(fileUrl);
             const plainBytes = await decryptAesGcmToBytes(ciphertextBuffer, fileKey, fileNonce);
 
-            const blob = new Blob([plainBytes.buffer as ArrayBuffer], { type: fileType || 'application/octet-stream' });
+            const blob = new Blob([plainBytes.buffer as ArrayBuffer], { type: mimeType });
             if (decryptedUrl) {
                 URL.revokeObjectURL(decryptedUrl);
             }
             decryptedUrl = URL.createObjectURL(blob);
+
+            // Save to gallery in the background (Android only)
+            if (isMediaCacheEnabled()) {
+                const extracted = extractBlossomSha256FromUrl(fileUrl);
+                if (extracted?.sha256) {
+                    // Fire and forget - don't await
+                    saveToMediaCache(extracted.sha256, mimeType, blob).catch((e) => {
+                        console.warn('Failed to save media to gallery:', e);
+                    });
+                }
+            }
         } catch (e) {
             decryptError = (e as Error).message;
         } finally {
