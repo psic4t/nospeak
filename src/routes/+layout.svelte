@@ -31,12 +31,13 @@
    import { syncState } from "$lib/stores/sync";
    import { signerMismatch } from "$lib/stores/signerMismatch";
 
-   import { configureAndroidStatusBar } from "$lib/core/StatusBar";
-   import { initLanguage } from "$lib/stores/language";
-   import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
-   import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
-    import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
-    import Toast from "$lib/components/Toast.svelte";
+     import { configureAndroidStatusBar } from "$lib/core/StatusBar";
+    import { initLanguage } from "$lib/stores/language";
+    import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
+    import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
+     import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
+     import Toast from "$lib/components/Toast.svelte";
+    import { showToast, dismissToast } from "$lib/stores/toast";
  
 
    const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
@@ -104,6 +105,8 @@
 
     // Register PWA Service Worker
     const { registerSW } = await import('virtual:pwa-register');
+    let updateToastId: string | null = null;
+    
     registerSW({
       immediate: true,
       onRegistered(r) {
@@ -111,6 +114,20 @@
       },
       onRegisterError(error) {
         console.error('SW registration error', error);
+      },
+      onNeedRefresh() {
+        // Show update notification toast
+        if (!updateToastId) {
+          updateToastId = showToast(
+            'Update available - Click to reload',
+            'info',
+            0, // Persistent (no auto-dismiss)
+            () => {
+              // Reload the page to apply update
+              window.location.reload();
+            }
+          );
+        }
       }
     });
 

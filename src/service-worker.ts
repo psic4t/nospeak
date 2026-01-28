@@ -13,8 +13,8 @@ declare let self: ServiceWorkerGlobalScope & {
     __WB_MANIFEST: Array<PrecacheManifestEntry | string> | undefined;
 };
 
-// Take over control immediately
-self.skipWaiting();
+// Take control of clients when activated
+// Note: skipWaiting removed to allow proper cache warm-up before activation
 clientsClaim();
 
 // Clean up old caches
@@ -39,7 +39,7 @@ precacheAndRoute(manifest);
 
 // Handle all navigation requests by serving index.html
 // This enables client-side routing to work for all routes (/chat, /contacts, etc.)
-const handler = createHandlerBoundToURL('/index.html');
+const handler = createHandlerBoundToURL('index.html');
 registerRoute(new NavigationRoute(handler));
 
 // Handle notification clicks

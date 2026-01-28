@@ -90,7 +90,7 @@ tasks:
       - API endpoint works: /api/url-preview?url=...
       - Direct URL access works (SPA fallback)
       - Health check endpoint responds
-    status: pending
+    status: completed
     files: []
 
   - id: task-11
@@ -107,5 +107,30 @@ tasks:
     description: |
       Execute npm run check and npx vitest run to ensure
       all tests pass and TypeScript is happy.
+    status: completed
+    files: []
+
+  - id: task-13
+    title: Add PWA update notifications
+    description: |
+      Add update notification toast that appears when new PWA version
+      is available. Use registerSW onNeedRefresh callback to detect
+      updates and show persistent toast. Clicking toast reloads page.
+      Toast should reappear periodically if dismissed without reload.
+    status: completed
+    files:
+      - src/routes/+layout.svelte
+      - src/lib/stores/toast.ts
+      - src/lib/components/Toast.svelte
+
+  - id: task-14
+    title: Test PWA update notification
+    description: |
+      Simulate PWA update scenario:
+      1. Build and serve PWA
+      2. Make a code change
+      3. Rebuild and redeploy
+      4. Verify update toast appears in existing session
+      5. Click toast to verify reload applies update
     status: completed
     files: []

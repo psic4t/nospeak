@@ -19,7 +19,7 @@ export default defineConfig({
 			strategies: 'injectManifest',
 			srcDir: 'src',
 			filename: 'service-worker.ts',
-			registerType: 'autoUpdate',
+			registerType: 'prompt',
 			scope: '/',
 			base: '/',
 			includeAssets: ['robots.txt', 'favicons/*.png', 'favicons/*.ico', 'nospeak.svg'],

@@ -103,6 +103,24 @@ Docker Container
 - Simple, single-container deployment
 - Backward compatible with existing behavior
 
+### 6. PWA Update Notifications (New)
+**Current**: Service worker updates silently in background, user never notified  
+**New**: Toast notification appears when update is available, user can click to reload
+
+**Update Flow**:
+```
+1. New version deployed to server
+2. Browser detects service worker change via precache manifest hash
+3. New service worker installs in background
+4. Application shows toast: "Update available - Click to reload"
+5. User clicks toast → page reloads → new version active
+6. If dismissed, toast reappears periodically until update applied
+```
+
+**Files to modify**:
+- `src/routes/+layout.svelte` - Add `onNeedRefresh` callback to registerSW
+- Uses existing `showToast()` function with persistent duration
+
 ## Dependencies
 - `express` - Production dependency for API server
 
@@ -115,3 +133,4 @@ Docker Container
 6. Stop server, reload page - verify PWA still works via service worker
 7. Test Docker build and run
 8. Verify graceful degradation: URL previews fail silently when offline
+9. Simulate update: Deploy new version, verify toast appears, click reloads app

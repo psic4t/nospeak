@@ -114,3 +114,27 @@ The application SHALL no longer fetch runtime configuration on startup.
 - **WHEN** it previously called `initRuntimeConfig()`
 - **THEN** this call SHALL be removed or made optional
 - **AND** the application SHALL start using baked-in configuration
+
+### Requirement: PWA Update Notifications
+The application SHALL display a notification when a new PWA version is available, allowing users to reload and apply the update.
+
+#### Scenario: New version detected
+- **GIVEN** the PWA is running
+- **WHEN** a new version is deployed to the server
+- **AND** the service worker detects the update
+- **THEN** a toast notification SHALL appear with message "Update available - Click to reload"
+- **AND** the toast SHALL use the existing info styling (lavender blue)
+- **AND** the toast SHALL be persistent (no auto-dismiss timeout)
+
+#### Scenario: User applies update
+- **GIVEN** the update notification toast is visible
+- **WHEN** the user clicks anywhere on the toast
+- **THEN** the page SHALL reload immediately
+- **AND** the new PWA version SHALL be activated
+
+#### Scenario: Update notification dismissed without reload
+- **GIVEN** the user dismisses the update notification without clicking reload
+- **WHEN** a period of time passes (e.g., 5 minutes)
+- **AND** the service worker checks for updates again
+- **THEN** the update notification SHALL reappear
+- **AND** this SHALL continue periodically until the user reloads or updates are applied
