@@ -23,7 +23,10 @@ export default defineConfig({
 			injectManifest: {
 				// Ensure the app shell and boot files are revisioned.
 				// This prevents stale index.html referencing missing hashed chunks on reload.
-				globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,json}']
+				// NOTE: The plugin automatically adds 'prerendered/**/*.{html,json}' which
+				// causes a Workbox warning in SPA mode (no prerendered HTML files).
+				// This warning is harmless and expected - the build completes successfully.
+				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,webmanifest}']
 			},
 			scope: '/',
 			base: '/',
