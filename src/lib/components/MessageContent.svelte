@@ -254,7 +254,7 @@
     } | null;
 
     let preview = $state<UrlPreviewState>(null);
-    let previewUrl = $derived(getFirstNonMediaUrl(content));
+    let previewUrl = $derived(fileUrl ? null : getFirstNonMediaUrl(content));
  
      let container: HTMLElement | null = null;
      let isVisible = $state(false);
