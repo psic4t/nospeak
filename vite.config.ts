@@ -20,6 +20,11 @@ export default defineConfig({
 			srcDir: 'src',
 			filename: 'service-worker.ts',
 			registerType: 'prompt',
+			injectManifest: {
+				// Ensure the app shell and boot files are revisioned.
+				// This prevents stale index.html referencing missing hashed chunks on reload.
+				globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,json}']
+			},
 			scope: '/',
 			base: '/',
 			includeAssets: ['robots.txt', 'favicons/*.png', 'favicons/*.ico', 'nospeak.svg'],

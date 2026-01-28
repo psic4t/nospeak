@@ -37,7 +37,7 @@
     import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
      import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
      import Toast from "$lib/components/Toast.svelte";
-    import { showToast, dismissToast } from "$lib/stores/toast";
+    import { showToast } from "$lib/stores/toast";
  
 
    const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
@@ -107,29 +107,65 @@
     const { registerSW } = await import('virtual:pwa-register');
     let updateToastId: string | null = null;
     
-    registerSW({
-      immediate: true,
-      onRegistered(r) {
-        console.log('SW Registered');
-      },
-      onRegisterError(error) {
-        console.error('SW registration error', error);
-      },
-      onNeedRefresh() {
-        // Show update notification toast
-        if (!updateToastId) {
-          updateToastId = showToast(
-            'Update available - Click to reload',
-            'info',
-            0, // Persistent (no auto-dismiss)
-            () => {
-              // Reload the page to apply update
-              window.location.reload();
-            }
-          );
+     const updateSW = registerSW({
+        immediate: true,
+        onRegistered(r) {
+          console.log('SW Registered');
+
+          let swRegistration: ServiceWorkerRegistration | undefined = r ?? undefined;
+
+          const checkForSwUpdate = async (): Promise<void> => {
+              try {
+                  await swRegistration?.update();
+              } catch (e) {
+                  console.warn('SW update check failed', e);
+              }
+          };
+
+          // Trigger an update check once on startup.
+          void checkForSwUpdate();
+
+          // Trigger update checks when returning to foreground.
+          const onVisibilityChange = (): void => {
+              if (document.visibilityState === 'visible') {
+                  void checkForSwUpdate();
+              }
+          };
+
+          document.addEventListener('visibilitychange', onVisibilityChange);
+
+          // Trigger update checks periodically.
+          const updateIntervalMs = 5 * 60 * 1000;
+          const intervalId = window.setInterval(() => {
+              void checkForSwUpdate();
+          }, updateIntervalMs);
+
+          // Cleanup listeners/interval when layout is destroyed.
+          return () => {
+              document.removeEventListener('visibilitychange', onVisibilityChange);
+              clearInterval(intervalId);
+              swRegistration = undefined;
+          };
+        },
+        onRegisterError(error) {
+          console.error('SW registration error', error);
+        },
+       onNeedRefresh() {
+         // Show update notification toast
+         if (!updateToastId) {
+           updateToastId = showToast(
+             'Update available - Click to reload',
+             'info',
+             0, // Persistent (no auto-dismiss)
+             () => {
+              // Activate the waiting service worker and reload.
+              // This prevents stale index.html pointing at missing hashed assets.
+              void updateSW(true);
+              }
+            );
+          }
         }
-      }
-    });
+      });
 
     const restored = await authService.restore();
 

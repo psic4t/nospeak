@@ -217,6 +217,11 @@ app.use(express.static(path.join(__dirname, 'build')));
 // SPA fallback: serve index.html for all non-API routes
 // This enables client-side routing to work for direct URL access
 app.get('*', (req, res) => {
+    // Don't serve index.html for asset files - return 404 instead.
+    // Otherwise missing JS/CSS assets can return HTML and fail as "dynamic import" errors.
+    if (req.url.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|json|webmanifest|map)$/)) {
+        return res.status(404).send('Not found');
+    }
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 

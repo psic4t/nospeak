@@ -17,6 +17,14 @@ declare let self: ServiceWorkerGlobalScope & {
 // Note: skipWaiting removed to allow proper cache warm-up before activation
 clientsClaim();
 
+// Support "prompt" update flow from virtual:pwa-register.
+// registerSW() will postMessage({ type: 'SKIP_WAITING' }) when user accepts update.
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        void self.skipWaiting();
+    }
+});
+
 // Clean up old caches
 cleanupOutdatedCaches();
 
@@ -24,15 +32,34 @@ cleanupOutdatedCaches();
 // If the manifest injection fails for any reason, avoid crashing.
 const wbManifest = self.__WB_MANIFEST;
 
-// Add index.html to the manifest if not present (needed for static adapter fallback)
+// IMPORTANT: The app shell must be revisioned so it stays in sync with hashed _app assets.
+// Workbox's createHandlerBoundToURL('index.html') requires index.html to be precached.
+// Some toolchains exclude index.html from __WB_MANIFEST, so we ensure it is present
+// with a build-changing revision derived from _app/version.json.
 const manifest = Array.isArray(wbManifest) ? wbManifest : [];
-const hasIndexHtml = manifest.some(entry => {
+
+const normalizeUrl = (url: string): string => url.startsWith('/') ? url.slice(1) : url;
+
+const versionEntry = manifest.find((entry) => {
+    if (typeof entry === 'string') {
+        return normalizeUrl(entry) === '_app/version.json';
+    }
+    return normalizeUrl(entry.url) === '_app/version.json';
+});
+
+const versionRevision = typeof versionEntry === 'string' ? undefined : versionEntry?.revision;
+
+const hasIndexHtml = manifest.some((entry) => {
     const url = typeof entry === 'string' ? entry : entry.url;
-    return url === 'index.html' || url === '/index.html';
+    const normalized = normalizeUrl(url);
+    return normalized === 'index.html';
 });
 
 if (!hasIndexHtml) {
-    manifest.push({ url: 'index.html', revision: null });
+    manifest.push({
+        url: 'index.html',
+        revision: versionRevision ?? String(Date.now())
+    });
 }
 
 precacheAndRoute(manifest);
