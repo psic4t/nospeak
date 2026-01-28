@@ -44,52 +44,11 @@ function isRuntimeConfig(value: unknown): value is RuntimeConfig {
     );
 }
 
-export async function initRuntimeConfig(fetchImpl: typeof fetch = fetch): Promise<void> {
-    if (typeof window === 'undefined') {
-        return;
-    }
-
-    // Preserve existing Android/static build-time configuration when present.
-    try {
-        const envBase = (import.meta.env.PUBLIC_WEB_APP_BASE_URL as string | undefined) ?? '';
-        const normalized = envBase ? normalizeHttpsOrigin(envBase) : null;
-        if (normalized) {
-            runtimeConfig.update((current) => ({
-                ...current,
-                webAppBaseUrl: normalized
-            }));
-        }
-    } catch {
-        // ignore
-    }
-
-    try {
-        const response = await fetchImpl('/api/runtime-config', {
-            headers: {
-                accept: 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Runtime config fetch failed: ${response.status}`);
-        }
-
-        const json = (await response.json()) as unknown;
-
-        if (!isRuntimeConfig(json)) {
-            throw new Error('Runtime config response invalid');
-        }
-
-        // Normalize https origins in case server format changes.
-        const normalizedWebBase = normalizeHttpsOrigin(json.webAppBaseUrl) ?? DEFAULT_RUNTIME_CONFIG.webAppBaseUrl;
-
-        runtimeConfig.set({
-            ...json,
-            webAppBaseUrl: normalizedWebBase
-        });
-    } catch (e) {
-        console.warn('Failed to initialize runtime config; using defaults', e);
-    }
+export async function initRuntimeConfig(_fetchImpl?: typeof fetch): Promise<void> {
+    // Runtime configuration is now baked into the client bundle at build time.
+    // This function is kept for backward compatibility but does nothing.
+    // The DEFAULT_RUNTIME_CONFIG values are used directly.
+    return Promise.resolve();
 }
 
 export function getRuntimeConfigSnapshot(): RuntimeConfig {

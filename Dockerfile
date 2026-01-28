@@ -29,21 +29,21 @@ RUN npm ci --only=production
 # Copy the built application
 COPY --from=builder /app/build ./build
 
+# Copy server.js
+COPY --from=builder /app/server.js ./server.js
+
 # Create user_media directory and set permissions
-RUN mkdir -p ./build/client/user_media && chown -R node:node ./build
+RUN mkdir -p ./build/user_media && chown -R node:node ./build
 
 # Switch to non-root user
 USER node
-
-# Set environment variable for larger body size limit (50MB for video uploads)
-ENV BODY_SIZE_LIMIT=52428800
 
 # Expose the port the app runs on
 EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Start the SvelteKit server
-CMD ["node", "build/index.js"]
+# Start the Express server
+CMD ["node", "server.js"]

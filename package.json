@@ -55,6 +55,7 @@
     "blurhash": "^2.0.5",
     "chokidar": "^5.0.0",
     "dexie": "^4.2.1",
+    "express": "^4.21.2",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "minidenticons": "^4.2.1",

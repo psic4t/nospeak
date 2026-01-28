@@ -1,0 +1,111 @@
+tasks:
+  - id: task-1
+    title: Update svelte.config.js to use static adapter
+    description: |
+      Switch from adapter-node to adapter-static for default builds.
+      Maintain backward compatibility for Android builds.
+    status: completed
+    files:
+      - svelte.config.js
+
+  - id: task-2
+    title: Create client-side runtime config module
+    description: |
+      Export baked-in runtime configuration from a client-side module.
+      Replace server-side config fetching with static defaults.
+    status: completed
+    files:
+      - src/lib/core/runtimeConfig/index.ts
+
+  - id: task-3
+    title: Remove runtime config initialization from layout
+    description: |
+      Remove or make optional the initRuntimeConfig() call in +layout.svelte.
+      App should start immediately with baked-in configuration.
+    status: completed
+    files:
+      - src/routes/+layout.svelte
+
+  - id: task-4
+    title: Add navigation fallback to service worker
+    description: |
+      Implement NavigationRoute in service worker to serve cached index.html
+      for ALL navigation requests. This enables client-side routing to work
+      for direct URL access and page reloads.
+    status: completed
+    files:
+      - src/service-worker.ts
+
+  - id: task-5
+    title: Add graceful degradation for URL previews
+    description: |
+      Wrap URL preview API calls in try-catch to fail silently when
+      server is unavailable. Preview simply won't render, no error shown.
+    status: completed
+    files:
+      - src/lib/core/UrlPreviewApi.ts
+      - src/lib/components/MessageContent.svelte
+
+  - id: task-6
+    title: Create Express API server
+    description: |
+      Create server.js with Express to serve PWA static files and
+      handle /api/url-preview endpoint. Include SPA fallback for
+      client-side routing.
+    status: completed
+    files:
+      - server.js
+
+  - id: task-7
+    title: Add express to production dependencies
+    description: |
+      Add express package to dependencies in package.json
+      for production server.
+    status: completed
+    files:
+      - package.json
+
+  - id: task-8
+    title: Update Dockerfile for Express server
+    description: |
+      Update Dockerfile to run server.js instead of build/index.js.
+      Copy server.js and build directory to production image.
+    status: completed
+    files:
+      - Dockerfile
+
+  - id: task-9
+    title: Verify static build output
+    description: |
+      Run production build and verify all routes are pre-rendered.
+      Check that build directory contains static HTML files for all routes.
+    status: completed
+    files: []
+
+  - id: task-10
+    title: Test Express server locally
+    description: |
+      Run node server.js and verify:
+      - PWA loads at http://localhost:3000/
+      - API endpoint works: /api/url-preview?url=...
+      - Direct URL access works (SPA fallback)
+      - Health check endpoint responds
+    status: pending
+    files: []
+
+  - id: task-11
+    title: Test offline navigation
+    description: |
+      Serve build directory with simple HTTP server.
+      Kill server and verify navigation between routes still works
+      via service worker fallback.
+    status: completed
+    files: []
+
+  - id: task-12
+    title: Run quality checks
+    description: |
+      Execute npm run check and npx vitest run to ensure
+      all tests pass and TypeScript is happy.
+    status: completed
+    files: []
