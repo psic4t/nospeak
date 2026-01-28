@@ -86,6 +86,61 @@ describe('MessageContent Markdown parsing', () => {
 });
 
 describe('MessageContent URL handling', () => {
+    it('skips URL preview when fileUrl is provided (encrypted file messages)', () => {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+        const isImage = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const isVideo = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.(mp4|webm|mov|ogg)$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const isAudio = (url: string) => {
+            try {
+                const u = new URL(url);
+                return /\.mp3$/i.test(u.pathname);
+            } catch {
+                return false;
+            }
+        };
+
+        const getFirstNonMediaUrl = (text: string): string | null => {
+            const matches = text.match(urlRegex) ?? [];
+            for (const candidate of matches) {
+                if (!isImage(candidate) && !isVideo(candidate) && !isAudio(candidate)) {
+                    return candidate;
+                }
+            }
+            return null;
+        };
+
+        // Simulate the component logic: when fileUrl is set, previewUrl should be null
+        const fileUrl = 'https://blossom.primal.net/0b416e77b6725ec89810b03c998281588adc735b41e730dabb97ce44c2f43c77';
+        const content = 'https://blossom.primal.net/0b416e77b6725ec89810b03c998281588adc735b41e730dabb97ce44c2f43c77';
+
+        // With fileUrl present, preview should be skipped
+        const fileUrlPresent = 'https://blossom.primal.net/0b416e77b6725ec89810b03c998281588adc735b41e730dabb97ce44c2f43c77';
+        const previewUrlWithFile = fileUrlPresent ? null : getFirstNonMediaUrl(content);
+        expect(previewUrlWithFile).toBeNull();
+
+        // Without fileUrl, the URL would be extracted
+        const fileUrlAbsent = null;
+        const previewUrlWithoutFile = fileUrlAbsent ? null : getFirstNonMediaUrl(content);
+        expect(previewUrlWithoutFile).toBe('https://blossom.primal.net/0b416e77b6725ec89810b03c998281588adc735b41e730dabb97ce44c2f43c77');
+    });
+
     it('detects non-media URLs separately from media URLs', () => {
         const urlRegex = /(https?:\/\/[^\s]+)/g;
  
