@@ -1,8 +1,8 @@
 {
   "name": "web",
   "private": true,
-  "version": "0.10.2",
-  "versionCode": 100020,
+  "version": "0.10.3",
+  "versionCode": 100030,
   "type": "module",
   "scripts": {
     "dev": "vite dev",
