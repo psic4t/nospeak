@@ -210,7 +210,8 @@ const de = {
         locationPreview: {
             title: 'Standort',
             closeButton: 'Schließen',
-            openInOpenStreetMap: 'In OpenStreetMap öffnen'
+            openInOpenStreetMap: 'In OpenStreetMap öffnen',
+            ctrlScrollToZoom: 'Strg + Scrollen zum Zoomen'
         },
         mediaServersAutoConfigured: {
             title: 'Medienserver konfiguriert',

@@ -209,7 +209,8 @@ const it = {
         locationPreview: {
             title: 'Posizione',
             closeButton: 'Chiudi',
-            openInOpenStreetMap: 'Apri in OpenStreetMap'
+            openInOpenStreetMap: 'Apri in OpenStreetMap',
+            ctrlScrollToZoom: 'Usa Ctrl + scroll per zoomare'
         },
         mediaServersAutoConfigured: {
             title: 'Server multimediali configurati',

@@ -28,9 +28,13 @@
     // User must tap once to activate panning/zooming. Auto-deactivates after 5s of no touch.
     let activated: boolean = $state(false);
     let deactivateTimer: ReturnType<typeof setTimeout> | undefined = $state();
+    let showCtrlHint: boolean = $state(false);
+    let ctrlHintTimer: ReturnType<typeof setTimeout> | undefined = $state();
 
     const point: LocationPoint = $derived({ latitude, longitude });
     const openMapUrl = $derived(buildOsmOpenUrl(point));
+    // On desktop (non-Android) in chat bubbles, require Ctrl+scroll to zoom
+    const requiresCtrlScroll = $derived(!isAndroidNativeEnv && height === MAP_HEIGHT_BUBBLE);
 
     function activateMap() {
         if (!interactive || !isAndroidNativeEnv || activated) return;
@@ -71,6 +75,24 @@
         }
     }
 
+    function handleWheel(e: WheelEvent) {
+        if (!map) return;
+
+        if (e.ctrlKey) {
+            // Ctrl held: allow zoom
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -1 : 1;
+            map.zoomIn(delta);
+        } else {
+            // No Ctrl: show hint, let scroll bubble up to parent
+            showCtrlHint = true;
+            if (ctrlHintTimer) clearTimeout(ctrlHintTimer);
+            ctrlHintTimer = setTimeout(() => {
+                showCtrlHint = false;
+            }, 1500);
+        }
+    }
+
     onMount(() => {
         if (!mapContainer) return;
 
@@ -85,7 +107,7 @@
                 zoomControl: startInteractive,
                 dragging: startInteractive,
                 touchZoom: startInteractive,
-                scrollWheelZoom: startInteractive,
+                scrollWheelZoom: startInteractive && !requiresCtrlScroll,
                 doubleClickZoom: startInteractive,
                 boxZoom: startInteractive,
                 keyboard: startInteractive,
@@ -109,11 +131,22 @@
             });
 
             L.marker([latitude, longitude], { icon: defaultIcon }).addTo(map);
+
+            // On desktop chat bubbles, require Ctrl+scroll to zoom
+            if (requiresCtrlScroll && mapContainer) {
+                mapContainer.addEventListener('wheel', handleWheel, { passive: false });
+            }
         });
 
         return () => {
             if (deactivateTimer) {
                 clearTimeout(deactivateTimer);
+            }
+            if (ctrlHintTimer) {
+                clearTimeout(ctrlHintTimer);
+            }
+            if (requiresCtrlScroll && mapContainer) {
+                mapContainer.removeEventListener('wheel', handleWheel);
             }
             if (map) {
                 map.remove();
@@ -143,6 +176,15 @@
                 style="touch-action: pan-y;"
                 onclick={activateMap}
             ></div>
+        {/if}
+        {#if showCtrlHint}
+            <div
+                class="absolute inset-0 z-[1000] flex items-center justify-center bg-black/40 pointer-events-none rounded-xl transition-opacity duration-200"
+            >
+                <span class="text-white text-sm font-medium px-3 py-2 bg-black/70 rounded-lg shadow-lg">
+                    {$t('modals.locationPreview.ctrlScrollToZoom')}
+                </span>
+            </div>
         {/if}
     </div>
     {#if openMapUrl}
