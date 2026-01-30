@@ -159,9 +159,15 @@
 
     const groupItems: ChatListItem[] = await Promise.all(
       groupConversations.map(async (conv) => {
-        // Get the last message for this conversation
-        const lastMsg = await messageRepo.getLastMessageForConversation(conv.id);
+        // Fetch recent messages for display and unread calculation
+        const recentMsgs = await messageRepo.getMessagesByConversationId(conv.id, 10);
+        const lastMsg = recentMsgs[recentMsgs.length - 1]; // Most recent for display
         const lastMsgTime = lastMsg ? lastMsg.sentAt : conv.lastActivityAt;
+        // For unread indicator, only consider received messages (not sent from other clients)
+        const lastReceivedMsg = recentMsgs
+          .filter((m) => m.direction === "received")
+          .pop();
+        const lastReceivedTime = lastReceivedMsg ? lastReceivedMsg.sentAt : 0;
 
         let lastMessageText = "";
         if (lastMsg) {
@@ -204,7 +210,7 @@
           groupName = generateGroupTitle(participantNames);
         }
 
-        const hasUnread = conv.lastActivityAt > (conv.lastReadAt || 0);
+        const hasUnread = lastReceivedTime > (conv.lastReadAt || 0);
 
         return {
           id: conv.id,

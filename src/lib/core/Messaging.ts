@@ -383,6 +383,7 @@ import type { Conversation } from '$lib/db/db';
           subjectUpdatedAt: hasSubjectTag && subject ? rumorCreatedAtMs : undefined,
           subjectUpdatedRumorId: hasSubjectTag && subject ? rumorId : undefined,
           lastActivityAt: now,
+          lastReadAt: now, // Mark as read so it doesn't show unread indicator on discovery
           createdAt: now
         };
         await conversationRepo.upsertConversation(conversation);

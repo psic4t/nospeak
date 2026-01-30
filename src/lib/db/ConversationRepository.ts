@@ -203,6 +203,7 @@ export class ConversationRepository {
         await db.conversations.update(id, {
             lastReadAt: Date.now()
         });
+        this.emitConversationUpdated(id);
     }
 
     /**

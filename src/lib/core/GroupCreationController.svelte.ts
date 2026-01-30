@@ -153,6 +153,7 @@ export function createGroupCreationController() {
                 participants: allParticipantNpubs,
                 subject,
                 lastActivityAt: Date.now(),
+                lastReadAt: Date.now(), // Mark as read so it doesn't show unread indicator on creation
                 createdAt: Date.now()
             };
 
