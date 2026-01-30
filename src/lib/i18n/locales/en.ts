@@ -183,6 +183,17 @@ const en = {
             addFailed: 'Could not add contact from this QR. Please try again.',
             added: 'Contact added from QR.'
         },
+        scanContactQrResult: {
+            title: 'Contact from QR',
+            alreadyContact: 'This contact is already in your contacts.',
+            reviewHint: 'Review the contact from the scanned QR before adding.',
+            updatingProfile: 'Updating profile…',
+            loadFailed: 'Failed to load contact details from QR.',
+            addFailed: 'Failed to add contact from QR.',
+            closeButton: 'Close',
+            addButton: 'Add contact',
+            startChatButton: 'Start chat'
+        },
         attachmentPreview: {
             title: 'Attachment preview',
             imageAlt: 'Attachment preview',

@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { goto } from '$app/navigation';
+    import { get } from 'svelte/store';
     import { fade } from 'svelte/transition';
     import { glassModal } from '$lib/utils/transitions';
     import { t } from '$lib/i18n';
@@ -37,7 +39,7 @@
             }
         } catch (error) {
             console.error('ScanContactQrResultModal: failed to load contact info', error);
-            errorMessage = 'Failed to load contact details from QR.';
+            errorMessage = get(t)('modals.scanContactQrResult.loadFailed') as string;
         } finally {
             isLoading = false;
         }
@@ -77,18 +79,27 @@
             return;
         }
 
+        const targetNpub = npub;
         isAdding = true;
         errorMessage = null;
 
         try {
-            await addContactByNpub(npub);
+            await addContactByNpub(targetNpub);
             close();
+            goto(`/chat/${targetNpub}`);
         } catch (error) {
             console.error('ScanContactQrResultModal: failed to add contact from QR result', error);
-            errorMessage = 'Failed to add contact from QR.';
+            errorMessage = get(t)('modals.scanContactQrResult.addFailed') as string;
         } finally {
             isAdding = false;
         }
+    }
+
+    function handleStartChat(): void {
+        if (!npub) return;
+        const targetNpub = npub;
+        close();
+        goto(`/chat/${targetNpub}`);
     }
 
     $effect(() => {
@@ -144,7 +155,7 @@
             </Button>
 
             <div class="mb-4 text-center">
-                <h2 class="typ-title dark:text-white">Contact from QR</h2>
+                <h2 class="typ-title dark:text-white">{$t('modals.scanContactQrResult.title')}</h2>
             </div>
 
             <div class="flex flex-col items-center gap-3">
@@ -166,17 +177,17 @@
 
                 {#if isExistingContact}
                     <div class="mt-2 text-xs text-gray-700 dark:text-slate-200 text-center">
-                        This contact is already in your contacts.
+                        {$t('modals.scanContactQrResult.alreadyContact')}
                     </div>
                 {:else}
                     <div class="mt-2 text-xs text-gray-600 dark:text-slate-300 text-center">
-                        Review the contact from the scanned QR before adding.
+                        {$t('modals.scanContactQrResult.reviewHint')}
                     </div>
                 {/if}
 
                 {#if isLoading}
                     <div class="mt-1 text-[11px] text-gray-500 dark:text-slate-400 text-center">
-                        Updating profile…
+                        {$t('modals.scanContactQrResult.updatingProfile')}
                     </div>
                 {/if}
 
@@ -192,17 +203,25 @@
                     size="sm"
                     onclick={close}
                 >
-                    Close
+                    {$t('modals.scanContactQrResult.closeButton')}
                 </Button>
 
-                {#if !isExistingContact}
+                {#if isExistingContact}
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        onclick={handleStartChat}
+                    >
+                        {$t('modals.scanContactQrResult.startChatButton')}
+                    </Button>
+                {:else}
                     <Button
                         variant="primary"
                         size="sm"
                         onclick={handleAdd}
                         disabled={isAdding}
                     >
-                        Add contact
+                        {$t('modals.scanContactQrResult.addButton')}
                     </Button>
                 {/if}
             </div>

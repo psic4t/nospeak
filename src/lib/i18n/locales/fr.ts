@@ -178,10 +178,21 @@ const fr = {
             title: 'Scanner le QR du contact',
             instructions: 'Pointez votre caméra vers un QR nostr pour ajouter un contact.',
             scanning: 'Scan…',
-            noCamera: "La caméra n’est pas disponible sur cet appareil.",
+            noCamera: "La caméra n'est pas disponible sur cet appareil.",
             invalidQr: 'Ce code QR ne contient pas un npub de contact valide.',
-            addFailed: "Impossible d’ajouter le contact depuis ce QR. Veuillez réessayer.",
+            addFailed: "Impossible d'ajouter le contact depuis ce QR. Veuillez réessayer.",
             added: 'Contact ajouté depuis le QR.'
+        },
+        scanContactQrResult: {
+            title: 'Contact depuis QR',
+            alreadyContact: 'Ce contact est déjà dans vos contacts.',
+            reviewHint: "Vérifiez le contact du QR scanné avant de l'ajouter.",
+            updatingProfile: 'Mise à jour du profil…',
+            loadFailed: 'Échec du chargement des détails du contact depuis le QR.',
+            addFailed: "Échec de l'ajout du contact depuis le QR.",
+            closeButton: 'Fermer',
+            addButton: 'Ajouter le contact',
+            startChatButton: 'Démarrer le chat'
         },
         attachmentPreview: {
             title: 'Aperçu de la pièce jointe',

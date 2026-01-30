@@ -183,6 +183,17 @@ const it = {
             addFailed: 'Impossibile aggiungere il contatto da questo QR. Riprova.',
             added: 'Contatto aggiunto dal QR.'
         },
+        scanContactQrResult: {
+            title: 'Contatto da QR',
+            alreadyContact: 'Questo contatto è già nei tuoi contatti.',
+            reviewHint: 'Controlla il contatto dal QR scansionato prima di aggiungerlo.',
+            updatingProfile: 'Aggiornamento profilo…',
+            loadFailed: 'Impossibile caricare i dettagli del contatto dal QR.',
+            addFailed: 'Impossibile aggiungere il contatto dal QR.',
+            closeButton: 'Chiudi',
+            addButton: 'Aggiungi contatto',
+            startChatButton: 'Avvia chat'
+        },
         attachmentPreview: {
             title: 'Anteprima allegato',
             imageAlt: 'Anteprima allegato',
