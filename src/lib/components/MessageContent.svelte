@@ -130,7 +130,8 @@
                     citeLines.push(lines[i].replace(/^> ?/, '')); // Remove "> " or ">"
                     i++;
                 }
-                const citeContent = citeLines.map(l => parseInlineMarkdown(l)).join('<br>');
+                // Recursively parse to handle nested citations and other block elements
+                const citeContent = parseMarkdown(citeLines.join('\n'));
                 result.push(`<blockquote class="border-l-2 border-gray-400 dark:border-slate-500 bg-gray-100/50 dark:bg-slate-800/50 pl-3 pr-3 py-1 my-1 rounded-r text-gray-700 dark:text-slate-300">${citeContent}</blockquote>`);
                 continue;
             }

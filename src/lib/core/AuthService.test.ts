@@ -330,8 +330,8 @@ describe('AuthService ordered login history flow integration', () => {
  
          await authService.login('nsec1test');
  
-         expect(goto).toHaveBeenCalledWith('/chat');
-         expect(runFlowSpy).toHaveBeenCalledWith('npub1test', 'Login');
+        expect(goto).toHaveBeenCalledWith('/chat', { replaceState: true });
+        expect(runFlowSpy).toHaveBeenCalledWith('npub1test', 'Login');
      });
  
   });
@@ -550,7 +550,7 @@ describe('AuthService ordered login history flow integration', () => {
  
           await authService.loginWithAmber();
  
-          expect(goto).toHaveBeenCalledWith('/chat');
+          expect(goto).toHaveBeenCalledWith('/chat', { replaceState: true });
           expect(runFlowSpy).toHaveBeenCalledWith('npub1amber', 'Amber login');
           expect(localStorage.getItem('nospeak:auth_method')).toBe('amber');
           expect(localStorage.getItem('nospeak:amber_pubkey_hex')).toBeTruthy();

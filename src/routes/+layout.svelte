@@ -75,6 +75,13 @@
 
    });
 
+  // Redirect authenticated users away from login page (safety net for back navigation)
+  $effect(() => {
+      if ($currentUser && page.url.pathname === '/') {
+          goto('/chat', { replaceState: true });
+      }
+  });
+
   // Keep PWA app badge in sync with unread counts
   $effect(() => {
       const user = $currentUser;
@@ -178,9 +185,9 @@
           });
       }
 
-      // If restored and on login page, go to chat - await to complete navigation before showing UI
+      // If restored and on login page, go to chat (replace to keep login out of history)
       if (restored && location.pathname === "/" && !routedFromNotification) {
-        await goto("/chat");
+        await goto("/chat", { replaceState: true });
       }
 
       // Only set initialized after auth restore AND any navigation is complete

@@ -202,8 +202,8 @@ export class AuthService {
                 localStorage.setItem(STORAGE_KEY, nsec);
             }
 
-            // Navigate to chat and start ordered login history flow in background
-            goto('/chat');
+            // Navigate to chat (replace login page in history) and start ordered login history flow in background
+            goto('/chat', { replaceState: true });
             this.runLoginHistoryFlow(npub, 'Login').catch(console.error);
         } catch (e) {
             console.error('Login failed:', e);
@@ -225,7 +225,7 @@ export class AuthService {
             localStorage.setItem(AUTH_METHOD_KEY, 'amber');
             localStorage.setItem('nospeak:amber_pubkey_hex', pubkeyHex);
 
-            goto('/chat');
+            goto('/chat', { replaceState: true });
             this.runLoginHistoryFlow(npub, 'Amber login').catch(console.error);
         } catch (e) {
             console.error('Amber login failed:', e);
@@ -254,8 +254,8 @@ export class AuthService {
             // Start periodic signer verification for NIP-07
             signerVerificationService.startPeriodicVerification(pubkey);
 
-            // Navigate to chat and start ordered login history flow in background
-            goto('/chat');
+            // Navigate to chat (replace login page in history) and start ordered login history flow in background
+            goto('/chat', { replaceState: true });
             this.runLoginHistoryFlow(npub, 'Extension login').catch(console.error);
         } catch (e) {
             console.error('Extension login failed:', e);
