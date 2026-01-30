@@ -141,7 +141,8 @@ const en = {
             saveError: 'Could not save your initial setup. Please try again.',
             doLater: "I'll do this later",
             saving: 'Saving...',
-            continue: 'Continue'
+            continue: 'Continue',
+            autoRelaysConfigured: 'Messaging relays configured. You can change them in Settings.'
         },
         relayStatus: {
             title: 'Relay Connections',

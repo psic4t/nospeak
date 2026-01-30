@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { isOnline, showRelayStatusModal } from "$lib/stores/connection";
-  import { authService } from "$lib/core/AuthService";
+  import { authService, checkAndAutoSetRelays } from "$lib/core/AuthService";
   import { initRuntimeConfig } from "$lib/core/runtimeConfig";
   import { onMount } from "svelte";
   import { pwaInfo } from 'virtual:pwa-info';
@@ -89,6 +89,20 @@
 
   onMount(() => {
       return initAppVisibilityAndFocusTracking();
+  });
+
+  // Check for missing messaging relays when app becomes visible
+  onMount(() => {
+      const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible' && $currentUser) {
+              void checkAndAutoSetRelays();
+          }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
   });
 
   onMount(async () => {

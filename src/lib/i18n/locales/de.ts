@@ -142,7 +142,8 @@ const de = {
             saveError: 'Deine Ersteinrichtung konnte nicht gespeichert werden. Bitte versuche es erneut.',
             doLater: 'Ich kümmere mich später darum',
             saving: 'Speichere…',
-            continue: 'Weiter'
+            continue: 'Weiter',
+            autoRelaysConfigured: 'Messaging-Relays wurden konfiguriert. Du kannst sie in den Einstellungen ändern.'
         },
         relayStatus: {
             title: 'Relay-Verbindungen',

@@ -141,7 +141,8 @@ const es = {
             saveError: 'No se pudo guardar tu configuración inicial. Inténtalo de nuevo.',
             doLater: 'Lo haré más tarde',
             saving: 'Guardando...',
-            continue: 'Continuar'
+            continue: 'Continuar',
+            autoRelaysConfigured: 'Relays de mensajería configurados. Puedes cambiarlos en Ajustes.'
         },
         relayStatus: {
             title: 'Conexiones a relays',

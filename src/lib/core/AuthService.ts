@@ -3,7 +3,9 @@ import { LocalSigner } from '$lib/core/signer/LocalSigner';
 import { Nip07Signer } from '$lib/core/signer/Nip07Signer';
 import { Nip55Signer } from '$lib/core/signer/Nip55Signer';
 import { discoverUserRelays } from '$lib/core/connection/Discovery';
-import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
+import { getDiscoveryRelays, getDefaultMessagingRelays } from '$lib/core/runtimeConfig';
+import { relaySettingsService } from './RelaySettingsService';
+import { t } from '$lib/i18n';
 import { nip19, generateSecretKey, getPublicKey } from 'nostr-tools';
 import { goto } from '$app/navigation';
 import { connectionManager } from './connection/instance';
@@ -60,6 +62,61 @@ const NOTIFICATION_PERMISSION_PROMPTED_KEY = 'nospeak_notifications_permission_p
 
 const SYNC_GLOBAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const SYNC_DISMISS_DELAY_MS = 2 * 60 * 1000; // 2 minutes
+
+// Session flag to prevent duplicate auto-relay notifications
+let hasNotifiedAboutAutoRelays = false;
+
+/**
+ * Reset the auto-relay notification flag. Called on logout.
+ */
+export function resetAutoRelayNotification(): void {
+    hasNotifiedAboutAutoRelays = false;
+}
+
+/**
+ * Check if the current user has messaging relays configured.
+ * If they have a username but no relays, auto-set default relays and notify.
+ * This is exported so it can be called on app resume/visibility change.
+ */
+export async function checkAndAutoSetRelays(): Promise<void> {
+    // Skip if already notified this session
+    if (hasNotifiedAboutAutoRelays) {
+        return;
+    }
+
+    const user = get(currentUser);
+    if (!user?.npub) {
+        return;
+    }
+
+    try {
+        const profile = await profileRepo.getProfileIgnoreTTL(user.npub);
+        const hasRelays = !!profile && Array.isArray(profile.messagingRelays) && profile.messagingRelays.length > 0;
+
+        if (hasRelays) {
+            return;
+        }
+
+        const metadata = profile?.metadata || {};
+        const hasUsername = !!(metadata.name || metadata.display_name || metadata.nip05);
+
+        // Only auto-set for users with username but no relays
+        // (users without both should see EmptyProfileModal)
+        if (!hasUsername) {
+            return;
+        }
+
+        // Auto-set default relays
+        await relaySettingsService.updateSettings(getDefaultMessagingRelays());
+
+        // Mark as notified and show toast
+        hasNotifiedAboutAutoRelays = true;
+        const message = get(t)('modals.emptyProfile.autoRelaysConfigured') as string;
+        showToast(message, 'info', 5000);
+    } catch (error) {
+        console.error('Failed to auto-set default relays:', error);
+    }
+}
 
 export class AuthService {
     private lastLoginNpub: string | null = null;
@@ -394,7 +451,11 @@ export class AuthService {
             const hasUsername = !!(metadata.name || metadata.display_name || metadata.nip05);
 
             if (!hasRelays && !hasUsername) {
+                // New user: show modal to set relays and username
                 showEmptyProfileModal.set(true);
+            } else if (!hasRelays && hasUsername) {
+                // Existing user with username but no relays: auto-set and notify
+                await checkAndAutoSetRelays();
             }
         } catch (profileError) {
             console.error(`${context} empty profile check failed:`, profileError);
@@ -620,6 +681,9 @@ export class AuthService {
         // Stop signer verification and clear mismatch state
         signerVerificationService.stopPeriodicVerification();
         clearSignerMismatch();
+
+        // Reset auto-relay notification flag for next session
+        resetAutoRelayNotification();
 
         // Ensure Android background messaging is stopped before tearing down connections
         await disableAndroidBackgroundMessaging().catch(e => {

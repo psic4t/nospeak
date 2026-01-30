@@ -141,7 +141,8 @@ const fr = {
             saveError: "Impossible d’enregistrer votre configuration initiale. Veuillez réessayer.",
             doLater: 'Je le ferai plus tard',
             saving: 'Enregistrement...',
-            continue: 'Continuer'
+            continue: 'Continuer',
+            autoRelaysConfigured: 'Relays de messagerie configurés. Vous pouvez les modifier dans Paramètres.'
         },
         relayStatus: {
             title: 'Connexions aux relays',

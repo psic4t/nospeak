@@ -141,7 +141,8 @@ const pt = {
             saveError: 'Não foi possível guardar a configuração inicial. Tente novamente.',
             doLater: 'Farei isto mais tarde',
             saving: 'A guardar...',
-            continue: 'Continuar'
+            continue: 'Continuar',
+            autoRelaysConfigured: 'Relays de mensagens configurados. Pode alterá-los em Definições.'
         },
         relayStatus: {
             title: 'Ligações a relays',

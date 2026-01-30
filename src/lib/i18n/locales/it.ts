@@ -141,7 +141,8 @@ const it = {
             saveError: 'Impossibile salvare la configurazione iniziale. Riprova.',
             doLater: 'Lo farò più tardi',
             saving: 'Salvataggio...',
-            continue: 'Continua'
+            continue: 'Continua',
+            autoRelaysConfigured: 'Relays di messaggistica configurati. Puoi modificarli in Impostazioni.'
         },
         relayStatus: {
             title: 'Connessioni relay',
