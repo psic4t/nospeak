@@ -13,6 +13,7 @@
     import { saveToMediaCache, loadFromMediaCache, isMediaCacheEnabled } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
     import { t } from '$lib/i18n';
+    import GenericFileDisplay from './GenericFileDisplay.svelte';
 
     let {
         content,
@@ -21,6 +22,7 @@
         onImageClick,
         fileUrl = undefined,
         fileType = undefined,
+        fileSize = undefined,
         fileEncryptionAlgorithm = undefined,
         fileKey = undefined,
         fileNonce = undefined,
@@ -38,6 +40,7 @@
         onImageClick?: (url: string, originalUrl?: string | null) => void;
         fileUrl?: string;
         fileType?: string;
+        fileSize?: number;
         fileEncryptionAlgorithm?: string;
         fileKey?: string;
         fileNonce?: string;
@@ -89,6 +92,12 @@
 
     function isAudioMime(mime?: string) {
         return !!mime && mime.startsWith('audio/');
+    }
+
+    function isGenericFileMime(mime?: string) {
+        if (!mime) return false;
+        // It's a generic file if it's not image, video, or audio
+        return !isImageMime(mime) && !isVideoMime(mime) && !isAudioMime(mime);
     }
  
     function parseInlineMarkdown(text: string): string {
@@ -680,6 +689,15 @@
                       <div class="mb-1">
                           <AudioWaveformPlayer url={decryptedUrl} isOwn={isOwn} />
                       </div>
+                 {:else if isGenericFileMime(fileType)}
+                     <GenericFileDisplay
+                         fileType={fileType ?? 'application/octet-stream'}
+                         fileSize={fileSize}
+                         fileUrl={fileUrl}
+                         decryptedUrl={decryptedUrl}
+                         isDecrypting={false}
+                         isOwn={isOwn}
+                     />
                  {:else}
                      <a href={decryptedUrl} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">Download attachment</a>
                  {/if}
@@ -697,7 +715,21 @@
                              </div>
                          {/if}
                      </div>
-                 {:else}
+                 {:else if isGenericFileMime(fileType)}
+                 <!-- Generic file display while decrypting -->
+                 <GenericFileDisplay
+                     fileType={fileType ?? 'application/octet-stream'}
+                     fileSize={fileSize}
+                     fileUrl={fileUrl}
+                     decryptedUrl={null}
+                     isDecrypting={isDecrypting}
+                     isOwn={isOwn}
+                     onDownload={decryptAttachment}
+                 />
+                 {#if decryptError}
+                     <div class="typ-meta text-xs text-red-500 mt-1">{decryptError}</div>
+                 {/if}
+             {:else}
                  {#if isDecrypting}
                      <div class="typ-meta text-xs text-gray-500 dark:text-slate-400">Decrypting attachment...</div>
                  {:else if decryptError}
@@ -767,6 +799,16 @@
                   <div class="mb-1">
                       <AudioWaveformPlayer url={fileUrl} isOwn={isOwn} />
                   </div>
+             {:else if isGenericFileMime(fileType)}
+                 <!-- Non-encrypted generic file (direct URL) -->
+                 <GenericFileDisplay
+                     fileType={fileType ?? 'application/octet-stream'}
+                     fileSize={fileSize}
+                     fileUrl={fileUrl}
+                     decryptedUrl={fileUrl}
+                     isDecrypting={false}
+                     isOwn={isOwn}
+                 />
              {:else}
                  <a href={fileUrl} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">Download attachment</a>
              {/if}

@@ -6,18 +6,19 @@
     import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
     import { hapticSelection } from '$lib/utils/haptics';
     import { t } from '$lib/i18n';
+    import { detectMediaType, validateFileSize, MAX_FILE_SIZE } from '$lib/utils/fileIcons';
 
 
 
     type Variant = 'chat' | 'default';
 
-    let { onFileSelect, onShareLocation, showLocationOption = false, inline, variant: variantProp = 'default', allowedTypes = ['image', 'video'] } = $props<{
-        onFileSelect: (file: File, type: 'image' | 'video' | 'audio') => void;
+    let { onFileSelect, onShareLocation, showLocationOption = false, inline, variant: variantProp = 'default', allowedTypes = ['image', 'video', 'file'] } = $props<{
+        onFileSelect: (file: File, type: 'image' | 'video' | 'audio' | 'file') => void;
         onShareLocation?: () => void;
         showLocationOption?: boolean;
         inline?: boolean;
         variant?: Variant;
-        allowedTypes?: ('image' | 'video' | 'audio')[];
+        allowedTypes?: ('image' | 'video' | 'audio' | 'file')[];
     }>();
 
     const variant: Variant = $derived(inline === true ? 'chat' : (inline === false ? 'default' : variantProp));
@@ -46,7 +47,7 @@
         showDropdown = false;
     }
 
-      function handleFileTypeSelect(type: 'image' | 'video' | 'audio') {
+      function handleFileTypeSelect(type: 'image' | 'video' | 'audio' | 'file') {
           closeDropdown();
           hapticSelection();
           openFileSelector(type);
@@ -129,7 +130,7 @@
         });
     }
 
-    async function openFileSelector(type: 'image' | 'video' | 'audio') {
+    async function openFileSelector(type: 'image' | 'video' | 'audio' | 'file') {
         const input = document.createElement('input');
         input.type = 'file';
 
@@ -137,14 +138,34 @@
             input.accept = 'image/jpeg,image/png,image/gif,image/webp';
         } else if (type === 'video') {
             input.accept = 'video/mp4,video/webm,video/quicktime';
-        } else {
+        } else if (type === 'audio') {
             input.accept = 'audio/mpeg,audio/webm,audio/ogg';
+        } else {
+            // Generic file - accept all types
+            input.accept = '*/*';
         }
 
         input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
                 try {
+                    // For generic file uploads, auto-detect if it's actually media
+                    if (type === 'file') {
+                        const detectedType = detectMediaType(file);
+
+                        // If it's media, route to the existing media handlers
+                        if (detectedType !== 'file') {
+                            onFileSelect(file, detectedType);
+                            return;
+                        }
+
+                        // Validate file size for generic files (10 MB max)
+                        if (!validateFileSize(file)) {
+                            alert(get(t)('chat.fileUpload.fileTooLarge'));
+                            return;
+                        }
+                    }
+
                     onFileSelect(file, type);
                 } catch (error) {
                     console.error('Upload failed:', error);

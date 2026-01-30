@@ -288,13 +288,19 @@ const fr = {
             location: 'Localisation',
             image: 'Image',
             video: 'Vidéo',
-            audio: 'Musique'
+            audio: 'Musique',
+            file: 'Fichier'
         },
         mediaErrors: {
             cameraErrorTitle: 'Erreur de caméra',
             cameraErrorMessage: 'Impossible de prendre la photo'
         },
-        mediaUnavailable: 'Ce média n’est plus disponible.',
+        fileUpload: {
+            fileTooLarge: 'Le fichier est trop volumineux. La taille maximale est de 10 Mo.',
+            download: 'Télécharger',
+            decrypting: 'Déchiffrement...'
+        },
+        mediaUnavailable: "Ce média n'est plus disponible.",
         voiceMessage: {
             title: 'Message vocal',
             recordAria: 'Enregistrer un message vocal',

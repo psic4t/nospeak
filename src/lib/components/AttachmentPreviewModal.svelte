@@ -7,6 +7,7 @@
     import LocationMap from '$lib/components/LocationMap.svelte';
     import Textarea from '$lib/components/ui/Textarea.svelte';
     import { MAP_HEIGHT_PREVIEW, buildOsmOpenUrl } from '$lib/core/MapUtils';
+    import { getFileIconInfo, getFileExtension, formatFileSize } from '$lib/utils/fileIcons';
 
     import type { LocationPoint } from '$lib/core/MapUtils';
 
@@ -42,7 +43,7 @@
         location?: LocationPoint | null;
         openMapText?: string;
         file?: File | null;
-        mediaType?: 'image' | 'video' | 'audio';
+        mediaType?: 'image' | 'video' | 'audio' | 'file';
         objectUrl?: string | null;
         title: string;
         imageAlt?: string;
@@ -261,6 +262,19 @@
                     <video src={objectUrl} controls class="max-h-64 w-full object-contain"></video>
                 {:else if mediaType === 'audio' && objectUrl}
                     <audio src={objectUrl} controls class="w-full"></audio>
+                {:else if mediaType === 'file' && file}
+                    {@const iconInfo = getFileIconInfo(file.type)}
+                    {@const extension = getFileExtension(file.type) || '.file'}
+                    {@const size = formatFileSize(file.size)}
+                    <div class="flex flex-col items-center gap-3 py-6">
+                        <div class="w-16 h-16 rounded-xl {iconInfo.color} flex items-center justify-center">
+                            {@html iconInfo.svg}
+                        </div>
+                        <div class="text-center">
+                            <div class="typ-section text-gray-800 dark:text-gray-200 uppercase">{extension}</div>
+                            <div class="typ-meta text-gray-500 dark:text-gray-400">{size}</div>
+                        </div>
+                    </div>
                 {:else}
                     <div class="typ-body text-gray-500 dark:text-slate-400">{noPreviewText}</div>
                 {/if}

@@ -288,11 +288,17 @@ const es = {
             location: 'Ubicación',
             image: 'Imagen',
             video: 'Vídeo',
-            audio: 'Música'
+            audio: 'Música',
+            file: 'Archivo'
         },
         mediaErrors: {
             cameraErrorTitle: 'Error de cámara',
             cameraErrorMessage: 'No se pudo capturar la foto'
+        },
+        fileUpload: {
+            fileTooLarge: 'El archivo es demasiado grande. El tamaño máximo es 10 MB.',
+            download: 'Descargar',
+            decrypting: 'Descifrando...'
         },
         mediaUnavailable: 'Este medio ya no está disponible.',
         voiceMessage: {

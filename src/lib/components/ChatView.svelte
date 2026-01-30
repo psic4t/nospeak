@@ -527,7 +527,7 @@
     // Single-file media preview state
   let showMediaPreview = $state(false);
   let pendingMediaFile = $state<File | null>(null);
-  let pendingMediaType = $state<'image' | 'video' | 'audio' | null>(null);
+  let pendingMediaType = $state<'image' | 'video' | 'audio' | 'file' | null>(null);
   let pendingMediaObjectUrl = $state<string | null>(null);
   let pendingMediaCaption = $state("");
   let pendingMediaError = $state<string | null>(null);
@@ -1151,7 +1151,7 @@
   }
 
 
-  function openMediaPreview(file: File, type: 'image' | 'video' | 'audio') {
+  function openMediaPreview(file: File, type: 'image' | 'video' | 'audio' | 'file') {
     if (pendingMediaObjectUrl) {
       URL.revokeObjectURL(pendingMediaObjectUrl);
       pendingMediaObjectUrl = null;
@@ -1190,14 +1190,17 @@
     })();
   }
 
-  function mediaTypeToMime(type: 'image' | 'video' | 'audio'): string {
+  function mediaTypeToMime(type: 'image' | 'video' | 'audio' | 'file'): string {
     if (type === 'image') {
       return 'image/jpeg';
     }
     if (type === 'video') {
       return 'video/mp4';
     }
-    return 'audio/mpeg';
+    if (type === 'audio') {
+      return 'audio/mpeg';
+    }
+    return 'application/octet-stream';
   }
 
   async function confirmSendMedia() {
@@ -1446,7 +1449,7 @@
     }
   }
 
-  async function handleFileSelect(file: File, type: 'image' | 'video' | 'audio') {
+  async function handleFileSelect(file: File, type: 'image' | 'video' | 'audio' | 'file') {
     // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
     if (!isGroup && !partnerNpub) return;
     if (isGroup && !groupConversation) return;
@@ -2058,7 +2061,7 @@
           showLocationOption={true}
           onShareLocation={() => void handleShareLocation()}
           variant="chat"
-          allowedTypes={["image", "video", "audio"]}
+          allowedTypes={["image", "video", "audio", "file"]}
         />
         <textarea
           bind:this={inputElement}

@@ -249,11 +249,11 @@
     }
   }
 
-  function handlePictureUpload(file: File, _type: "image" | "video" | "audio") {
+  function handlePictureUpload(file: File, _type: "image" | "video" | "audio" | "file") {
     openProfileMediaPreview('picture', file);
   }
 
-  function handleBannerUpload(file: File, _type: "image" | "video" | "audio") {
+  function handleBannerUpload(file: File, _type: "image" | "video" | "audio" | "file") {
     openProfileMediaPreview('banner', file);
   }
 

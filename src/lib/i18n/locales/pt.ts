@@ -288,11 +288,17 @@ const pt = {
             location: 'Localização',
             image: 'Imagem',
             video: 'Vídeo',
-            audio: 'Música'
+            audio: 'Música',
+            file: 'Arquivo'
         },
         mediaErrors: {
             cameraErrorTitle: 'Erro da câmara',
             cameraErrorMessage: 'Falha ao capturar a foto'
+        },
+        fileUpload: {
+            fileTooLarge: 'O arquivo é muito grande. O tamanho máximo é 10 MB.',
+            download: 'Baixar',
+            decrypting: 'Descriptografando...'
         },
         mediaUnavailable: 'Este media já não está disponível.',
         voiceMessage: {

@@ -1156,19 +1156,22 @@ import type { Conversation } from '$lib/db/db';
     return rumorId;
   }
 
-  private mediaTypeToMime(type: 'image' | 'video' | 'audio'): string {
+  private mediaTypeToMime(type: 'image' | 'video' | 'audio' | 'file'): string {
     if (type === 'image') {
       return 'image/jpeg';
     }
     if (type === 'video') {
       return 'video/mp4';
     }
-    return 'audio/mpeg';
+    if (type === 'audio') {
+      return 'audio/mpeg';
+    }
+    return 'application/octet-stream';
   }
 
   private async uploadEncryptedMedia(
     encrypted: EncryptedFileResult,
-    mediaType: 'image' | 'video' | 'audio',
+    mediaType: 'image' | 'video' | 'audio' | 'file',
     mimeType: string,
     blossomServers: string[]
   ): Promise<string> {
@@ -1191,7 +1194,7 @@ import type { Conversation } from '$lib/db/db';
   public async sendFileMessage(
     recipientNpub: string | null,
     file: File,
-    mediaType: 'image' | 'video' | 'audio',
+    mediaType: 'image' | 'video' | 'audio' | 'file',
     createdAtSeconds?: number,
     conversationId?: string,
     mediaMeta?: { width?: number; height?: number; blurhash?: string }
@@ -1272,7 +1275,7 @@ import type { Conversation } from '$lib/db/db';
   private async sendGroupFileMessage(
     conversationId: string,
     file: File,
-    mediaType: 'image' | 'video' | 'audio',
+    mediaType: 'image' | 'video' | 'audio' | 'file',
     createdAtSeconds?: number,
     mediaMeta?: { width?: number; height?: number; blurhash?: string }
   ): Promise<string> {

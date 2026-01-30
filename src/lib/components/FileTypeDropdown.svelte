@@ -1,25 +1,26 @@
 <script lang="ts">
      import { t } from '$lib/i18n';
  
-     let {
-         onFileTypeSelect,
-         showCameraOption = false,
-         onTakePhoto,
-         showLocationOption = false,
-         onShareLocation,
-         allowedTypes = ['image', 'video']
-     } = $props<{
-         onFileTypeSelect: (type: 'image' | 'video' | 'audio') => void;
-         showCameraOption?: boolean;
-         onTakePhoto?: () => void;
-         showLocationOption?: boolean;
-         onShareLocation?: () => void;
-         allowedTypes?: ('image' | 'video' | 'audio')[];
-     }>();
- 
-     let showImage = $derived(allowedTypes.includes('image'));
-     let showVideo = $derived(allowedTypes.includes('video'));
-     let showAudio = $derived(allowedTypes.includes('audio'));
+    let {
+        onFileTypeSelect,
+        showCameraOption = false,
+        onTakePhoto,
+        showLocationOption = false,
+        onShareLocation,
+        allowedTypes = ['image', 'video', 'file']
+    } = $props<{
+        onFileTypeSelect: (type: 'image' | 'video' | 'audio' | 'file') => void;
+        showCameraOption?: boolean;
+        onTakePhoto?: () => void;
+        showLocationOption?: boolean;
+        onShareLocation?: () => void;
+        allowedTypes?: ('image' | 'video' | 'audio' | 'file')[];
+    }>();
+
+    let showImage = $derived(allowedTypes.includes('image'));
+    let showVideo = $derived(allowedTypes.includes('video'));
+    let showAudio = $derived(allowedTypes.includes('audio'));
+    let showFile = $derived(allowedTypes.includes('file'));
  
      function handleImageClick() {
          onFileTypeSelect('image');
@@ -29,11 +30,15 @@
          onFileTypeSelect('video');
      }
  
-     function handleAudioClick() {
-         onFileTypeSelect('audio');
-     }
- 
-     function handleTakePhotoClick() {
+    function handleAudioClick() {
+        onFileTypeSelect('audio');
+    }
+
+    function handleFileClick() {
+        onFileTypeSelect('file');
+    }
+
+    function handleTakePhotoClick() {
          if (onTakePhoto) {
              onTakePhoto();
          }
@@ -163,6 +168,28 @@
             <circle cx="18" cy="16" r="3" />
         </svg>
         <span>{$t('chat.mediaMenu.audio')}</span>
+    </button>
+    {/if}
+    {#if showFile}
+    <button
+        type="button"
+        onclick={handleFileClick}
+        class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+    >
+        <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-gray-600 dark:text-gray-300"
+        >
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+        </svg>
+        <span>{$t('chat.mediaMenu.file')}</span>
     </button>
     {/if}
 </div>

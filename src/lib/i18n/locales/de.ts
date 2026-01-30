@@ -290,11 +290,17 @@ const de = {
             location: 'Standort',
             image: 'Bild',
             video: 'Video',
-            audio: 'Musik'
+            audio: 'Musik',
+            file: 'Datei'
         },
         mediaErrors: {
             cameraErrorTitle: 'Kamerafehler',
             cameraErrorMessage: 'Foto konnte nicht aufgenommen werden'
+        },
+        fileUpload: {
+            fileTooLarge: 'Datei ist zu groß. Maximale Größe ist 10 MB.',
+            download: 'Herunterladen',
+            decrypting: 'Entschlüsseln...'
         },
         mediaUnavailable: 'Dieses Medium ist nicht mehr verfügbar.',
         voiceMessage: {
