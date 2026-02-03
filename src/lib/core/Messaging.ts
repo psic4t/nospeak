@@ -1,6 +1,6 @@
 import { connectionManager } from './connection/instance';
 import { messageRepo } from '$lib/db/MessageRepository';
-import { nip19, type NostrEvent, generateSecretKey, getPublicKey, finalizeEvent, nip44, getEventHash } from 'nostr-tools';
+import { nip19, type NostrEvent, generateSecretKey, getPublicKey, finalizeEvent, nip44, getEventHash, verifyEvent } from 'nostr-tools';
 import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { profileRepo } from '$lib/db/ProfileRepository';
@@ -144,6 +144,11 @@ import type { Conversation } from '$lib/db/db';
 
       if (seal.kind !== 13) throw new Error(`Expected Seal (Kind 13), got ${seal.kind}`);
 
+      // NIP-17: Verify seal signature to prevent impersonation attacks
+      if (!verifyEvent(seal)) {
+        throw new Error('Invalid seal signature - possible forgery attempt');
+      }
+
       // Step 2: Decrypt Seal
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
       const rumor = JSON.parse(decryptedSeal) as NostrEvent;
@@ -153,12 +158,17 @@ import type { Conversation } from '$lib/db/db';
         throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
       }
 
+      // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
+      if (seal.pubkey !== rumor.pubkey) {
+        throw new Error('Seal pubkey does not match rumor pubkey - possible impersonation attempt');
+      }
+
       // Validate p tags in rumor - for group messages, my pubkey must be in at least one p-tag
       // For self-sent messages, sender pubkey equals my pubkey
       const myPubkey = await s.getPublicKey();
       const pTags = rumor.tags.filter(t => t[0] === 'p');
       const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
-      
+
       if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
         throw new Error('Received rumor does not include my public key in p-tags');
       }
@@ -188,6 +198,11 @@ import type { Conversation } from '$lib/db/db';
 
       if (seal.kind !== 13) throw new Error(`Expected Seal (Kind 13), got ${seal.kind}`);
 
+      // NIP-17: Verify seal signature to prevent impersonation attacks
+      if (!verifyEvent(seal)) {
+        throw new Error('Invalid seal signature - possible forgery attempt');
+      }
+
       // Step 2: Decrypt Seal
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
       const rumor = JSON.parse(decryptedSeal) as NostrEvent;
@@ -197,12 +212,17 @@ import type { Conversation } from '$lib/db/db';
         throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
       }
 
+      // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
+      if (seal.pubkey !== rumor.pubkey) {
+        throw new Error('Seal pubkey does not match rumor pubkey - possible impersonation attempt');
+      }
+
       // Validate p tags in rumor - for group messages, my pubkey must be in at least one p-tag
       // For self-sent messages, sender pubkey equals my pubkey
       const myPubkey = await s.getPublicKey();
       const pTags = rumor.tags.filter(t => t[0] === 'p');
       const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
-      
+
       if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
         throw new Error('Received rumor does not include my public key in p-tags');
       }
