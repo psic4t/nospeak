@@ -6,6 +6,10 @@ import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { connectionManager } from './connection/instance';
 
+const { mockVerifyEvent } = vi.hoisted(() => {
+    return { mockVerifyEvent: vi.fn().mockReturnValue(true) };
+});
+
 vi.mock('nostr-tools', async (importOriginal) => {
     const actual = await importOriginal() as any;
     return {
@@ -16,6 +20,7 @@ vi.mock('nostr-tools', async (importOriginal) => {
             npubEncode: vi.fn().mockReturnValue('npub1sender'),
         },
         getEventHash: vi.fn().mockReturnValue('0000000000000000000000000000000000000000000000000000000000000000'),
+        verifyEvent: mockVerifyEvent,
     };
 });
 
@@ -655,6 +660,208 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect(msg.rumorId).toBeDefined();
             expect(typeof msg.rumorId).toBe('string');
             expect(msg.rumorId).toBe('0000000000000000000000000000000000000000000000000000000000000000');
+        });
+    });
+
+    describe('NIP-17 seal signature verification (security)', () => {
+        let messagingService: MessagingService;
+        let mockSigner: any;
+        const myPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+        const senderPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            messagingService = new MessagingService();
+
+            // Create valid seal and rumor JSON
+            const validRumor = JSON.stringify({
+                kind: 14,
+                pubkey: senderPubkey,
+                content: 'test message',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+            });
+
+            const validSeal = JSON.stringify({
+                kind: 13,
+                pubkey: senderPubkey,
+                content: 'encrypted-rumor',
+                created_at: 1600000000,
+                tags: [],
+                sig: 'valid-signature',
+            });
+
+            mockSigner = {
+                getPublicKey: vi.fn().mockResolvedValue(myPubkey),
+                decrypt: vi.fn()
+                    .mockResolvedValueOnce(validSeal)  // First call: decrypt gift wrap -> seal
+                    .mockResolvedValueOnce(validRumor), // Second call: decrypt seal -> rumor
+                encrypt: vi.fn().mockResolvedValue('ciphertext'),
+                signEvent: vi.fn().mockResolvedValue({}),
+            };
+
+            vi.mocked(get).mockReturnValue(mockSigner);
+            mockVerifyEvent.mockReturnValue(true);
+        });
+
+        it('should reject gift wrap with invalid seal signature', async () => {
+            mockVerifyEvent.mockReturnValue(false);
+
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            await (messagingService as any).handleGiftWrap(giftWrapEvent);
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to unwrap/decrypt message:',
+                expect.objectContaining({ message: expect.stringContaining('Invalid seal signature') })
+            );
+            consoleSpy.mockRestore();
+        });
+
+        it('should reject gift wrap when seal.pubkey does not match rumor.pubkey', async () => {
+            // Create mismatched seal - seal.pubkey differs from rumor.pubkey
+            const rumorWithDifferentPubkey = JSON.stringify({
+                kind: 14,
+                pubkey: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', // Different!
+                content: 'forged message',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+            });
+
+            const sealWithSenderPubkey = JSON.stringify({
+                kind: 13,
+                pubkey: senderPubkey, // Doesn't match rumor.pubkey
+                content: 'encrypted-rumor',
+                created_at: 1600000000,
+                tags: [],
+                sig: 'valid-signature',
+            });
+
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(sealWithSenderPubkey)
+                .mockResolvedValueOnce(rumorWithDifferentPubkey);
+
+            mockVerifyEvent.mockReturnValue(true); // Signature is valid
+
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            await (messagingService as any).handleGiftWrap(giftWrapEvent);
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to unwrap/decrypt message:',
+                expect.objectContaining({ message: expect.stringContaining('Seal pubkey does not match rumor pubkey') })
+            );
+            consoleSpy.mockRestore();
+        });
+
+        it('should accept gift wrap with valid seal signature and matching pubkeys', async () => {
+            mockVerifyEvent.mockReturnValue(true);
+
+            const processRumorSpy = vi.spyOn(messagingService as any, 'processRumor').mockResolvedValue(undefined);
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            await (messagingService as any).handleGiftWrap(giftWrapEvent);
+
+            expect(mockVerifyEvent).toHaveBeenCalled();
+            expect(processRumorSpy).toHaveBeenCalled();
+        });
+
+        it('processGiftWrapToMessage should also reject invalid seal signatures', async () => {
+            mockVerifyEvent.mockReturnValue(false);
+
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            const result = await (messagingService as any).processGiftWrapToMessage(giftWrapEvent);
+
+            expect(result).toBeNull();
+        });
+
+        it('processGiftWrapToMessage should reject mismatched seal/rumor pubkeys', async () => {
+            const rumorWithDifferentPubkey = JSON.stringify({
+                kind: 14,
+                pubkey: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                content: 'forged message',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+            });
+
+            const sealWithSenderPubkey = JSON.stringify({
+                kind: 13,
+                pubkey: senderPubkey,
+                content: 'encrypted-rumor',
+                created_at: 1600000000,
+                tags: [],
+                sig: 'valid-signature',
+            });
+
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(sealWithSenderPubkey)
+                .mockResolvedValueOnce(rumorWithDifferentPubkey);
+
+            mockVerifyEvent.mockReturnValue(true);
+
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            const result = await (messagingService as any).processGiftWrapToMessage(giftWrapEvent);
+
+            expect(result).toBeNull();
         });
     });
 });
