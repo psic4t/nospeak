@@ -31,6 +31,14 @@ export class ReactionRepository {
         const count = await db.reactions.where('reactionEventId').equals(reactionEventId).count();
         return count > 0;
     }
+
+    public async hasReactionByContent(targetEventId: string, authorNpub: string, emoji: string): Promise<boolean> {
+        const count = await db.reactions
+            .where('[targetEventId+authorNpub+emoji]')
+            .equals([targetEventId, authorNpub, emoji])
+            .count();
+        return count > 0;
+    }
 }
 
 export const reactionRepo = new ReactionRepository();

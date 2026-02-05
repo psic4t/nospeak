@@ -85,6 +85,7 @@ vi.mock('$lib/db/ReactionRepository', () => ({
         upsertReaction: vi.fn().mockResolvedValue(undefined),
         getReactionsForTarget: vi.fn().mockResolvedValue([]),
         hasReaction: vi.fn().mockResolvedValue(false),
+        hasReactionByContent: vi.fn().mockResolvedValue(false),
     },
 }));
 

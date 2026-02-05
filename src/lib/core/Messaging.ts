@@ -485,11 +485,6 @@ import type { Conversation } from '$lib/db/db';
     if (!s || !user) return;
 
     try {
-      // Skip if this reaction has already been processed (prevents duplicates from relays)
-      if (await reactionRepo.hasReaction(originalEventId)) {
-        return;
-      }
-
       const myPubkey = await s.getPublicKey();
       const pTag = rumor.tags.find(t => t[0] === 'p');
       if (!pTag || (pTag[1] !== myPubkey && rumor.pubkey !== myPubkey)) {
@@ -514,6 +509,13 @@ import type { Conversation } from '$lib/db/db';
 
       const targetEventId = eTag[1];
       const authorNpub = nip19.npubEncode(rumor.pubkey);
+
+      // Skip if this logical reaction already exists (same person + same emoji + same target)
+      // This prevents duplicates from different relays which may have different gift wrap event IDs
+      if (await reactionRepo.hasReactionByContent(targetEventId, authorNpub, content)) {
+        return;
+      }
+
       const reaction: Omit<Reaction, 'id'> = {
         targetEventId,
         reactionEventId: originalEventId,
