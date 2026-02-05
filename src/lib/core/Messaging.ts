@@ -452,9 +452,11 @@ import type { Conversation } from '$lib/db/db';
 
     // Show notification for received messages (but not for history messages)
     if (message.direction === 'received') {
-      const shouldPersistUnread = !isActivelyViewingConversation(message.recipientNpub);
+      // Use conversationId for unread tracking (works for both 1-on-1 and groups)
+      const unreadKey = message.conversationId || message.recipientNpub;
+      const shouldPersistUnread = !isActivelyViewingConversation(unreadKey);
       if (shouldPersistUnread) {
-        addUnreadMessage(user.npub, message.recipientNpub, message.eventId);
+        addUnreadMessage(user.npub, unreadKey, message.eventId);
       }
 
       // Don't show notifications for messages fetched during history sync
@@ -770,13 +772,15 @@ import type { Conversation } from '$lib/db/db';
             for (const message of messagesToSave) {
               await this.autoAddContact(message.recipientNpub, false);
 
+              // Use conversationId for unread tracking (works for both 1-on-1 and groups)
+              const historyUnreadKey = message.conversationId || message.recipientNpub;
               const shouldMarkUnread =
                 !!options.markUnread &&
                 message.direction === 'received' &&
-                !isActivelyViewingConversation(message.recipientNpub);
+                !isActivelyViewingConversation(historyUnreadKey);
 
               if (shouldMarkUnread) {
-                addUnreadMessage(user.npub, message.recipientNpub, message.eventId);
+                addUnreadMessage(user.npub, historyUnreadKey, message.eventId);
               }
             }
           }

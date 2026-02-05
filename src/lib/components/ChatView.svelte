@@ -448,29 +448,32 @@
     }
 
     function clearUnreadMarkersForChat() {
-      if (!$currentUser || !partnerNpub) {
-        return;
-      }
+      if (!$currentUser) return;
+      
+      // Use conversationId for groups, partnerNpub for 1-on-1
+      const chatKey = isGroup ? groupConversation?.id : partnerNpub;
+      if (!chatKey) return;
 
-      clearChatUnread($currentUser.npub, partnerNpub);
+      clearChatUnread($currentUser.npub, chatKey);
       unreadSnapshotMessageIds = [];
       clearEphemeralHighlights();
     }
 
     $effect(() => {
       const user = $currentUser;
-      const partner = partnerNpub;
-      if (!user || !partner) {
+      // Use conversationId for groups, partnerNpub for 1-on-1
+      const chatKey = isGroup ? groupConversation?.id : partnerNpub;
+      if (!user || !chatKey) {
         unreadSnapshotMessageIds = [];
         clearEphemeralHighlights();
         return;
       }
 
-      const snapshot = getUnreadSnapshot(user.npub, partner);
+      const snapshot = getUnreadSnapshot(user.npub, chatKey);
       unreadSnapshotMessageIds = Array.from(snapshot.messages);
       clearEphemeralHighlights();
 
-      clearChatUnread(user.npub, partner);
+      clearChatUnread(user.npub, chatKey);
     });
 
     onMount(() => {
@@ -481,8 +484,10 @@
       const handleFocus = () => {
         // Clear unread state when window regains focus while viewing a chat
         // This handles the case where messages arrive while the window is in background
-        if ($currentUser && partnerNpub) {
-          clearChatUnread($currentUser.npub, partnerNpub);
+        if (!$currentUser) return;
+        const chatKey = isGroup ? groupConversation?.id : partnerNpub;
+        if (chatKey) {
+          clearChatUnread($currentUser.npub, chatKey);
         }
       };
 
@@ -490,8 +495,10 @@
         if (document.visibilityState === 'visible') {
           // Clear unread state when app becomes visible while viewing a chat
           // This handles the case where messages arrive while the window is minimized
-          if ($currentUser && partnerNpub) {
-            clearChatUnread($currentUser.npub, partnerNpub);
+          if (!$currentUser) return;
+          const chatKey = isGroup ? groupConversation?.id : partnerNpub;
+          if (chatKey) {
+            clearChatUnread($currentUser.npub, chatKey);
           }
         } else {
           clearEphemeralHighlights();
