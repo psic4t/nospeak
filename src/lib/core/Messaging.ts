@@ -304,6 +304,7 @@ import type { Conversation } from '$lib/db/db';
         const nonceTag = rumor.tags.find(t => t[0] === 'decryption-nonce');
         const dimTag = rumor.tags.find(t => t[0] === 'dim');
         const blurhashTag = rumor.tags.find(t => t[0] === 'blurhash');
+        const altTag = rumor.tags.find(t => t[0] === 'alt');
 
         const fileType = fileTypeTag?.[1];
         const fileSize = sizeTag ? parseInt(sizeTag[1], 10) || undefined : undefined;
@@ -324,7 +325,7 @@ import type { Conversation } from '$lib/db/db';
 
         return {
           recipientNpub: partnerNpub,
-          message: rumor.content || '',
+          message: altTag?.[1] || '',
           sentAt: rumor.created_at * 1000,
           eventId: originalEventId,
           rumorId,
@@ -1266,10 +1267,11 @@ import type { Conversation } from '$lib/db/db';
     mediaType: 'image' | 'video' | 'audio' | 'file',
     createdAtSeconds?: number,
     conversationId?: string,
-    mediaMeta?: { width?: number; height?: number; blurhash?: string }
+    mediaMeta?: { width?: number; height?: number; blurhash?: string },
+    caption?: string
   ): Promise<string> {
     if (conversationId) {
-      return this.sendGroupFileMessage(conversationId, file, mediaType, createdAtSeconds, mediaMeta);
+      return this.sendGroupFileMessage(conversationId, file, mediaType, createdAtSeconds, mediaMeta, caption);
     }
 
     if (!recipientNpub) {
@@ -1310,6 +1312,9 @@ import type { Conversation } from '$lib/db/db';
     if (mediaMeta?.blurhash) {
       tags.push(['blurhash', mediaMeta.blurhash]);
     }
+    if (caption) {
+      tags.push(['alt', caption]);
+    }
 
     const rumor: Partial<NostrEvent> = {
       kind: 15,
@@ -1323,7 +1328,7 @@ import type { Conversation } from '$lib/db/db';
       recipients: [recipientNpub],
       rumor,
       messageDbFields: {
-        message: '',
+        message: caption || '',
         fileUrl,
         fileType: mimeType,
         fileSize: encrypted.size,
@@ -1346,7 +1351,8 @@ import type { Conversation } from '$lib/db/db';
     file: File,
     mediaType: 'image' | 'video' | 'audio' | 'file',
     createdAtSeconds?: number,
-    mediaMeta?: { width?: number; height?: number; blurhash?: string }
+    mediaMeta?: { width?: number; height?: number; blurhash?: string },
+    caption?: string
   ): Promise<string> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -1400,6 +1406,9 @@ import type { Conversation } from '$lib/db/db';
     if (mediaMeta?.blurhash) {
       tags.push(['blurhash', mediaMeta.blurhash]);
     }
+    if (caption) {
+      tags.push(['alt', caption]);
+    }
 
     const rumor: Partial<NostrEvent> = {
       kind: 15,
@@ -1415,7 +1424,7 @@ import type { Conversation } from '$lib/db/db';
       conversationId,
       conversation,
       messageDbFields: {
-        message: '',
+        message: caption || '',
         fileUrl,
         fileType: mimeType,
         fileSize: encrypted.size,

@@ -19,6 +19,7 @@ describe('chatHistorySearch', () => {
         const messages: Message[] = [baseMessage({ message: 'Hello', rumorKind: 14 })];
         expect(buildChatHistorySearchResults(messages, 'he')).toEqual([]);
     });
+
     it('matches case-insensitively on message text', () => {
         const messages: Message[] = [
             baseMessage({ sentAt: 1, message: 'Hello there', rumorKind: 14 }),
@@ -30,78 +31,46 @@ describe('chatHistorySearch', () => {
         expect(results[0].message).toBe('Hello there');
     });
 
-    it('includes file bubble + caption when caption matches', () => {
-        const fileRumorId = 'file-rumor-1';
+    it('returns results sorted by sentAt', () => {
+        const messages: Message[] = [
+            baseMessage({ sentAt: 30, message: 'Third foo', rumorKind: 14 }),
+            baseMessage({ sentAt: 10, message: 'First foo', rumorKind: 14 }),
+            baseMessage({ sentAt: 20, message: 'Second foo', rumorKind: 14 })
+        ];
 
+        const results = buildChatHistorySearchResults(messages, 'foo');
+        expect(results).toHaveLength(3);
+        expect(results[0].message).toBe('First foo');
+        expect(results[1].message).toBe('Second foo');
+        expect(results[2].message).toBe('Third foo');
+    });
+
+    it('finds captions stored in file message via alt tag', () => {
         const file = baseMessage({
             sentAt: 10,
             rumorKind: 15,
-            rumorId: fileRumorId,
-            message: ''
+            message: 'A nice sunset photo'
         });
 
-        const caption = baseMessage({
-            sentAt: 11,
-            rumorKind: 14,
-            parentRumorId: fileRumorId,
-            message: 'A nice Caption'
-        });
-
-        const results = buildChatHistorySearchResults([file, caption], 'caption');
-        expect(results.map((m) => m.rumorKind)).toEqual([15, 14]);
-        expect(results[0].rumorId).toBe(fileRumorId);
-        expect(results[1].parentRumorId).toBe(fileRumorId);
-    });
-
-    it('deduplicates messages when a parent is pulled in by caption match', () => {
-        const fileRumorId = 'file-rumor-2';
-
-        const file = baseMessage({
-            sentAt: 20,
-            rumorKind: 15,
-            rumorId: fileRumorId,
-            message: ''
-        });
-
-        const caption = baseMessage({
-            sentAt: 21,
-            rumorKind: 14,
-            parentRumorId: fileRumorId,
-            message: 'foo'
-        });
-
-        const text = baseMessage({
-            sentAt: 30,
-            rumorKind: 14,
-            message: 'Foo bar'
-        });
-
-        const results = buildChatHistorySearchResults([file, caption, text], 'foo');
-        const ids = results.map((m) => m.eventId);
-        expect(new Set(ids).size).toBe(ids.length);
-        expect(results.map((m) => m.rumorKind)).toEqual([15, 14, 14]);
-    });
-
-    it('does not force parent inclusion when direction differs', () => {
-        const fileRumorId = 'file-rumor-3';
-
-        const file = baseMessage({
-            sentAt: 40,
-            rumorKind: 15,
-            rumorId: fileRumorId,
-            direction: 'sent'
-        });
-
-        const caption = baseMessage({
-            sentAt: 41,
-            rumorKind: 14,
-            parentRumorId: fileRumorId,
-            direction: 'received',
-            message: 'caption mismatch'
-        });
-
-        const results = buildChatHistorySearchResults([file, caption], 'caption');
+        const results = buildChatHistorySearchResults([file], 'sunset');
         expect(results).toHaveLength(1);
-        expect(results[0].message).toBe('caption mismatch');
+        expect(results[0].rumorKind).toBe(15);
+        expect(results[0].message).toBe('A nice sunset photo');
+    });
+
+    it('returns empty array for empty message list', () => {
+        const results = buildChatHistorySearchResults([], 'test');
+        expect(results).toEqual([]);
+    });
+
+    it('handles messages with undefined message field', () => {
+        const messages: Message[] = [
+            baseMessage({ sentAt: 1, message: undefined as unknown as string, rumorKind: 14 }),
+            baseMessage({ sentAt: 2, message: 'Hello world', rumorKind: 14 })
+        ];
+
+        const results = buildChatHistorySearchResults(messages, 'hello');
+        expect(results).toHaveLength(1);
+        expect(results[0].message).toBe('Hello world');
     });
 });

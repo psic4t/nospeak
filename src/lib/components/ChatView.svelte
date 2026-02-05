@@ -36,7 +36,6 @@
   import { t } from '$lib/i18n';
   import { get } from 'svelte/store';
   import { tick } from 'svelte';
-  import { isCaptionMessage, getCaptionForParent } from '$lib/core/captionGrouping';
   import { buildChatHistorySearchResults } from '$lib/core/chatHistorySearch';
   import { getCurrentPosition } from '$lib/core/LocationService';
   import { isVoiceRecordingSupported } from '$lib/core/VoiceRecorder';
@@ -1276,24 +1275,15 @@
           }
         }
 
-        const parentRumorId = await messagingService.sendFileMessage(
+        await messagingService.sendFileMessage(
           isGroup ? null : partnerNpub!,
           file,
           mediaType,
           createdAtSeconds,
           isGroup ? groupConversation!.id : undefined,
-          mediaMeta
+          mediaMeta,
+          caption.length > 0 ? caption : undefined
         );
-
-        if (caption.length > 0) {
-          await messagingService.sendMessage(
-            isGroup ? null : partnerNpub!,
-            caption,
-            parentRumorId,
-            undefined,
-            isGroup ? groupConversation!.id : undefined
-          );
-        }
 
         if (isDestroyed) return;
 
@@ -1880,11 +1870,8 @@
         </div>
       {/if}
 
-       {@const caption = isCaptionMessage(displayMessages, i)}
-       {@const captionForThis = getCaptionForParent(displayMessages, i)}
        {@const hasUnreadMarker = msg.direction === "received" && (
          unreadSnapshotMessageSet.has(msg.eventId) ||
-         (captionForThis && unreadSnapshotMessageSet.has(captionForThis.eventId)) ||
          activeHighlightMessageSet.has(msg.eventId)
        )}
 
@@ -1894,12 +1881,11 @@
           ? 'w-full max-w-full md:w-[560px] md:max-w-full'
           : (useFullWidthBubbles ? 'max-w-full' : 'max-w-[70%]')}
  
-       {#if !caption}
       <div
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={isAndroidShell ? { duration: 0 } : { y: 20, duration: 300, easing: cubicOut }}
       >
-        {#if msg.direction === "received" && !caption}
+        {#if msg.direction === "received"}
           {#if isGroup && msg.senderNpub}
             <!-- Group message: show sender's avatar -->
             <button
@@ -1977,9 +1963,9 @@
                 fileBlurhash={msg.fileBlurhash}
               />
 
-            {#if captionForThis}
+            {#if msg.rumorKind === 15 && msg.message && msg.message !== msg.fileUrl}
               <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">
-                {@html highlightPlainTextToHtml(captionForThis.message, isSearchActive ? searchQuery : '')}
+                {@html highlightPlainTextToHtml(msg.message, isSearchActive ? searchQuery : '')}
               </div>
             {/if}
 
@@ -2036,7 +2022,6 @@
           </button>
         {/if}
       </div>
-      {/if}
     {/each}
   </div>
 

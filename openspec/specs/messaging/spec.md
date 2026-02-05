@@ -1148,12 +1148,12 @@ The messaging experience SHALL represent binary attachments (such as images, vid
 - **THEN** the system SHALL continue to treat the message as a text chat bubble with media URL detection as defined in existing messaging requirements
 - **AND** this behavior SHALL remain supported even after nospeak starts sending attachments using Kind 15 for its own clients.
 
-#### Scenario: Optional caption sent as separate Kind 14 message
+#### Scenario: Optional caption sent via alt tag in Kind 15 message
 - **GIVEN** the user has entered non-empty caption text while preparing a file attachment in the media preview for a NIP-17 conversation
 - **WHEN** the messaging service sends the Kind 15 file message rumor and corresponding gift-wrap for that attachment
-- **THEN** it SHALL also send a separate NIP-17 Kind 14 text message in the same conversation whose content is the caption text
-- **AND** the caption Kind 14 text message SHALL include an `e` tag whose value is the rumor id of the corresponding Kind 15 file message, denoting that file message as the direct parent according to the NIP-17 definition of the `e` tag.
-- **AND** the conversation UI SHALL present the file attachment bubble and caption text as a single visual message unit by rendering the caption text directly below the file preview inside the same bubble, without a separate caption avatar.
+- **THEN** the Kind 15 message SHALL include an `alt` tag (NIP-31) whose value is the caption text
+- **AND** no separate Kind 14 caption message SHALL be sent
+- **AND** the conversation UI SHALL present the file attachment bubble and caption text as a single visual message unit by rendering the caption text directly below the file preview inside the same bubble.
 
 #### Scenario: Kind 15 tags include MIME type, size, and hash
 - **WHEN** nospeak sends a Kind 15 file message rumor for any attachment
@@ -1171,12 +1171,11 @@ The messaging experience SHALL represent binary attachments (such as images, vid
 - **THEN** the stored message record SHALL identify that the underlying rumor kind is 15 and SHALL preserve file metadata (such as MIME type, URL, dimensions, and blurhash) separately from any freeform text content
 - **AND** the UI and history views SHALL be able to distinguish between text-only messages (Kind 14) and file messages (Kind 15) even when both appear in the same conversation.
 
-#### Scenario: Caption detection and grouping for NIP-17 messages
-- **GIVEN** a NIP-17 conversation history that contains a Kind 15 file message `F` and a Kind 14 text message `C` authored by the same pubkey
-- **WHEN** `C` includes an `e` tag whose value is the rumor id of `F`, denoting `F` as the direct parent according to NIP-17
-- **AND** `C` appears immediately after `F` in the locally ordered list of messages for that conversation
-- **THEN** the conversation UI SHALL treat `C` as a caption for `F` and render the caption text as part of the same visual message unit as `F`, directly below the file preview and without a separate caption avatar row
-- **AND** when these conditions are not met, Kind 14 text messages SHALL be rendered as normal chat bubbles without caption-style grouping.
+#### Scenario: Caption extraction from alt tag for received Kind 15 messages
+- **GIVEN** a NIP-17 conversation history that contains a Kind 15 file message `F`
+- **WHEN** `F` includes an `alt` tag (NIP-31) with a non-empty value
+- **THEN** the conversation UI SHALL extract the `alt` tag value and render it as the caption text directly below the file preview inside the same message bubble
+- **AND** when the `alt` tag is absent or empty, no caption SHALL be displayed for that file message.
 
 ### Requirement: File Message Metadata for Interoperability
 The messaging implementation for Kind 15 file messages SHALL standardize on a minimal tag set so that other NIP-17 clients can reliably interpret nospeak file DMs without needing to understand internal upload semantics. For image and video attachments, the tag set SHALL additionally include NIP-94 compatible `dim` and `blurhash` tags to enable receiving clients to pre-render media placeholders.
@@ -1281,7 +1280,7 @@ The messaging interface SHALL present a media preview surface when the user sele
 - **GIVEN** the media preview is open with a selected file and an optional caption
 - **WHEN** the user presses the primary Send action in the preview
 - **THEN** the system SHALL send a NIP-17 Kind 15 file message for the selected attachment according to the Media Upload Support and NIP-17 Kind 15 File Messages requirements
-- **AND** if the caption input is non-empty, the system SHALL also send a separate NIP-17 Kind 14 text message in the same conversation whose content is the caption text
+- **AND** if the caption input is non-empty, the Kind 15 message SHALL include an `alt` tag (NIP-31) whose value is the caption text
 - **AND** the media preview surface SHALL be dismissed after the send operation is initiated.
 
 #### Scenario: Closing preview discards pending attachment
@@ -1553,8 +1552,8 @@ The messaging UI SHALL provide a chat-history search control for an active conve
 - **AND** the filtering SHALL be case-insensitive
 
 #### Scenario: Caption match displays file bubble and caption
-- **GIVEN** a conversation contains a file message with an associated caption message
-- **WHEN** the user’s search query matches the caption text
+- **GIVEN** a conversation contains a file message with a caption stored via `alt` tag
+- **WHEN** the user's search query matches the caption text
 - **THEN** the results SHALL display the file message bubble
 - **AND** SHALL display the caption as part of the same visual message unit (under the file bubble)
 
