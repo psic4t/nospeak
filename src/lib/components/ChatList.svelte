@@ -503,9 +503,9 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        onclick={() => goto('/favorites')}
+        onclick={() => goto('/chat/favorites')}
         class={`p-3 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-200 ease-out group active:scale-[0.98] ${
-          page.url.pathname === '/favorites'
+          page.url.pathname === '/chat/favorites'
             ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-gray-900 dark:text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm"
             : "bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
         }`}

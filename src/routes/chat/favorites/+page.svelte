@@ -5,11 +5,13 @@
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { conversationRepo, isGroupConversationId } from '$lib/db/ConversationRepository';
     import { toggleFavorite } from '$lib/stores/favorites';
+    import { clearActiveConversation } from '$lib/stores/unreadMessages';
     import { getRelativeTime } from '$lib/utils/time';
     import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaPreview';
     import { blur } from '$lib/utils/platform';
+    import { tapSoundClick } from '$lib/utils/tapSound';
     import { t } from '$lib/i18n';
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import type { Message, FavoriteItem } from '$lib/db/db';
 
     interface FavoriteGroup {
@@ -27,7 +29,12 @@
     let currentTime = $state(Date.now());
 
     onMount(() => {
+        clearActiveConversation();
         loadFavorites();
+    });
+
+    onDestroy(() => {
+        clearActiveConversation();
     });
 
     async function loadFavorites() {
@@ -122,30 +129,36 @@
 </svelte:head>
 
 <div class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 {blur('sm')}">
-    <!-- Header -->
-    <div class="sticky top-0 z-10 p-4 pt-4-safe-top bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-slate-700/70">
-        <div class="flex items-center gap-3">
+    <!-- Header (matches ChatView header style) -->
+    <div
+        class="absolute top-0 left-0 right-0 z-20 p-2 pt-safe min-h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm transition-all duration-150 ease-out"
+    >
+        <div class="flex items-center gap-3 flex-1 min-w-0">
             <button
-                type="button"
-                class="p-2 rounded-full hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors"
-                onclick={() => goto('/chat')}
-                aria-label="Back"
+                onclick={() => {
+                    tapSoundClick();
+                    goto('/chat');
+                }}
+                class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-150 ease-out flex-shrink-0"
+                aria-label="Back to contacts"
             >
-                <svg class="w-5 h-5 text-gray-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                 </svg>
             </button>
-            <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+            <div class="w-8 h-8 md:w-9 md:h-9 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4 md:w-5 md:h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                 </svg>
-                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">{$t('chats.favorites')}</h1>
             </div>
+            <span class="font-bold dark:text-white text-left truncate min-w-0">
+                {$t('chats.favorites')}
+            </span>
         </div>
     </div>
 
-    <!-- Content -->
-    <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+    <!-- Content (padded for header, matches ChatView content area) -->
+    <div class="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 pt-[calc(5rem+env(safe-area-inset-top))] space-y-6 custom-scrollbar">
         {#if loading}
             <div class="flex justify-center mt-10">
                 <div class="text-sm text-gray-500 dark:text-slate-400">Loading...</div>
