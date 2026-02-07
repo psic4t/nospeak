@@ -285,27 +285,28 @@
                                     {/if}
 
                                     <!-- Bubble -->
-                                    <div class="{bubbleWidthClass} min-w-0 flex flex-col">
-                                        <!-- svelte-ignore a11y_no_static_element_interactions -->
-                                        <div
-                                            class={`min-w-0 overflow-hidden p-3 shadow-sm transition-all duration-150 ease-out relative ${isAndroidShell ? 'select-none' : ''} ${
-                                                isSent
-                                                    ? 'bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none'
-                                                    : 'bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none'
-                                            }`}
-                                            oncontextmenu={(e) => handleContextMenu(e, favorite.eventId, favorite.conversationId, message)}
-                                            onmousedown={(e) => handleMouseDown(e, favorite.eventId, favorite.conversationId, message)}
-                                            onmouseup={handleMouseUp}
-                                            onmouseleave={handleMouseUp}
-                                        >
-                                            <!-- Star badge -->
-                                            <div class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm z-10">
-                                                <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                                                </svg>
-                                            </div>
+                                     <div class="{bubbleWidthClass} min-w-0 flex flex-col">
+                                         <div class="relative">
+                                             <!-- Star badge -->
+                                             <div class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm z-10">
+                                                 <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                                 </svg>
+                                             </div>
+                                         <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                         <div
+                                             class={`min-w-0 overflow-hidden p-3 shadow-sm transition-all duration-150 ease-out relative ${isAndroidShell ? 'select-none' : ''} ${
+                                                 isSent
+                                                     ? 'bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none'
+                                                     : 'bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none'
+                                             }`}
+                                             oncontextmenu={(e) => handleContextMenu(e, favorite.eventId, favorite.conversationId, message)}
+                                             onmousedown={(e) => handleMouseDown(e, favorite.eventId, favorite.conversationId, message)}
+                                             onmouseup={handleMouseUp}
+                                             onmouseleave={handleMouseUp}
+                                         >
 
-                                            <!-- Sender name (group received messages) -->
+                                             <!-- Sender name (group received messages) -->
                                             {#if group.isGroup && !isSent && senderName}
                                                 <div class="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">
                                                     {senderName}
@@ -346,11 +347,12 @@
                                                         <circle cx="12" cy="19" r="2"/>
                                                     </svg>
                                                 </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                             </div>
+                                         </div>
+                                         </div>
+                                     </div>
 
-                                    <!-- Avatar (sent only) -->
+                                     <!-- Avatar (sent only) -->
                                     {#if isSent && $currentUser}
                                         <Avatar
                                             npub={$currentUser.npub}
