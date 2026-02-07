@@ -20,7 +20,12 @@ export interface AndroidShareTextPayload {
     targetConversationId?: string;
 }
 
-export type AndroidSharePayload = AndroidShareMediaPayload | AndroidShareTextPayload;
+export interface AndroidShareErrorPayload {
+    kind: 'error';
+    message: string;
+}
+
+export type AndroidSharePayload = AndroidShareMediaPayload | AndroidShareTextPayload | AndroidShareErrorPayload;
 
 export interface AndroidShareTargetPlugin {
     getInitialShare(): Promise<AndroidSharePayload | null>;

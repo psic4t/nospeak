@@ -16,10 +16,12 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import android.util.Log;
 
 @CapacitorPlugin(name = "AndroidShareTarget")
 public class AndroidShareTargetPlugin extends Plugin {
 
+    private static final String TAG = "AndroidShareTarget";
     private static final int MAX_SHARE_BYTES = 25 * 1024 * 1024; // 25 MiB safety limit
 
     @PluginMethod
@@ -84,6 +86,21 @@ public class AndroidShareTargetPlugin extends Plugin {
                 return null;
             }
 
+            // Claim read permission for the shared content URI.
+            // On Android 11+ gallery apps grant temporary access via
+            // FLAG_GRANT_READ_URI_PERMISSION; we must ensure the resolver
+            // can actually open the stream before attempting to read.
+            try {
+                getContext().getContentResolver().takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                );
+            } catch (SecurityException e) {
+                // Not all providers support persistable permissions.
+                // The intent-level grant may still be sufficient, so we
+                // fall through and let openInputStream() try.
+                Log.d(TAG, "takePersistableUriPermission not supported for URI, relying on intent grant", e);
+            }
+
             String mediaType;
             if (type.startsWith("image/")) {
                 mediaType = "image";
@@ -109,9 +126,12 @@ public class AndroidShareTargetPlugin extends Plugin {
                     payload.put("targetConversationId", targetConversationId);
                 }
                 return payload;
+            } catch (SecurityException e) {
+                Log.e(TAG, "Permission denied reading shared media URI", e);
+                return createErrorPayload("Cannot access shared file. Permission was denied.");
             } catch (IOException e) {
-                // Best-effort: log and ignore; web side will not see a payload
-                return null;
+                Log.e(TAG, "IO error reading shared media URI", e);
+                return createErrorPayload("Failed to read shared file.");
             }
         }
 
@@ -119,7 +139,14 @@ public class AndroidShareTargetPlugin extends Plugin {
         return null;
     }
 
-    private MediaData readMediaFromUri(Uri uri, String mimeType) throws IOException {
+    private static JSObject createErrorPayload(String message) {
+        JSObject payload = new JSObject();
+        payload.put("kind", "error");
+        payload.put("message", message);
+        return payload;
+    }
+
+    private MediaData readMediaFromUri(Uri uri, String mimeType) throws IOException, SecurityException {
         ContentResolver resolver = getContext().getContentResolver();
         String resolvedMime = mimeType != null ? mimeType : resolver.getType(uri);
         if (resolvedMime == null) {

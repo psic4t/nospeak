@@ -212,8 +212,21 @@
              return;
          }
  
-         // Check if this is a Direct Share with a target conversation
-          let targetConversationId = payload.targetConversationId;
+          // Handle error payloads from native layer (e.g. permission denied)
+          if (payload.kind === 'error') {
+              try {
+                  await nativeDialogService.alert({
+                      title: 'Share failed',
+                      message: payload.message
+                  });
+              } catch {
+                  // ignore
+              }
+              return;
+          }
+
+          // Check if this is a Direct Share with a target conversation
+           let targetConversationId = payload.targetConversationId;
           
           // If targetConversationId is a truncated npub (starts with npub1 but < 63 chars),
           // find the full npub from contacts
