@@ -289,7 +289,7 @@ const de = {
             copy: 'Kopieren',
             sentAt: 'Gesendet',
             favorite: 'Favorit',
-            unfavorite: 'Entfernen'
+            unfavorite: 'Favorit entfernen'
         },
         reactions: {
             cannotReactTitle: 'Reaktion nicht möglich',

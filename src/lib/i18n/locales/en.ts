@@ -287,7 +287,7 @@ const en = {
             copy: 'Copy',
             sentAt: 'Sent',
             favorite: 'Favorite',
-            unfavorite: 'Unfavorite'
+            unfavorite: 'Remove favorite'
         },
         reactions: {
             cannotReactTitle: 'Cannot React',

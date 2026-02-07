@@ -281,7 +281,9 @@ const it = {
         contextMenu: {
             cite: 'Cita',
             copy: 'Copia',
-            sentAt: 'Inviato'
+            sentAt: 'Inviato',
+            favorite: 'Preferito',
+            unfavorite: 'Rimuovi preferito'
         },
         reactions: {
             cannotReactTitle: 'Impossibile reagire',
