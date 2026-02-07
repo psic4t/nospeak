@@ -22,6 +22,7 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Tab from "$lib/components/ui/Tab.svelte";
   import { getMediaPreviewLabel, getLocationPreviewLabel } from "$lib/utils/mediaPreview";
+  import { getRelativeTime } from "$lib/utils/time";
   import { overscroll } from "$lib/utils/overscroll";
 
   // Extended contact type that includes group chats
@@ -49,6 +50,15 @@
 
   const isAndroidApp = isAndroidNative();
   let myPicture = $state<string | undefined>(undefined);
+
+  // Update current time every minute to refresh relative times
+  let currentTime = $state(Date.now());
+  $effect(() => {
+    const interval = setInterval(() => {
+      currentTime = Date.now();
+    }, 60000);
+    return () => clearInterval(interval);
+  });
 
   $effect(() => {
     if (!$currentUser) {
@@ -500,20 +510,25 @@
             : "bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
         }`}
       >
-        {#if item.isGroup}
-          <GroupAvatar
-            participants={item.participants || []}
-            size="md"
-            class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
-          />
-        {:else}
-          <Avatar
-            npub={item.id}
-            src={item.picture}
-            size="md"
-            class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
-          />
-        {/if}
+        <div class="relative shrink-0">
+          {#if item.isGroup}
+            <GroupAvatar
+              participants={item.participants || []}
+              size="md"
+              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+            />
+          {:else}
+            <Avatar
+              npub={item.id}
+              src={item.picture}
+              size="md"
+              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+            />
+          {/if}
+          {#if item.hasUnread}
+            <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[rgb(var(--color-base-rgb))]"></div>
+          {/if}
+        </div>
 
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1 min-w-0">
@@ -557,6 +572,14 @@
                 <path d="m9 12 2 2 4-4"></path>
               </svg>
             {/if}
+            {#if item.lastMessageTime > 0}
+              <span
+                class="ml-auto text-xs text-gray-500 dark:text-slate-400 shrink-0"
+                title={new Date(item.lastMessageTime).toLocaleString()}
+              >
+                {getRelativeTime(item.lastMessageTime, currentTime)}
+              </span>
+            {/if}
           </div>
           {#if item.lastMessageText}
             <div
@@ -566,9 +589,6 @@
             </div>
           {/if}
         </div>
-        {#if item.hasUnread}
-          <div class="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
-        {/if}
       </div>
     {/each}
   </div>
