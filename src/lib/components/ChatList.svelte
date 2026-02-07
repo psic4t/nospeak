@@ -560,7 +560,7 @@
           </div>
           {#if item.lastMessageText}
             <div
-              class="typ-body text-gray-800 dark:text-slate-300 truncate md:hidden"
+              class="typ-body text-gray-800 dark:text-slate-300 truncate"
             >
               {@html parseMarkdownPreview(item.lastMessageText)}
             </div>

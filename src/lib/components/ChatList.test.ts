@@ -206,16 +206,17 @@ describe('ChatList last message preview', () => {
 });
 
 
-describe('ChatList mobile preview layout', () => {
-    it('uses a mobile-only last-message preview element', () => {
+describe('ChatList message preview layout', () => {
+    it('renders a last-message preview element on all screen sizes', () => {
         const filePath = join(__dirname, 'ChatList.svelte');
         const content = readFileSync(filePath, 'utf8');
  
         // Ensure we render a conditional lastMessageText preview (item.lastMessageText for unified chat list)
         expect(content).toContain('item.lastMessageText');
  
-        // Ensure the preview line is marked as mobile-only via md:hidden
-        expect(content).toContain('truncate md:hidden');
+        // Ensure the preview line uses truncate for text overflow but is visible on all screen sizes
+        expect(content).toMatch(/class="[^"]*truncate[^"]*"/);
+        expect(content).not.toContain('truncate md:hidden');
     });
 });
 
