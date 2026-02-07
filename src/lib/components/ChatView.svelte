@@ -1616,13 +1616,13 @@
     <div
       class="absolute top-0 left-0 right-0 z-20 p-2 pt-safe min-h-16 border-b border-gray-200/50 dark:border-slate-700/70 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm transition-all duration-150 ease-out"
     >
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 flex-1 min-w-0">
         <button 
             onclick={() => {
                 tapSoundClick();
                 goto('/chat');
             }}
-            class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-150 ease-out"
+            class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-150 ease-out flex-shrink-0"
             aria-label="Back to contacts"
         >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1638,9 +1638,9 @@
                   class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
               />
           </div>
-          <div class="flex flex-col group">
+          <div class="flex flex-col group flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
-                  <span class="font-bold dark:text-white text-left truncate max-w-[180px]">
+                  <span class="font-bold dark:text-white text-left truncate">
                       {groupTitle || $t('chat.group.defaultTitle')}
                   </span>
                   <button
@@ -1687,7 +1687,7 @@
           </button>
           <button
               onclick={() => partnerNpub && openProfile(partnerNpub)}
-              class="font-bold hover:underline dark:text-white text-left"
+              class="font-bold hover:underline dark:text-white text-left truncate min-w-0"
           >
               {partnerName || partnerNpub.slice(0, 10) + "..."}
           </button>
@@ -1713,7 +1713,7 @@
           />
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-shrink-0">
           <!-- Desktop/tablet inline slide-out -->
           <div
             class={`hidden md:block transition-[max-width,opacity] duration-200 ease-out ${
