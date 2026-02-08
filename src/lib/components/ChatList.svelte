@@ -123,6 +123,27 @@
     return text;
   }
 
+  const npubMentionRegex = /nostr:(npub1[a-z0-9]{58,})/g;
+
+  async function replaceNpubMentionsInPreview(text: string): Promise<string> {
+    const matches = [...text.matchAll(npubMentionRegex)];
+    if (matches.length === 0) return text;
+
+    let result = text;
+    // Process in reverse to preserve indices
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i];
+      const npub = match[1];
+      const profile = await profileRepo.getProfileIgnoreTTL(npub);
+      const displayName = profile?.metadata?.name
+        || profile?.metadata?.display_name
+        || profile?.metadata?.displayName
+        || npub.slice(0, 12) + '...' + npub.slice(-6);
+      result = result.slice(0, match.index!) + '@' + displayName + result.slice(match.index! + match[0].length);
+    }
+    return result;
+  }
+
   async function refreshChatList(dbContacts: ContactItem[]): Promise<void> {
     console.log("ChatList: Processing contacts from DB:", dbContacts.length);
 
@@ -160,6 +181,11 @@
           if (lastMessageText && lastMsg.direction === "sent") {
             lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
           }
+        }
+
+        // Replace nostr:npub mentions with @displayName
+        if (lastMessageText) {
+          lastMessageText = await replaceNpubMentionsInPreview(lastMessageText);
         }
 
         let name = c.npub.slice(0, 10) + "...";
@@ -230,6 +256,11 @@
                                lastMsg.senderNpub.slice(0, 8) + '...';
             lastMessageText = `${senderName}: ${lastMessageText}`;
           }
+        }
+
+        // Replace nostr:npub mentions with @displayName
+        if (lastMessageText) {
+          lastMessageText = await replaceNpubMentionsInPreview(lastMessageText);
         }
 
         // Generate group title from participants or use stored subject

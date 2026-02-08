@@ -10,6 +10,7 @@
   import GroupAvatar from "./GroupAvatar.svelte";
   import GroupMembersModal from "./GroupMembersModal.svelte";
   import EditGroupNameModal from "./EditGroupNameModal.svelte";
+  import { contactRepo } from "$lib/db/ContactRepository";
   import { conversationRepo } from "$lib/db/ConversationRepository";
   import MessageContent from "./MessageContent.svelte";
   import ContextMenu from "./ContextMenu.svelte";
@@ -630,6 +631,73 @@
       : [],
   );
 
+  // Mention picker state
+  interface MentionCandidate {
+    npub: string;
+    name: string;
+    picture?: string;
+  }
+
+  let showMentionPicker = $state(false);
+  let mentionSearch = $state("");
+  let mentionSelectedIndex = $state(0);
+  let mentionCandidates = $state<MentionCandidate[]>([]);
+
+  let filteredMentions = $derived(
+    showMentionPicker
+      ? (mentionSearch
+          ? mentionCandidates.filter((c) => {
+              const q = mentionSearch.toLowerCase();
+              return c.name.toLowerCase().includes(q) || c.npub.toLowerCase().includes(q);
+            })
+          : mentionCandidates
+        ).slice(0, 5)
+      : [],
+  );
+
+  // Load mention candidates from contacts + group participants
+  $effect(() => {
+    // Track reactive dependencies
+    const conv = groupConversation;
+    const user = $currentUser;
+
+    void (async () => {
+      const contacts = await contactRepo.getContacts();
+      const npubSet = new Set<string>();
+      const candidates: MentionCandidate[] = [];
+
+      // Add all contacts
+      for (const c of contacts) {
+        if (user && c.npub === user.npub) continue;
+        npubSet.add(c.npub);
+        const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
+        const name = profile?.metadata?.name
+          || profile?.metadata?.display_name
+          || profile?.metadata?.displayName
+          || c.npub.slice(0, 12) + '...' + c.npub.slice(-6);
+        candidates.push({ npub: c.npub, name, picture: profile?.metadata?.picture });
+      }
+
+      // Add group participants not already in contacts
+      if (isGroup && conv?.participants) {
+        for (const npub of conv.participants) {
+          if (user && npub === user.npub) continue;
+          if (npubSet.has(npub)) continue;
+          npubSet.add(npub);
+          const profile = await profileRepo.getProfileIgnoreTTL(npub);
+          const name = profile?.metadata?.name
+            || profile?.metadata?.display_name
+            || profile?.metadata?.displayName
+            || npub.slice(0, 12) + '...' + npub.slice(-6);
+          candidates.push({ npub, name, picture: profile?.metadata?.picture });
+        }
+      }
+
+      candidates.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      mentionCandidates = candidates;
+    })();
+  });
+
 
   function handleInput(e: Event) {
     const input = e.target as HTMLTextAreaElement;
@@ -641,19 +709,54 @@
     const cursorPosition = input.selectionStart || 0;
     const textBeforeCursor = inputText.slice(0, cursorPosition);
 
-    // Find the last word segment before cursor
-    const match = textBeforeCursor.match(/:(\w*)$/);
+    // Find the last word segment before cursor for emoji picker
+    const emojiMatch = textBeforeCursor.match(/:(\w*)$/);
 
-    if (match) {
+    // Check for @mention trigger (@ at start of input or after whitespace)
+    const mentionMatch = textBeforeCursor.match(/(?:^|\s)@(\w*)$/);
+
+    if (emojiMatch) {
       showEmojiPicker = true;
-      emojiSearch = match[1];
+      emojiSearch = emojiMatch[1];
       emojiSelectedIndex = 0;
+      // Mutual exclusion: close mention picker
+      showMentionPicker = false;
+    } else if (mentionMatch) {
+      showMentionPicker = true;
+      mentionSearch = mentionMatch[1];
+      mentionSelectedIndex = 0;
+      // Mutual exclusion: close emoji picker
+      showEmojiPicker = false;
     } else {
       showEmojiPicker = false;
+      showMentionPicker = false;
     }
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // Mention picker keyboard navigation
+    if (showMentionPicker && filteredMentions.length > 0) {
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        mentionSelectedIndex =
+          (mentionSelectedIndex - 1 + filteredMentions.length) %
+          filteredMentions.length;
+        return;
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        mentionSelectedIndex = (mentionSelectedIndex + 1) % filteredMentions.length;
+        return;
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        selectMention(filteredMentions[mentionSelectedIndex]);
+        return;
+      } else if (e.key === "Escape") {
+        showMentionPicker = false;
+        return;
+      }
+    }
+
+    // Emoji picker keyboard navigation
     if (showEmojiPicker && filteredEmojis.length > 0) {
       if (e.key === "ArrowUp") {
         e.preventDefault();
@@ -704,6 +807,39 @@
     }
 
     showEmojiPicker = false;
+  }
+
+  function selectMention(candidate: MentionCandidate) {
+    if (!inputElement) return;
+
+    const cursorPosition = inputElement.selectionStart || 0;
+    const textBeforeCursor = inputText.slice(0, cursorPosition);
+    const textAfterCursor = inputText.slice(cursorPosition);
+
+    // Replace the @search part with nostr:npub
+    const match = textBeforeCursor.match(/(?:^|\s)@(\w*)$/);
+    if (match) {
+      // match.index is the start of the full match (including the leading space if any)
+      const matchStart = match.index!;
+      // Keep the leading whitespace (if any) but replace from the @ onwards
+      const leadingChar = textBeforeCursor[matchStart];
+      const prefixEnd = leadingChar === '@' ? matchStart : matchStart + 1;
+      const prefix = textBeforeCursor.slice(0, prefixEnd);
+      const insertion = `nostr:${candidate.npub} `;
+      inputText = prefix + insertion + textAfterCursor;
+
+      // Restore focus and cursor position
+      setTimeout(() => {
+        const newCursorPos = prefix.length + insertion.length;
+        inputElement.setSelectionRange(newCursorPos, newCursorPos);
+        inputElement.focus();
+        // Re-trigger auto-resize
+        inputElement.style.height = "auto";
+        inputElement.style.height = Math.min(inputElement.scrollHeight, 150) + "px";
+      }, 0);
+    }
+
+    showMentionPicker = false;
   }
 
   function openProfile(npub: string) {
@@ -2081,6 +2217,31 @@
               <span class="text-sm text-gray-600 dark:text-slate-300"
                 >:{emoji.name}:</span
               >
+            </button>
+          {/each}
+        </div>
+      {/if}
+
+      {#if showMentionPicker && filteredMentions.length > 0}
+        <div
+          class="absolute bottom-full mb-2 left-12 bg-white/80 dark:bg-slate-900/80 {blur('xl')} border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-72 z-50"
+        >
+          {#each filteredMentions as candidate, i}
+            <button
+              type="button"
+              class={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors duration-150 ease-out ${i === mentionSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
+              onclick={() => selectMention(candidate)}
+            >
+              <Avatar
+                npub={candidate.npub}
+                src={candidate.picture}
+                size="sm"
+                class="!w-7 !h-7 flex-shrink-0"
+              />
+              <div class="flex flex-col min-w-0">
+                <span class="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{candidate.name}</span>
+                <span class="text-xs text-gray-500 dark:text-slate-400 truncate">{candidate.npub.slice(0, 12)}...{candidate.npub.slice(-6)}</span>
+              </div>
             </button>
           {/each}
         </div>
