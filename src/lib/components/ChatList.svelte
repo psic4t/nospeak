@@ -573,28 +573,17 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         onclick={() => goto('/chat/favorites')}
-        class={`p-3 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-200 ease-out group active:scale-[0.98] ${
+        class={`py-2 px-4 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-2.5 transition-all duration-200 ease-out group active:scale-[0.98] ${
           page.url.pathname === '/chat/favorites'
             ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-gray-900 dark:text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
             : "bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
         }`}
       >
-        <div class="relative shrink-0">
-          <div class="w-14 h-14 md:w-10 md:h-10 rounded-full bg-[rgb(var(--color-lavender-rgb))] flex items-center justify-center ring-2 ring-white/50 dark:ring-white/10 shadow-sm transition-all duration-150 ease-out">
-            <svg class="w-7 h-7 md:w-5 md:h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-            </svg>
-          </div>
-        </div>
-
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1 min-w-0">
-            <span class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]">{$t('chats.favorites')}</span>
-          </div>
-          <div class="typ-body text-gray-500 dark:text-slate-400 truncate">
-            {favoritesCount} {favoritesCount === 1 ? $t('chats.favoriteMessage') : $t('chats.favoriteMessages')}
-          </div>
-        </div>
+        <svg class="w-4 h-4 shrink-0 text-[rgb(var(--color-lavender-rgb))]" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+        </svg>
+        <span class="font-bold text-[15px] truncate">{$t('chats.favorites')}</span>
+        <span class="text-xs text-gray-500 dark:text-slate-400">{favoritesCount}</span>
       </div>
     {/if}
     {#each filteredChatItems as item}
