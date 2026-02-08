@@ -7,6 +7,8 @@
     import { discoverUserRelays } from '$lib/core/connection/Discovery';
     import { getDisplayedNip05 } from '$lib/core/Nip05Display';
     import type { Profile } from '$lib/db/db';
+    import { addContactByNpub } from '$lib/core/ContactService';
+    import { profileResolver } from '$lib/core/ProfileResolver';
     import { contactRepo } from '$lib/db/ContactRepository';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { t } from '$lib/i18n';
@@ -29,6 +31,8 @@
     let loading = $state(false);
     let isRefreshing = $state(false);
     let isContact = $state(false);
+    let adding = $state(false);
+    let added = $state(false);
 
     let contactCheckNonce = 0;
 
@@ -37,11 +41,15 @@
 
     $effect(() => {
         if (isOpen && npub) {
+            adding = false;
+            added = false;
             void loadProfile();
             void checkIsContact();
         } else {
             isRefreshing = false;
             isContact = false;
+            adding = false;
+            added = false;
         }
     });
 
@@ -54,6 +62,15 @@
 
         try {
             profile = await profileRepo.getProfileIgnoreTTL(npub);
+
+            if (!profile) {
+                try {
+                    await profileResolver.resolveProfile(npub, true);
+                    profile = await profileRepo.getProfileIgnoreTTL(npub);
+                } catch (e) {
+                    console.warn('ProfileModal: relay profile fetch failed', e);
+                }
+            }
         } finally {
             if (showLoading) {
                 loading = false;
@@ -104,6 +121,20 @@
             console.error('ProfileModal: failed to refresh profile', e);
         } finally {
             isRefreshing = false;
+        }
+    }
+
+    async function addToContacts(): Promise<void> {
+        if (adding || added || isContact) return;
+
+        adding = true;
+        try {
+            await addContactByNpub(npub);
+            isContact = true;
+            added = true;
+        } catch (e) {
+            console.error('ProfileModal: failed to add contact', e);
+            adding = false;
         }
     }
 
@@ -262,6 +293,30 @@
                                     {/if}
                                     <span>{getDisplayedNip05(profile.metadata.nip05)}</span>
                                 </div>
+                            {/if}
+
+                            {#if !isContact && !isOwnProfile}
+                                {#if added}
+                                    <div class="flex items-center gap-1.5 mt-3 text-sm text-green-600 dark:text-green-400 font-medium">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                                        <span>{$t('modals.profile.contactAdded')}</span>
+                                    </div>
+                                {:else}
+                                    <button
+                                        type="button"
+                                        class="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-colors bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onclick={addToContacts}
+                                        disabled={adding}
+                                    >
+                                        {#if adding}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                                            <span>{$t('modals.profile.addingContact')}</span>
+                                        {:else}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="11" x2="19" y2="17"></line><line x1="16" y1="14" x2="22" y2="14"></line></svg>
+                                            <span>{$t('modals.profile.addToContacts')}</span>
+                                        {/if}
+                                    </button>
+                                {/if}
                             {/if}
                         </div>
                     </div>

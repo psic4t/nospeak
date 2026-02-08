@@ -141,7 +141,10 @@ const en = {
               messagingRelays: 'Messaging Relays',
               noRelays: 'None',
               refreshing: 'Refreshing profile…',
-              notFound: 'Profile not found'
+              notFound: 'Profile not found',
+              addToContacts: 'Add to contacts',
+              addingContact: 'Adding…',
+              contactAdded: 'Contact added'
           },
 
         emptyProfile: {

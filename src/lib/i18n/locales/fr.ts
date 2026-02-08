@@ -137,7 +137,10 @@ const fr = {
             messagingRelays: 'Relays de messagerie',
             noRelays: 'Aucun',
             refreshing: 'Actualisation du profil…',
-            notFound: 'Profil introuvable'
+            notFound: 'Profil introuvable',
+            addToContacts: 'Ajouter aux contacts',
+            addingContact: 'Ajout en cours…',
+            contactAdded: 'Contact ajouté'
         },
 
         emptyProfile: {

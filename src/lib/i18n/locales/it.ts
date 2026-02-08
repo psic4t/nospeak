@@ -137,7 +137,10 @@ const it = {
             messagingRelays: 'Relays di messaggistica',
             noRelays: 'Nessuno',
             refreshing: 'Aggiornamento profilo…',
-            notFound: 'Profilo non trovato'
+            notFound: 'Profilo non trovato',
+            addToContacts: 'Aggiungi ai contatti',
+            addingContact: 'Aggiunta in corso…',
+            contactAdded: 'Contatto aggiunto'
         },
 
         emptyProfile: {

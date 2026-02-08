@@ -137,7 +137,10 @@ const pt = {
             messagingRelays: 'Relays de mensagens',
             noRelays: 'Nenhum',
             refreshing: 'A atualizar perfil…',
-            notFound: 'Perfil não encontrado'
+            notFound: 'Perfil não encontrado',
+            addToContacts: 'Adicionar aos contactos',
+            addingContact: 'A adicionar…',
+            contactAdded: 'Contacto adicionado'
         },
 
         emptyProfile: {

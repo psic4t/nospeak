@@ -12,7 +12,9 @@
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
     import { saveToMediaCache, loadFromMediaCache, isMediaCacheEnabled } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
+    import { nip19 } from 'nostr-tools';
     import { t } from '$lib/i18n';
+    import { openProfileModal } from '$lib/stores/modals';
     import GenericFileDisplay from './GenericFileDisplay.svelte';
 
     let {
@@ -54,6 +56,118 @@
     }>();
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const npubRegex = /(nostr:npub1[a-z0-9]{58,}|npub1[a-z0-9]{58,})/g;
+
+    function escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function extractNpub(match: string): string {
+        return match.startsWith('nostr:') ? match.slice('nostr:'.length) : match;
+    }
+
+    function truncateNpub(npub: string): string {
+        if (npub.length <= 16) return npub;
+        return `${npub.slice(0, 8)}...${npub.slice(-3)}`;
+    }
+
+    function isValidNpub(npub: string): boolean {
+        try {
+            const decoded = nip19.decode(npub);
+            return decoded.type === 'npub';
+        } catch {
+            return false;
+        }
+    }
+
+    // Extract unique valid npubs from content
+    const contentNpubs = $derived((() => {
+        const matches = content.match(npubRegex);
+        if (!matches) return [] as string[];
+        const unique = new Set<string>();
+        for (const m of matches) {
+            const npub = extractNpub(m);
+            if (isValidNpub(npub)) {
+                unique.add(npub);
+            }
+        }
+        return Array.from(unique).slice(0, 20);
+    })());
+
+    // Reactive display-name map from profile cache
+    let npubDisplayNames = $state<Map<string, string>>(new Map());
+
+    $effect(() => {
+        const npubs = contentNpubs;
+        if (npubs.length === 0) {
+            npubDisplayNames = new Map();
+            return;
+        }
+
+        const newMap = new Map<string, string>();
+
+        (async () => {
+            const uncached: string[] = [];
+
+            // Phase 1: Check cache for all npubs
+            for (const npub of npubs) {
+                try {
+                    const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                    if (profile?.metadata) {
+                        const name = profile.metadata.name || profile.metadata.display_name;
+                        if (name) newMap.set(npub, name);
+                    } else {
+                        uncached.push(npub);
+                    }
+                } catch { /* ignore */ }
+            }
+
+            // Update immediately with whatever we found in cache
+            npubDisplayNames = new Map(newMap);
+
+            // Phase 2: Fetch uncached profiles from relays
+            if (uncached.length > 0) {
+                await Promise.allSettled(
+                    uncached.map(npub => profileResolver.resolveProfile(npub, true))
+                );
+
+                // Phase 3: Re-read resolved profiles from cache
+                for (const npub of uncached) {
+                    try {
+                        const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                        if (profile?.metadata) {
+                            const name = profile.metadata.name || profile.metadata.display_name;
+                            if (name) newMap.set(npub, name);
+                        }
+                    } catch { /* ignore */ }
+                }
+
+                npubDisplayNames = new Map(newMap);
+            }
+        })();
+    });
+
+    function getNpubDisplayLabel(npub: string): string {
+        const name = npubDisplayNames.get(npub);
+        return name ? `@${escapeHtml(name)}` : `@${truncateNpub(npub)}`;
+    }
+
+    function replaceNpubsWithMentions(html: string): string {
+        return html.replace(npubRegex, (match) => {
+            const npub = extractNpub(match);
+            if (!isValidNpub(npub)) return escapeHtml(match);
+            const label = getNpubDisplayLabel(npub);
+            const ownClass = isOwn
+                ? 'text-blue-100 hover:text-white'
+                : 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300';
+            return `<a href="#" data-npub="${escapeHtml(npub)}" class="npub-mention underline cursor-pointer font-medium ${ownClass}">${label}</a>`;
+        });
+    }
 
     function isImage(url: string) {
         try {
@@ -610,9 +724,21 @@
             isDecrypting = false;
         }
     }
+
+    function handleNpubInteraction(e: MouseEvent | KeyboardEvent) {
+        if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
+        const target = (e.target as HTMLElement).closest('a[data-npub]');
+        if (target) {
+            e.preventDefault();
+            e.stopPropagation();
+            const npub = target.getAttribute('data-npub');
+            if (npub) openProfileModal(npub);
+        }
+    }
  </script>
  
- <div bind:this={container} class={`whitespace-pre-wrap break-anywhere leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
+ <!-- svelte-ignore a11y_no_static_element_interactions -->
+ <div bind:this={container} onclick={handleNpubInteraction} onkeydown={handleNpubInteraction} class={`whitespace-pre-wrap break-anywhere leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
 
     {#if location}
         <div class="my-1">
@@ -855,7 +981,7 @@
                      <a href={part} target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80 break-all">{part}</a>
                  {/if}
              {:else}
-                  <span>{@html applyHighlightToHtml(parseMarkdown(part), highlightNeedle)}</span>
+                  <span>{@html applyHighlightToHtml(replaceNpubsWithMentions(parseMarkdown(part)), highlightNeedle)}</span>
              {/if}
          {/each}
 
