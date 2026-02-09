@@ -7,11 +7,57 @@ Install on Android over [F-Droid](https://fdroid.org), [Obtainium](https://githu
 
 ## Features
 
-- **Decentralized Chat**: Uses Nostr relays without central servers
-- **Private Messaging**: End-to-end encrypted conversations
-- **Encrypted Media Upload**: Share images and videos in chat
-- **Responsive Design**: Works seamlessly on desktop and mobile
-- **Rich Text**: Support for markdown formatting and emojis
+### Private Messaging
+- **1-on-1 Conversations** — End-to-end encrypted direct messages using the NIP-17 gift-wrap protocol with no metadata leakage
+- **Group Chats** — Create named group conversations with multiple participants, all fully encrypted
+- **Emoji Reactions** — React to messages with emoji; reactions are privacy-wrapped just like messages
+- **Reply & Quote** — Reply to specific messages in a conversation
+- **Message Search** — Search through your chat history
+
+### Always-On Notifications
+- **Background Messaging Service (Android)** — A permanent foreground service stays connected to your relays so you never miss a message, even when the app is closed
+- **Survives Reboots** — The service restarts automatically after device reboots or app updates
+- **Web Push Notifications** — Get notified of new messages in the browser via PWA notifications
+
+### Encrypted Media & Sharing
+- **Encrypted Images & Videos** — Media is encrypted client-side with AES-256-GCM before upload to Blossom servers
+- **Voice Messages** — Record and send voice messages with waveform visualization (up to 3 minutes)
+- **Location Sharing** — Share your GPS location as an interactive map
+- **File Attachments** — Send any file type, fully encrypted
+- **Link Previews & YouTube Embeds** — Rich URL previews with Open Graph metadata
+- **Android Share Target** — Share images, videos, and text directly from other apps into nospeak
+
+### Privacy & Security
+- **NIP-17 Gift Wrap Protocol** — Triple-layer encryption (Gift Wrap, Seal, Rumor) with randomized timestamps to prevent timing analysis
+- **NIP-44 Encryption** — State-of-the-art versioned encryption for all message content
+- **Encrypted Contact Lists** — Your contact list is encrypted before syncing to relays
+- **Android Keystore** — When using nsec to login, secret keys stored in hardware-backed secure storage on Android
+- **No Central Server** — All data lives locally on your device and on Nostr relays you choose
+
+### Multi-Platform
+- **Android App** — Native Android app with OS integration (background service, share targets, haptics)
+- **Progressive Web App** — Use in any modern browser with offline support
+- **External Signer Support** — Login with NIP-07 browser extensions (nos2x, Alby) or NIP-55 Android signers (Amber)
+
+### Contacts & Discovery
+- **Search & Add Contacts** — Find users by name, npub, or NIP-05 address
+- **QR Code Sharing** — Share your profile or scan others via QR codes
+- **NIP-05 Verification** — Verified identity badges on profiles
+
+### Chat Organization
+- **Favorites** — Star important messages, synced across devices
+- **Archives** — Archive old conversations to keep your inbox clean
+- **Unread Badges** — Per-conversation unread message counts
+
+### Relay Management
+- **Custom Relay Configuration** — Choose which relays you send and receive messages on
+- **Relay Health Monitoring** — Real-time connection status and auth state per relay
+- **Auto-Reconnect** — Automatic reconnection with exponential backoff
+
+### Personalization
+- **6 Languages** — English, Deutsch, Español, Português, Français, Italiano
+- **Theme Support** — System, light, and dark mode
+- **Profile Customization** — Set your name, avatar, banner, bio, and Lightning address
 
 ## Quick Start
 
