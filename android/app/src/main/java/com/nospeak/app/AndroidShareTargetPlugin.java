@@ -3,9 +3,12 @@ package com.nospeak.app;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.util.Base64;
+import android.util.Log;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -16,13 +19,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import android.util.Log;
 
 @CapacitorPlugin(name = "AndroidShareTarget")
 public class AndroidShareTargetPlugin extends Plugin {
 
     private static final String TAG = "AndroidShareTarget";
     private static final int MAX_SHARE_BYTES = 25 * 1024 * 1024; // 25 MiB safety limit
+    private static final int JPEG_QUALITY = 85;
 
     @PluginMethod
     public void getInitialShare(PluginCall call) {
@@ -191,7 +194,31 @@ public class AndroidShareTargetPlugin extends Plugin {
                 }
                 out.write(buffer, 0, read);
             }
-            String base64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+            byte[] rawBytes = out.toByteArray();
+
+            // Transcode HEIC/HEIF images to JPEG for WebView compatibility.
+            // Android's BitmapFactory can decode HEIC (API 28+) but WebView
+            // based on Chromium cannot render it, so we convert before passing
+            // the base64 payload to the web layer.
+            if (isHeicFormat(resolvedMime, fileName)) {
+                Bitmap bitmap = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.length);
+                if (bitmap != null) {
+                    try {
+                        ByteArrayOutputStream jpegOut = new ByteArrayOutputStream();
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, jpegOut);
+                        rawBytes = jpegOut.toByteArray();
+                        resolvedMime = "image/jpeg";
+                        fileName = fileName.replaceAll("(?i)\\.(heic|heif)$", ".jpg");
+                        Log.d(TAG, "Transcoded HEIC/HEIF image to JPEG");
+                    } finally {
+                        bitmap.recycle();
+                    }
+                } else {
+                    Log.w(TAG, "BitmapFactory could not decode HEIC/HEIF image, passing raw bytes");
+                }
+            }
+
+            String base64 = Base64.encodeToString(rawBytes, Base64.NO_WRAP);
             MediaData data = new MediaData();
             data.fileName = fileName;
             data.mimeType = resolvedMime;
@@ -209,6 +236,27 @@ public class AndroidShareTargetPlugin extends Plugin {
                 } catch (IOException ignored) { }
             }
         }
+    }
+
+    /**
+     * Check if the image is HEIC/HEIF format by MIME type or file extension.
+     * Google Photos commonly shares images in this format which Android's
+     * WebView cannot render.
+     */
+    private static boolean isHeicFormat(String mime, String fileName) {
+        if (mime != null) {
+            String lower = mime.toLowerCase();
+            if (lower.startsWith("image/heic") || lower.startsWith("image/heif")) {
+                return true;
+            }
+        }
+        if (fileName != null) {
+            String lower = fileName.toLowerCase();
+            if (lower.endsWith(".heic") || lower.endsWith(".heif")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static class MediaData {
