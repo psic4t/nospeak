@@ -22,7 +22,12 @@ function getClientIp(event: RequestEvent): string {
         const first = xff.split(',')[0].trim();
         if (first) return first;
     }
-    return event.getClientAddress();
+    try {
+        return event.getClientAddress();
+    } catch {
+        // getClientAddress() is unavailable during prerendering (adapter-static fallback)
+        return 'unknown';
+    }
 }
 
 function hashIp(ip: string): string {
