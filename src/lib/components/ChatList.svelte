@@ -308,7 +308,7 @@
     );
 
     const orphanedArchiveItems: ChatListItem[] = await Promise.all(
-      orphanedArchiveNpubs.map(npub => buildContactChatItem(npub, undefined, undefined)),
+      orphanedArchiveNpubs.map(npub => buildContactChatItem(npub, Date.now(), undefined)),
     );
 
     // 4. Combine and sort all chat items

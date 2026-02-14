@@ -4,6 +4,7 @@
     import { messageRepo } from '$lib/db/MessageRepository';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { conversationRepo, generateGroupTitle, isGroupConversationId } from '$lib/db/ConversationRepository';
+    import { contactRepo } from '$lib/db/ContactRepository';
     import { toggleArchive, archivedConversationIds } from '$lib/stores/archive';
     import { clearActiveConversation } from '$lib/stores/unreadMessages';
     import { currentUser } from '$lib/stores/auth';
@@ -119,7 +120,10 @@
                         const lastReceivedMsg = recentMsgs
                             .filter((m) => m.direction === "received")
                             .pop();
-                        hasUnread = (lastReceivedMsg?.sentAt || 0) > 0;
+                        const contact = await contactRepo.getContacts().then(
+                            contacts => contacts.find(c => c.npub === conversationId)
+                        );
+                        hasUnread = (lastReceivedMsg?.sentAt || 0) > (contact?.lastReadAt || 0);
                     }
                 }
 
