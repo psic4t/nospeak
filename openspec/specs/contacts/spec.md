@@ -4,9 +4,7 @@
 TBD - created by archiving change separate-chats-from-contacts. Update Purpose after archive.
 ## Requirements
 ### Requirement: Contact Storage via Kind 30000 Encrypted Follow Set
-The system SHALL store the user's contacts as a Kind 30000 parameterized replaceable event with `d` tag value `dm-contacts`. Contact pubkeys SHALL be stored privately in the encrypted content field using NIP-44 self-encryption, not as public `p` tags. The event SHALL be published to both messaging relays and discovery relays when contacts change. When contacts are fetched from relays and merged into local storage, the system SHALL resolve profiles for newly added contacts using batch profile resolution.
-
-At each sync point where `dm-contacts` is fetched or published, the system SHALL also perform the equivalent operation for the `dm-favorites` encrypted list (Kind 30000 with `d: "dm-favorites"`), ensuring both lists stay in sync across devices.
+The system SHALL store the user's contacts as a Kind 30000 parameterized replaceable event with `d` tag value `dm-contacts`. Contact pubkeys SHALL be stored privately in the encrypted content field using NIP-44 self-encryption, not as public `p` tags. The event SHALL be published to both messaging relays and discovery relays when contacts change. When contacts are fetched from relays, the system SHALL perform a full replace sync where the relay list is authoritative: local contacts absent from the relay list are removed, and relay contacts absent locally are added. The system SHALL resolve profiles for newly added contacts using batch profile resolution. Contact sync is triggered on-demand when the user opens the contacts view (Manage Contacts modal on web/desktop or `/contacts` route on Android), not on a startup timer.
 
 #### Scenario: Contact list published on contact add
 - **GIVEN** the user adds a new contact via the Manage Contacts modal
@@ -21,27 +19,17 @@ At each sync point where `dm-contacts` is fetched or published, the system SHALL
 - **THEN** the system SHALL publish an updated Kind 30000 event reflecting the removal
 - **AND** the encrypted content SHALL no longer include the removed contact's pubkey
 
-#### Scenario: Contact list fetched on profile refresh
-- **GIVEN** the user is authenticated and a profile refresh is triggered
-- **WHEN** the system fetches profile data from relays
-- **THEN** it SHALL also fetch the user's Kind 30000 event with `d: "dm-contacts"`
+#### Scenario: Contact list synced on-demand when opening contacts view
+- **GIVEN** the user is authenticated
+- **WHEN** the user opens the Manage Contacts modal (web/desktop) or navigates to the `/contacts` route (Android)
+- **THEN** the system SHALL fetch the user's Kind 30000 event with `d: "dm-contacts"` from relays
 - **AND** decrypt the content using NIP-44
-- **AND** merge any remote contacts not in local storage using union merge (never delete)
+- **AND** perform a full replace sync: the relay contact list is authoritative, local contacts absent from the relay list SHALL be removed, and relay contacts absent locally SHALL be added
 
-#### Scenario: Favorites list synced alongside contacts on profile refresh
-- **GIVEN** the user is authenticated and a profile refresh is triggered
-- **WHEN** the system fetches and merges the contact list from relays
-- **THEN** it SHALL also fetch and merge the favorites list (Kind 30000 with `d: "dm-favorites"`) from relays
-
-#### Scenario: Favorites list synced alongside contacts on login
+#### Scenario: Contact list synced on login
 - **GIVEN** the user authenticates and the login sync flow begins
-- **WHEN** the system fetches and merges the contact list during login
-- **THEN** it SHALL also fetch and merge the favorites list from relays after contact sync completes
-
-#### Scenario: Favorites list synced alongside contacts on own profile refresh
-- **GIVEN** the user manually refreshes their own profile via the Profile modal
-- **WHEN** the system fetches and merges the contact list
-- **THEN** it SHALL also fetch and merge the favorites list from relays
+- **WHEN** the system reaches the contacts sync step
+- **THEN** it SHALL fetch and full-replace sync the contact list from relays
 
 #### Scenario: Profiles resolved for contacts from Kind 30000
 - **GIVEN** the user is authenticated and has a Kind 30000 event with 5 contacts on relays

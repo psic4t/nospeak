@@ -11,6 +11,7 @@
      import { conversationRepo, isGroupConversationId } from '$lib/db/ConversationRepository';
      import { consumePendingAndroidMediaShare, consumePendingAndroidTextShare } from '$lib/stores/androidShare';
      import { isAndroidNative } from '$lib/core/NativeDialogs';
+     import { chatVisitRefreshService } from '$lib/core/ChatVisitRefreshService';
      
      const PAGE_SIZE = 50;
 
@@ -52,6 +53,26 @@
           return () => {
               clearActiveConversation();
           };
+      });
+
+      // Refresh contact profile/relay data on chat visit
+      $effect(() => {
+          const convId = conversationId;
+          const user = $currentUser;
+          console.log(`[ChatVisitRefresh] $effect fired: convId=${convId}, user=${user?.npub?.slice(0, 12)}, isGroup=${isGroup}`);
+          if (!convId || convId === 'ALL' || !user?.npub) return;
+
+          if (isGroup) {
+              // For groups, wait for groupConversation to be loaded
+              const group = groupConversation;
+              if (group?.participants) {
+                  console.log(`[ChatVisitRefresh] Refreshing ${group.participants.length} group participants`);
+                  void chatVisitRefreshService.refreshGroupParticipants(group.participants, user.npub);
+              }
+          } else {
+              console.log(`[ChatVisitRefresh] Refreshing 1:1 contact: ${convId.slice(0, 12)}`);
+              void chatVisitRefreshService.refreshContact(convId);
+          }
       });
 
      let initialSharedMedia = $state<{ file: File; mediaType: 'image' | 'video' | 'audio' } | null>(null);

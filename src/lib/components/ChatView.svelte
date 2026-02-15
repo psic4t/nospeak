@@ -146,8 +146,31 @@
        return profileData;
    }
    
-   // Load profiles for all message senders in view
-   $effect(() => {
+    // Re-read all group participant profiles from DB (called after profiles-updated event)
+    async function refreshGroupParticipantProfiles(participants: string[]) {
+        const others = participants.filter((p: string) => p !== $currentUser?.npub);
+        for (const npub of others) {
+            const profile = await profileRepo.getProfileIgnoreTTL(npub);
+            const name = profile?.metadata?.name || 
+                         profile?.metadata?.display_name || 
+                         npub.slice(0, 8) + '...';
+            const picture = profile?.metadata?.picture;
+            participantProfiles.set(npub, { name, picture });
+        }
+        participantProfiles = new Map(participantProfiles);
+
+        // Update group title if it's auto-generated (no explicit subject)
+        if (groupConversation && !groupConversation.subject) {
+            const names = others.slice(0, 5).map(npub => {
+                const p = participantProfiles.get(npub);
+                return p?.name || npub.slice(0, 8) + '...';
+            });
+            groupTitle = generateGroupTitle(names);
+        }
+    }
+
+    // Load profiles for all message senders in view
+    $effect(() => {
        if (!isGroup || !messages.length) return;
        
        // Collect unique sender npubs that we don't have profiles for
@@ -571,7 +594,11 @@
       };
 
       const handleProfilesUpdated = () => {
+        console.log(`[ChatView] handleProfilesUpdated received, partnerNpub=${partnerNpub?.slice(0, 12)}, isGroup=${isGroup}`);
         fetchPartnerProfile();
+        if (isGroup && groupConversation?.participants) {
+          void refreshGroupParticipantProfiles(groupConversation.participants);
+        }
       };
 
       window.addEventListener('blur', handleBlur);

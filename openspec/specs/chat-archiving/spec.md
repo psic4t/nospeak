@@ -23,9 +23,9 @@ The system SHALL store archived conversation IDs in an encrypted list named "dm-
 
 #### Scenario: Sync archives across devices
 - **GIVEN** a user has archived chats on Device A
-- **WHEN** the user opens the app on Device B
+- **WHEN** the user opens the app on Device B and navigates to the Archive tab in the chat list
 - **THEN** the archived conversation IDs are fetched from Nostr relays
-- **AND** merged into the local archives using union merge strategy
+- **AND** synced into local archives using full replace strategy where the relay list is authoritative: local archives absent from the relay list are removed, and relay archives absent locally are added
 
 ### Requirement: Archive User Interface
 

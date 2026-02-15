@@ -375,23 +375,13 @@
      }
 
      if (restored && location.pathname !== "/") {
-      // Wait 5 seconds then refresh all contact profiles and relay information
+      // Refresh current user's relay discovery after a short delay
       setTimeout(async () => {
-        console.log("Starting delayed profile and relay refresh after 5 seconds");
-        
-        const { contactRepo } = await import("$lib/db/ContactRepository");
         const { discoverUserRelays } = await import(
           "$lib/core/connection/Discovery"
         );
-        const { profileResolver } = await import("$lib/core/ProfileResolver");
         const { profileRepo } = await import("$lib/db/ProfileRepository");
 
-        const contacts = await contactRepo.getContacts();
-        console.log(
-          `Refreshing profiles for ${contacts.length} contacts after delay`,
-        );
-
-        // Refresh current user profile/relays if TTL has expired
         const user = $currentUser;
         if (user?.npub) {
           const freshProfile = await profileRepo.getProfile(user.npub);
@@ -412,34 +402,7 @@
             }
            }
         }
-
-        // Refresh profiles for all contacts in parallel with some concurrency control
-        const BATCH_SIZE = 5;
-        for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-          const batch = contacts.slice(i, i + BATCH_SIZE);
-          await Promise.all(
-            batch.map(async (contact) => {
-              try {
-                console.log(`Refreshing profile for ${contact.npub}`);
-                await discoverUserRelays(contact.npub, false);
-                await profileResolver.resolveProfile(contact.npub, true); // force refresh
-              } catch (error) {
-                console.error(
-                  `Failed to refresh profile for ${contact.npub}:`,
-                  error,
-                );
-              }
-            }),
-          );
-
-          // Small delay between batches to avoid overwhelming relays
-          if (i + BATCH_SIZE < contacts.length) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
-        
-        console.log("Profile and relay refresh completed");
-      }, 5000); // 5 second delay
+      }, 2000);
     }
   });
 </script>

@@ -7,7 +7,7 @@ Enable users to mark messages as favorites for quick access, with encrypted cros
 
 ### Requirement: Favorite Message Storage via Kind 30003 Bookmark Set
 
-The system SHALL store the user's favorited messages as a Kind 30003 (NIP-51 Bookmark Set) parameterized replaceable event with `d` tag value `dm-favorites`. Favorited message references SHALL be stored privately in the encrypted content field using NIP-44 self-encryption as a JSON array of `[["e", "<eventId>", "<conversationId>"], ...]` tags. The event SHALL be published to both messaging relays and discovery relays when favorites change. When favorites are fetched from relays and merged into local storage, the system SHALL use union merge (never delete local favorites).
+The system SHALL store the user's favorited messages as a Kind 30003 (NIP-51 Bookmark Set) parameterized replaceable event with `d` tag value `dm-favorites`. Favorited message references SHALL be stored privately in the encrypted content field using NIP-44 self-encryption as a JSON array of `[["e", "<eventId>", "<conversationId>"], ...]` tags. The event SHALL be published to both messaging relays and discovery relays when favorites change. When favorites are fetched from relays, the system SHALL perform a full replace sync where the relay list is authoritative: local favorites absent from the relay list are removed, and relay favorites absent locally are added. Favorites sync is triggered on-demand when the user opens the favorites page or refreshes their own profile, not on a startup timer.
 
 #### Scenario: Favorites list published on favorite add
 - **GIVEN** the user opens the context menu on a message that is not favorited
@@ -28,17 +28,17 @@ The system SHALL store the user's favorited messages as a Kind 30003 (NIP-51 Boo
 - **WHEN** the system reaches the favorites sync step (after contact sync)
 - **THEN** it SHALL fetch the user's Kind 30003 event with `d: "dm-favorites"`
 - **AND** decrypt the content using NIP-44
-- **AND** merge any remote favorites not in local storage using union merge (never delete)
+- **AND** perform a full replace sync: the relay favorites list is authoritative, local favorites absent from the relay list SHALL be removed, and relay favorites absent locally SHALL be added
 
-#### Scenario: Favorites list fetched on delayed refresh
-- **GIVEN** the user's session has been restored and the delayed profile refresh runs
-- **WHEN** the system refreshes contact data from relays
-- **THEN** it SHALL also fetch and merge the favorites list from relays
+#### Scenario: Favorites list fetched on-demand when opening favorites page
+- **GIVEN** the user is authenticated
+- **WHEN** the user navigates to the `/favorites` route
+- **THEN** the system SHALL fetch and full-replace sync the favorites list from relays
 
 #### Scenario: Favorites list fetched on own profile refresh
 - **GIVEN** the user manually refreshes their own profile via the Profile modal
 - **WHEN** the profile refresh completes
-- **THEN** the system SHALL also fetch and merge the favorites list from relays
+- **THEN** the system SHALL also fetch and full-replace sync the favorites list from relays
 
 ### Requirement: Message Context Menu Favorite Toggle
 
