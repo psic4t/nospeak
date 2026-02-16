@@ -40,6 +40,7 @@
   import { buildChatHistorySearchResults } from '$lib/core/chatHistorySearch';
   import { getRelativeTime as getRelativeTimeUtil } from '$lib/utils/time';
   import { favoriteEventIds, toggleFavorite } from '$lib/stores/favorites';
+  import { archivedConversationIds, toggleArchive } from '$lib/stores/archive';
   import { getCurrentPosition } from '$lib/core/LocationService';
   import { isVoiceRecordingSupported } from '$lib/core/VoiceRecorder';
   import { generateGroupTitle } from '$lib/db/ConversationRepository';
@@ -1681,6 +1682,10 @@
       isVoiceRecordingSupported()
   );
 
+  // Determine archive status: for 1-on-1 chats the ID is partnerNpub, for groups it's groupConversation.id
+  const chatArchiveId = $derived(isGroup ? groupConversation?.id : partnerNpub);
+  const isArchived = $derived(chatArchiveId ? $archivedConversationIds.has(chatArchiveId) : false);
+
   async function sendVoiceMessage(file: File): Promise<void> {
     // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
     if (!isGroup && !partnerNpub) return;
@@ -2219,6 +2224,7 @@
     {/each}
   </div>
 
+  {#if !isArchived}
   <div
     class="absolute bottom-0 left-0 right-0 z-20 p-4 p-4-safe-bottom border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-lg transition-all duration-150 ease-out"
   >
@@ -2337,6 +2343,23 @@
       {/if}
     </form>
   </div>
+  {:else}
+  <div
+    class="absolute bottom-0 left-0 right-0 z-20 p-4 p-4-safe-bottom border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-lg transition-all duration-150 ease-out"
+  >
+    <div class="flex items-center justify-center gap-3">
+      <span class="text-sm text-gray-500 dark:text-slate-400">{$t('chats.chatArchived')}</span>
+      <Button
+        type="button"
+        variant="filled-tonal"
+        size="sm"
+        onclick={() => { if (chatArchiveId) toggleArchive(chatArchiveId); }}
+      >
+        {$t('chats.unarchive')}
+      </Button>
+    </div>
+  </div>
+  {/if}
 </div>
 
 {#if isGroup && groupConversation}
