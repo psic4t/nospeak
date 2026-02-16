@@ -4,10 +4,16 @@ assets:
 name: nospeak
 description: A decentralized Nostr chat client for secure, private messaging
 license: GPL-3.0-or-later
-builder: npub142gywvjkq0dv6nupggyn2euhx4nduwc7yz5f24ah9rpmunr2s39se3xrj0
 homepage: https://nospeak.chat
-tags: chat messaging blossom end-to-end-encryption nostr nip-17 privacy
-icon: static/nospeak-white-inner.png
+tags:
+  - chat
+  - messaging
+  - blossom
+  - end-to-end-encryption
+  - nostr
+  - nip-17
+  - privacy
+icon: ./static/nospeak-white-inner.png
 images:
   - fastlane/metadata/android/en-US/images/phoneScreenshots/1.png
   - fastlane/metadata/android/en-US/images/phoneScreenshots/2.png
