@@ -12,8 +12,11 @@
     import { contactRepo } from '$lib/db/ContactRepository';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { t } from '$lib/i18n';
-    import { isAndroidNative } from '$lib/core/NativeDialogs';
+    import { isAndroidNative, isMobileWeb } from '$lib/core/NativeDialogs';
+    import { blur } from '$lib/utils/platform';
     import Button from '$lib/components/ui/Button.svelte';
+    import BottomSheetHandle from '$lib/components/ui/BottomSheetHandle.svelte';
+    import { bottomSheet } from '$lib/actions/bottomSheet';
     import { currentUser } from '$lib/stores/auth';
     import { glassModal } from '$lib/utils/transitions';
     import { hapticSelection } from '$lib/utils/haptics';
@@ -26,7 +29,9 @@
     let { isOpen, close, npub } = $props<{ isOpen: boolean; close: () => void; npub: string }>();
 
     const isAndroidApp = isAndroidNative();
+    const isMobile = isAndroidApp || isMobileWeb();
 
+    let overlayElement: HTMLDivElement | undefined = $state();
     let profile = $state<Profile | undefined>(undefined);
     let loading = $state(false);
     let isRefreshing = $state(false);
@@ -151,28 +156,40 @@
 </script>
 
 {#if isOpen}
-    <div 
+    <div
+        bind:this={overlayElement}
         in:fade={{ duration: 130 }}
         out:fade={{ duration: 110 }}
-        class="fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        class={`fixed inset-0 bg-black/35 md:bg-black/40 bg-gradient-to-br from-black/40 via-black/35 to-slate-900/40 ${blur('sm')} flex justify-center z-50 ${
+            isMobile ? 'items-end' : 'items-center p-4'
+        }`}
         class:android-safe-area-top={isAndroidApp}
         role="dialog"
         aria-modal="true"
-         tabindex="-1"
-         onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
-         onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
-
+        tabindex="-1"
+        onclick={(e) => { if(e.target === e.currentTarget) { hapticSelection(); close(); } }}
+        onkeydown={(e) => { if(e.key === 'Escape') { hapticSelection(); close(); } }}
     >
-        <div 
-            in:glassModal={{ duration: 200, scaleFrom: 0.92, blurFrom: 1 }} 
-            out:glassModal={{ duration: 150, scaleFrom: 0.92, blurFrom: 1 }}
-            class="bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl w-full max-w-xl h-auto max-h-[85vh] rounded-3xl flex flex-col shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden relative outline-none">
-            
+        <div
+            use:bottomSheet={{ enabled: isMobile, onClose: () => { hapticSelection(); close(); }, overlay: overlayElement }}
+            in:glassModal={{ duration: 200, scaleFrom: 0.92 }}
+            out:glassModal={{ duration: 150, scaleFrom: 0.92 }}
+            class={`bg-white/95 dark:bg-slate-900/80 ${blur('xl')} shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden relative outline-none ${
+                isMobile
+                    ? 'w-full rounded-t-3xl rounded-b-none max-h-[90vh]'
+                    : 'w-full max-w-xl max-h-[85vh] rounded-3xl'
+            }`}
+            class:android-safe-area-bottom={isAndroidApp}
+        >
+            {#if isMobile}
+                <BottomSheetHandle />
+            {/if}
+
             <Button
                 onclick={close}
                 aria-label="Close modal"
                 size="icon"
-                class="absolute top-4 right-4 z-10"
+                class="absolute top-4 right-4 z-10 {isMobile ? 'hidden' : ''}"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </Button>
