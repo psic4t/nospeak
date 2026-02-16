@@ -9,22 +9,24 @@ import { quintOut } from 'svelte/easing';
      blurFrom?: number;
  }
  
- export function glassModal(_node: Element, options: GlassModalOptions = {}) {
-     const {
-         duration = 150,
-         easing = quintOut
-     } = options;
- 
-     return {
-         duration,
-         css: (t: number) => {
-             const eased = easing(t);
-             const opacity = eased;
- 
-             return `
-                 opacity: ${opacity};
-             `;
-         }
-     };
- }
+export function glassModal(_node: Element, options: GlassModalOptions = {}) {
+    const {
+        duration = 150,
+        easing = quintOut,
+        scaleFrom = 1
+    } = options;
+
+    return {
+        duration,
+        css: (t: number) => {
+            const eased = easing(t);
+            const scale = scaleFrom + (1 - scaleFrom) * eased;
+
+            return `
+                opacity: ${eased};
+                transform: scale(${scale});
+            `;
+        }
+    };
+}
 

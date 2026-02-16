@@ -6,8 +6,10 @@
     import type { PluginListenerHandle } from '@capacitor/core';
 
     import Button from '$lib/components/ui/Button.svelte';
+    import BottomSheetHandle from '$lib/components/ui/BottomSheetHandle.svelte';
     import WaveformBars from '$lib/components/WaveformBars.svelte';
-    import { nativeDialogService } from '$lib/core/NativeDialogs';
+    import { bottomSheet } from '$lib/actions/bottomSheet';
+    import { isAndroidNative, isMobileWeb, nativeDialogService } from '$lib/core/NativeDialogs';
     import { clamp01, downsamplePeaks } from '$lib/core/Waveform';
     import {
         formatDurationMs,
@@ -44,6 +46,10 @@
 
     // Determine if we should use native Android recording
     const useNativeRecording = Capacitor.getPlatform() === 'android' && AndroidMicrophone !== null;
+
+    // Bottom sheet drag support
+    const isMobile = isAndroidNative() || isMobileWeb();
+    let overlayElement: HTMLDivElement | undefined = $state();
 
     let recordingState = $state<RecordingState>('idle');
     let error: string | null = $state(null);
@@ -886,6 +892,7 @@
 
 {#if isOpen}
     <div
+        bind:this={overlayElement}
         class="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/40 px-0 md:px-4"
         role="dialog"
         aria-modal="true"
@@ -894,8 +901,12 @@
         onkeydown={handleKeydown}
     >
         <div
+            use:bottomSheet={{ enabled: isMobile, onClose: onCancel, overlay: overlayElement }}
             class="relative w-full bg-white/95 dark:bg-slate-900/95 border border-gray-200/80 dark:border-slate-700/80 shadow-2xl backdrop-blur-xl p-4 space-y-4 rounded-t-3xl md:max-w-md md:rounded-2xl"
         >
+            {#if isMobile}
+                <BottomSheetHandle />
+            {/if}
             <div class="flex items-center justify-between">
                 <h2 class="typ-title dark:text-white">{$t('chat.voiceMessage.title')}</h2>
 

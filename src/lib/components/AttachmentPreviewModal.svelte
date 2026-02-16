@@ -2,6 +2,8 @@
     import { hapticSelection } from '$lib/utils/haptics';
     import { isAndroidCapacitorShell, blur } from '$lib/utils/platform';
     import { isMobileWeb } from '$lib/core/NativeDialogs';
+    import BottomSheetHandle from '$lib/components/ui/BottomSheetHandle.svelte';
+    import { bottomSheet } from '$lib/actions/bottomSheet';
 
     import Button from '$lib/components/ui/Button.svelte';
     import LocationMap from '$lib/components/LocationMap.svelte';
@@ -71,17 +73,7 @@
     const openMapUrl = $derived(location ? buildOsmOpenUrl(location) : null);
     const showLocationConfirm = $derived(isLocationMode && !!confirmTextIdle);
 
-    // Bottom sheet drag state (Android only)
-    const BOTTOM_SHEET_ACTIVATION_THRESHOLD = 8;
-    const BOTTOM_SHEET_CLOSE_THRESHOLD = 96;
-    const BOTTOM_SHEET_VELOCITY_THRESHOLD = 0.5; // px/ms - fast swipe threshold
-    let isBottomSheetDragging = $state(false);
-    let bottomSheetDragStartY = 0;
-    let bottomSheetDragY = $state(0);
-    let modalElement: HTMLDivElement | undefined = $state();
-    let lastPointerY = 0;
-    let lastPointerTime = 0;
-    let pointerVelocity = 0;
+    let overlayElement: HTMLDivElement | undefined = $state();
 
     function handleOverlayClick(e: MouseEvent): void {
         if (e.target === e.currentTarget) {
@@ -97,101 +89,14 @@
         }
     }
 
-    function handleBottomSheetPointerDown(e: PointerEvent) {
-        if (!isAndroidShell) return;
-        e.preventDefault();
-        isBottomSheetDragging = false;
-        bottomSheetDragStartY = e.clientY;
-        bottomSheetDragY = 0;
-        
-        // Initialize velocity tracking
-        lastPointerY = e.clientY;
-        lastPointerTime = e.timeStamp;
-        pointerVelocity = 0;
-        
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    }
 
-    function handleBottomSheetPointerMove(e: PointerEvent) {
-        if (!isAndroidShell) return;
-        
-        const delta = e.clientY - bottomSheetDragStartY;
-        
-        if (!isBottomSheetDragging) {
-            if (delta > BOTTOM_SHEET_ACTIVATION_THRESHOLD) {
-                isBottomSheetDragging = true;
-            } else {
-                return;
-            }
-        }
-        
-        // Calculate velocity (px/ms)
-        const timeDelta = e.timeStamp - lastPointerTime;
-        if (timeDelta > 0) {
-            pointerVelocity = (e.clientY - lastPointerY) / timeDelta;
-        }
-        lastPointerY = e.clientY;
-        lastPointerTime = e.timeStamp;
-        
-        const dragY = delta > 0 ? delta : 0;
-        
-        // Direct DOM manipulation - bypasses Svelte reactivity for performance
-        if (modalElement) {
-            modalElement.style.transform = `translateY(${dragY}px)`;
-        }
-        
-        // Store for close decision
-        bottomSheetDragY = dragY;
-    }
-
-    function handleBottomSheetPointerEnd(e: PointerEvent) {
-        if (!isAndroidShell) return;
-        
-        try {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-        } catch {
-            // ignore
-        }
-        
-        if (!isBottomSheetDragging) {
-            bottomSheetDragY = 0;
-            return;
-        }
-        
-        // Close if: dragged past threshold OR velocity exceeds threshold (fast swipe)
-        const shouldClose = bottomSheetDragY > BOTTOM_SHEET_CLOSE_THRESHOLD 
-            || pointerVelocity > BOTTOM_SHEET_VELOCITY_THRESHOLD;
-        
-        // Re-enable CSS transition BEFORE position change (for smooth animation)
-        isBottomSheetDragging = false;
-        
-        if (shouldClose) {
-            // Animate off-screen, then close
-            if (modalElement) {
-                modalElement.style.transform = 'translateY(100%)';
-            }
-            setTimeout(() => {
-                bottomSheetDragY = 0;
-                if (modalElement) {
-                    modalElement.style.transform = '';
-                }
-                hapticSelection();
-                onCancel();
-            }, 150);
-        } else {
-            // Snap back to origin with animation
-            bottomSheetDragY = 0;
-            if (modalElement) {
-                modalElement.style.transform = 'translateY(0)';
-            }
-        }
-    }
 
 
 </script>
 
 {#if isOpen}
     <div
+        bind:this={overlayElement}
         class={`fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/40 md:pb-4 ${useFullWidth ? '' : 'px-4'}`}
         role="dialog"
         aria-modal="true"
@@ -200,26 +105,13 @@
         onkeydown={handleKeydown}
     >
         <div
-            bind:this={modalElement}
+            use:bottomSheet={{ enabled: useFullWidth, onClose: () => { hapticSelection(); onCancel(); }, overlay: overlayElement }}
             class={`relative w-full bg-white/95 dark:bg-slate-900/95 border border-gray-200/80 dark:border-slate-700/80 shadow-2xl ${blur('xl')} p-4 space-y-3 ${
-                isBottomSheetDragging ? '' : 'transition-transform duration-150 ease-out'
-            } ${
                 isAndroidShell ? 'rounded-t-3xl' : 'max-w-md rounded-t-2xl md:rounded-2xl'
             }`}
-            style:will-change={isBottomSheetDragging ? 'transform' : undefined}
         >
-            {#if isAndroidShell}
-                <div class="absolute top-0 left-0 right-0 h-20 z-20 pointer-events-none">
-                    <div
-                        class="mx-auto w-32 h-full pointer-events-auto touch-none"
-                        onpointerdown={handleBottomSheetPointerDown}
-                        onpointermove={handleBottomSheetPointerMove}
-                        onpointerup={handleBottomSheetPointerEnd}
-                        onpointercancel={handleBottomSheetPointerEnd}
-                    >
-                        <div class="mx-auto mt-2 w-10 h-1.5 rounded-full bg-gray-300 dark:bg-slate-600"></div>
-                    </div>
-                </div>
+            {#if useFullWidth}
+                <BottomSheetHandle />
             {/if}
 
             <Button
