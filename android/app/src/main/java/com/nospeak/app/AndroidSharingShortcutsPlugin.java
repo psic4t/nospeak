@@ -51,7 +51,7 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
 
     private static final String LOG_TAG = "SharingShortcuts";
     private static final String SHARE_TARGET_CATEGORY = "com.nospeak.app.category.SHARE_TARGET";
-    private static final int AVATAR_SIZE_PX = 108; // Standard shortcut icon size
+    private static final int AVATAR_SIZE_PX = 192; // Match NativeBackgroundMessagingService for full-size icons
     private static final int MAX_SHORTCUTS = 4;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -183,6 +183,8 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
         intent.addCategory(Intent.CATEGORY_DEFAULT);
         intent.setData(Uri.parse("nospeak://chat/" + conversationId));
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra("nospeak_route_kind", "chat");
+        intent.putExtra("nospeak_conversation_id", conversationId);
 
         // Build the shortcut
         Set<String> categories = new HashSet<>(Collections.singletonList(SHARE_TARGET_CATEGORY));
@@ -194,7 +196,7 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
                 .setLongLived(true)
                 .setPerson(person)
                 .setCategories(categories)
-                .setIcon(avatar != null ? IconCompat.createWithBitmap(makeCircular(avatar)) : null)
+                .setIcon(avatar != null ? IconCompat.createWithAdaptiveBitmap(avatar) : null)
                 .build();
     }
 

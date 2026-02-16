@@ -1,6 +1,7 @@
 package com.nospeak.app;
 
 import android.content.Intent;
+import android.net.Uri;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -42,8 +43,28 @@ public class AndroidNotificationRouterPlugin extends Plugin {
             return null;
         }
 
+        // Primary path: read from intent extras (notification taps via PendingIntent)
         String kind = intent.getStringExtra(EXTRA_ROUTE_KIND);
         String conversationId = intent.getStringExtra(EXTRA_ROUTE_CONVERSATION_ID);
+
+        // Fallback: parse from data URI (launcher shortcuts may strip extras).
+        // Only when MIME type is absent — a non-null type means a real share-sheet
+        // intent which should be handled by AndroidShareTargetPlugin instead.
+        if ((kind == null || kind.isEmpty())
+                && intent.getType() == null
+                && intent.getData() != null) {
+            Uri data = intent.getData();
+            if ("nospeak".equals(data.getScheme())
+                    && data.getPathSegments() != null
+                    && !data.getPathSegments().isEmpty()) {
+                String host = data.getHost();
+                if ("chat".equals(host)) {
+                    kind = "chat";
+                    conversationId = data.getLastPathSegment();
+                }
+            }
+        }
+
         if (kind == null || kind.isEmpty() || conversationId == null || conversationId.isEmpty()) {
             return null;
         }

@@ -159,8 +159,11 @@
               if (isGroup) {
                   // Group chat - use the hash directly
                   await goto(`/chat/${encodeURIComponent(conversationId)}`);
+              } else if (conversationId.startsWith('npub1')) {
+                  // Already an npub (from launcher shortcut taps)
+                  await goto(`/chat/${encodeURIComponent(conversationId)}`);
               } else {
-                  // 1-on-1 chat - convert pubkey hex to npub
+                  // Hex pubkey (from notification taps)
                   const partnerNpub = nip19.npubEncode(conversationId);
                   await goto(`/chat/${encodeURIComponent(partnerNpub)}`);
               }
