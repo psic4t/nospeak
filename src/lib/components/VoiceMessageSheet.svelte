@@ -69,7 +69,7 @@
     let errorListener: PluginListenerHandle | null = $state(null);
 
     // Shared state
-    const WAVEFORM_BAR_COUNT = 40;
+    const WAVEFORM_BAR_COUNT = 56;
     let rawPeaks = $state<number[]>([]);
 
     let previewDuration = $state(0);
@@ -923,7 +923,7 @@
                 <WaveformBars
                     peaks={waveformPeaks}
                     barCount={WAVEFORM_BAR_COUNT}
-                    heightPx={40}
+                    heightPx={32}
                     progress={canPreview ? previewProgress : 0}
                     seekable={canPreview}
                     onSeek={handlePreviewSeek}
