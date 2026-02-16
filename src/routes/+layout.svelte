@@ -126,17 +126,19 @@
       initAndroidBackNavigation();
     }
 
-    // Register PWA Service Worker
-    const { registerSW } = await import('virtual:pwa-register');
-    registerSW({
-      immediate: true,
-      onRegistered(r) {
-        console.log('SW Registered');
-      },
-      onRegisterError(error) {
-        console.error('SW registration error', error);
-      }
-    });
+    // Register PWA Service Worker (web only — not needed in Capacitor native shell)
+    if (!isAndroidNative()) {
+      const { registerSW } = await import('virtual:pwa-register');
+      registerSW({
+        immediate: true,
+        onRegistered(r) {
+          console.log('SW Registered');
+        },
+        onRegisterError(error) {
+          console.error('SW registration error', error);
+        }
+      });
+    }
 
     const restored = await authService.restore();
 
