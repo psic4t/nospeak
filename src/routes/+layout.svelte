@@ -302,7 +302,7 @@
            const contactItemsWithMsgTime = await Promise.all(
              dbContacts.map(async (c) => {
                // Get last message to determine actual last activity (like ChatList does)
-               const recentMsgs = await messageRepo.getMessages(c.npub, 1);
+                const recentMsgs = await messageRepo.getMessages(c.npub, 1);
                const lastMsg = recentMsgs[recentMsgs.length - 1];
                const lastMsgTime = lastMsg ? lastMsg.sentAt : 0;
                return {

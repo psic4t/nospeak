@@ -86,14 +86,16 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
         executor.execute(() -> {
             try {
                 List<ShortcutInfoCompat> shortcuts = new ArrayList<>();
+                Set<String> newShortcutIds = new HashSet<>();
                 int count = Math.min(contactsArray.length(), MAX_SHORTCUTS);
 
                 for (int i = 0; i < count; i++) {
                     try {
                         JSONObject contact = contactsArray.getJSONObject(i);
-                        ShortcutInfoCompat shortcut = buildShortcut(contact);
+                        ShortcutInfoCompat shortcut = buildShortcut(contact, i);
                         if (shortcut != null) {
                             shortcuts.add(shortcut);
+                            newShortcutIds.add(shortcut.getId());
                         }
                     } catch (JSONException e) {
                         Log.w(LOG_TAG, "Failed to parse contact at index " + i, e);
@@ -101,9 +103,31 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
                 }
 
                 if (!shortcuts.isEmpty()) {
-                    // Clear all existing dynamic shortcuts first to remove any old-format shortcuts
+                    // Remove stale cached/long-lived shortcuts that are no longer in the top contacts.
+                    // removeAllDynamicShortcuts only removes shortcuts from the dynamic set;
+                    // long-lived shortcuts remain cached by Android and still appear in the share sheet.
+                    // We must explicitly remove them with removeLongLivedShortcuts.
+                    try {
+                        List<ShortcutInfoCompat> existing = ShortcutManagerCompat.getShortcuts(
+                                getContext(),
+                                ShortcutManagerCompat.FLAG_MATCH_DYNAMIC
+                                        | ShortcutManagerCompat.FLAG_MATCH_CACHED);
+                        List<String> staleIds = new ArrayList<>();
+                        for (ShortcutInfoCompat s : existing) {
+                            if (!newShortcutIds.contains(s.getId())) {
+                                staleIds.add(s.getId());
+                            }
+                        }
+                        if (!staleIds.isEmpty()) {
+                            ShortcutManagerCompat.removeLongLivedShortcuts(getContext(), staleIds);
+                            Log.d(LOG_TAG, "Removed " + staleIds.size() + " stale cached shortcuts");
+                        }
+                    } catch (Exception e) {
+                        Log.w(LOG_TAG, "Failed to clean up stale shortcuts", e);
+                    }
+
+                    // Clear all existing dynamic shortcuts and set the new ones
                     ShortcutManagerCompat.removeAllDynamicShortcuts(getContext());
-                    // Then set the new properly-formatted shortcuts
                     ShortcutManagerCompat.setDynamicShortcuts(getContext(), shortcuts);
                     Log.d(LOG_TAG, "Published " + shortcuts.size() + " sharing shortcuts");
                 }
@@ -118,7 +142,7 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
         });
     }
 
-    private ShortcutInfoCompat buildShortcut(JSONObject contact) {
+    private ShortcutInfoCompat buildShortcut(JSONObject contact, int rank) {
         String conversationId = contact.optString("conversationId", null);
         String displayName = contact.optString("displayName", null);
         String avatarUrl = contact.optString("avatarUrl", null);
@@ -194,6 +218,7 @@ public class AndroidSharingShortcutsPlugin extends Plugin {
                 .setLongLabel(displayName)
                 .setIntent(intent)
                 .setLongLived(true)
+                .setRank(rank)
                 .setPerson(person)
                 .setCategories(categories)
                 .setIcon(avatar != null ? IconCompat.createWithAdaptiveBitmap(avatar) : null)
