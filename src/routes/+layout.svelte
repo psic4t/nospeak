@@ -113,11 +113,9 @@
   });
 
   onMount(async () => {
-    const _tBoot = performance.now();
     initLanguage();
  
     await initRuntimeConfig();
-    const _tConfig = performance.now();
  
     configureAndroidStatusBar().catch((error) => {
       console.warn('Android status bar configuration failed', error);
@@ -143,8 +141,6 @@
     }
 
     const restored = await authService.restore();
-    const _tRestore = performance.now();
-    console.log(`[App perf] initRuntimeConfig=${(_tConfig - _tBoot).toFixed(1)}ms | restore=${(_tRestore - _tConfig).toFixed(1)}ms | total=${(_tRestore - _tBoot).toFixed(1)}ms`);
 
       let routedFromNotification = false;
 

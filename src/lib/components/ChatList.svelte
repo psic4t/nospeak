@@ -226,8 +226,6 @@
   }
 
   async function refreshChatList(dbContacts: ContactItem[]): Promise<void> {
-    const _tTotal = performance.now();
-
     // ── Phase 1: Gather IDs we need data for ─────────────────────────
     const contactNpubs = dbContacts.map(c => c.npub);
     const contactNpubSet = new Set(contactNpubs);
@@ -245,8 +243,6 @@
     // All 1-on-1 npubs that need last-message lookup
     const allContactNpubs = [...contactNpubs, ...orphanedArchiveNpubs];
     const allContactNpubSet = new Set(allContactNpubs);
-
-    const _t1 = performance.now();
 
     // ── Phase 2: Fetch last message per contact/group in parallel ─────
     // Use compound indexes with limit(1) — each is a single cursor seek.
@@ -278,8 +274,6 @@
 
     await Promise.all([...contactMsgPromises, ...groupMsgPromises]);
 
-    const _t2 = performance.now();
-
     // ── Phase 3: Batch-fetch all profiles ────────────────────────────
     // Collect all npubs we need profiles for: contacts, orphans, group participants, group message senders
     const profileNpubs = new Set(allContactNpubs);
@@ -307,8 +301,6 @@
     for (let i = 0; i < profileNpubArr.length; i++) {
       profileCache.set(profileNpubArr[i], bulkProfiles[i] ?? undefined);
     }
-
-    const _t3 = performance.now();
 
     // ── Phase 4: Build contact items (synchronous, no DB reads) ──────
     const contactItems: ChatListItem[] = dbContacts.map(c =>
@@ -387,8 +379,6 @@
       ),
     );
 
-    const _t4 = performance.now();
-
     // ── Phase 7: Combine, filter, sort ───────────────────────────────
     const allItems = [...contactItems, ...groupItems, ...orphanedArchiveItems];
     const itemsWithMessages = allItems.filter(item => item.lastMessageTime > 0);
@@ -397,11 +387,6 @@
     );
 
     chatItems = sortedItems;
-    const _tEnd = performance.now();
-
-    console.log(
-      `[ChatList perf] total=${(_tEnd - _tTotal).toFixed(1)}ms | ids=${(_t1 - _tTotal).toFixed(1)}ms | msgFetch=${(_t2 - _t1).toFixed(1)}ms (${allContactNpubs.length}c+${groupConvIds.length}g) | profiles=${(_t3 - _t2).toFixed(1)}ms (${profileCache.size}) | build=${(_t4 - _t3).toFixed(1)}ms | sort=${(_tEnd - _t4).toFixed(1)}ms`,
-    );
   }
 
   // Concurrent refresh guard: only one refreshChatList runs at a time.
@@ -430,16 +415,11 @@
   // Sync contacts and group conversations from DB
   // Use onMount instead of $effect to avoid infinite loop when updating store
   onMount(() => {
-    const _mountTime = performance.now();
-    console.log("[ChatList perf] onMount fired");
-
     // Watch contacts table changes for reactivity
     const contactsSub = liveQuery(() => {
-      console.log(`[ChatList perf] liveQuery callback: ${(performance.now() - _mountTime).toFixed(1)}ms after mount`);
       return contactRepo.getContacts();
     }).subscribe(async (dbContacts) => {
       await guardedRefreshChatList(dbContacts as ContactItem[]);
-      console.log(`[ChatList perf] render complete: ${(performance.now() - _mountTime).toFixed(1)}ms after mount`);
     });
 
     const handleEvent = async () => {
