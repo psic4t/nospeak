@@ -13,7 +13,7 @@ tags:
   - nostr
   - nip-17
   - privacy
-icon: ./static/nospeak-white-inner.png
+icon: https://raw.githubusercontent.com/psic4t/nospeak/refs/heads/master/static/nospeak-white-inner.png
 images:
   - fastlane/metadata/android/en-US/images/phoneScreenshots/1.png
   - fastlane/metadata/android/en-US/images/phoneScreenshots/2.png
