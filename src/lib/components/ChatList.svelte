@@ -7,7 +7,7 @@
   import { conversationRepo, generateGroupTitle, isGroupConversationId } from "$lib/db/ConversationRepository";
   import { liveQuery } from "dexie";
   import { profileRepo } from "$lib/db/ProfileRepository";
-  import type { ContactItem, Conversation } from "$lib/db/db";
+  import type { ContactItem, Conversation, Message, Profile } from "$lib/db/db";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import Avatar from "./Avatar.svelte";
@@ -143,42 +143,35 @@
 
   const npubMentionRegex = /nostr:(npub1[a-z0-9]{58,})/g;
 
-  async function replaceNpubMentionsInPreview(text: string): Promise<string> {
-    const matches = [...text.matchAll(npubMentionRegex)];
-    if (matches.length === 0) return text;
-
-    let result = text;
-    // Process in reverse to preserve indices
-    for (let i = matches.length - 1; i >= 0; i--) {
-      const match = matches[i];
-      const npub = match[1];
-      const profile = await profileRepo.getProfileIgnoreTTL(npub);
+  /**
+   * Replace nostr:npub mentions with @displayName using a provided profile cache.
+   * Synchronous - no DB lookups on the critical path.
+   */
+  function replaceNpubMentionsInPreview(text: string, profileCache: Map<string, Profile | undefined>): string {
+    return text.replace(npubMentionRegex, (_match, npub: string) => {
+      const profile = profileCache.get(npub);
       const displayName = profile?.metadata?.name
         || profile?.metadata?.display_name
         || profile?.metadata?.displayName
-        || npub.slice(0, 12) + '...' + npub.slice(-6);
-      result = result.slice(0, match.index!) + '@' + displayName + result.slice(match.index! + match[0].length);
-    }
-    return result;
+        || npub.slice(0, 12) + '...';
+      return '@' + displayName;
+    });
   }
 
   /**
-   * Build a ChatListItem for a 1-on-1 chat from an npub.
-   * Used for both active contacts and orphaned archived chats.
+   * Build a ChatListItem for a 1-on-1 chat from pre-fetched data.
+   * Synchronous - all DB data must be provided, no awaits.
    */
-  async function buildContactChatItem(
+  function buildContactChatItem(
     npub: string,
     lastReadAt: number | undefined,
     lastActivityAt: number | undefined,
-  ): Promise<ChatListItem> {
-    const profile = await profileRepo.getProfileIgnoreTTL(npub);
-    const recentMsgs = await messageRepo.getMessages(npub, 10);
-    const lastMsg = recentMsgs[recentMsgs.length - 1];
+    profile: Profile | undefined,
+    lastMsg: Message | undefined,
+    profileCache: Map<string, Profile | undefined>,
+  ): ChatListItem {
     const lastMsgTime = lastMsg ? lastMsg.sentAt : 0;
-    const lastReceivedMsg = recentMsgs
-      .filter((m) => m.direction === "received")
-      .pop();
-    const lastReceivedTime = lastReceivedMsg ? lastReceivedMsg.sentAt : 0;
+    const lastReceivedTime = (lastMsg && lastMsg.direction === "received") ? lastMsg.sentAt : 0;
     const lastActivityTime = Math.max(
       lastReceivedTime,
       lastActivityAt || 0,
@@ -200,7 +193,7 @@
     }
 
     if (lastMessageText) {
-      lastMessageText = await replaceNpubMentionsInPreview(lastMessageText);
+      lastMessageText = replaceNpubMentionsInPreview(lastMessageText, profileCache);
     }
 
     let name = npub.slice(0, 10) + "...";
@@ -233,139 +226,197 @@
   }
 
   async function refreshChatList(dbContacts: ContactItem[]): Promise<void> {
-    console.log("ChatList: Processing contacts from DB:", dbContacts.length);
+    const _tTotal = performance.now();
 
-    // 1. Process regular 1-on-1 contacts
-    const contactItems: ChatListItem[] = await Promise.all(
-      dbContacts.map((c) => buildContactChatItem(c.npub, c.lastReadAt, c.lastActivityAt)),
-    );
+    // ── Phase 1: Gather IDs we need data for ─────────────────────────
+    const contactNpubs = dbContacts.map(c => c.npub);
+    const contactNpubSet = new Set(contactNpubs);
 
-    // 2. Process group conversations
     const groupConversations = await conversationRepo.getGroupConversations();
-    console.log("ChatList: Processing group conversations:", groupConversations.length);
+    const groupConvIds = groupConversations.map(g => g.id);
+    const groupConvIdSet = new Set(groupConvIds);
 
-    const groupItems: ChatListItem[] = await Promise.all(
-      groupConversations.map(async (conv) => {
-        // Fetch recent messages for display and unread calculation
-        const recentMsgs = await messageRepo.getMessagesByConversationId(conv.id, 10);
-        const lastMsg = recentMsgs[recentMsgs.length - 1]; // Most recent for display
-        const lastMsgTime = lastMsg ? lastMsg.sentAt : conv.lastActivityAt;
-        // For unread indicator, only consider received messages (not sent from other clients)
-        const lastReceivedMsg = recentMsgs
-          .filter((m) => m.direction === "received")
-          .pop();
-        const lastReceivedTime = lastReceivedMsg ? lastReceivedMsg.sentAt : 0;
-
-        let lastMessageText = "";
-        if (lastMsg) {
-          if (lastMsg.fileUrl && lastMsg.fileType) {
-            lastMessageText = getMediaPreviewLabel(lastMsg.fileType);
-          } else if (lastMsg.location) {
-            lastMessageText = getLocationPreviewLabel();
-          } else {
-            lastMessageText = (lastMsg.message || "").replace(/\s+/g, " ").trim();
-          }
-
-          // For group messages, show sender name if it's not from us
-          if (lastMessageText && lastMsg.direction === "sent") {
-            lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
-          } else if (lastMessageText && lastMsg.senderNpub) {
-            // Get sender's name
-            const senderProfile = await profileRepo.getProfileIgnoreTTL(lastMsg.senderNpub);
-            const senderName = senderProfile?.metadata?.name || 
-                               senderProfile?.metadata?.display_name ||
-                               lastMsg.senderNpub.slice(0, 8) + '...';
-            lastMessageText = `${senderName}: ${lastMessageText}`;
-          }
-        }
-
-        // Replace nostr:npub mentions with @displayName
-        if (lastMessageText) {
-          lastMessageText = await replaceNpubMentionsInPreview(lastMessageText);
-        }
-
-        // Generate group title from participants or use stored subject
-        let groupName = conv.subject;
-        if (!groupName) {
-          // Generate from participant names
-          const participantNames = await Promise.all(
-            conv.participants
-              .filter((p: string) => p !== $currentUser?.npub) // Exclude self
-              .slice(0, 5) // Limit to avoid too many lookups
-              .map(async (npub: string) => {
-                const profile = await profileRepo.getProfileIgnoreTTL(npub);
-                return profile?.metadata?.name || 
-                       profile?.metadata?.display_name || 
-                       npub.slice(0, 8) + '...';
-              })
-          );
-          groupName = generateGroupTitle(participantNames);
-        }
-
-        const hasUnread = lastReceivedTime > (conv.lastReadAt || 0);
-
-        return {
-          id: conv.id,
-          isGroup: true,
-          name: groupName,
-          participants: conv.participants,
-          hasUnread,
-          lastMessageTime: lastMsgTime,
-          lastMessageText: lastMessageText || undefined,
-        };
-      }),
-    );
-
-    // 3. Build items for orphaned archived 1-on-1 chats (contact deleted but archive exists)
-    const contactNpubs = new Set(dbContacts.map(c => c.npub));
-    const groupIds = new Set(groupConversations.map(conv => conv.id));
     const archivedIds = get(archivedConversationIds);
-
     const orphanedArchiveNpubs = [...archivedIds].filter(
-      id => !contactNpubs.has(id) && !groupIds.has(id) && !isGroupConversationId(id)
+      id => !contactNpubSet.has(id) && !groupConvIdSet.has(id) && !isGroupConversationId(id)
+    );
+    const orphanNpubSet = new Set(orphanedArchiveNpubs);
+
+    // All 1-on-1 npubs that need last-message lookup
+    const allContactNpubs = [...contactNpubs, ...orphanedArchiveNpubs];
+    const allContactNpubSet = new Set(allContactNpubs);
+
+    const _t1 = performance.now();
+
+    // ── Phase 2: Fetch last message per contact/group in parallel ─────
+    // Use compound indexes with limit(1) — each is a single cursor seek.
+    // No wrapping transaction so IndexedDB can overlap reads.
+    const contactLastMsgs = new Map<string, Message>();
+    const groupLastMsgs = new Map<string, Message>();
+
+    const contactMsgPromises = allContactNpubs.map(async (npub) => {
+      // Fetch last 2 by [recipientNpub+sentAt], filter out group msgs, keep first
+      const items = await db.messages
+        .where('[recipientNpub+sentAt]')
+        .between([npub, -Infinity], [npub, Infinity], true, true)
+        .reverse()
+        .limit(2)
+        .toArray();
+      const nonGroup = items.find(m => !(m.conversationId && m.conversationId !== m.recipientNpub));
+      if (nonGroup) contactLastMsgs.set(npub, nonGroup);
+    });
+
+    const groupMsgPromises = groupConvIds.map(async (convId) => {
+      const items = await db.messages
+        .where('[conversationId+sentAt]')
+        .between([convId, -Infinity], [convId, Infinity], true, true)
+        .reverse()
+        .limit(1)
+        .toArray();
+      if (items[0]) groupLastMsgs.set(convId, items[0]);
+    });
+
+    await Promise.all([...contactMsgPromises, ...groupMsgPromises]);
+
+    const _t2 = performance.now();
+
+    // ── Phase 3: Batch-fetch all profiles ────────────────────────────
+    // Collect all npubs we need profiles for: contacts, orphans, group participants, group message senders
+    const profileNpubs = new Set(allContactNpubs);
+    for (const conv of groupConversations) {
+      for (const p of conv.participants) profileNpubs.add(p);
+    }
+    for (const [, msg] of groupLastMsgs) {
+      if (msg.senderNpub) profileNpubs.add(msg.senderNpub);
+    }
+    // Also collect npubs mentioned in message previews
+    for (const [, msg] of contactLastMsgs) {
+      if (msg.message) {
+        for (const m of msg.message.matchAll(npubMentionRegex)) profileNpubs.add(m[1]);
+      }
+    }
+    for (const [, msg] of groupLastMsgs) {
+      if (msg.message) {
+        for (const m of msg.message.matchAll(npubMentionRegex)) profileNpubs.add(m[1]);
+      }
+    }
+
+    const profileNpubArr = [...profileNpubs];
+    const bulkProfiles = await db.profiles.bulkGet(profileNpubArr);
+    const profileCache = new Map<string, Profile | undefined>();
+    for (let i = 0; i < profileNpubArr.length; i++) {
+      profileCache.set(profileNpubArr[i], bulkProfiles[i] ?? undefined);
+    }
+
+    const _t3 = performance.now();
+
+    // ── Phase 4: Build contact items (synchronous, no DB reads) ──────
+    const contactItems: ChatListItem[] = dbContacts.map(c =>
+      buildContactChatItem(
+        c.npub, c.lastReadAt, c.lastActivityAt,
+        profileCache.get(c.npub), contactLastMsgs.get(c.npub),
+        profileCache,
+      ),
     );
 
-    const orphanedArchiveItems: ChatListItem[] = await Promise.all(
-      orphanedArchiveNpubs.map(npub => buildContactChatItem(npub, Date.now(), undefined)),
+    // ── Phase 5: Build group items (synchronous using cache) ─────────
+    const groupItems: ChatListItem[] = groupConversations.map(conv => {
+      const lastMsg = groupLastMsgs.get(conv.id);
+      const lastMsgTime = lastMsg ? lastMsg.sentAt : conv.lastActivityAt;
+      const lastReceivedTime = (lastMsg && lastMsg.direction === "received") ? lastMsg.sentAt : 0;
+
+      let lastMessageText = "";
+      if (lastMsg) {
+        if (lastMsg.fileUrl && lastMsg.fileType) {
+          lastMessageText = getMediaPreviewLabel(lastMsg.fileType);
+        } else if (lastMsg.location) {
+          lastMessageText = getLocationPreviewLabel();
+        } else {
+          lastMessageText = (lastMsg.message || "").replace(/\s+/g, " ").trim();
+        }
+
+        if (lastMessageText && lastMsg.direction === "sent") {
+          lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
+        } else if (lastMessageText && lastMsg.senderNpub) {
+          const senderProfile = profileCache.get(lastMsg.senderNpub);
+          const senderName = senderProfile?.metadata?.name ||
+                             senderProfile?.metadata?.display_name ||
+                             lastMsg.senderNpub.slice(0, 8) + '...';
+          lastMessageText = `${senderName}: ${lastMessageText}`;
+        }
+      }
+
+      if (lastMessageText) {
+        lastMessageText = replaceNpubMentionsInPreview(lastMessageText, profileCache);
+      }
+
+      // Generate group title from participants or use stored subject
+      let groupName = conv.subject;
+      if (!groupName) {
+        const participantNames = conv.participants
+          .filter((p: string) => p !== $currentUser?.npub)
+          .slice(0, 5)
+          .map((npub: string) => {
+            const profile = profileCache.get(npub);
+            return profile?.metadata?.name ||
+                   profile?.metadata?.display_name ||
+                   npub.slice(0, 8) + '...';
+          });
+        groupName = generateGroupTitle(participantNames);
+      }
+
+      const hasUnread = lastReceivedTime > (conv.lastReadAt || 0);
+
+      return {
+        id: conv.id,
+        isGroup: true,
+        name: groupName,
+        participants: conv.participants,
+        hasUnread,
+        lastMessageTime: lastMsgTime,
+        lastMessageText: lastMessageText || undefined,
+      };
+    });
+
+    // ── Phase 6: Build orphaned archive items (synchronous) ──────────
+    const orphanedArchiveItems: ChatListItem[] = orphanedArchiveNpubs.map(npub =>
+      buildContactChatItem(
+        npub, Date.now(), undefined,
+        profileCache.get(npub), contactLastMsgs.get(npub),
+        profileCache,
+      ),
     );
 
-    // 4. Combine and sort all chat items
+    const _t4 = performance.now();
+
+    // ── Phase 7: Combine, filter, sort ───────────────────────────────
     const allItems = [...contactItems, ...groupItems, ...orphanedArchiveItems];
-    
-    // Filter out items with no messages
     const itemsWithMessages = allItems.filter(item => item.lastMessageTime > 0);
-
-    // Sort by last message time (most recent first)
     const sortedItems = itemsWithMessages.sort(
       (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0),
     );
-    
-    console.log(
-      "ChatList: Updating with",
-      sortedItems.length,
-      "items (contacts:",
-      contactItems.filter(c => c.lastMessageTime > 0).length,
-      ", groups:",
-      groupItems.length,
-      ", orphaned archives:",
-      orphanedArchiveItems.filter(a => a.lastMessageTime > 0).length,
-      ")",
-    );
-    
+
     chatItems = sortedItems;
+    const _tEnd = performance.now();
+
+    console.log(
+      `[ChatList perf] total=${(_tEnd - _tTotal).toFixed(1)}ms | ids=${(_t1 - _tTotal).toFixed(1)}ms | msgFetch=${(_t2 - _t1).toFixed(1)}ms (${allContactNpubs.length}c+${groupConvIds.length}g) | profiles=${(_t3 - _t2).toFixed(1)}ms (${profileCache.size}) | build=${(_t4 - _t3).toFixed(1)}ms | sort=${(_tEnd - _t4).toFixed(1)}ms`,
+    );
   }
 
   // Sync contacts and group conversations from DB
   // Use onMount instead of $effect to avoid infinite loop when updating store
   onMount(() => {
-    console.log("ChatList: Setting up liveQuery subscription");
+    const _mountTime = performance.now();
+    console.log("[ChatList perf] onMount fired");
 
     // Watch contacts table changes for reactivity
     const contactsSub = liveQuery(() => {
-      console.log("ChatList: liveQuery triggered - contacts table changed");
+      console.log(`[ChatList perf] liveQuery callback: ${(performance.now() - _mountTime).toFixed(1)}ms after mount`);
       return contactRepo.getContacts();
     }).subscribe(async (dbContacts) => {
       await refreshChatList(dbContacts as ContactItem[]);
+      console.log(`[ChatList perf] render complete: ${(performance.now() - _mountTime).toFixed(1)}ms after mount`);
     });
 
     const handleNewMessage = async () => {
