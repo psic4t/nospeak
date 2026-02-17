@@ -476,6 +476,13 @@ import type { Conversation } from '$lib/db/db';
 
       // Auto-add unknown contacts
       await this.autoAddContact(message.recipientNpub, true);
+
+      // Mark contact activity for received 1-on-1 messages so ChatList
+      // can use lastActivityAt for unread indicators without scanning messages
+      const isGroupMsg = message.conversationId && isGroupConversationId(message.conversationId);
+      if (!isGroupMsg) {
+        await contactRepo.markActivity(message.recipientNpub, rumor.created_at * 1000);
+      }
     }
   }
 
@@ -781,6 +788,14 @@ import type { Conversation } from '$lib/db/db';
             // For sent: recipientNpub is the recipient
             for (const message of messagesToSave) {
               await this.autoAddContact(message.recipientNpub, false);
+
+              // Mark contact activity for received 1-on-1 messages
+              if (message.direction === 'received') {
+                const isGroupMsg = message.conversationId && isGroupConversationId(message.conversationId);
+                if (!isGroupMsg) {
+                  await contactRepo.markActivity(message.recipientNpub, message.sentAt);
+                }
+              }
 
               // Use conversationId for unread tracking (works for both 1-on-1 and groups)
               const historyUnreadKey = message.conversationId || message.recipientNpub;

@@ -17,8 +17,11 @@ export class ContactRepository {
     }
 
     public async markActivity(npub: string, timestamp?: number) {
+        const ts = timestamp ?? Date.now();
+        const existing = await db.contacts.get(npub);
+        if (existing && (existing.lastActivityAt || 0) >= ts) return;
         await db.contacts.update(npub, {
-            lastActivityAt: timestamp ?? Date.now()
+            lastActivityAt: ts
         });
     }
 
