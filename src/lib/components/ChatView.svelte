@@ -457,9 +457,9 @@
      }
    });
 
-  let chatRoot: HTMLElement;
-  let chatContainer: HTMLElement;
-  let inputElement: HTMLTextAreaElement;
+  let chatRoot = $state<HTMLElement>(undefined!);
+  let chatContainer = $state<HTMLElement>(undefined!);
+  let inputElement = $state<HTMLTextAreaElement>(undefined!);
   let currentTime = $state(Date.now());
    let relayStatusTimeout: number | null = null;
    
