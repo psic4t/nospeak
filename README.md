@@ -121,7 +121,7 @@ src/
 Create `.env` file for local development (restart the server to apply changes):
 
 ```env
-# Runtime-configurable defaults (served to clients via GET /api/runtime-config)
+# Runtime-configurable defaults (embedded via SSR at page load)
 # Relays MUST use wss:// and servers MUST use https://
 NOSPEAK_DISCOVERY_RELAYS=wss://nostr.data.haus,wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net,wss://purplepag.es
 NOSPEAK_DEFAULT_MESSAGING_RELAYS=wss://nostr.data.haus,wss://nos.lol,wss://relay.damus.io
@@ -133,7 +133,7 @@ NOSPEAK_WEB_APP_BASE_URL=https://nospeak.chat
 
 ### Docker Compose runtime configuration
 
-The Node server reads these values from `process.env` at startup and serves the effective config to the web client via `GET /api/runtime-config` (same-origin). Update the environment values and recreate the container to apply changes.
+The Node server reads these values from `process.env` at startup and embeds them in the initial page via SSR. Update the environment values and recreate the container to apply changes.
 
 ```yaml
 services:

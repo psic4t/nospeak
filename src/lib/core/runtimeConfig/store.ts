@@ -44,12 +44,32 @@ function isRuntimeConfig(value: unknown): value is RuntimeConfig {
     );
 }
 
-export async function initRuntimeConfig(fetchImpl: typeof fetch = fetch): Promise<void> {
+/**
+ * Initialize the runtime config store.
+ *
+ * When `serverConfig` is provided (from +layout.server.ts SSR data),
+ * the store is set directly — no HTTP fetch needed.
+ *
+ * When called without arguments (Android/static builds where SSR data
+ * is unavailable), falls back to hardcoded defaults with an optional
+ * PUBLIC_WEB_APP_BASE_URL build-time override.
+ */
+export function initRuntimeConfig(serverConfig?: unknown): void {
     if (typeof window === 'undefined') {
         return;
     }
 
-    // Preserve existing Android/static build-time configuration when present.
+    // If server-provided config is available (SSR), use it directly.
+    if (serverConfig && isRuntimeConfig(serverConfig)) {
+        const normalizedWebBase = normalizeHttpsOrigin(serverConfig.webAppBaseUrl) ?? DEFAULT_RUNTIME_CONFIG.webAppBaseUrl;
+        runtimeConfig.set({
+            ...serverConfig,
+            webAppBaseUrl: normalizedWebBase
+        });
+        return;
+    }
+
+    // Fallback for Android/static builds: apply build-time env var override.
     try {
         const envBase = (import.meta.env.PUBLIC_WEB_APP_BASE_URL as string | undefined) ?? '';
         const normalized = envBase ? normalizeHttpsOrigin(envBase) : null;
@@ -61,34 +81,6 @@ export async function initRuntimeConfig(fetchImpl: typeof fetch = fetch): Promis
         }
     } catch {
         // ignore
-    }
-
-    try {
-        const response = await fetchImpl('/api/runtime-config', {
-            headers: {
-                accept: 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Runtime config fetch failed: ${response.status}`);
-        }
-
-        const json = (await response.json()) as unknown;
-
-        if (!isRuntimeConfig(json)) {
-            throw new Error('Runtime config response invalid');
-        }
-
-        // Normalize https origins in case server format changes.
-        const normalizedWebBase = normalizeHttpsOrigin(json.webAppBaseUrl) ?? DEFAULT_RUNTIME_CONFIG.webAppBaseUrl;
-
-        runtimeConfig.set({
-            ...json,
-            webAppBaseUrl: normalizedWebBase
-        });
-    } catch (e) {
-        console.warn('Failed to initialize runtime config; using defaults', e);
     }
 }
 
