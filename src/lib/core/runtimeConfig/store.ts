@@ -47,23 +47,26 @@ function isRuntimeConfig(value: unknown): value is RuntimeConfig {
 /**
  * Initialize the runtime config store.
  *
- * When `serverConfig` is provided (from +layout.server.ts SSR data),
- * the store is set directly — no HTTP fetch needed.
+ * On web/Docker (SSR), the server hook injects a `<script>` tag that sets
+ * `window.__NOSPEAK_CONFIG__` with the resolved config before any component
+ * code runs. This function reads it synchronously — no load function, no
+ * HTTP fetch, zero navigation overhead.
  *
- * When called without arguments (Android/static builds where SSR data
- * is unavailable), falls back to hardcoded defaults with an optional
- * PUBLIC_WEB_APP_BASE_URL build-time override.
+ * On Android/static builds where the injected script is absent, falls back
+ * to hardcoded defaults with an optional PUBLIC_WEB_APP_BASE_URL build-time
+ * override.
  */
-export function initRuntimeConfig(serverConfig?: unknown): void {
+export function initRuntimeConfig(): void {
     if (typeof window === 'undefined') {
         return;
     }
 
-    // If server-provided config is available (SSR), use it directly.
-    if (serverConfig && isRuntimeConfig(serverConfig)) {
-        const normalizedWebBase = normalizeHttpsOrigin(serverConfig.webAppBaseUrl) ?? DEFAULT_RUNTIME_CONFIG.webAppBaseUrl;
+    // Read config injected by hooks.server.ts into the HTML <head>.
+    const injected = (window as unknown as Record<string, unknown>).__NOSPEAK_CONFIG__;
+    if (injected && isRuntimeConfig(injected)) {
+        const normalizedWebBase = normalizeHttpsOrigin(injected.webAppBaseUrl) ?? DEFAULT_RUNTIME_CONFIG.webAppBaseUrl;
         runtimeConfig.set({
-            ...serverConfig,
+            ...injected,
             webAppBaseUrl: normalizedWebBase
         });
         return;

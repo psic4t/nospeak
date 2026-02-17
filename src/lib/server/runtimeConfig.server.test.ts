@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RUNTIME_CONFIG } from '$lib/core/runtimeConfig/defaults';
-import { getRuntimeConfigFromEnv } from './runtimeConfig.server';
+import { getRuntimeConfigFromEnv } from '$lib/core/runtimeConfig/env';
 
 describe('getRuntimeConfigFromEnv', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

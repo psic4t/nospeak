@@ -42,7 +42,7 @@
 
    const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
  
-   let { children, data } = $props();
+   let { children } = $props();
 
   let isInitialized = $state(false);
   let showProfileRefreshBanner = $state(false);
@@ -114,7 +114,7 @@
 
   onMount(async () => {
     initLanguage();
-    initRuntimeConfig(data?.runtimeConfig);
+    initRuntimeConfig();
  
     configureAndroidStatusBar().catch((error) => {
       console.warn('Android status bar configuration failed', error);
