@@ -404,6 +404,29 @@
     );
   }
 
+  // Concurrent refresh guard: only one refreshChatList runs at a time.
+  // If a second is requested while one is running, it queues and runs after.
+  let refreshInProgress = false;
+  let pendingRefreshContacts: ContactItem[] | null = null;
+
+  async function guardedRefreshChatList(dbContacts: ContactItem[]): Promise<void> {
+    if (refreshInProgress) {
+      pendingRefreshContacts = dbContacts;
+      return;
+    }
+    refreshInProgress = true;
+    try {
+      await refreshChatList(dbContacts);
+    } finally {
+      refreshInProgress = false;
+      if (pendingRefreshContacts) {
+        const queued = pendingRefreshContacts;
+        pendingRefreshContacts = null;
+        await guardedRefreshChatList(queued);
+      }
+    }
+  }
+
   // Sync contacts and group conversations from DB
   // Use onMount instead of $effect to avoid infinite loop when updating store
   onMount(() => {
@@ -415,49 +438,31 @@
       console.log(`[ChatList perf] liveQuery callback: ${(performance.now() - _mountTime).toFixed(1)}ms after mount`);
       return contactRepo.getContacts();
     }).subscribe(async (dbContacts) => {
-      await refreshChatList(dbContacts as ContactItem[]);
+      await guardedRefreshChatList(dbContacts as ContactItem[]);
       console.log(`[ChatList perf] render complete: ${(performance.now() - _mountTime).toFixed(1)}ms after mount`);
     });
 
-    const handleNewMessage = async () => {
+    const handleEvent = async () => {
       try {
         const dbContacts = await contactRepo.getContacts();
-        await refreshChatList(dbContacts as ContactItem[]);
+        await guardedRefreshChatList(dbContacts as ContactItem[]);
       } catch (e) {
-        console.error("ChatList: Failed to refresh after new message", e);
-      }
-    };
-
-    const handleProfilesUpdated = async () => {
-      try {
-        const dbContacts = await contactRepo.getContacts();
-        await refreshChatList(dbContacts as ContactItem[]);
-      } catch (e) {
-        console.error("ChatList: Failed to refresh after profiles updated", e);
-      }
-    };
-
-    const handleConversationUpdated = async () => {
-      try {
-        const dbContacts = await contactRepo.getContacts();
-        await refreshChatList(dbContacts as ContactItem[]);
-      } catch (e) {
-        console.error("ChatList: Failed to refresh after conversation updated", e);
+        console.error("ChatList: Failed to refresh after event", e);
       }
     };
 
     if (typeof window !== "undefined") {
       window.addEventListener(
         "nospeak:new-message",
-        handleNewMessage as EventListener,
+        handleEvent as EventListener,
       );
       window.addEventListener(
         "nospeak:profiles-updated",
-        handleProfilesUpdated as EventListener,
+        handleEvent as EventListener,
       );
       window.addEventListener(
         "nospeak:conversation-updated",
-        handleConversationUpdated as EventListener,
+        handleEvent as EventListener,
       );
     }
 
@@ -467,15 +472,15 @@
       if (typeof window !== "undefined") {
         window.removeEventListener(
           "nospeak:new-message",
-          handleNewMessage as EventListener,
+          handleEvent as EventListener,
         );
         window.removeEventListener(
           "nospeak:profiles-updated",
-          handleProfilesUpdated as EventListener,
+          handleEvent as EventListener,
         );
         window.removeEventListener(
           "nospeak:conversation-updated",
-          handleConversationUpdated as EventListener,
+          handleEvent as EventListener,
         );
       }
     };
