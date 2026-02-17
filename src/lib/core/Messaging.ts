@@ -22,7 +22,7 @@ import { conversationRepo, deriveConversationId, isGroupConversationId, generate
 import type { Conversation } from '$lib/db/db';
  
  export class MessagingService {
-   private debug: boolean = true;
+    private debug: boolean = false;
     private isFetchingHistory: boolean = false;
     private lastHistoryFetch: number = 0;
     private readonly HISTORY_FETCH_DEBOUNCE = 5000; // 5 seconds
