@@ -234,33 +234,16 @@
         }
 
         try {
-            let sharedViaFile = false;
+            // Best-effort cleanup of previous decrypted share files before creating a new one
+            await cleanupAndroidDecryptedShareFiles();
 
-            if (imageViewerUrl.startsWith('blob:')) {
-                try {
-                    // Best-effort cleanup of previous decrypted share files before creating a new one
-                    await cleanupAndroidDecryptedShareFiles();
+            const filename = `image-${Date.now()}.jpg`;
+            const uri = await createAndroidShareFileFromUrl(imageViewerUrl, filename);
 
-                    const filename = `image-${Date.now()}.jpg`;
-                    const uri = await createAndroidShareFileFromUrl(imageViewerUrl, filename);
-
-                    await nativeDialogService.share({
-                        files: [uri],
-                        text: 'Shared from nospeak'
-                    });
-
-                    sharedViaFile = true;
-                } catch (innerError) {
-                    console.error('Failed to share image via Android file share, falling back to URL:', innerError);
-                }
-            }
-
-            if (!sharedViaFile) {
-                await nativeDialogService.share({
-                    url: imageViewerOriginalUrl || imageViewerUrl,
-                    text: 'Shared from nospeak'
-                });
-            }
+            await nativeDialogService.share({
+                files: [uri],
+                text: 'Shared from nospeak'
+            });
         } catch (e) {
             console.error('Failed to share image from viewer:', e);
 
