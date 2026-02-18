@@ -45,22 +45,37 @@ export function computePeaksFromAudioBuffer(buffer: AudioBuffer, targetCount: nu
     }
 
     const samplesPerBar = Math.max(1, Math.floor(totalSamples / targetCount));
-    const peaks: number[] = [];
+    const rawRms: number[] = [];
 
+    // First pass: compute RMS (root mean square) per bucket.
+    // RMS represents average energy which varies much more than peak amplitude
+    // across speech segments, giving visually distinct bar heights.
     for (let i = 0; i < targetCount; i++) {
         const start = i * samplesPerBar;
         const end = Math.min(totalSamples, start + samplesPerBar);
+        const count = (end - start) * channelCount;
 
-        let max = 0;
+        let sumSq = 0;
         for (let c = 0; c < channelCount; c++) {
             const data = buffer.getChannelData(c);
             for (let s = start; s < end; s++) {
-                max = Math.max(max, Math.abs(data[s] ?? 0));
+                const v = data[s] ?? 0;
+                sumSq += v * v;
             }
         }
 
-        // Slightly lift small peaks so silence still renders.
-        const lifted = Math.min(1, 0.08 + max * 1.15);
+        rawRms.push(count > 0 ? Math.sqrt(sumSq / count) : 0);
+    }
+
+    // Second pass: normalize against global max so loud recordings
+    // still show visual contrast between quieter and louder moments.
+    const globalMax = Math.max(...rawRms);
+    const peaks: number[] = [];
+
+    for (let i = 0; i < targetCount; i++) {
+        const normalized = globalMax > 0 ? (rawRms[i] ?? 0) / globalMax : 0;
+        // Floor of 0.08 ensures silence still renders visible bars.
+        const lifted = 0.08 + normalized * 0.92;
         peaks.push(clamp01(lifted));
     }
 
