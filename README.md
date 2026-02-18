@@ -234,6 +234,7 @@ Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 
 ### Identity, Metadata & Discovery
 - **NIP-05**: Mapping Nostr keys to DNS-based internet identifiers
+- **NIP-42**: Authentication to relays 
 - **NIP-50**: Search relays for contact discovery
 - **NIP-65**: Relay list metadata for messaging/mailbox relays
 
