@@ -605,8 +605,25 @@ export class AuthService {
                 return true;
             } else if (method === 'nip07') {
                 if (!window.nostr) {
-                    // Extension not available, cannot restore
-                    return false;
+                    // Extension may still be loading; poll briefly before giving up
+                    const available = await new Promise<boolean>((resolve) => {
+                        const interval = 100;
+                        const maxWait = 1500;
+                        let elapsed = 0;
+                        const timer = setInterval(() => {
+                            elapsed += interval;
+                            if (window.nostr) {
+                                clearInterval(timer);
+                                resolve(true);
+                            } else if (elapsed >= maxWait) {
+                                clearInterval(timer);
+                                resolve(false);
+                            }
+                        }, interval);
+                    });
+                    if (!available) {
+                        return false;
+                    }
                 }
 
                 // Get the expected pubkey from storage (if we have it from previous login)
