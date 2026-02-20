@@ -426,6 +426,7 @@
     } | null;
 
     let preview = $state<UrlPreviewState>(null);
+    let previewStatus = $state<'idle' | 'loading' | 'loaded' | 'failed'>('idle');
     let previewUrl = $derived(fileUrl ? null : getFirstNonMediaUrl(content));
  
      let container: HTMLElement | null = null;
@@ -503,20 +504,29 @@
     $effect(() => {
         if (!previewUrl) {
             preview = null;
+            previewStatus = 'idle';
             lastPreviewUrl = null;
             if (fetchTimeout) clearTimeout(fetchTimeout);
             return;
         }
         if (!getUrlPreviewsEnabled()) {
             preview = null;
+            previewStatus = 'idle';
             lastPreviewUrl = null;
             if (fetchTimeout) clearTimeout(fetchTimeout);
             return;
         }
         if (typeof window === 'undefined') {
             preview = null;
+            previewStatus = 'idle';
             return;
         }
+
+        // Reserve space immediately while waiting for visibility/fetch
+        if (previewStatus === 'idle') {
+            previewStatus = 'loading';
+        }
+
         if (!isVisible) {
             if (fetchTimeout) {
                 clearTimeout(fetchTimeout);
@@ -539,6 +549,7 @@
                     const response = await fetch(getUrlPreviewApiUrl(previewUrl));
                     if (!response.ok || response.status === 204) {
                         preview = null;
+                        previewStatus = 'failed';
                         return;
                     }
                     const data = (await response.json()) as {
@@ -550,6 +561,7 @@
     
                     if (!data || (!data.title && !data.description)) {
                         preview = null;
+                        previewStatus = 'failed';
                         return;
                     }
     
@@ -562,8 +574,10 @@
                         image: data.image,
                         domain: parsedUrl.hostname
                     };
+                    previewStatus = 'loaded';
                 } catch {
                     preview = null;
+                    previewStatus = 'failed';
                 }
             })();
         }, 300); // 300ms debounce
@@ -1021,6 +1035,20 @@
                      </div>
                  </a>
              </div>
+         {:else if previewStatus === 'loading'}
+            <!-- Skeleton placeholder: reserves space while URL preview loads -->
+            <div class="mt-2 mb-1 overflow-hidden break-anywhere">
+                <div class="block w-full max-w-full overflow-hidden rounded-xl bg-white/20 dark:bg-slate-800/50 md:bg-white/10 md:dark:bg-slate-800/30 md:backdrop-blur-sm border border-gray-200/50 dark:border-slate-700/50">
+                    <div class="flex flex-col sm:flex-row gap-0 sm:gap-0 h-auto sm:h-28">
+                        <div class="w-full sm:w-28 sm:shrink-0 h-32 sm:h-full bg-gray-200/50 dark:bg-slate-700/50 animate-pulse"></div>
+                        <div class="min-w-0 p-3 flex flex-col justify-center gap-2 overflow-hidden">
+                            <div class="h-4 w-3/4 rounded bg-gray-200/60 dark:bg-slate-700/60 animate-pulse"></div>
+                            <div class="h-3 w-full rounded bg-gray-200/40 dark:bg-slate-700/40 animate-pulse"></div>
+                            <div class="h-3 w-1/3 rounded bg-gray-200/30 dark:bg-slate-700/30 animate-pulse"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
          {/if}
      {/if}
  </div>
