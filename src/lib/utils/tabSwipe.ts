@@ -36,11 +36,16 @@ interface TabSwipeOptions {
 export function tabSwipe(node: HTMLElement, options: TabSwipeOptions) {
     // Only enable on Android
     if (!isAndroidCapacitorShell()) {
-        // Still position the container for desktop
-        applyTranslate(options.activeIndex, false);
+        // Still position the container for desktop (inline to avoid TDZ with tabCount)
+        const setTranslate = (opts: TabSwipeOptions) => {
+            const pct = -(opts.activeIndex * 100) / opts.tabCount;
+            node.style.transition = 'none';
+            node.style.transform = `translateX(${pct}%)`;
+        };
+        setTranslate(options);
         return {
             update(newOptions: TabSwipeOptions) {
-                applyTranslate(newOptions.activeIndex, false);
+                setTranslate(newOptions);
             },
             destroy() {}
         };

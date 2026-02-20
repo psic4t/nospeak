@@ -25,7 +25,7 @@ export function deriveConversationId(participantPubkeys: string[], selfPubkey: s
     const allPubkeys = [...new Set([...participantPubkeys, selfPubkey])];
     const sorted = allPubkeys.sort();
     const concatenated = sorted.join('');
-    // Use sha256 directly with string - noble hashes accepts string or Uint8Array
+    // noble hashes v1 accepts string or Uint8Array
     const hashBytes = sha256(concatenated);
     const hashHex = bytesToHex(hashBytes);
     return hashHex.slice(0, 16);
