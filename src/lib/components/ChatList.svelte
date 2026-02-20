@@ -24,6 +24,7 @@
   import { getMediaPreviewLabel, getLocationPreviewLabel } from "$lib/utils/mediaPreview";
   import { getRelativeTime } from "$lib/utils/time";
   import { overscroll } from "$lib/utils/overscroll";
+  import { tabSwipe } from "$lib/utils/tabSwipe";
   import { db } from "$lib/db/db";
   import { archivedConversationIds, toggleArchive } from "$lib/stores/archive";
   import { archiveRepo } from "$lib/db/ArchiveRepository";
@@ -46,6 +47,26 @@
   let chatItems = $state<ChatListItem[]>([]);
   let filter = $state<'all' | 'unread' | 'groups' | 'archive'>('all');
   let archivesCount = $state(0);
+
+  // Tab swipe support
+  const tabValues = ['all', 'unread', 'groups', 'archive'] as const;
+  let tabIndex = $derived(tabValues.indexOf(filter));
+  let swipeProgress = $state<number | undefined>(undefined);
+
+  function handleTabIndexChange(index: number): void {
+    filter = tabValues[index];
+  }
+
+  function handleSwipeProgress(progress: number): void {
+    swipeProgress = progress;
+  }
+
+  // Reset swipe progress when filter changes (e.g. via tap)
+  $effect(() => {
+    // Reading filter to subscribe
+    filter;
+    swipeProgress = undefined;
+  });
 
   // Subscribe to archives count
   $effect(() => {
@@ -79,6 +100,12 @@
     filter === 'groups' ? chatItems.filter(item => item.isGroup && !$archivedConversationIds.has(item.id)) :
     chatItems.filter(item => $archivedConversationIds.has(item.id))
   );
+
+  // Pre-computed filtered lists for each panel (used in multi-panel swipe layout)
+  let allItems = $derived(chatItems.filter(item => !$archivedConversationIds.has(item.id)));
+  let unreadItems = $derived(chatItems.filter(item => item.hasUnread && !$archivedConversationIds.has(item.id)));
+  let groupItems = $derived(chatItems.filter(item => item.isGroup && !$archivedConversationIds.has(item.id)));
+  let archiveItems = $derived(chatItems.filter(item => $archivedConversationIds.has(item.id)));
 
   const isAndroidApp = isAndroidNative();
   let myPicture = $state<string | undefined>(undefined);
@@ -633,45 +660,151 @@
       ]}
       ariaLabel="Filter chats"
       class="px-2"
+      progress={swipeProgress}
     />
   </div>
 
-  <div class="flex-1 overflow-y-auto custom-scrollbar native-scroll pt-[calc(120px+env(safe-area-inset-top))] pb-safe-offset-16" use:overscroll>
-    {#if chatItems.length === 0}
-      <div class="space-y-3 p-3 animate-pulse">
-        {#each Array(5) as _}
-          <div
-            class="flex items-center gap-3 p-3 rounded-full bg-[rgb(var(--color-lavender-rgb)/0.10)] dark:bg-[rgb(var(--color-lavender-rgb)/0.14)]"
-          >
-            <div
-              class="w-12 h-12 rounded-full bg-gray-200/50 dark:bg-slate-700/50"
-            ></div>
-            <div class="flex-1 space-y-2">
-              <div
-                class="h-4 bg-gray-200/50 dark:bg-slate-700/50 rounded w-2/3"
-              ></div>
-              <div
-                class="h-3 bg-gray-200/50 dark:bg-slate-700/50 rounded w-1/3"
-              ></div>
-            </div>
-          </div>
-        {/each}
-        <div class="text-center text-sm text-gray-700 dark:text-slate-400 mt-4">
-          {$t("chats.emptyHint")}
-        </div>
-      </div>
-    {:else if filteredChatItems.length === 0}
-      <div class="text-center text-sm text-gray-500 dark:text-slate-400 mt-8 px-4">
-        {#if filter === 'unread'}
-          {$t("chats.emptyUnread")}
-        {:else if filter === 'groups'}
-          {$t("chats.emptyGroups")}
-        {:else if filter === 'archive'}
-          {$t("chats.emptyArchive")}
+  {#snippet chatItemRow(item: ChatListItem)}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      onclick={() => selectChat(item.id)}
+      oncontextmenu={(e) => handleContextMenu(e, item.id)}
+      onmousedown={(e) => handleMouseDown(e, item.id)}
+      onmouseup={handleMouseUp}
+      onmouseleave={handleMouseUp}
+      onselectstart={(e) => {
+        if (!isAndroidApp) return;
+        e.preventDefault();
+      }}
+      class:select-none={isAndroidApp}
+      class={`p-3 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-200 ease-out group active:scale-[0.98] ${
+        page.url.pathname.includes(item.id)
+          ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-gray-900 dark:text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
+          : "bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
+      }`}
+    >
+      <div class="relative shrink-0">
+        {#if item.isGroup}
+          <GroupAvatar
+            participants={item.participants || []}
+            size="md"
+            class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+          />
+        {:else}
+          <Avatar
+            npub={item.id}
+            src={item.picture}
+            size="md"
+            class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+          />
+        {/if}
+        {#if item.hasUnread}
+          <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[rgb(var(--color-base-rgb))]"></div>
         {/if}
       </div>
-    {/if}
-    {#if favoritesCount > 0 && filter === 'all'}
+
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1 min-w-0">
+          <span
+            class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]"
+            >{item.name}</span
+          >
+          {#if item.isGroup}
+            <!-- Group icon indicator -->
+            <svg
+              class="shrink-0 text-gray-600 dark:text-slate-300"
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          {:else if item.nip05Status === "valid"}
+            <svg
+              class="shrink-0 text-green-500"
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <path d="m9 12 2 2 4-4"></path>
+            </svg>
+          {/if}
+          {#if item.lastMessageTime > 0}
+            <span
+              class="ml-auto text-xs text-gray-500 dark:text-slate-400 shrink-0"
+              title={new Date(item.lastMessageTime).toLocaleString()}
+            >
+              {getRelativeTime(item.lastMessageTime, currentTime)}
+            </span>
+          {/if}
+          <button
+            type="button"
+            class="hidden md:inline-flex py-1 pr-0 pl-px rounded-l hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors opacity-0 group-hover:opacity-100"
+            onclick={(e) => handleDotClick(e, item.id)}
+            aria-label="Chat options"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="2"/>
+              <circle cx="12" cy="12" r="2"/>
+              <circle cx="12" cy="19" r="2"/>
+            </svg>
+          </button>
+        </div>
+        {#if item.lastMessageText}
+          <div
+            class="typ-body text-gray-800 dark:text-slate-300 truncate"
+          >
+            {parseMarkdownPreview(item.lastMessageText)}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/snippet}
+
+  {#snippet loadingSkeleton()}
+    <div class="space-y-3 p-3 animate-pulse">
+      {#each Array(5) as _}
+        <div
+          class="flex items-center gap-3 p-3 rounded-full bg-[rgb(var(--color-lavender-rgb)/0.10)] dark:bg-[rgb(var(--color-lavender-rgb)/0.14)]"
+        >
+          <div
+            class="w-12 h-12 rounded-full bg-gray-200/50 dark:bg-slate-700/50"
+          ></div>
+          <div class="flex-1 space-y-2">
+            <div
+              class="h-4 bg-gray-200/50 dark:bg-slate-700/50 rounded w-2/3"
+            ></div>
+            <div
+              class="h-3 bg-gray-200/50 dark:bg-slate-700/50 rounded w-1/3"
+            ></div>
+          </div>
+        </div>
+      {/each}
+      <div class="text-center text-sm text-gray-700 dark:text-slate-400 mt-4">
+        {$t("chats.emptyHint")}
+      </div>
+    </div>
+  {/snippet}
+
+  {#snippet favoritesRow()}
+    {#if favoritesCount > 0}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -689,119 +822,81 @@
         <span class="text-xs text-gray-500 dark:text-slate-400">{favoritesCount}</span>
       </div>
     {/if}
-    {#each filteredChatItems as item}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        onclick={() => selectChat(item.id)}
-        oncontextmenu={(e) => handleContextMenu(e, item.id)}
-        onmousedown={(e) => handleMouseDown(e, item.id)}
-        onmouseup={handleMouseUp}
-        onmouseleave={handleMouseUp}
-        onselectstart={(e) => {
-          if (!isAndroidApp) return;
-          e.preventDefault();
-        }}
-        class:select-none={isAndroidApp}
-        class={`p-3 mx-2 my-1.5 rounded-full cursor-pointer flex items-center gap-3 transition-all duration-200 ease-out group active:scale-[0.98] ${
-          page.url.pathname.includes(item.id)
-            ? "bg-[rgb(var(--color-lavender-rgb)/0.20)] dark:bg-[rgb(var(--color-lavender-rgb)/0.24)] text-gray-900 dark:text-[rgb(var(--color-text-rgb)/0.92)] shadow-sm hover:shadow hover:bg-[rgb(var(--color-lavender-rgb)/0.26)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.30)] active:bg-[rgb(var(--color-lavender-rgb)/0.32)] dark:active:bg-[rgb(var(--color-lavender-rgb)/0.36)]"
-            : "bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white"
-        }`}
-      >
-        <div class="relative shrink-0">
-          {#if item.isGroup}
-            <GroupAvatar
-              participants={item.participants || []}
-              size="md"
-              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
-            />
-          {:else}
-            <Avatar
-              npub={item.id}
-              src={item.picture}
-              size="md"
-              class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
-            />
-          {/if}
-          {#if item.hasUnread}
-            <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[rgb(var(--color-base-rgb))]"></div>
-          {/if}
-        </div>
+  {/snippet}
 
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1 min-w-0">
-            <span
-              class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]"
-              >{item.name}</span
-            >
-            {#if item.isGroup}
-              <!-- Group icon indicator -->
-              <svg
-                class="shrink-0 text-gray-600 dark:text-slate-300"
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-            {:else if item.nip05Status === "valid"}
-              <svg
-                class="shrink-0 text-green-500"
-                xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                <path d="m9 12 2 2 4-4"></path>
-              </svg>
-            {/if}
-            {#if item.lastMessageTime > 0}
-              <span
-                class="ml-auto text-xs text-gray-500 dark:text-slate-400 shrink-0"
-                title={new Date(item.lastMessageTime).toLocaleString()}
-              >
-                {getRelativeTime(item.lastMessageTime, currentTime)}
-              </span>
-            {/if}
-            <button
-              type="button"
-              class="hidden md:inline-flex py-1 pr-0 pl-px rounded-l hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors opacity-0 group-hover:opacity-100"
-              onclick={(e) => handleDotClick(e, item.id)}
-              aria-label="Chat options"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="5" r="2"/>
-                <circle cx="12" cy="12" r="2"/>
-                <circle cx="12" cy="19" r="2"/>
-              </svg>
-            </button>
+  <!-- Swipe container: horizontal flex with 4 panels, one per tab -->
+  <div class="flex-1 overflow-hidden pt-[calc(120px+env(safe-area-inset-top))]">
+    <div
+      class="flex h-full"
+      style="width: {tabValues.length * 100}%"
+      use:tabSwipe={{
+        tabCount: tabValues.length,
+        activeIndex: tabIndex,
+        onIndexChange: handleTabIndexChange,
+        onProgress: handleSwipeProgress
+      }}
+    >
+      <!-- Panel: All -->
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+        {#if chatItems.length === 0}
+          {@render loadingSkeleton()}
+        {:else if allItems.length === 0}
+          <div class="text-center text-sm text-gray-500 dark:text-slate-400 mt-8 px-4">
+            {$t("chats.emptyHint")}
           </div>
-          {#if item.lastMessageText}
-            <div
-              class="typ-body text-gray-800 dark:text-slate-300 truncate"
-            >
-              {parseMarkdownPreview(item.lastMessageText)}
-            </div>
-          {/if}
-        </div>
+        {:else}
+          {@render favoritesRow()}
+          {#each allItems as item (item.id)}
+            {@render chatItemRow(item)}
+          {/each}
+        {/if}
       </div>
-    {/each}
+
+      <!-- Panel: Unread -->
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+        {#if chatItems.length === 0}
+          {@render loadingSkeleton()}
+        {:else if unreadItems.length === 0}
+          <div class="text-center text-sm text-gray-500 dark:text-slate-400 mt-8 px-4">
+            {$t("chats.emptyUnread")}
+          </div>
+        {:else}
+          {#each unreadItems as item (item.id)}
+            {@render chatItemRow(item)}
+          {/each}
+        {/if}
+      </div>
+
+      <!-- Panel: Groups -->
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+        {#if chatItems.length === 0}
+          {@render loadingSkeleton()}
+        {:else if groupItems.length === 0}
+          <div class="text-center text-sm text-gray-500 dark:text-slate-400 mt-8 px-4">
+            {$t("chats.emptyGroups")}
+          </div>
+        {:else}
+          {#each groupItems as item (item.id)}
+            {@render chatItemRow(item)}
+          {/each}
+        {/if}
+      </div>
+
+      <!-- Panel: Archive -->
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+        {#if chatItems.length === 0}
+          {@render loadingSkeleton()}
+        {:else if archiveItems.length === 0}
+          <div class="text-center text-sm text-gray-500 dark:text-slate-400 mt-8 px-4">
+            {$t("chats.emptyArchive")}
+          </div>
+        {:else}
+          {#each archiveItems as item (item.id)}
+            {@render chatItemRow(item)}
+          {/each}
+        {/if}
+      </div>
+    </div>
   </div>
 
   <ConnectionStatus />

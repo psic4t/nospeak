@@ -13,18 +13,22 @@
         value = $bindable<string>(),
         tabs,
         ariaLabel = 'Tabs',
-        class: className = ''
+        class: className = '',
+        progress
     } = $props<{
         value?: string;
         tabs: TabItem[];
         ariaLabel?: string;
         class?: string;
+        /** Fractional tab index (0 to tabs.length-1) for smooth indicator interpolation during swipe. */
+        progress?: number;
     }>();
 
     let tablistEl = $state<HTMLDivElement | null>(null);
     let indicatorLeft = $state(0);
     let indicatorWidth = $state(0);
     let indicatorVisible = $state(false);
+    let indicatorAnimated = $state(true);
     let resizeObserver: ResizeObserver | null = null;
 
     // Drag-to-scroll state (desktop)
@@ -163,11 +167,61 @@
         selectTab(enabledTabs[nextIndex]);
     }
 
+    /**
+     * When `progress` is provided (during swipe), interpolate the indicator
+     * position between the two adjacent tab buttons for smooth tracking.
+     */
+    function updateIndicatorFromProgress(p: number): void {
+        if (!tablistEl || tabs.length === 0) return;
+
+        const buttons = tabs.map((tab: TabItem) => {
+            const selector = `button[data-tab-value="${cssEscape(tab.value)}"]`;
+            return tablistEl!.querySelector<HTMLButtonElement>(selector);
+        });
+
+        const floorIdx = Math.max(0, Math.min(tabs.length - 1, Math.floor(p)));
+        const ceilIdx = Math.min(tabs.length - 1, floorIdx + 1);
+        const frac = p - floorIdx;
+
+        const btnA = buttons[floorIdx];
+        const btnB = buttons[ceilIdx];
+        if (!btnA || !btnB) return;
+
+        const containerRect = tablistEl.getBoundingClientRect();
+        const scrollLeft = tablistEl.scrollLeft;
+        const inset = 14;
+
+        const rectA = btnA.getBoundingClientRect();
+        const rectB = btnB.getBoundingClientRect();
+
+        const leftA = rectA.left - containerRect.left + scrollLeft + inset;
+        const widthA = Math.max(24, rectA.width - inset * 2);
+        const leftB = rectB.left - containerRect.left + scrollLeft + inset;
+        const widthB = Math.max(24, rectB.width - inset * 2);
+
+        indicatorLeft = Math.max(0, leftA + (leftB - leftA) * frac);
+        indicatorWidth = Math.max(0, widthA + (widthB - widthA) * frac);
+        indicatorVisible = true;
+        indicatorAnimated = false;
+    }
+
     $effect(() => {
         // Ensure the underline follows selection changes.
         value;
         tabs.length;
-        void updateIndicator();
+
+        // When progress is undefined (no active swipe), use standard snap indicator
+        if (progress === undefined) {
+            indicatorAnimated = true;
+            void updateIndicator();
+        }
+    });
+
+    // Track progress changes for smooth interpolation during swipe
+    $effect(() => {
+        if (progress !== undefined) {
+            updateIndicatorFromProgress(progress);
+        }
     });
 
     // Update indicator when the tab container is scrolled.
@@ -246,7 +300,7 @@
 
         <div
             aria-hidden="true"
-            class="absolute bottom-0 h-[3px] rounded-full bg-[rgb(var(--color-lavender-rgb))] transition-[transform,width,opacity] duration-200 ease-out"
+            class="absolute bottom-0 h-[3px] rounded-full bg-[rgb(var(--color-lavender-rgb))] {indicatorAnimated ? 'transition-[transform,width,opacity] duration-200 ease-out' : ''}"
             style="width: {indicatorWidth}px; transform: translateX({indicatorLeft}px); opacity: {indicatorVisible ? 1 : 0};"
         ></div>
     </div>
