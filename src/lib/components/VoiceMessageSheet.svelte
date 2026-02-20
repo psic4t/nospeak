@@ -150,7 +150,14 @@
 
         cleanupPreview();
 
-        // Cleanup native recording
+        // Stop native recording if still active, then cleanup listeners
+        if (useNativeRecording && AndroidMicrophone) {
+            try {
+                await AndroidMicrophone.stopRecording();
+            } catch {
+                // May fail if not recording — that's fine
+            }
+        }
         await cleanupNativeListeners();
         nativeFilePath = null;
 
