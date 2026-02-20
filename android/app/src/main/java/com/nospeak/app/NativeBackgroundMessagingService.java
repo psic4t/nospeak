@@ -1251,6 +1251,10 @@ public class NativeBackgroundMessagingService extends Service {
                 shortcutAvailable ? shortcutConversationId : null
         );
 
+        // Refreshes (avatar upgrade, shortcut publish, energy profile transition)
+        // must never re-alert — the user already saw/heard the original notification.
+        builder.setOnlyAlertOnce(true);
+
         manager.notify(notificationId, builder.build());
     }
 
