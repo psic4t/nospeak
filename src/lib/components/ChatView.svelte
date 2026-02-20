@@ -1971,6 +1971,7 @@
 
   <div
     bind:this={chatContainer}
+    role="region"
     tabindex="-1"
     style="overflow-anchor: none;"
     class="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-safe-offset-28 pt-[calc(5rem+env(safe-area-inset-top))] space-y-4 custom-scrollbar native-scroll focus:outline-none focus:ring-0"

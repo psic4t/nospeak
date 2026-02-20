@@ -95,6 +95,11 @@
 
 <div
     bind:this={container}
+    role={seekable ? 'slider' : 'presentation'}
+    aria-valuemin={seekable ? 0 : undefined}
+    aria-valuemax={seekable ? 100 : undefined}
+    aria-valuenow={seekable ? Math.round(clampedProgress * 100) : undefined}
+    aria-label={seekable ? 'Audio seek bar' : undefined}
     class={`flex items-center justify-between gap-[2px] w-full ${seekable ? 'cursor-pointer touch-none select-none' : ''}`}
     style={`height: ${heightPx}px`}
     onpointerdown={handlePointerDown}
