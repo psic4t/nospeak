@@ -149,9 +149,12 @@ export class ProfileResolver {
                     void finalize();
                 }
             }, {
-                extraRelays: getDiscoveryRelays()
-            });
+            extraRelays: getDiscoveryRelays().filter(url => {
+                const health = connectionManager.getRelayHealth(url);
+                return health?.isConnected;
+            })
         });
+    });
     }
 
     /**
@@ -284,7 +287,10 @@ export class ProfileResolver {
                     data.foundNip65Relays = true;
                 }
             }, {
-                extraRelays: getDiscoveryRelays()
+                extraRelays: getDiscoveryRelays().filter(url => {
+                    const health = connectionManager.getRelayHealth(url);
+                    return health?.isConnected;
+                })
             });
         });
     }
