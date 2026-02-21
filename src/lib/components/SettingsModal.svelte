@@ -1076,12 +1076,22 @@
                   class="ms-4 px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   <option value="en">English</option>
+                  <option value="ar">العربية</option>
                   <option value="de">Deutsch</option>
                   <option value="es">Español</option>
                   <option value="fa">فارسی</option>
                   <option value="fr">Français</option>
+                  <option value="he">עברית</option>
                   <option value="it">Italiano</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="nl">Nederlands</option>
+                  <option value="pl">Polski</option>
                   <option value="pt">Português</option>
+                  <option value="ru">Русский</option>
+                  <option value="tr">Türkçe</option>
+                  <option value="ur">اردو</option>
+                  <option value="zh">简体中文</option>
                 </select>
               </div>
 
