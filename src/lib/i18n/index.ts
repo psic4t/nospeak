@@ -1,14 +1,15 @@
 import { init, register, locale, getLocaleFromNavigator, t } from 'svelte-i18n';
 
-export type Language = 'en' | 'ar' | 'de' | 'es' | 'fa' | 'fr' | 'he' | 'hi' | 'it' | 'ja' | 'ko' | 'nl' | 'pl' | 'pt' | 'ru' | 'tr' | 'ur' | 'zh';
+export type Language = 'en' | 'ar' | 'bn' | 'de' | 'es' | 'fa' | 'fr' | 'he' | 'hi' | 'it' | 'ja' | 'ko' | 'nl' | 'pl' | 'pt' | 'ru' | 'th' | 'tr' | 'ur' | 'vi' | 'zh';
 
-const SUPPORTED_LOCALES: Language[] = ['en', 'ar', 'de', 'es', 'fa', 'fr', 'he', 'hi', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'ru', 'tr', 'ur', 'zh'];
+const SUPPORTED_LOCALES: Language[] = ['en', 'ar', 'bn', 'de', 'es', 'fa', 'fr', 'he', 'hi', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'ru', 'th', 'tr', 'ur', 'vi', 'zh'];
 const DEFAULT_LOCALE: Language = 'en';
 
 const RTL_LOCALES: Language[] = ['ar', 'fa', 'he', 'ur'];
 
 register('en', () => import('./locales/en.ts'));
 register('ar', () => import('./locales/ar.ts'));
+register('bn', () => import('./locales/bn.ts'));
 register('de', () => import('./locales/de.ts'));
 register('es', () => import('./locales/es.ts'));
 register('fa', () => import('./locales/fa.ts'));
@@ -22,8 +23,10 @@ register('nl', () => import('./locales/nl.ts'));
 register('pl', () => import('./locales/pl.ts'));
 register('pt', () => import('./locales/pt.ts'));
 register('ru', () => import('./locales/ru.ts'));
+register('th', () => import('./locales/th.ts'));
 register('tr', () => import('./locales/tr.ts'));
 register('ur', () => import('./locales/ur.ts'));
+register('vi', () => import('./locales/vi.ts'));
 register('zh', () => import('./locales/zh.ts'));
  
 export function initI18n(initial: Language = DEFAULT_LOCALE): void {
@@ -53,6 +56,10 @@ export function detectNavigatorLocale(): Language {
 
     if (lower.startsWith('ar')) {
         return 'ar';
+    }
+
+    if (lower.startsWith('bn')) {
+        return 'bn';
     }
 
     if (lower.startsWith('de')) {
@@ -107,12 +114,20 @@ export function detectNavigatorLocale(): Language {
         return 'ru';
     }
 
+    if (lower.startsWith('th')) {
+        return 'th';
+    }
+
     if (lower.startsWith('tr')) {
         return 'tr';
     }
 
     if (lower.startsWith('ur')) {
         return 'ur';
+    }
+
+    if (lower.startsWith('vi')) {
+        return 'vi';
     }
 
     if (lower.startsWith('zh')) {

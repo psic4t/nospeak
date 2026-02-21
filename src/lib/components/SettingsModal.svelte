@@ -1077,6 +1077,7 @@
                 >
                   <option value="en">English</option>
                   <option value="ar">العربية</option>
+                  <option value="bn">বাংলা</option>
                   <option value="de">Deutsch</option>
                   <option value="es">Español</option>
                   <option value="fa">فارسی</option>
@@ -1090,8 +1091,10 @@
                   <option value="pl">Polski</option>
                   <option value="pt">Português</option>
                   <option value="ru">Русский</option>
+                  <option value="th">ไทย</option>
                   <option value="tr">Türkçe</option>
                   <option value="ur">اردو</option>
+                  <option value="vi">Tiếng Việt</option>
                   <option value="zh">简体中文</option>
                 </select>
               </div>
