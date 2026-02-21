@@ -15,9 +15,9 @@
 
     // Size configurations for the container and individual avatars
     const sizeConfig = {
-        sm: { container: 'w-8 h-8', avatar: 'w-5 h-5', offset: '-ml-2' },
-        md: { container: 'w-10 h-10', avatar: 'w-6 h-6', offset: '-ml-2' },
-        lg: { container: 'w-16 h-16', avatar: 'w-9 h-9', offset: '-ml-3' }
+        sm: { container: 'w-8 h-8', avatar: 'w-5 h-5', offset: '-ms-2' },
+        md: { container: 'w-10 h-10', avatar: 'w-6 h-6', offset: '-ms-2' },
+        lg: { container: 'w-16 h-16', avatar: 'w-9 h-9', offset: '-ms-3' }
     };
 
     // Show up to 3 avatars
@@ -84,7 +84,7 @@
         </div>
     {:else}
         <!-- Multiple participants - stacked layout -->
-        <div class="flex items-center pl-1">
+        <div class="flex items-center ps-1">
             {#each displayParticipants as npub, i}
                 <div 
                     class={`${config.avatar} rounded-full ring-2 ring-white dark:ring-slate-900 overflow-hidden bg-gray-200 dark:bg-slate-700 shadow-sm ${i > 0 ? config.offset : ''}`}

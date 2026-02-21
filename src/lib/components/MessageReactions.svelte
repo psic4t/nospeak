@@ -55,7 +55,7 @@
     });
 </script>
 
-<div bind:this={container} class={`relative z-10 ${isOwn ? 'flex justify-end pr-3' : 'flex justify-start pl-3'}`} style="margin-top: -10px;">
+<div bind:this={container} class={`relative z-10 ${isOwn ? 'flex justify-end pe-3' : 'flex justify-start ps-3'}`} style="margin-top: -10px;">
     {#if isVisible && summaries.length > 0}
         <div class="flex flex-wrap gap-1 text-xs">
             {#each summaries as summary}

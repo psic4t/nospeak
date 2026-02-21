@@ -71,7 +71,7 @@
                     onclick={close}
                     aria-label="Close modal"
                     size="icon"
-                    class="absolute top-4 right-4 z-10"
+                    class="absolute top-4 end-4 z-10"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </Button>
@@ -91,7 +91,7 @@
                 {#each $relayHealths as health}
                     <div class="p-4 border border-gray-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-800/40 shadow-sm hover:shadow transition-all">
                         <div class="flex justify-between items-center mb-3">
-                            <span class="typ-body font-medium dark:text-slate-200 truncate flex-1 mr-3">{health.url}</span>
+                            <span class="typ-body font-medium dark:text-slate-200 truncate flex-1 me-3">{health.url}</span>
                             <span class={`typ-meta px-2.5 py-1 rounded-full ${health.isConnected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800'}`}>
                                 {health.isConnected ? $t('modals.relayStatus.connected') : $t('modals.relayStatus.disconnected')}
                             </span>
@@ -121,7 +121,7 @@
                             {#if health.lastAuthError}
                                 <div class="col-span-2 flex justify-between typ-meta">
                                     <span>{$t('modals.relayStatus.authErrorLabel')}</span>
-                                    <span class="typ-meta text-red-600 dark:text-red-400 truncate ml-4">{health.lastAuthError}</span>
+                                    <span class="typ-meta text-red-600 dark:text-red-400 truncate ms-4">{health.lastAuthError}</span>
                                 </div>
                             {/if}
                         </div>

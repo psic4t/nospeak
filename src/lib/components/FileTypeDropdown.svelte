@@ -57,7 +57,7 @@
         <button
             type="button"
             onclick={handleTakePhotoClick}
-            class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+            class="w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
         >
             <svg
                 width="18"
@@ -80,7 +80,7 @@
         <button
             type="button"
             onclick={handleShareLocationClick}
-            class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+            class="w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
         >
             <svg
                 width="18"
@@ -103,7 +103,7 @@
     <button
         type="button"
         onclick={handleImageClick}
-        class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+        class="w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
     >
         <svg
             width="18"
@@ -127,7 +127,7 @@
     <button
         type="button"
         onclick={handleVideoClick}
-        class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+        class="w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
     >
         <svg
             width="18"
@@ -150,7 +150,7 @@
     <button
         type="button"
         onclick={handleAudioClick}
-        class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+        class="w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
     >
         <svg
             width="18"
@@ -174,7 +174,7 @@
     <button
         type="button"
         onclick={handleFileClick}
-        class="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
+        class="w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200"
     >
         <svg
             width="18"

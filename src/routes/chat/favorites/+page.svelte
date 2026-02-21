@@ -243,7 +243,7 @@
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                 </svg>
             </div>
-            <span class="font-bold dark:text-white text-left truncate min-w-0">
+            <span class="font-bold dark:text-white text-start truncate min-w-0">
                 {$t('chats.favorites')}
             </span>
         </div>
@@ -311,8 +311,8 @@
                                          <div
                                              class={`min-w-0 overflow-hidden p-3 shadow-sm transition-all duration-150 ease-out relative ${isAndroidShell ? 'select-none' : ''} ${
                                                  isSent
-                                                     ? 'bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none'
-                                                     : 'bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none'
+                                                  ? 'bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none rtl:rounded-br-2xl rtl:rounded-bl-none'
+                                                      : 'bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none rtl:rounded-bl-2xl rtl:rounded-br-none'
                                              }`}
                                              oncontextmenu={(e) => handleContextMenu(e, favorite.eventId, favorite.conversationId, message)}
                                              onmousedown={(e) => handleMouseDown(e, favorite.eventId, favorite.conversationId, message)}
@@ -351,7 +351,7 @@
                                                 </span>
                                                 <button
                                                     type="button"
-                                                    class="hidden md:inline-flex py-1 pr-0 pl-px rounded-l hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors"
+                                                    class="hidden md:inline-flex py-1 pe-0 ps-px rounded-s hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors"
                                                     onclick={(e) => handleDotClick(e, favorite.eventId, favorite.conversationId, message)}
                                                     aria-label="Message options"
                                                 >

@@ -174,13 +174,13 @@
             class="p-6 shadow-2xl border border-white/20 dark:border-white/10 flex flex-col overflow-hidden outline-none relative transition-transform duration-150 ease-out w-full h-full rounded-none md:w-[480px] md:h-auto md:max-h-[80vh] md:rounded-3xl bg-white dark:bg-slate-900/80 md:bg-white/95 backdrop-blur-xl"
         >
             <!-- Close button -->
-            <Button size="icon" onclick={() => { hapticSelection(); close(); }} aria-label="Close modal" class="hidden md:flex absolute top-4 right-4 z-10 rounded-full">
+            <Button size="icon" onclick={() => { hapticSelection(); close(); }} aria-label="Close modal" class="hidden md:flex absolute top-4 end-4 z-10 rounded-full">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </Button>
 
             <div class="flex items-center mb-4 px-1">
                 <h2 class="typ-title dark:text-white">{$t('modals.manageContacts.title')}</h2>
-                <span class="typ-meta text-gray-400 dark:text-slate-500 ml-3 self-center">{ctrl.contacts.length}</span>
+                <span class="typ-meta text-gray-400 dark:text-slate-500 ms-3 self-center">{ctrl.contacts.length}</span>
             </div>
 
             <div class="mb-4">
@@ -196,7 +196,7 @@
                 <div class="flex items-center justify-between p-3 my-1.5 rounded-full w-full hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] transition-all duration-200 ease-out">
                     <button
                         type="button"
-                        class="flex items-center gap-3 text-left bg-transparent text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200 ease-out active:scale-[0.98]"
+                        class="flex items-center gap-3 text-start bg-transparent text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200 ease-out active:scale-[0.98]"
                         onclick={() => {
                             hapticSelection();
                             ctrl.toggleSearchField();
@@ -299,7 +299,7 @@
                                             type="button"
                                             disabled={ctrl.nip05Result.alreadyAdded}
                                             onclick={() => { hapticSelection(); ctrl.selectNip05Result(); }}
-                                            class="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors {ctrl.nip05Result.alreadyAdded ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)]'}"
+                                            class="w-full flex items-center gap-3 px-4 py-3 text-start transition-colors {ctrl.nip05Result.alreadyAdded ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)]'}"
                                         >
                                             <Avatar
                                                 npub={ctrl.nip05Result.npub}
@@ -355,7 +355,7 @@
                                         {#each ctrl.searchResults as result (result.npub)}
                                             <button
                                                 type="button"
-                                                class="w-full flex items-center gap-3 px-4 py-2 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] text-left transition-colors border-b border-gray-50 dark:border-slate-800 last:border-0"
+                                                class="w-full flex items-center gap-3 px-4 py-2 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] text-start transition-colors border-b border-gray-50 dark:border-slate-800 last:border-0"
                                                 onclick={() => ctrl.selectSearchResult(result)}
                                             >
                                                 <Avatar
@@ -410,7 +410,7 @@
                 <!-- Create group row -->
                 <button
                     type="button"
-                    class="flex items-center gap-3 p-3 my-1.5 rounded-full w-full text-left bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white transition-all duration-200 ease-out active:scale-[0.98]"
+                    class="flex items-center gap-3 p-3 my-1.5 rounded-full w-full text-start bg-transparent text-gray-700 dark:text-gray-400 hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] dark:hover:bg-[rgb(var(--color-lavender-rgb)/0.16)] hover:text-gray-900 dark:hover:text-white transition-all duration-200 ease-out active:scale-[0.98]"
                     onclick={() => {
                         hapticSelection();
                         close();

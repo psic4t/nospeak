@@ -136,7 +136,7 @@
                 onclick={close}
                 aria-label="Close modal"
                 size="icon"
-                class="absolute top-4 right-4 z-10"
+                class="absolute top-4 end-4 z-10"
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"

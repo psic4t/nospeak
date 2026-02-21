@@ -622,7 +622,7 @@
  
    function getCategoryCardClasses(category: Category): string {
     const base =
-      "w-full text-left my-1.5 rounded-full px-4 py-3 flex items-center justify-between transition-all duration-200 ease-out active:scale-[0.98]";
+      "w-full text-start my-1.5 rounded-full px-4 py-3 flex items-center justify-between transition-all duration-200 ease-out active:scale-[0.98]";
 
     if (activeCategory === category) {
       return (
@@ -717,7 +717,7 @@
          }}
          aria-label="Close modal"
          size="icon"
-         class="hidden md:flex absolute top-4 right-4 z-10"
+         class="hidden md:flex absolute top-4 end-4 z-10"
        >
 
         <svg
@@ -1052,7 +1052,7 @@
                   id="theme-mode"
                   bind:value={themeMode}
                   onchange={handleThemeModeChange}
-                  class="ml-4 px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  class="ms-4 px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   <option value="system">System</option>
                   <option value="light">Light</option>
@@ -1073,14 +1073,15 @@
                   id="language-select"
                   bind:value={languageValue}
                   onchange={handleLanguageChange}
-                  class="ml-4 px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  class="ms-4 px-4 py-2 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
                   <option value="en">English</option>
                   <option value="de">Deutsch</option>
                   <option value="es">Español</option>
-                  <option value="pt">Português</option>
+                  <option value="fa">فارسی</option>
                   <option value="fr">Français</option>
                   <option value="it">Italiano</option>
+                  <option value="pt">Português</option>
                 </select>
               </div>
 
@@ -1108,7 +1109,7 @@
                     aria-label={
                       notificationsEnabled ? "Disable notifications" : "Enable notifications"
                     }
-                    class="ml-4"
+                    class="ms-4"
                   />
                 {:else}
                   <span class="typ-meta text-gray-400 dark:text-slate-500">
@@ -1149,7 +1150,7 @@
                             ? "Disable Android background messaging"
                             : "Enable Android background messaging"
                     }
-                    class="ml-4"
+                    class="ms-4"
                   />
                 </div>
               {/if}
@@ -1172,7 +1173,7 @@
                    aria-label={
                      urlPreviewsEnabled ? "Disable URL previews" : "Enable URL previews"
                    }
-                   class="ml-4"
+                   class="ms-4"
                  />
               </div>
             </div>
@@ -1368,7 +1369,7 @@
                   >
                     {#if isSavingProfile}
                       <svg
-                        class="animate-spin h-4 w-4 text-white mr-2"
+                        class="animate-spin h-4 w-4 text-white me-2"
                         xmlns="http://www.w3.org/2000/svg"
                         fill="none"
                         viewBox="0 0 24 24"
@@ -1454,7 +1455,7 @@
               >
                 {#each relays as relay}
                   <div class="px-4 py-3 flex items-center justify-between">
-                    <div class="flex-1 min-w-0 pr-4 flex items-center gap-2">
+                    <div class="flex-1 min-w-0 pe-4 flex items-center gap-2">
                       <div
                         class={`w-2 h-2 rounded-full flex-shrink-0 ${
                           $relayHealths.find(h => h.url === relay.url)?.isConnected
@@ -1555,7 +1556,7 @@
               >
                 {#each mediaServers as server, index}
                   <div class="px-4 py-3 flex items-center justify-between">
-                    <div class="flex-1 min-w-0 pr-4 flex items-center gap-2">
+                    <div class="flex-1 min-w-0 pe-4 flex items-center gap-2">
                       <p
                         class="text-sm font-medium dark:text-white truncate"
                         title={server.url}
@@ -1643,7 +1644,7 @@
                     aria-label={
                       mediaCacheEnabled ? "Disable media cache" : "Enable media cache"
                     }
-                    class="ml-4"
+                    class="ms-4"
                   />
                 </div>
               {/if}
@@ -1739,7 +1740,7 @@
                       type={showNsec ? "text" : "password"}
                       readonly
                       value={storedNsec}
-                      class="pr-10 font-mono"
+                      class="pe-10 font-mono"
                     />
                       <Button
                         type="button"

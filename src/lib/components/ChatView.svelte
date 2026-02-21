@@ -1861,7 +1861,7 @@
           </div>
           <div class="flex flex-col group flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
-                  <span class="font-bold dark:text-white text-left truncate">
+                   <span class="font-bold dark:text-white text-start truncate">
                       {groupTitle || $t('chat.group.defaultTitle')}
                   </span>
                   <button
@@ -1886,7 +1886,7 @@
               </div>
               <button
                   type="button"
-                  class="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:underline cursor-pointer transition-colors text-left"
+                   class="text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:underline cursor-pointer transition-colors text-start"
                   onclick={() => { hapticSelection(); showMembersModal = true; }}
                   aria-label={$t('chat.group.viewMembers')}
               >
@@ -1908,7 +1908,7 @@
           </button>
           <button
               onclick={() => partnerNpub && openProfile(partnerNpub)}
-              class="font-bold hover:underline dark:text-white text-left truncate min-w-0"
+               class="font-bold hover:underline dark:text-white text-start truncate min-w-0"
           >
               {partnerName || partnerNpub.slice(0, 10) + "..."}
           </button>
@@ -1918,7 +1918,7 @@
       {#if (partnerNpub && partnerNpub !== 'ALL') || isGroup}
         <!-- Mobile overlay search input (covers username area) -->
         <div
-          class={`md:hidden absolute bottom-2 h-11 left-24 right-16 z-30 transition-[opacity,transform] duration-200 ease-out ${
+          class={`md:hidden absolute bottom-2 h-11 start-24 end-16 z-30 transition-[opacity,transform] duration-200 ease-out ${
             isSearchOpen
               ? 'opacity-100 translate-x-0 pointer-events-auto'
               : 'opacity-0 translate-x-2 pointer-events-none'
@@ -2109,7 +2109,7 @@
         <div class={`${bubbleWidthClass} min-w-0 flex flex-col`}>
         <div class="relative">
             {#if $favoriteEventIds.has(msg.eventId)}
-              <div class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[rgb(var(--color-lavender-rgb))] rounded-full flex items-center justify-center shadow-sm z-10">
+               <div class="absolute -top-1.5 -end-1.5 w-5 h-5 bg-[rgb(var(--color-lavender-rgb))] rounded-full flex items-center justify-center shadow-sm z-10">
                 <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                 </svg>
@@ -2121,8 +2121,8 @@
           class={`min-w-0 overflow-hidden p-3 shadow-sm cursor-pointer transition-all duration-150 ease-out relative ${isAndroidShell ? 'select-none' : ''}
                           ${
                             msg.direction === "sent"
-                              ? "bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none hover:shadow-md"
-                              : "bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none hover:bg-white dark:hover:bg-slate-800"
+                              ? "bg-blue-50/10 dark:bg-blue-900/40 text-gray-900 dark:text-slate-100 border border-blue-500/10 dark:border-blue-400/10 rounded-2xl rounded-br-none rtl:rounded-br-2xl rtl:rounded-bl-none hover:shadow-md"
+                              : "bg-white/95 dark:bg-slate-800/95 md:bg-white/80 md:dark:bg-slate-800/80 md:backdrop-blur-sm dark:text-white border border-gray-100 dark:border-slate-700/50 rounded-2xl rounded-bl-none rtl:rounded-bl-2xl rtl:rounded-br-none hover:bg-white dark:hover:bg-slate-800"
                            }`}
             oncontextmenu={(e) => handleContextMenu(e, msg)}
            onmousedown={(e) => handleMouseDown(e, msg)}
@@ -2131,7 +2131,7 @@
           onmouseleave={handleMouseUp}
            >
             {#if hasUnreadMarker}
-              <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-emerald-400/70"></div>
+               <div class="absolute start-0 top-2 bottom-2 w-1 rounded-e bg-emerald-400/70"></div>
             {/if}
             
             <!-- Sender name for group messages -->
@@ -2174,7 +2174,7 @@
              </span>
               <button
                 type="button"
-                class="hidden md:inline-flex py-1 pr-0 pl-px rounded-l hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors"
+                 class="hidden md:inline-flex py-1 pe-0 ps-px rounded-s hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors"
                 onclick={(e) => handleDotClick(e, msg)}
                 aria-label="Message options"
               >
@@ -2187,7 +2187,7 @@
            </div>
           {#if msg.direction === "sent" && i === getLastSentIndex(displayMessages) && (partnerNpub || isGroup)}
             {#if $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id)}
-              <div class="typ-meta mt-0.5 text-right text-blue-100">
+               <div class="typ-meta mt-0.5 text-end text-blue-100">
                 {#if $lastRelaySendStatus.successfulRelays === 0}
                   {$t('chat.relayStatus.sending')}
                 {:else}
@@ -2195,7 +2195,7 @@
                 {/if}
               </div>
             {:else if msg.eventId && msg.eventId.startsWith('optimistic:')}
-              <div class="typ-meta mt-0.5 text-right text-blue-100">
+               <div class="typ-meta mt-0.5 text-end text-blue-100">
                 {$t('chat.relayStatus.sending')}
               </div>
             {/if}
@@ -2238,12 +2238,12 @@
     >
       {#if showEmojiPicker && filteredEmojis.length > 0}
         <div
-          class="absolute bottom-full mb-2 left-12 bg-white/80 dark:bg-slate-900/80 {blur('xl')} border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-64 z-50"
+           class="absolute bottom-full mb-2 start-12 bg-white/80 dark:bg-slate-900/80 {blur('xl')} border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-64 z-50"
         >
           {#each filteredEmojis as emoji, i}
             <button
               type="button"
-              class={`w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors duration-150 ease-out ${i === emojiSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
+               class={`w-full text-start px-4 py-2 flex items-center gap-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors duration-150 ease-out ${i === emojiSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
               onclick={() => selectEmoji(emoji)}
             >
               <span class="text-xl">{emoji.char}</span>
@@ -2257,12 +2257,12 @@
 
       {#if showMentionPicker && filteredMentions.length > 0}
         <div
-          class="absolute bottom-full mb-2 left-12 bg-white/80 dark:bg-slate-900/80 {blur('xl')} border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-72 z-50"
+           class="absolute bottom-full mb-2 start-12 bg-white/80 dark:bg-slate-900/80 {blur('xl')} border border-gray-200 dark:border-slate-700 shadow-xl rounded-lg overflow-hidden w-72 z-50"
         >
           {#each filteredMentions as candidate, i}
             <button
               type="button"
-              class={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors duration-150 ease-out ${i === mentionSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
+               class={`w-full text-start px-3 py-2 flex items-center gap-2.5 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors duration-150 ease-out ${i === mentionSelectedIndex ? "bg-blue-50/50 dark:bg-slate-700/80" : ""}`}
               onclick={() => selectMention(candidate)}
             >
               <Avatar

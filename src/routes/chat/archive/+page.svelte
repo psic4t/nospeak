@@ -231,7 +231,7 @@
                     <path d="m9 17 3-3 3 3"/>
                 </svg>
             </div>
-            <span class="font-bold dark:text-white text-left truncate min-w-0">
+            <span class="font-bold dark:text-white text-start truncate min-w-0">
                 {$t('chats.archived')}
             </span>
         </div>
@@ -298,13 +298,13 @@
                                     </svg>
                                 {/if}
                                 {#if chat.lastMessageTime > 0}
-                                    <span class="ml-auto text-xs text-gray-500 dark:text-slate-400 shrink-0" title={new Date(chat.lastMessageTime).toLocaleString()}>
+                                    <span class="ms-auto text-xs text-gray-500 dark:text-slate-400 shrink-0" title={new Date(chat.lastMessageTime).toLocaleString()}>
                                         {getRelativeTime(chat.lastMessageTime, currentTime)}
                                     </span>
                                 {/if}
                                 <button
                                     type="button"
-                                    class="hidden md:inline-flex py-1 pr-0 pl-px rounded-l hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors opacity-0 group-hover:opacity-100"
+                                    class="hidden md:inline-flex py-1 pe-0 ps-px rounded-s hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors opacity-0 group-hover:opacity-100"
                                     onclick={(e) => handleDotClick(e, chat.id)}
                                     aria-label="Chat options"
                                 >

@@ -33,7 +33,8 @@
    import { signerMismatch } from "$lib/stores/signerMismatch";
 
    import { configureAndroidStatusBar } from "$lib/core/StatusBar";
-   import { initLanguage } from "$lib/stores/language";
+   import { initLanguage, language } from "$lib/stores/language";
+   import { isRtlLanguage } from "$lib/i18n";
    import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
    import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
     import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
@@ -80,6 +81,13 @@
       if ($currentUser && page.url.pathname === '/') {
           goto('/chat', { replaceState: true });
       }
+  });
+
+  // Set document direction and lang attribute based on active language
+  $effect(() => {
+      const lang = $language;
+      document.documentElement.lang = lang;
+      document.documentElement.dir = isRtlLanguage(lang) ? 'rtl' : 'ltr';
   });
 
   // Keep PWA app badge in sync with unread counts
@@ -437,7 +445,7 @@
         {@render children()}
 
         {#if showProfileRefreshBanner}
-          <div class="fixed bottom-3 right-3 z-50 px-3 py-2 text-xs rounded bg-gray-800 text-white shadow">
+          <div class="fixed bottom-3 end-3 z-50 px-3 py-2 text-xs rounded bg-gray-800 text-white shadow">
             {profileRefreshMessage}
           </div>
         {/if}

@@ -110,7 +110,7 @@
         {/if}
         {#if onCite}
             <button
-                class="w-full text-left px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
+                class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
                 onclick={() => { onCite(); onClose(); }}
             >
                 {$t('chat.contextMenu.cite')}
@@ -118,7 +118,7 @@
         {/if}
         {#if onCopy}
             <button 
-                class="w-full text-left px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
+                class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
                 onclick={() => { onCopy(); onClose(); }}
             >
                 {$t('chat.contextMenu.copy')}
@@ -126,7 +126,7 @@
         {/if}
         {#if onFavorite}
             <button 
-                class="w-full text-left px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
+                class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors"
                 onclick={() => { onFavorite(); onClose(); }}
             >
                 {isFavorited ? $t('chat.contextMenu.unfavorite') : $t('chat.contextMenu.favorite')}

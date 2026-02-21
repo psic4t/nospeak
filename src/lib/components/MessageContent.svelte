@@ -246,7 +246,7 @@
                 }
                 // Recursively parse to handle nested citations and other block elements
                 const citeContent = parseMarkdown(citeLines.join('\n'));
-                result.push(`<blockquote class="border-l-2 border-gray-400 dark:border-slate-500 bg-gray-100/50 dark:bg-slate-800/50 pl-3 pr-3 py-1 my-1 rounded-r text-gray-700 dark:text-slate-300">${citeContent}</blockquote>`);
+                result.push(`<blockquote class="border-s-2 border-gray-400 dark:border-slate-500 bg-gray-100/50 dark:bg-slate-800/50 ps-3 pe-3 py-1 my-1 rounded-e text-gray-700 dark:text-slate-300">${citeContent}</blockquote>`);
                 continue;
             }
 
@@ -258,7 +258,7 @@
                     i++;
                 }
                 const listContent = listItems.map(item => `<li>${parseInlineMarkdown(item)}</li>`).join('');
-                result.push(`<ul class="list-disc pl-5 my-1">${listContent}</ul>`);
+                result.push(`<ul class="list-disc ps-5 my-1">${listContent}</ul>`);
                 continue;
             }
 
@@ -270,7 +270,7 @@
                     i++;
                 }
                 const listContent = listItems.map(item => `<li>${parseInlineMarkdown(item)}</li>`).join('');
-                result.push(`<ol class="list-decimal pl-5 my-1">${listContent}</ol>`);
+                result.push(`<ol class="list-decimal ps-5 my-1">${listContent}</ol>`);
                 continue;
             }
 

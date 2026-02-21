@@ -160,7 +160,7 @@
                                     size="md"
                                     class="!w-12 !h-12 flex-shrink-0"
                                 />
-                                <div class="flex flex-col min-w-0 text-left">
+                                <div class="flex flex-col min-w-0 text-start">
                                     <span class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]">
                                         {member.name}
                                         {#if member.isCurrentUser}

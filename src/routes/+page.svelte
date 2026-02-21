@@ -116,7 +116,7 @@
         <div class="mb-2">
             <label 
                 for="nsec-input" 
-                class="block typ-body mb-2 dark:text-gray-300 ml-1"
+                class="block typ-body mb-2 dark:text-gray-300 ms-1"
             >
                 {$t('auth.loginWithNsecLabel')}
             </label>

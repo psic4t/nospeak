@@ -14,7 +14,7 @@
         onclick={() => showRelayStatusModal.set(true)}
         variant="outlined-chip"
         size="sm"
-        class={`gap-2 ${isAndroidApp ? 'mr-2' : ''}`}
+        class={`gap-2 ${isAndroidApp ? 'me-2' : ''}`}
     >
         <div
             class={`w-2 h-2 rounded-full ${

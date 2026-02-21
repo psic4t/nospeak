@@ -217,7 +217,7 @@
                     >
                         {#if isBusy}
                             <svg
-                                class="animate-spin h-4 w-4 text-white mr-2"
+                                class="animate-spin h-4 w-4 text-white me-2"
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
                                 viewBox="0 0 24 24"

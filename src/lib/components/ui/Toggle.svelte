@@ -32,8 +32,8 @@
     const thumbClasses = $derived(`
         pointer-events-none flex items-center justify-center rounded-full shadow-sm transition-all duration-200 ease-out
         ${checked 
-            ? 'h-6 w-6 translate-x-7 bg-[rgb(var(--color-lavender-rgb))]' 
-            : 'h-4 w-4 translate-x-1 bg-gray-400 dark:bg-slate-500'
+            ? 'h-6 w-6 ltr:translate-x-7 rtl:-translate-x-7 bg-[rgb(var(--color-lavender-rgb))]' 
+            : 'h-4 w-4 ltr:translate-x-1 rtl:-translate-x-1 bg-gray-400 dark:bg-slate-500'
         }
     `);
 

@@ -10,7 +10,7 @@ function readStoredLanguage(): Language | null {
 
     const stored = localStorage.getItem(STORAGE_KEY);
 
-    if (stored === 'en' || stored === 'de' || stored === 'es' || stored === 'pt' || stored === 'fr' || stored === 'it') {
+    if (stored === 'en' || stored === 'de' || stored === 'es' || stored === 'pt' || stored === 'fr' || stored === 'it' || stored === 'fa') {
         return stored;
     }
 

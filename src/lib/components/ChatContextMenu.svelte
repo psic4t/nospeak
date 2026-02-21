@@ -87,7 +87,7 @@
         class="chat-context-menu fixed bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl py-1 z-[9999] min-w-[160px] outline-none"
     >
         <button
-            class="w-full text-left px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"
+            class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"
             onclick={() => { onArchive(); onClose(); }}
         >
             {#if isArchived}

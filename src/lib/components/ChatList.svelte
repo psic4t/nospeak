@@ -748,7 +748,7 @@
           {/if}
           {#if item.lastMessageTime > 0}
             <span
-              class="ml-auto text-xs text-gray-500 dark:text-slate-400 shrink-0"
+              class="ms-auto text-xs text-gray-500 dark:text-slate-400 shrink-0"
               title={new Date(item.lastMessageTime).toLocaleString()}
             >
               {getRelativeTime(item.lastMessageTime, currentTime)}
@@ -756,7 +756,7 @@
           {/if}
           <button
             type="button"
-            class="hidden md:inline-flex py-1 pr-0 pl-px rounded-l hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors opacity-0 group-hover:opacity-100"
+            class="hidden md:inline-flex py-1 pe-0 ps-px rounded-s hover:bg-gray-100/50 dark:hover:bg-slate-700/50 transition-colors opacity-0 group-hover:opacity-100"
             onclick={(e) => handleDotClick(e, item.id)}
             aria-label="Chat options"
           >
@@ -911,7 +911,7 @@
         modals.showManageContactsModal.set(true);
       }
     }}
-    class="absolute right-4 w-14 h-14 rounded-full bg-[rgb(var(--color-lavender-rgb))] text-white dark:text-[rgb(var(--color-crust-rgb))] shadow-lg flex items-center justify-center z-30 hover:scale-105 active:scale-95 transition-transform mb-safe {isAndroidApp ? 'bottom-24' : 'bottom-16'}"
+    class="absolute end-4 w-14 h-14 rounded-full bg-[rgb(var(--color-lavender-rgb))] text-white dark:text-[rgb(var(--color-crust-rgb))] shadow-lg flex items-center justify-center z-30 hover:scale-105 active:scale-95 transition-transform mb-safe {isAndroidApp ? 'bottom-24' : 'bottom-16'}"
     aria-label={$t("chats.addContact")}
   >
     <svg
