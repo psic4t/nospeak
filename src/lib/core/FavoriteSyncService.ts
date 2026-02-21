@@ -111,7 +111,7 @@ export class FavoriteSyncService {
                     console.log(`[FavoriteSyncService] Published favorites to ${relayUrl}`);
                     return true;
                 } catch (e) {
-                    console.error(`[FavoriteSyncService] Failed to publish favorites to ${relayUrl}:`, e);
+                    console.warn(`[FavoriteSyncService] Failed to publish favorites to ${relayUrl}:`, e);
                     return false;
                 }
             };

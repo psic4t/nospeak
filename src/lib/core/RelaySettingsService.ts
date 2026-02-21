@@ -121,7 +121,7 @@ export class RelaySettingsService {
                     succeeded++;
                     
                 } catch (e) {
-                    console.error(`Failed to publish messaging relay list to ${relayUrl}:`, e);
+                    console.warn(`Failed to publish messaging relay list to ${relayUrl}:`, e);
                     // Continue with other relays even if one fails
                 }
             }

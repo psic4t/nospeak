@@ -122,7 +122,7 @@ export class ArchiveSyncService {
                     console.log(`[ArchiveSyncService] Published archives to ${relayUrl}`);
                     return true;
                 } catch (e) {
-                    console.error(`[ArchiveSyncService] Failed to publish archives to ${relayUrl}:`, e);
+                    console.warn(`[ArchiveSyncService] Failed to publish archives to ${relayUrl}:`, e);
                     return false;
                 }
             };

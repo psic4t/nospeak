@@ -117,7 +117,7 @@ export class ContactSyncService {
                     console.log(`[ContactSyncService] Published contacts to ${relayUrl}`);
                     return true;
                 } catch (e) {
-                    console.error(`[ContactSyncService] Failed to publish contacts to ${relayUrl}:`, e);
+                    console.warn(`[ContactSyncService] Failed to publish contacts to ${relayUrl}:`, e);
                     return false;
                 }
             };
