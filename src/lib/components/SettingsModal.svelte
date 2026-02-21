@@ -26,6 +26,7 @@
   import { language, setLanguage } from "$lib/stores/language";
   import { getAndroidLocalSecretKeyHex } from "$lib/core/AndroidLocalSecretKey";
   import { hapticSelection } from "$lib/utils/haptics";
+  import { relayHealths } from "$lib/stores/connection";
   import type { Language } from "$lib/i18n";
   import Button from '$lib/components/ui/Button.svelte';
   import BottomSheetHandle from '$lib/components/ui/BottomSheetHandle.svelte';
@@ -1453,7 +1454,14 @@
               >
                 {#each relays as relay}
                   <div class="px-4 py-3 flex items-center justify-between">
-                    <div class="flex-1 min-w-0 pr-4">
+                    <div class="flex-1 min-w-0 pr-4 flex items-center gap-2">
+                      <div
+                        class={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          $relayHealths.find(h => h.url === relay.url)?.isConnected
+                            ? 'bg-green-500'
+                            : 'bg-red-400'
+                        }`}
+                      ></div>
                       <p
                         class="text-sm font-medium dark:text-white truncate"
                         title={relay.url}
