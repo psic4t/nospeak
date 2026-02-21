@@ -441,6 +441,20 @@ const ur = {
             dangerZoneTitle: 'خطرناک علاقہ',
             dangerZoneDescription: 'لاگ آؤٹ کرنے سے اس آلے سے تمام کیش شدہ ڈیٹا ہٹ جائے گا۔',
             logoutButton: 'لاگ آؤٹ'
+        },
+        pin: {
+            appLockLabel: 'ایپ لاک',
+            appLockDescription: 'ایپ تک رسائی کے لیے PIN درکار ہو',
+            changePinButton: 'PIN تبدیل کریں',
+            enterNewPin: 'PIN مقرر کریں',
+            enterNewPinDescription: '4 ہندسوں کا PIN درج کریں',
+            confirmPin: 'PIN کی تصدیق کریں',
+            confirmPinDescription: 'وہی PIN دوبارہ درج کریں',
+            enterCurrentPin: 'PIN درج کریں',
+            enterCurrentPinDescription: 'اپنا موجودہ PIN درج کریں',
+            wrongPin: 'غلط PIN',
+            pinMismatch: 'PIN مماثل نہیں ہیں، دوبارہ کوشش کریں',
+            enterPinToUnlock: 'انلاک کرنے کے لیے PIN درج کریں'
         }
     },
     signerMismatch: {

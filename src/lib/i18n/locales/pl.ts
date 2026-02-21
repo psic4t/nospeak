@@ -262,6 +262,20 @@ const pl = {
             dangerZoneTitle: 'Strefa zagrożenia',
             dangerZoneDescription: 'Wylogowanie usunie wszystkie zapisane dane z tego urządzenia.',
             logoutButton: 'Wyloguj'
+        },
+        pin: {
+            appLockLabel: 'Blokada aplikacji',
+            appLockDescription: 'Wymagaj PIN-u, aby uzyskać dostęp do aplikacji',
+            changePinButton: 'Zmień PIN',
+            enterNewPin: 'Ustaw PIN',
+            enterNewPinDescription: 'Wprowadź 4-cyfrowy PIN',
+            confirmPin: 'Potwierdź PIN',
+            confirmPinDescription: 'Wprowadź ten sam PIN ponownie',
+            enterCurrentPin: 'Wprowadź PIN',
+            enterCurrentPinDescription: 'Wprowadź swój aktualny PIN',
+            wrongPin: 'Błędny PIN',
+            pinMismatch: 'PINy się nie zgadzają, spróbuj ponownie',
+            enterPinToUnlock: 'Wprowadź PIN, aby odblokować'
         }
     },
     signerMismatch: {

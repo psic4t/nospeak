@@ -443,6 +443,20 @@ const fr = {
             dangerZoneTitle: 'Zone de danger',
             dangerZoneDescription: "Se déconnecter supprimera toutes les données en cache de cet appareil.",
             logoutButton: 'Se déconnecter'
+        },
+        pin: {
+            appLockLabel: 'Verrouillage de l\'app',
+            appLockDescription: 'Exiger un code PIN pour accéder à l\'app',
+            changePinButton: 'Changer le PIN',
+            enterNewPin: 'Définir un PIN',
+            enterNewPinDescription: 'Entrez un code PIN à 4 chiffres',
+            confirmPin: 'Confirmer le PIN',
+            confirmPinDescription: 'Entrez le même PIN à nouveau',
+            enterCurrentPin: 'Entrer le PIN',
+            enterCurrentPinDescription: 'Entrez votre PIN actuel',
+            wrongPin: 'PIN incorrect',
+            pinMismatch: 'Les PINs ne correspondent pas, réessayez',
+            enterPinToUnlock: 'Entrez le PIN pour déverrouiller'
         }
     },
     signerMismatch: {

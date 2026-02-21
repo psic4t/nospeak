@@ -441,6 +441,20 @@ const he = {
             dangerZoneTitle: 'אזור סכנה',
             dangerZoneDescription: 'התנתקות תסיר את כל הנתונים השמורים מהמכשיר הזה.',
             logoutButton: 'התנתקות'
+        },
+        pin: {
+            appLockLabel: 'נעילת אפליקציה',
+            appLockDescription: 'דרוש קוד PIN לגישה לאפליקציה',
+            changePinButton: 'שנה קוד PIN',
+            enterNewPin: 'הגדר קוד PIN',
+            enterNewPinDescription: 'הזן קוד PIN בן 4 ספרות',
+            confirmPin: 'אשר קוד PIN',
+            confirmPinDescription: 'הזן את אותו קוד PIN שוב',
+            enterCurrentPin: 'הזן קוד PIN',
+            enterCurrentPinDescription: 'הזן את קוד ה-PIN הנוכחי שלך',
+            wrongPin: 'קוד PIN שגוי',
+            pinMismatch: 'קודי ה-PIN אינם תואמים, נסה שוב',
+            enterPinToUnlock: 'הזן קוד PIN לביטול נעילה'
         }
     },
     signerMismatch: {

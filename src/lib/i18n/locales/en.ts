@@ -453,6 +453,20 @@ const en = {
             dangerZoneTitle: 'Danger Zone',
             dangerZoneDescription: 'Logging out will remove all cached data from this device.',
             logoutButton: 'Logout'
+        },
+        pin: {
+            appLockLabel: 'App Lock',
+            appLockDescription: 'Require a PIN to access the app',
+            changePinButton: 'Change PIN',
+            enterNewPin: 'Set a PIN',
+            enterNewPinDescription: 'Enter a 4-digit PIN',
+            confirmPin: 'Confirm PIN',
+            confirmPinDescription: 'Enter the same PIN again',
+            enterCurrentPin: 'Enter PIN',
+            enterCurrentPinDescription: 'Enter your current PIN',
+            wrongPin: 'Wrong PIN',
+            pinMismatch: 'PINs don\'t match, try again',
+            enterPinToUnlock: 'Enter PIN to unlock'
         }
     },
     signerMismatch: {

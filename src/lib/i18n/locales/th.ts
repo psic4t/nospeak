@@ -84,7 +84,21 @@ const th = {
         profile: { nameLabel: 'ชื่อ', namePlaceholder: 'ชื่อของคุณ', displayNameLabel: 'ชื่อที่แสดง', displayNamePlaceholder: 'ชื่อที่แสดง', aboutLabel: 'เกี่ยวกับ', aboutPlaceholder: 'เล่าเกี่ยวกับตัวคุณ', pictureUrlLabel: 'URL รูปภาพ', pictureUrlPlaceholder: 'https://example.com/avatar.jpg', bannerUrlLabel: 'URL แบนเนอร์', bannerUrlPlaceholder: 'https://example.com/banner.jpg', nip05Label: 'NIP-05 (ชื่อผู้ใช้)', nip05Placeholder: 'name@domain.com', websiteLabel: 'เว็บไซต์', websitePlaceholder: 'https://example.com', lightningLabel: 'ที่อยู่ Lightning (LUD-16)', lightningPlaceholder: 'user@provider.com', saveButton: 'บันทึกการเปลี่ยนแปลง', savingButton: 'กำลังบันทึก...' },
         messagingRelays: { description: 'กำหนดค่ารีเลย์ส่งข้อความ NIP-17 ของคุณ รีเลย์เหล่านี้ใช้สำหรับรับข้อความเข้ารหัสของคุณ เพื่อประสิทธิภาพสูงสุด รีเลย์ส่งข้อความ 2 ตัวมักทำงานได้ดีที่สุด', inputPlaceholder: 'wss://relay.example.com', addButton: 'เพิ่ม', emptyState: 'ไม่มีรีเลย์ที่กำหนดค่า', tooManyWarning: 'การมีรีเลย์ส่งข้อความมากกว่า 3 ตัวอาจลดประสิทธิภาพและความน่าเชื่อถือ', saveStatusSuccess: 'บันทึกรายการรีเลย์ไปยัง {count} รีเลย์แล้ว', saveStatusPartial: 'บันทึกรายการรีเลย์ไปยัง {succeeded} จาก {attempted} รีเลย์', saveStatusNone: 'ไม่สามารถบันทึกรายการรีเลย์ไปยังรีเลย์ใดได้', saveStatusError: 'เกิดข้อผิดพลาดในการบันทึกรายการรีเลย์ การตั้งค่าของคุณอาจไม่ได้เผยแพร่ทั้งหมด', savingStatus: 'กำลังบันทึกการตั้งค่ารีเลย์…' },
         mediaServers: { description: 'กำหนดค่าเซิร์ฟเวอร์สื่อ Blossom ของคุณ เซิร์ฟเวอร์เหล่านี้ใช้สำหรับจัดเก็บไฟล์ที่คุณอัปโหลด (สื่อโปรไฟล์และไฟล์แนบในแชท)', inputPlaceholder: 'https://cdn.example.com', addButton: 'เพิ่ม', emptyState: 'ไม่มีเซิร์ฟเวอร์ที่กำหนดค่า', saveStatusSuccess: 'บันทึกรายการเซิร์ฟเวอร์ไปยัง {count} รีเลย์แล้ว', saveStatusPartial: 'บันทึกรายการเซิร์ฟเวอร์ไปยัง {succeeded} จาก {attempted} รีเลย์', saveStatusNone: 'ไม่สามารถบันทึกรายการเซิร์ฟเวอร์ไปยังรีเลย์ใดได้', saveStatusError: 'เกิดข้อผิดพลาดในการบันทึกรายการเซิร์ฟเวอร์ การตั้งค่าของคุณอาจไม่ได้เผยแพร่ทั้งหมด', savingStatus: 'กำลังบันทึกการตั้งค่าเซิร์ฟเวอร์สื่อ…', primary: 'หลัก', setAsPrimary: 'ตั้งเป็นหลัก', mediaCacheLabel: 'แคชสื่อ', mediaCacheDescription: 'บันทึกสื่อที่ดูแล้วลงในแกลเลอรีเพื่อเข้าถึงแบบออฟไลน์ ไฟล์สามารถจัดการได้ในแอปรูปภาพของคุณ' },
-        security: { loginMethodTitle: 'วิธีการเข้าสู่ระบบ', loginMethodUnknown: 'ไม่ทราบ', npubLabel: 'npub ของคุณ', nsecLabel: 'nsec ของคุณ', hideNsecAria: 'ซ่อน nsec', showNsecAria: 'แสดง nsec', dangerZoneTitle: 'โซนอันตราย', dangerZoneDescription: 'การออกจากระบบจะลบข้อมูลแคชทั้งหมดออกจากอุปกรณ์นี้', logoutButton: 'ออกจากระบบ' }
+        security: { loginMethodTitle: 'วิธีการเข้าสู่ระบบ', loginMethodUnknown: 'ไม่ทราบ', npubLabel: 'npub ของคุณ', nsecLabel: 'nsec ของคุณ', hideNsecAria: 'ซ่อน nsec', showNsecAria: 'แสดง nsec', dangerZoneTitle: 'โซนอันตราย', dangerZoneDescription: 'การออกจากระบบจะลบข้อมูลแคชทั้งหมดออกจากอุปกรณ์นี้', logoutButton: 'ออกจากระบบ' },
+        pin: {
+            appLockLabel: 'ล็อกแอป',
+            appLockDescription: 'ต้องใช้ PIN เพื่อเข้าถึงแอป',
+            changePinButton: 'เปลี่ยน PIN',
+            enterNewPin: 'ตั้ง PIN',
+            enterNewPinDescription: 'ป้อน PIN 4 หลัก',
+            confirmPin: 'ยืนยัน PIN',
+            confirmPinDescription: 'ป้อน PIN เดิมอีกครั้ง',
+            enterCurrentPin: 'ป้อน PIN',
+            enterCurrentPinDescription: 'ป้อน PIN ปัจจุบันของคุณ',
+            wrongPin: 'PIN ไม่ถูกต้อง',
+            pinMismatch: 'PIN ไม่ตรงกัน ลองใหม่อีกครั้ง',
+            enterPinToUnlock: 'ป้อน PIN เพื่อปลดล็อก'
+        }
     },
     signerMismatch: { title: 'บัญชีไม่ตรงกัน', description: 'ส่วนขยาย Signer ในเบราว์เซอร์ของคุณมีบัญชีที่ใช้งานอยู่ซึ่งแตกต่างจากบัญชีที่คุณเข้าสู่ระบบ', expectedAccount: 'เข้าสู่ระบบเป็น', actualAccount: 'บัญชีที่ใช้งานอยู่ใน Signer', instructions: 'กรุณาสลับไปยังบัญชีที่ถูกต้องในส่วนขยาย Signer ของคุณและโหลดหน้านี้ใหม่' }
 };

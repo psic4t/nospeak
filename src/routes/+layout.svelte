@@ -37,8 +37,12 @@
    import { isRtlLanguage } from "$lib/i18n";
    import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
    import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
-    import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
-    import Toast from "$lib/components/Toast.svelte";
+     import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
+     import Toast from "$lib/components/Toast.svelte";
+     import PinLockScreen from "$lib/components/PinLockScreen.svelte";
+     import PinSetupModal from "$lib/components/PinSetupModal.svelte";
+     import { isPinLocked, initPinState, lockApp, clearPinData } from "$lib/stores/pin";
+     import { pinSetupModalState, closePinSetupModal } from "$lib/stores/modals";
  
 
    const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
@@ -49,6 +53,7 @@
   let showProfileRefreshBanner = $state(false);
   let profileRefreshMessage = $state("");
   let isAndroidApp = $state(isAndroidNative());
+  let hadUser = false;
 
   const webManifestLinkTag = pwaInfo?.webManifest.linkTag ?? "";
 
@@ -61,7 +66,7 @@
     }
   }
 
-  // Close all modals when user logs out
+  // Close all modals and clear PIN state when user logs out
   $effect(() => {
           if (!$currentUser) {
               showSettingsModal.set(false);
@@ -72,6 +77,12 @@
                closeScanContactQrResult();
                closeProfileModal();
 
+               // Only clear PIN data on actual logout (user was logged in, now isn't)
+               if (hadUser) {
+                   clearPinData();
+               }
+         } else {
+              hadUser = true;
          }
 
    });
@@ -120,6 +131,20 @@
       };
   });
 
+  // Lock app when it goes to background (PIN protection)
+  onMount(() => {
+      const handlePinLock = () => {
+          if (document.visibilityState === 'hidden' && $currentUser) {
+              lockApp();
+          }
+      };
+
+      document.addEventListener('visibilitychange', handlePinLock);
+      return () => {
+          document.removeEventListener('visibilitychange', handlePinLock);
+      };
+  });
+
   onMount(async () => {
     initLanguage();
     initRuntimeConfig();
@@ -148,6 +173,11 @@
     }
 
     const restored = await authService.restore();
+
+      // Initialize PIN lock state after auth restore
+      if (restored) {
+        initPinState();
+      }
 
       let routedFromNotification = false;
 
@@ -517,5 +547,21 @@
  
       <ImageViewerOverlay />
       <Toast />
+
+      <!-- PIN Setup Modal - above all other modals -->
+      <PinSetupModal
+        isOpen={$pinSetupModalState.isOpen}
+        close={closePinSetupModal}
+        mode={$pinSetupModalState.mode}
+        onSuccess={(pin) => {
+          if ($pinSetupModalState.onSuccess) {
+            $pinSetupModalState.onSuccess(pin);
+          }
+          closePinSetupModal();
+        }}
+      />
+
+      <!-- PIN Lock Screen - highest z-index, covers entire app -->
+      <PinLockScreen isLocked={$isPinLocked} />
     </div>
   {/if}

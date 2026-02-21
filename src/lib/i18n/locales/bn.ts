@@ -441,6 +441,20 @@ const bn = {
             dangerZoneTitle: 'বিপদ অঞ্চল',
             dangerZoneDescription: 'লগআউট করলে এই ডিভাইস থেকে সমস্ত ক্যাশ করা ডেটা মুছে যাবে।',
             logoutButton: 'লগআউট'
+        },
+        pin: {
+            appLockLabel: 'অ্যাপ লক',
+            appLockDescription: 'অ্যাপে প্রবেশ করতে PIN প্রয়োজন',
+            changePinButton: 'PIN পরিবর্তন করুন',
+            enterNewPin: 'একটি PIN সেট করুন',
+            enterNewPinDescription: '4 সংখ্যার PIN দিন',
+            confirmPin: 'PIN নিশ্চিত করুন',
+            confirmPinDescription: 'একই PIN আবার দিন',
+            enterCurrentPin: 'PIN দিন',
+            enterCurrentPinDescription: 'আপনার বর্তমান PIN দিন',
+            wrongPin: 'ভুল PIN',
+            pinMismatch: 'PIN মিলছে না, আবার চেষ্টা করুন',
+            enterPinToUnlock: 'আনলক করতে PIN দিন'
         }
     },
     signerMismatch: {

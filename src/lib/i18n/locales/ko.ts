@@ -453,6 +453,20 @@ const ko = {
             dangerZoneTitle: '위험 구역',
             dangerZoneDescription: '로그아웃하면 이 기기의 모든 캐시 데이터가 삭제됩니다.',
             logoutButton: '로그아웃'
+        },
+        pin: {
+            appLockLabel: '앱 잠금',
+            appLockDescription: '앱에 접근할 때 PIN을 요구합니다',
+            changePinButton: 'PIN 변경',
+            enterNewPin: 'PIN 설정',
+            enterNewPinDescription: '4자리 PIN을 입력하세요',
+            confirmPin: 'PIN 확인',
+            confirmPinDescription: '같은 PIN을 다시 입력하세요',
+            enterCurrentPin: 'PIN 입력',
+            enterCurrentPinDescription: '현재 PIN을 입력하세요',
+            wrongPin: '잘못된 PIN',
+            pinMismatch: 'PIN이 일치하지 않습니다. 다시 시도하세요',
+            enterPinToUnlock: 'PIN을 입력하여 잠금 해제'
         }
     },
     signerMismatch: {

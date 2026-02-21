@@ -441,6 +441,20 @@ const ja = {
             dangerZoneTitle: '危険な操作',
             dangerZoneDescription: 'ログアウトすると、このデバイスからすべてのキャッシュデータが削除されます。',
             logoutButton: 'ログアウト'
+        },
+        pin: {
+            appLockLabel: 'アプリロック',
+            appLockDescription: 'アプリへのアクセスにPINを要求する',
+            changePinButton: 'PINを変更',
+            enterNewPin: 'PINを設定',
+            enterNewPinDescription: '4桁のPINを入力してください',
+            confirmPin: 'PINを確認',
+            confirmPinDescription: '同じPINをもう一度入力してください',
+            enterCurrentPin: 'PINを入力',
+            enterCurrentPinDescription: '現在のPINを入力してください',
+            wrongPin: 'PINが正しくありません',
+            pinMismatch: 'PINが一致しません。もう一度お試しください',
+            enterPinToUnlock: 'PINを入力してロックを解除'
         }
     },
     signerMismatch: {

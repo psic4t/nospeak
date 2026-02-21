@@ -441,6 +441,20 @@ const ar = {
             dangerZoneTitle: 'منطقة الخطر',
             dangerZoneDescription: 'سيؤدي تسجيل الخروج إلى إزالة جميع البيانات المخزنة مؤقتًا من هذا الجهاز.',
             logoutButton: 'تسجيل الخروج'
+        },
+        pin: {
+            appLockLabel: 'قفل التطبيق',
+            appLockDescription: 'طلب رمز PIN للوصول إلى التطبيق',
+            changePinButton: 'تغيير رمز PIN',
+            enterNewPin: 'تعيين رمز PIN',
+            enterNewPinDescription: 'أدخل رمز PIN مكون من 4 أرقام',
+            confirmPin: 'تأكيد رمز PIN',
+            confirmPinDescription: 'أدخل نفس رمز PIN مرة أخرى',
+            enterCurrentPin: 'أدخل رمز PIN',
+            enterCurrentPinDescription: 'أدخل رمز PIN الحالي',
+            wrongPin: 'رمز PIN خاطئ',
+            pinMismatch: 'رموز PIN غير متطابقة، حاول مرة أخرى',
+            enterPinToUnlock: 'أدخل رمز PIN لفتح القفل'
         }
     },
     signerMismatch: {

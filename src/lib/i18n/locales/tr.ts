@@ -441,6 +441,20 @@ const tr = {
             dangerZoneTitle: 'Tehlikeli Bölge',
             dangerZoneDescription: 'Çıkış yapmak bu cihazdaki tüm önbelleğe alınmış verileri silecektir.',
             logoutButton: 'Çıkış Yap'
+        },
+        pin: {
+            appLockLabel: 'Uygulama Kilidi',
+            appLockDescription: 'Uygulamaya erişmek için PIN gerekli olsun',
+            changePinButton: 'PIN Değiştir',
+            enterNewPin: 'PIN Belirle',
+            enterNewPinDescription: '4 haneli bir PIN girin',
+            confirmPin: 'PIN\'i Onayla',
+            confirmPinDescription: 'Aynı PIN\'i tekrar girin',
+            enterCurrentPin: 'PIN Girin',
+            enterCurrentPinDescription: 'Mevcut PIN\'inizi girin',
+            wrongPin: 'Yanlış PIN',
+            pinMismatch: 'PIN\'ler eşleşmiyor, tekrar deneyin',
+            enterPinToUnlock: 'Kilidini açmak için PIN girin'
         }
     },
     signerMismatch: {

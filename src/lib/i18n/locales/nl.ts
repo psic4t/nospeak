@@ -453,6 +453,20 @@ const nl = {
             dangerZoneTitle: 'Gevarenzone',
             dangerZoneDescription: 'Uitloggen verwijdert alle gecachte gegevens van dit apparaat.',
             logoutButton: 'Uitloggen'
+        },
+        pin: {
+            appLockLabel: 'App-vergrendeling',
+            appLockDescription: 'Vereist een PIN om de app te openen',
+            changePinButton: 'PIN wijzigen',
+            enterNewPin: 'Stel een PIN in',
+            enterNewPinDescription: 'Voer een 4-cijferige PIN in',
+            confirmPin: 'Bevestig PIN',
+            confirmPinDescription: 'Voer dezelfde PIN nogmaals in',
+            enterCurrentPin: 'Voer PIN in',
+            enterCurrentPinDescription: 'Voer je huidige PIN in',
+            wrongPin: 'Verkeerde PIN',
+            pinMismatch: 'PINs komen niet overeen, probeer opnieuw',
+            enterPinToUnlock: 'Voer PIN in om te ontgrendelen'
         }
     },
     signerMismatch: {

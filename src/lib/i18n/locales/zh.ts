@@ -441,6 +441,20 @@ const zh = {
             dangerZoneTitle: '危险操作',
             dangerZoneDescription: '登出将删除此设备上的所有缓存数据。',
             logoutButton: '登出'
+        },
+        pin: {
+            appLockLabel: '应用锁',
+            appLockDescription: '访问应用时需要输入PIN码',
+            changePinButton: '更改PIN码',
+            enterNewPin: '设置PIN码',
+            enterNewPinDescription: '输入4位PIN码',
+            confirmPin: '确认PIN码',
+            confirmPinDescription: '再次输入相同的PIN码',
+            enterCurrentPin: '输入PIN码',
+            enterCurrentPinDescription: '输入您当前的PIN码',
+            wrongPin: 'PIN码错误',
+            pinMismatch: 'PIN码不匹配，请重试',
+            enterPinToUnlock: '输入PIN码解锁'
         }
     },
     signerMismatch: {

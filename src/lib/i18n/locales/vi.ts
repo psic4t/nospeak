@@ -441,6 +441,20 @@ const vi = {
             dangerZoneTitle: 'Vùng nguy hiểm',
             dangerZoneDescription: 'Đăng xuất sẽ xóa tất cả dữ liệu đã lưu cache khỏi thiết bị này.',
             logoutButton: 'Đăng xuất'
+        },
+        pin: {
+            appLockLabel: 'Khóa ứng dụng',
+            appLockDescription: 'Yêu cầu mã PIN để truy cập ứng dụng',
+            changePinButton: 'Đổi mã PIN',
+            enterNewPin: 'Đặt mã PIN',
+            enterNewPinDescription: 'Nhập mã PIN 4 chữ số',
+            confirmPin: 'Xác nhận mã PIN',
+            confirmPinDescription: 'Nhập lại mã PIN',
+            enterCurrentPin: 'Nhập mã PIN',
+            enterCurrentPinDescription: 'Nhập mã PIN hiện tại của bạn',
+            wrongPin: 'Sai mã PIN',
+            pinMismatch: 'Mã PIN không khớp, vui lòng thử lại',
+            enterPinToUnlock: 'Nhập mã PIN để mở khóa'
         }
     },
     signerMismatch: {

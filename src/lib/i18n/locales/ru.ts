@@ -262,6 +262,20 @@ const ru = {
             dangerZoneTitle: 'Опасная зона',
             dangerZoneDescription: 'Выход из аккаунта удалит все кэшированные данные с этого устройства.',
             logoutButton: 'Выйти'
+        },
+        pin: {
+            appLockLabel: 'Блокировка приложения',
+            appLockDescription: 'Требовать PIN-код для доступа к приложению',
+            changePinButton: 'Изменить PIN-код',
+            enterNewPin: 'Установите PIN-код',
+            enterNewPinDescription: 'Введите 4-значный PIN-код',
+            confirmPin: 'Подтвердите PIN-код',
+            confirmPinDescription: 'Введите тот же PIN-код ещё раз',
+            enterCurrentPin: 'Введите PIN-код',
+            enterCurrentPinDescription: 'Введите ваш текущий PIN-код',
+            wrongPin: 'Неверный PIN-код',
+            pinMismatch: 'PIN-коды не совпадают, попробуйте снова',
+            enterPinToUnlock: 'Введите PIN-код для разблокировки'
         }
     },
     signerMismatch: {

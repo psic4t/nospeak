@@ -455,6 +455,20 @@ const de = {
             dangerZoneTitle: 'Gefahrenzone',
             dangerZoneDescription: 'Abmelden entfernt alle zwischengespeicherten Daten von diesem Gerät.',
             logoutButton: 'Abmelden'
+        },
+        pin: {
+            appLockLabel: 'App-Sperre',
+            appLockDescription: 'PIN zum Öffnen der App verlangen',
+            changePinButton: 'PIN ändern',
+            enterNewPin: 'PIN festlegen',
+            enterNewPinDescription: 'Gib eine 4-stellige PIN ein',
+            confirmPin: 'PIN bestätigen',
+            confirmPinDescription: 'Gib dieselbe PIN erneut ein',
+            enterCurrentPin: 'PIN eingeben',
+            enterCurrentPinDescription: 'Gib deine aktuelle PIN ein',
+            wrongPin: 'Falsche PIN',
+            pinMismatch: 'PINs stimmen nicht überein, versuche es erneut',
+            enterPinToUnlock: 'PIN zum Entsperren eingeben'
         }
     },
     signerMismatch: {

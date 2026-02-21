@@ -453,6 +453,20 @@ const fa = {
             dangerZoneTitle: 'منطقه خطر',
             dangerZoneDescription: 'خروج از حساب تمام داده‌های ذخیره‌شده را از این دستگاه حذف می‌کند.',
             logoutButton: 'خروج'
+        },
+        pin: {
+            appLockLabel: 'قفل اپلیکیشن',
+            appLockDescription: 'برای دسترسی به اپلیکیشن کد PIN لازم باشد',
+            changePinButton: 'تغییر کد PIN',
+            enterNewPin: 'تنظیم کد PIN',
+            enterNewPinDescription: 'یک کد PIN ۴ رقمی وارد کنید',
+            confirmPin: 'تأیید کد PIN',
+            confirmPinDescription: 'همان کد PIN را دوباره وارد کنید',
+            enterCurrentPin: 'کد PIN را وارد کنید',
+            enterCurrentPinDescription: 'کد PIN فعلی خود را وارد کنید',
+            wrongPin: 'کد PIN اشتباه است',
+            pinMismatch: 'کدهای PIN مطابقت ندارند، دوباره تلاش کنید',
+            enterPinToUnlock: 'برای باز کردن قفل کد PIN را وارد کنید'
         }
     },
     signerMismatch: {

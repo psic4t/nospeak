@@ -441,6 +441,20 @@ const hi = {
             dangerZoneTitle: 'खतरा क्षेत्र',
             dangerZoneDescription: 'लॉगआउट करने से इस डिवाइस से सभी कैश्ड डेटा हट जाएगा।',
             logoutButton: 'लॉगआउट'
+        },
+        pin: {
+            appLockLabel: 'ऐप लॉक',
+            appLockDescription: 'ऐप तक पहुँचने के लिए PIN आवश्यक हो',
+            changePinButton: 'PIN बदलें',
+            enterNewPin: 'PIN सेट करें',
+            enterNewPinDescription: '4 अंकों का PIN दर्ज करें',
+            confirmPin: 'PIN की पुष्टि करें',
+            confirmPinDescription: 'वही PIN दोबारा दर्ज करें',
+            enterCurrentPin: 'PIN दर्ज करें',
+            enterCurrentPinDescription: 'अपना वर्तमान PIN दर्ज करें',
+            wrongPin: 'गलत PIN',
+            pinMismatch: 'PIN मेल नहीं खाते, पुनः प्रयास करें',
+            enterPinToUnlock: 'अनलॉक करने के लिए PIN दर्ज करें'
         }
     },
     signerMismatch: {

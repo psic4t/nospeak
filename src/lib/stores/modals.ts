@@ -30,9 +30,24 @@ import { writable } from 'svelte/store';
      scanContactQrResultState.set({ isOpen: true, npub });
  }
  
- export function closeScanContactQrResult() {
-     scanContactQrResultState.set({ isOpen: false, npub: null });
- }
+export function closeScanContactQrResult() {
+    scanContactQrResultState.set({ isOpen: false, npub: null });
+}
 
+export type PinSetupMode = 'set' | 'verify' | 'change';
+
+export const pinSetupModalState = writable<{ isOpen: boolean; mode: PinSetupMode; onSuccess: ((pin: string) => void) | null }>({
+    isOpen: false,
+    mode: 'set',
+    onSuccess: null
+});
+
+export function openPinSetupModal(mode: PinSetupMode, onSuccess: (pin: string) => void) {
+    pinSetupModalState.set({ isOpen: true, mode, onSuccess });
+}
+
+export function closePinSetupModal() {
+    pinSetupModalState.set({ isOpen: false, mode: 'set', onSuccess: null });
+}
 
 

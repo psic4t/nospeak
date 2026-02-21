@@ -35,6 +35,8 @@
   import Input from '$lib/components/ui/Input.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import Toggle from '$lib/components/ui/Toggle.svelte';
+  import { isPinEnabled, enablePin, disablePin } from '$lib/stores/pin';
+  import { openPinSetupModal } from '$lib/stores/modals';
  
   const packageVersion = __APP_VERSION__;
 
@@ -64,6 +66,9 @@
   let securityAuthMethod = $state<AuthMethod>("unknown");
   let storedNsec = $state("");
   let showNsec = $state(false);
+
+  // PIN lock state
+  let pinToggleChecked = $state(false);
 
   function hexToBytes(hex: string): Uint8Array {
     const normalized = hex.trim();
@@ -122,6 +127,37 @@
       showNsec = false;
       storedNsec = "";
     }
+  }
+
+  // PIN toggle handler: when toggling ON, open set modal; when toggling OFF, open verify modal
+  function handlePinToggle() {
+    if (pinToggleChecked) {
+      // User wants to enable PIN — open setup modal
+      openPinSetupModal('set', (pin: string) => {
+        void enablePin(pin);
+        pinToggleChecked = true;
+      });
+    } else {
+      // User wants to disable PIN — need to verify current PIN first
+      // Revert toggle immediately; it will stay off only if verification succeeds
+      pinToggleChecked = true;
+      openPinSetupModal('verify', (_pin: string) => {
+        disablePin();
+        pinToggleChecked = false;
+      });
+    }
+  }
+
+  // Keep toggle in sync with actual PIN enabled state
+  $effect(() => {
+    pinToggleChecked = $isPinEnabled;
+  });
+
+  function handleChangePinClick() {
+    openPinSetupModal('change', (pin: string) => {
+      void enablePin(pin);
+      pinToggleChecked = true;
+    });
   }
 
   // Profile settings
@@ -495,6 +531,7 @@
         }
 
         showNsec = false;
+        pinToggleChecked = $isPinEnabled;
       } catch (e) {
         console.warn("Failed to read auth method for Security settings:", e);
         securityAuthMethod = "unknown";
@@ -1805,6 +1842,42 @@
                   </div>
                 </div>
               {/if}
+
+              <!-- App Lock (PIN) -->
+              <div class="pt-6 border-t dark:border-slate-700">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="flex-1 min-w-0">
+                    <label
+                      for="pin-lock-toggle"
+                      class="typ-section dark:text-white"
+                    >
+                      {$t('settings.pin.appLockLabel')}
+                    </label>
+                    <p class="text-sm text-gray-600 dark:text-slate-400">
+                      {$t('settings.pin.appLockDescription')}
+                    </p>
+                  </div>
+                  <Toggle
+                    id="pin-lock-toggle"
+                    bind:checked={pinToggleChecked}
+                    onclick={handlePinToggle}
+                    aria-label={pinToggleChecked ? 'Disable app lock' : 'Enable app lock'}
+                    class="ms-4"
+                  />
+                </div>
+
+                {#if pinToggleChecked}
+                  <div class="mt-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onclick={handleChangePinClick}
+                    >
+                      {$t('settings.pin.changePinButton')}
+                    </Button>
+                  </div>
+                {/if}
+              </div>
 
               <div class="pt-6 border-t dark:border-slate-700">
                 <h4 class="text-sm font-medium text-red-600 dark:text-red-400 mb-2">

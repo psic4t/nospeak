@@ -443,6 +443,20 @@ const pt = {
             dangerZoneTitle: 'Zona de perigo',
             dangerZoneDescription: 'Terminar sessão irá remover todos os dados em cache deste dispositivo.',
             logoutButton: 'Terminar sessão'
+        },
+        pin: {
+            appLockLabel: 'Bloqueio da app',
+            appLockDescription: 'Exigir um PIN para aceder à app',
+            changePinButton: 'Alterar PIN',
+            enterNewPin: 'Definir um PIN',
+            enterNewPinDescription: 'Introduza um PIN de 4 dígitos',
+            confirmPin: 'Confirmar PIN',
+            confirmPinDescription: 'Introduza o mesmo PIN novamente',
+            enterCurrentPin: 'Introduzir PIN',
+            enterCurrentPinDescription: 'Introduza o seu PIN atual',
+            wrongPin: 'PIN incorreto',
+            pinMismatch: 'Os PINs não coincidem, tente novamente',
+            enterPinToUnlock: 'Introduza o PIN para desbloquear'
         }
     },
     signerMismatch: {
