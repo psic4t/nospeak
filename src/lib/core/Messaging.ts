@@ -1651,17 +1651,24 @@ import type { Conversation } from '$lib/db/db';
 
   private async getMessagingRelays(npub: string): Promise<string[]> {
     let profile = await profileRepo.getProfile(npub);
+
     if (!profile) {
+      // First try resolving from currently connected relays only (fast, works offline)
+      await profileResolver.resolveProfile(npub, true);
+      profile = await profileRepo.getProfile(npub);
+    }
+
+    if (!profile || !profile.messagingRelays?.length) {
+      // Fall back to full discovery (connects to discovery relays, slower)
       await discoverUserRelays(npub);
       profile = await profileRepo.getProfile(npub);
     }
- 
+
     if (!profile) {
       return [];
     }
- 
+
     const urls = new Set<string>(profile.messagingRelays || []);
- 
     return Array.from(urls);
   }
 
