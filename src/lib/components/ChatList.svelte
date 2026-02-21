@@ -825,7 +825,7 @@
   {/snippet}
 
   <!-- Swipe container: horizontal flex with 4 panels, one per tab -->
-  <div class="flex-1 overflow-hidden pt-[calc(120px+env(safe-area-inset-top))]">
+  <div class="flex-1 overflow-hidden">
     <div
       class="flex h-full"
       style="width: {tabValues.length * 100}%"
@@ -837,7 +837,7 @@
       }}
     >
       <!-- Panel: All -->
-      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pt-[calc(120px+env(safe-area-inset-top))] pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
         {#if chatItems.length === 0}
           {@render loadingSkeleton()}
         {:else if allItems.length === 0}
@@ -853,7 +853,7 @@
       </div>
 
       <!-- Panel: Unread -->
-      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pt-[calc(120px+env(safe-area-inset-top))] pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
         {#if chatItems.length === 0}
           {@render loadingSkeleton()}
         {:else if unreadItems.length === 0}
@@ -868,7 +868,7 @@
       </div>
 
       <!-- Panel: Groups -->
-      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pt-[calc(120px+env(safe-area-inset-top))] pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
         {#if chatItems.length === 0}
           {@render loadingSkeleton()}
         {:else if groupItems.length === 0}
@@ -883,7 +883,7 @@
       </div>
 
       <!-- Panel: Archive -->
-      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
+      <div class="h-full overflow-y-auto custom-scrollbar native-scroll pt-[calc(120px+env(safe-area-inset-top))] pb-safe-offset-16" style="width: {100 / tabValues.length}%" use:overscroll>
         {#if chatItems.length === 0}
           {@render loadingSkeleton()}
         {:else if archiveItems.length === 0}
