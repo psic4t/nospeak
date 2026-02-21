@@ -101,6 +101,14 @@ export async function checkAndAutoSetRelays(): Promise<void> {
             return;
         }
 
+        // Don't overwrite if there are active relay connections
+        // (e.g. user has a local relay that is connected and working)
+        const connectedCount = connectionManager.getAllRelayHealth()
+            .filter(h => h.isConnected).length;
+        if (connectedCount > 0) {
+            return;
+        }
+
         const metadata = profile?.metadata || {};
         const hasUsername = !!(metadata.name || metadata.display_name || metadata.nip05);
 
