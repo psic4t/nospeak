@@ -145,6 +145,20 @@
       };
   });
 
+  // Lock app when window loses focus (catches virtual desktop switches on Linux)
+  onMount(() => {
+      const handleWindowBlur = () => {
+          if ($currentUser) {
+              lockApp();
+          }
+      };
+
+      window.addEventListener('blur', handleWindowBlur);
+      return () => {
+          window.removeEventListener('blur', handleWindowBlur);
+      };
+  });
+
   onMount(async () => {
     initLanguage();
     initRuntimeConfig();
