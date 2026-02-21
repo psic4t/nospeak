@@ -9,6 +9,8 @@
      import { t } from '$lib/i18n';
      import { get } from 'svelte/store';
      import Button from '$lib/components/ui/Button.svelte';
+     import { profileRepo } from '$lib/db/ProfileRepository';
+     import { currentUser } from '$lib/stores/auth';
  
      let { isOpen = false } = $props<{ isOpen: boolean }>();
 
@@ -43,10 +45,20 @@
         errorMessage = '';
 
         try {
-            await relaySettingsService.updateSettings(
-                getDefaultMessagingRelays()
-            );
- 
+            // Only set default relays if user doesn't already have relays configured
+            // (they may have been set via manual relay input during sync)
+            const currentUserData = get(currentUser);
+            const existingProfile = currentUserData
+                ? await profileRepo.getProfileIgnoreTTL(currentUserData.npub)
+                : null;
+            const hasExistingRelays = (existingProfile?.messagingRelays?.length ?? 0) > 0;
+
+            if (!hasExistingRelays) {
+                await relaySettingsService.updateSettings(
+                    getDefaultMessagingRelays()
+                );
+            }
+
             const name = username.trim();
             await profileService.updateProfile({
                 name,
