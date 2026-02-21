@@ -1082,6 +1082,7 @@
                   <option value="fa">فارسی</option>
                   <option value="fr">Français</option>
                   <option value="he">עברית</option>
+                  <option value="hi">हिन्दी</option>
                   <option value="it">Italiano</option>
                   <option value="ja">日本語</option>
                   <option value="ko">한국어</option>

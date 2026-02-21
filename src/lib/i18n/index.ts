@@ -1,8 +1,8 @@
 import { init, register, locale, getLocaleFromNavigator, t } from 'svelte-i18n';
 
-export type Language = 'en' | 'ar' | 'de' | 'es' | 'fa' | 'fr' | 'he' | 'it' | 'ja' | 'ko' | 'nl' | 'pl' | 'pt' | 'ru' | 'tr' | 'ur' | 'zh';
+export type Language = 'en' | 'ar' | 'de' | 'es' | 'fa' | 'fr' | 'he' | 'hi' | 'it' | 'ja' | 'ko' | 'nl' | 'pl' | 'pt' | 'ru' | 'tr' | 'ur' | 'zh';
 
-const SUPPORTED_LOCALES: Language[] = ['en', 'ar', 'de', 'es', 'fa', 'fr', 'he', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'ru', 'tr', 'ur', 'zh'];
+const SUPPORTED_LOCALES: Language[] = ['en', 'ar', 'de', 'es', 'fa', 'fr', 'he', 'hi', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'ru', 'tr', 'ur', 'zh'];
 const DEFAULT_LOCALE: Language = 'en';
 
 const RTL_LOCALES: Language[] = ['ar', 'fa', 'he', 'ur'];
@@ -14,6 +14,7 @@ register('es', () => import('./locales/es.ts'));
 register('fa', () => import('./locales/fa.ts'));
 register('fr', () => import('./locales/fr.ts'));
 register('he', () => import('./locales/he.ts'));
+register('hi', () => import('./locales/hi.ts'));
 register('it', () => import('./locales/it.ts'));
 register('ja', () => import('./locales/ja.ts'));
 register('ko', () => import('./locales/ko.ts'));
@@ -72,6 +73,10 @@ export function detectNavigatorLocale(): Language {
 
     if (lower.startsWith('he')) {
         return 'he';
+    }
+
+    if (lower.startsWith('hi')) {
+        return 'hi';
     }
 
     if (lower.startsWith('it')) {
