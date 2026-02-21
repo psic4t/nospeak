@@ -515,6 +515,20 @@ export class AuthService {
         await this.runLoginHistoryFlow(this.lastLoginNpub, this.lastLoginContext || 'Retry');
     }
 
+    public async retrySyncWithManualRelay(relayUrl: string): Promise<void> {
+        if (!this.lastLoginNpub) {
+            throw new Error('Cannot retry sync: no previous login npub');
+        }
+
+        // Save the relay as the user's messaging relay
+        // This caches it in IndexedDB so hasCachedRelays will be true on retry
+        await relaySettingsService.updateSettings([relayUrl]);
+
+        // Retry the sync flow - now it will find cached relays and skip discovery
+        resetSyncFlow();
+        await this.runLoginHistoryFlow(this.lastLoginNpub, this.lastLoginContext || 'ManualRelay');
+    }
+
     public skipSyncAndContinue(): void {
         const state = get(syncState);
 
