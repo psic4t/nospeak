@@ -83,6 +83,13 @@ const de = {
         skipButton: 'Überspringen und fortfahren',
         continueInBackground: 'Im Hintergrund fortfahren',
         backgroundComplete: 'Synchronisierung abgeschlossen',
+        manualRelay: {
+            label: 'Oder Relay manuell eingeben',
+            placeholder: 'ws://192.168.1.50:7777',
+            connectButton: 'Verbinden',
+            connecting: 'Verbinde...',
+            invalidUrl: 'Ungültige Relay-URL'
+        },
         steps: {
             connectDiscoveryRelays: 'Verbindung zu Discovery-Relays herstellen',
             fetchMessagingRelays: 'Messaging-Relays des Nutzers abrufen und zwischenspeichern',

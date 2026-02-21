@@ -82,6 +82,13 @@ const en = {
         skipButton: 'Skip and continue',
         continueInBackground: 'Continue in background',
         backgroundComplete: 'Sync completed',
+        manualRelay: {
+            label: 'Or enter a relay manually',
+            placeholder: 'ws://192.168.1.50:7777',
+            connectButton: 'Connect',
+            connecting: 'Connecting...',
+            invalidUrl: 'Invalid relay URL'
+        },
         steps: {
             connectDiscoveryRelays: 'Connect to discovery relays',
             fetchMessagingRelays: "Fetch and cache user's messaging relays",

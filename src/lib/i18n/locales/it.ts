@@ -78,6 +78,13 @@ const it = {
         skipButton: 'Salta e continua',
         continueInBackground: 'Continua in background',
         backgroundComplete: 'Sincronizzazione completata',
+        manualRelay: {
+            label: 'Oppure inserisci un relay manualmente',
+            placeholder: 'ws://192.168.1.50:7777',
+            connectButton: 'Connetti',
+            connecting: 'Connessione...',
+            invalidUrl: 'URL relay non valido'
+        },
         steps: {
             connectDiscoveryRelays: 'Connetti ai relays di discovery',
             fetchMessagingRelays: "Recupera e memorizza nella cache i relays di messaggistica dell'utente",
