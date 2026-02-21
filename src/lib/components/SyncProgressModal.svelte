@@ -8,6 +8,9 @@
 
     let { progress = 0 } = $props<{ progress: number }>();
     const isAndroidApp = isAndroidNative();
+    let manualRelayUrl = $state('');
+    let isConnecting = $state(false);
+    let connectError = $state('');
 
     function handleRetry() {
         authService.retrySyncFlow();
@@ -20,6 +23,36 @@
     function handleContinueInBackground() {
         setBackgroundMode();
         completeLoginSyncFlow();
+    }
+
+    async function handleManualRelay() {
+        if (!manualRelayUrl.trim()) return;
+
+        let url = manualRelayUrl.trim();
+        // Normalize: auto-prepend wss:// if no scheme
+        if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
+            url = 'wss://' + url;
+        }
+
+        // Basic URL validation
+        try {
+            new URL(url);
+        } catch {
+            connectError = $t('sync.manualRelay.invalidUrl') as string;
+            return;
+        }
+
+        isConnecting = true;
+        connectError = '';
+
+        try {
+            await authService.retrySyncWithManualRelay(url);
+            manualRelayUrl = '';
+        } catch (e) {
+            connectError = e instanceof Error ? e.message : String(e);
+        } finally {
+            isConnecting = false;
+        }
     }
 
     // Map step IDs to translation keys for error display
@@ -65,6 +98,37 @@
                         </ul>
                     </div>
                 {/if}
+
+                <!-- Manual Relay Input -->
+                <div class="w-full space-y-2">
+                    <div class="typ-label text-gray-500 dark:text-slate-400">
+                        {$t('sync.manualRelay.label')}
+                    </div>
+                    <div class="flex gap-2">
+                        <input
+                            type="text"
+                            bind:value={manualRelayUrl}
+                            placeholder={$t('sync.manualRelay.placeholder')}
+                            class="flex-1 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                            onkeydown={(e) => { if (e.key === 'Enter') handleManualRelay(); }}
+                            disabled={isConnecting}
+                        />
+                        <Button
+                            variant="filled-tonal"
+                            onclick={handleManualRelay}
+                            disabled={isConnecting || !manualRelayUrl.trim()}
+                        >
+                            {#if isConnecting}
+                                {$t('sync.manualRelay.connecting')}
+                            {:else}
+                                {$t('sync.manualRelay.connectButton')}
+                            {/if}
+                        </Button>
+                    </div>
+                    {#if connectError}
+                        <div class="typ-meta text-red-500 dark:text-red-400">{connectError}</div>
+                    {/if}
+                </div>
 
                 <!-- Action Buttons -->
                 <div class="flex gap-3 w-full">
