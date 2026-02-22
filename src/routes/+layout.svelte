@@ -88,8 +88,9 @@
    });
 
   // Redirect authenticated users away from login page (safety net for back navigation)
+  // Skip during active sync flow — login methods handle their own navigation
   $effect(() => {
-      if ($currentUser && page.url.pathname === '/') {
+      if ($currentUser && page.url.pathname === '/' && !$syncState.flowActive) {
           goto('/chat', { replaceState: true });
       }
   });

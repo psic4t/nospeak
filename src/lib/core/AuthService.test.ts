@@ -129,8 +129,8 @@ vi.mock('$lib/core/signer/Nip55Signer', () => ({
  }));
  
  vi.mock('$lib/stores/sync', () => ({
- 
     beginLoginSyncFlow: vi.fn(),
+    updateLoginSyncIsFirstSync: vi.fn(),
     setLoginSyncActiveStep: vi.fn(),
     completeLoginSyncFlow: vi.fn()
  }));
@@ -333,6 +333,28 @@ describe('AuthService ordered login history flow integration', () => {
         expect(goto).toHaveBeenCalledWith('/chat', { replaceState: true });
         expect(runFlowSpy).toHaveBeenCalledWith('npub1test', 'Login');
      });
+
+    it('calls beginLoginSyncFlow before navigating to /chat', async () => {
+        const module = await import('./AuthService');
+        vi
+            .spyOn(module.AuthService.prototype as any, 'runLoginHistoryFlow')
+            .mockResolvedValue(undefined);
+
+        const { goto } = await import('$app/navigation');
+        const { beginLoginSyncFlow } = await import('$lib/stores/sync');
+
+        const callOrder: string[] = [];
+        (beginLoginSyncFlow as any).mockImplementation(() => {
+            callOrder.push('beginLoginSyncFlow');
+        });
+        (goto as any).mockImplementation(() => {
+            callOrder.push('goto');
+        });
+
+        await authService.login('nsec1test');
+
+        expect(callOrder.indexOf('beginLoginSyncFlow')).toBeLessThan(callOrder.indexOf('goto'));
+    });
  
   });
 
@@ -555,6 +577,28 @@ describe('AuthService ordered login history flow integration', () => {
           expect(localStorage.getItem('nospeak:auth_method')).toBe('amber');
           expect(localStorage.getItem('nospeak:amber_pubkey_hex')).toBeTruthy();
       });
+
+    it('loginWithAmber calls beginLoginSyncFlow before navigating to /chat', async () => {
+        const module = await import('./AuthService');
+        vi
+            .spyOn(module.AuthService.prototype as any, 'runLoginHistoryFlow')
+            .mockResolvedValue(undefined);
+
+        const { goto } = await import('$app/navigation');
+        const { beginLoginSyncFlow } = await import('$lib/stores/sync');
+
+        const callOrder: string[] = [];
+        (beginLoginSyncFlow as any).mockImplementation(() => {
+            callOrder.push('beginLoginSyncFlow');
+        });
+        (goto as any).mockImplementation(() => {
+            callOrder.push('goto');
+        });
+
+        await authService.loginWithAmber();
+
+        expect(callOrder.indexOf('beginLoginSyncFlow')).toBeLessThan(callOrder.indexOf('goto'));
+    });
  
       it('restore() returns true and syncs background messaging for amber sessions when cached pubkey exists', async () => {
           const { syncAndroidBackgroundMessagingFromPreference } = await import('./BackgroundMessaging');

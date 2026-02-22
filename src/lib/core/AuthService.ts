@@ -17,6 +17,7 @@ import { profileResolver } from './ProfileResolver';
 import { messageRepo } from '$lib/db/MessageRepository';
 import {
     beginLoginSyncFlow,
+    updateLoginSyncIsFirstSync,
     completeLoginSyncFlow,
     setLoginSyncActiveStep,
     setSyncError,
@@ -214,7 +215,11 @@ export class AuthService {
                 localStorage.setItem(STORAGE_KEY, nsec);
             }
 
-            // Navigate to chat (replace login page in history) and start ordered login history flow in background
+            // Start sync flow BEFORE navigation so the modal renders immediately
+            // when the chat layout mounts
+            beginLoginSyncFlow(true);
+
+            // Navigate to chat and start ordered login history flow in background
             goto('/chat', { replaceState: true });
             this.runLoginHistoryFlow(npub, 'Login').catch(console.error);
         } catch (e) {
@@ -237,6 +242,7 @@ export class AuthService {
             localStorage.setItem(AUTH_METHOD_KEY, 'amber');
             localStorage.setItem('nospeak:amber_pubkey_hex', pubkeyHex);
 
+            beginLoginSyncFlow(true);
             goto('/chat', { replaceState: true });
             this.runLoginHistoryFlow(npub, 'Amber login').catch(console.error);
         } catch (e) {
@@ -266,7 +272,8 @@ export class AuthService {
             // Start periodic signer verification for NIP-07
             signerVerificationService.startPeriodicVerification(pubkey);
 
-            // Navigate to chat (replace login page in history) and start ordered login history flow in background
+            // Start sync flow BEFORE navigation so the modal renders immediately
+            beginLoginSyncFlow(true);
             goto('/chat', { replaceState: true });
             this.runLoginHistoryFlow(npub, 'Extension login').catch(console.error);
         } catch (e) {
@@ -303,7 +310,9 @@ export class AuthService {
             const totalMessages = await messageRepo.countMessages('ALL');
             const isFirstSync = totalMessages === 0;
 
-            beginLoginSyncFlow(isFirstSync);
+            // Update isFirstSync now that we know from DB
+            // (beginLoginSyncFlow was already called by the login method)
+            updateLoginSyncIsFirstSync(isFirstSync);
 
             // Set up dismiss timer (2 minutes)
             dismissTimer = setTimeout(() => {
@@ -512,6 +521,7 @@ export class AuthService {
         }
 
         resetSyncFlow();
+        beginLoginSyncFlow(true);
         await this.runLoginHistoryFlow(this.lastLoginNpub, this.lastLoginContext || 'Retry');
     }
 
@@ -526,6 +536,7 @@ export class AuthService {
 
         // Retry the sync flow - now it will find cached relays and skip discovery
         resetSyncFlow();
+        beginLoginSyncFlow(true);
         await this.runLoginHistoryFlow(this.lastLoginNpub, this.lastLoginContext || 'ManualRelay');
     }
 

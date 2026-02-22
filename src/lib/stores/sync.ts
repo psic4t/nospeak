@@ -106,6 +106,13 @@ export function beginLoginSyncFlow(isFirstSync: boolean) {
     });
 }
 
+export function updateLoginSyncIsFirstSync(isFirstSync: boolean) {
+    syncState.update(state => ({
+        ...state,
+        isFirstSync
+    }));
+}
+
 export function setLoginSyncActiveStep(stepId: LoginSyncStepId) {
     syncState.update(state => {
         if (!state.flowActive) {

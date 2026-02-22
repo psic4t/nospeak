@@ -80,7 +80,7 @@
     let isChatOpen = $derived(page.url.pathname !== '/chat');
 </script>
 
-<div class="flex h-full overflow-hidden bg-transparent">
+<div class="flex h-full overflow-hidden bg-transparent" class:invisible={$syncState.flowActive}>
     <div class={`${isChatOpen ? 'hidden md:block' : 'block'} w-full md:w-[23rem] flex-shrink-0 border-r border-gray-200/50 dark:border-gray-800/50`}>
         <ChatList />
     </div>
