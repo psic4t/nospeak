@@ -880,11 +880,33 @@ export class ConnectionManager {
         }
     }
 
-    public async fetchEvents(filters: any[], timeoutMs: number = 3000): Promise<any[]> {
+    public async fetchEvents(
+        filters: any[],
+        timeoutMs: number = 3000,
+        options?: { extraRelays?: string[] }
+    ): Promise<any[]> {
         const events: any[] = [];
+
+        // Add extra relays temporarily if needed
+        const addedTemporaryRelays: string[] = [];
+        if (options?.extraRelays) {
+            for (const url of options.extraRelays) {
+                if (!this.relays.has(url)) {
+                    this.addTemporaryRelay(url);
+                    addedTemporaryRelays.push(url);
+                }
+            }
+        }
+
         const connectedRelays = this.getConnectedRelays();
         
-        if (connectedRelays.length === 0) return [];
+        if (connectedRelays.length === 0) {
+            // Clean up any temporary relays we added
+            for (const url of addedTemporaryRelays) {
+                this.removeRelay(url);
+            }
+            return [];
+        }
 
         return new Promise((resolve) => {
             let completedRelays = 0;
@@ -904,6 +926,10 @@ export class ConnectionManager {
                     this.safeCloseSubscription(sub);
                 }
                 clearTimeout(timer);
+                // Clean up temporary relays
+                for (const url of addedTemporaryRelays) {
+                    this.removeRelay(url);
+                }
             };
 
             const timer = setTimeout(() => {

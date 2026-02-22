@@ -248,27 +248,14 @@ export class ArchiveSyncService {
 
     /**
      * Fetch the latest event matching a filter from connected relays.
+     * Uses fetchEvents which resolves on EOSE from all relays (with 5s safety timeout).
      */
     private async fetchLatestEvent(filter: any): Promise<any | null> {
-        return new Promise((resolve) => {
-            let latestEvent: any = null;
-            let latestCreatedAt = 0;
-
-            const timeout = setTimeout(() => {
-                cleanup();
-                resolve(latestEvent);
-            }, 5000);
-
-            const cleanup = connectionManager.subscribe([filter], (event) => {
-                if (event.created_at > latestCreatedAt) {
-                    latestCreatedAt = event.created_at;
-                    latestEvent = event;
-                }
-            });
-
-            // Also resolve early if we get an EOSE-like completion
-            // For now just rely on the timeout
-        });
+        const events = await connectionManager.fetchEvents([filter], 5000);
+        if (events.length === 0) return null;
+        return events.reduce((latest, e) =>
+            e.created_at > latest.created_at ? e : latest
+        );
     }
 }
 

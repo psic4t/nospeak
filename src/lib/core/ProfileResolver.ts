@@ -217,82 +217,77 @@ export class ProfileResolver {
             });
         }
 
-        return new Promise<void>((resolve) => {
-            const finalize = async () => {
-                // Cache all profiles that we found
-                let cached = 0;
-                for (const [npub, data] of profileDataMap.entries()) {
-                    try {
-                        const { data: pubkey } = nip19.decode(npub);
-                        await profileRepo.cacheProfile(
-                            npub,
-                            data.metadata,
-                            {
-                                messagingRelays: (data.foundMessagingRelays || data.foundNip65Relays) ? data.messagingRelays : undefined,
-                                mediaServers: data.foundMediaServers ? data.mediaServers : undefined
-                            }
-                        );
-
-                        // Cache Android profile identity if we have metadata
-                        const username = extractKind0Username(data.metadata);
-                        if (username) {
-                            await cacheAndroidProfileIdentity({
-                                pubkeyHex: pubkey as string,
-                                username,
-                                picture: extractKind0Picture(data.metadata) ?? undefined,
-                                updatedAt: Date.now()
-                            });
-                        }
-
-                        if (data.foundProfile) {
-                            cached++;
-                        }
-                    } catch (e) {
-                        console.warn(`[ProfileResolver] Failed to cache profile for ${npub}:`, e);
-                    }
-                }
-                console.log(`[ProfileResolver] Batch resolution complete: ${cached}/${pubkeyToNpub.size} profiles cached`);
-                resolve();
-            };
-
-            // 5-second timeout for batch resolution
-            const timeout = setTimeout(() => {
-                cleanup();
-                void finalize();
-            }, 5000);
-
-            const cleanup = connectionManager.subscribe(filters, (event) => {
-                const npub = pubkeyToNpub.get(event.pubkey);
-                if (!npub) return;
-
-                const data = profileDataMap.get(npub);
-                if (!data) return;
-
-                if (event.kind === 0 && !data.foundProfile) {
-                    try {
-                        data.metadata = JSON.parse(event.content);
-                        data.foundProfile = true;
-                    } catch (e) {
-                        console.error(`[ProfileResolver] Failed to parse profile metadata for ${npub}`, e);
-                    }
-                } else if (event.kind === 10050 && !data.foundMessagingRelays) {
-                    data.messagingRelays = this.parseMessagingRelayList(event);
-                    data.foundMessagingRelays = true;
-                } else if (event.kind === 10063 && !data.foundMediaServers) {
-                    data.mediaServers = parseBlossomServerListEvent(event);
-                    data.foundMediaServers = true;
-                } else if (event.kind === 10002 && !data.foundNip65Relays && !data.foundMessagingRelays) {
-                    const parsed = this.parseNIP65RelayList(event);
-                    data.messagingRelays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
-                    data.foundNip65Relays = true;
-                }
-            }, {
-                extraRelays: getDiscoveryRelays().filter(url => {
-                    const health = connectionManager.getRelayHealth(url);
-                    return health?.isConnected;
-                })
-            });
+        // Fetch events using EOSE-aware fetchEvents (with 5s safety timeout)
+        const extraRelays = getDiscoveryRelays().filter(url => {
+            const health = connectionManager.getRelayHealth(url);
+            return health?.isConnected;
         });
+
+        const events = await connectionManager.fetchEvents(filters, 5000, {
+            extraRelays: extraRelays.length > 0 ? extraRelays : undefined
+        });
+
+        // Process fetched events
+        for (const event of events) {
+            const npub = pubkeyToNpub.get(event.pubkey);
+            if (!npub) continue;
+
+            const data = profileDataMap.get(npub);
+            if (!data) continue;
+
+            if (event.kind === 0 && !data.foundProfile) {
+                try {
+                    data.metadata = JSON.parse(event.content);
+                    data.foundProfile = true;
+                } catch (e) {
+                    console.error(`[ProfileResolver] Failed to parse profile metadata for ${npub}`, e);
+                }
+            } else if (event.kind === 10050 && !data.foundMessagingRelays) {
+                data.messagingRelays = this.parseMessagingRelayList(event);
+                data.foundMessagingRelays = true;
+            } else if (event.kind === 10063 && !data.foundMediaServers) {
+                data.mediaServers = parseBlossomServerListEvent(event);
+                data.foundMediaServers = true;
+            } else if (event.kind === 10002 && !data.foundNip65Relays && !data.foundMessagingRelays) {
+                const parsed = this.parseNIP65RelayList(event);
+                data.messagingRelays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
+                data.foundNip65Relays = true;
+            }
+        }
+
+        // Cache all profiles that we found
+        let cached = 0;
+        for (const [npub, data] of profileDataMap.entries()) {
+            try {
+                const { data: pubkey } = nip19.decode(npub);
+                await profileRepo.cacheProfile(
+                    npub,
+                    data.metadata,
+                    {
+                        messagingRelays: (data.foundMessagingRelays || data.foundNip65Relays) ? data.messagingRelays : undefined,
+                        mediaServers: data.foundMediaServers ? data.mediaServers : undefined
+                    }
+                );
+
+                // Cache Android profile identity if we have metadata
+                const username = extractKind0Username(data.metadata);
+                if (username) {
+                    await cacheAndroidProfileIdentity({
+                        pubkeyHex: pubkey as string,
+                        username,
+                        picture: extractKind0Picture(data.metadata) ?? undefined,
+                        updatedAt: Date.now()
+                    });
+                }
+
+                if (data.foundProfile) {
+                    cached++;
+                }
+            } catch (e) {
+                console.warn(`[ProfileResolver] Failed to cache profile for ${npub}:`, e);
+            }
+        }
+        console.log(`[ProfileResolver] Batch resolution complete: ${cached}/${pubkeyToNpub.size} profiles cached`);
     }
 
     private parseMessagingRelayList(event: any): string[] {

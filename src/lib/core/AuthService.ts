@@ -415,34 +415,28 @@ export class AuthService {
             }
         }
 
-        // 4. Fetch and merge contacts from Kind 30000 event
+        // 4. Fetch and merge contacts, favorites, and archives in parallel
         // Note: Must happen BEFORE history fetch so we have the full contact list
         // before auto-adding contacts from messages (prevents overwriting saved contacts)
         setLoginSyncActiveStep('fetch-contacts');
-        try {
-            await contactSyncService.fetchAndSyncContacts();
-        } catch (error) {
-            console.error(`${context} contact sync failed:`, error);
-            // Non-fatal - continue with flow
-        }
-
-        // 4b. Fetch and sync favorites from Kind 30003 event
-        try {
-            await favoriteSyncService.fetchAndSyncFavorites();
-            await loadFavorites();
-        } catch (error) {
-            console.error(`${context} favorites sync failed:`, error);
-            // Non-fatal - continue with flow
-        }
-
-        // 4c. Fetch and sync archives from Kind 30000 event
-        try {
-            await archiveSyncService.fetchAndSyncArchives();
-            await loadArchives();
-        } catch (error) {
-            console.error(`${context} archives sync failed:`, error);
-            // Non-fatal - continue with flow
-        }
+        await Promise.all([
+            contactSyncService.fetchAndSyncContacts().catch(error => {
+                console.error(`${context} contact sync failed:`, error);
+                // Non-fatal - continue with flow
+            }),
+            favoriteSyncService.fetchAndSyncFavorites()
+                .then(() => loadFavorites())
+                .catch(error => {
+                    console.error(`${context} favorites sync failed:`, error);
+                    // Non-fatal - continue with flow
+                }),
+            archiveSyncService.fetchAndSyncArchives()
+                .then(() => loadArchives())
+                .catch(error => {
+                    console.error(`${context} archives sync failed:`, error);
+                    // Non-fatal - continue with flow
+                }),
+        ]);
 
         // 5. Fetch and cache history items from relays
         // Note: Discovery relays stay connected so autoAddContact can resolve profiles
