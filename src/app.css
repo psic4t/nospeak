@@ -156,14 +156,24 @@
 
 /* Cypher theme neon glow effects */
 [data-theme="cypher"] {
-    --neon-glow: 0 0 10px rgba(0, 255, 255, 0.5);
-    --neon-glow-subtle: 0 0 5px rgba(0, 255, 255, 0.3);
-    --neon-border-glow: 0 0 2px rgba(0, 255, 255, 0.8);
+    --neon-glow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.4), 0 0 60px rgba(0, 255, 255, 0.2);
+    --neon-glow-subtle: 0 0 10px rgba(0, 255, 255, 0.6), 0 0 20px rgba(0, 255, 255, 0.3);
+    --neon-border-glow: 0 0 5px rgba(0, 255, 255, 1), 0 0 15px rgba(0, 255, 255, 0.5);
+    --neon-text-glow: 0 0 5px rgba(0, 255, 255, 0.8), 0 0 10px rgba(0, 255, 255, 0.4);
 }
 
 [data-theme="cypher"] button:focus,
 [data-theme="cypher"] input:focus {
-    box-shadow: var(--neon-glow-subtle);
+    box-shadow: var(--neon-glow);
+}
+
+[data-theme="cypher"] button,
+[data-theme="cypher"] [role="button"] {
+    box-shadow: var(--neon-border-glow);
+}
+
+[data-theme="cypher"] * {
+    text-shadow: var(--neon-text-glow);
 }
 
 /* Cypher theme: force all inner UI backgrounds to pure black */
