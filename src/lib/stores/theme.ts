@@ -1,5 +1,5 @@
 export type Theme = 'latte' | 'frappe' | 'macchiato' | 'mocha';
-export type ThemeMode = 'system' | 'light' | 'dark';
+export type ThemeMode = 'system' | 'light' | 'dark' | 'cypher';
 
 export interface ThemeColors {
 	rosewater: string;
@@ -147,6 +147,35 @@ export const catppuccinThemes: Record<Theme, ThemeColors> = {
 	}
 };
 
+export const cypherTheme: ThemeColors = {
+	rosewater: '#00ffff',
+	flamingo: '#00cccc',
+	pink: '#00ffff',
+	mauve: '#00ffff',
+	red: '#00ffff',
+	maroon: '#00cccc',
+	peach: '#00ffff',
+	yellow: '#00ffff',
+	green: '#00ffff',
+	teal: '#00ffff',
+	sky: '#00ffff',
+	sapphire: '#00cccc',
+	blue: '#00ffff',
+	lavender: '#00ffff',
+	text: '#ffffff',
+	subtext1: '#b3b3b3',
+	subtext0: '#999999',
+	overlay2: '#00ffff',
+	overlay1: '#00cccc',
+	overlay0: '#00aaaa',
+	surface2: '#000000',
+	surface1: '#000000',
+	surface0: '#000000',
+	base: '#000000',
+	mantle: '#000000',
+	crust: '#000000'
+};
+
 export const themeNames: Record<Theme, string> = {
 	latte: 'Catppuccin Latte',
 	frappe: 'Catppuccin Frappé',
@@ -197,9 +226,9 @@ export function setThemeMode(mode: ThemeMode) {
 	}
 }
 
-export function getEffectiveThemeForMode(mode: ThemeMode): Theme {
+export function getEffectiveThemeForMode(mode: ThemeMode): Theme | 'cypher' {
 	if (typeof window === 'undefined') {
-		return mode === 'dark' ? 'frappe' : 'latte';
+		return mode === 'dark' ? 'frappe' : mode === 'cypher' ? 'cypher' : 'latte';
 	}
 
 	const prefersDark =
@@ -208,12 +237,13 @@ export function getEffectiveThemeForMode(mode: ThemeMode): Theme {
 
 	if (mode === 'light') return 'latte';
 	if (mode === 'dark') return 'frappe';
+	if (mode === 'cypher') return 'cypher';
 
 	return prefersDark ? 'frappe' : 'latte';
 }
 
-export function applyTheme(theme: Theme) {
-	const colors = catppuccinThemes[theme];
+export function applyTheme(theme: Theme | 'cypher') {
+	const colors = theme === 'cypher' ? cypherTheme : catppuccinThemes[theme as Theme];
 	const root = document.documentElement;
 
 	Object.entries(colors).forEach(([key, value]) => {
@@ -229,8 +259,7 @@ export function applyTheme(theme: Theme) {
 	// Set data attribute for CSS targeting
 	root.setAttribute('data-theme', theme);
 
-
-	const isDark = theme === 'frappe' || theme === 'macchiato' || theme === 'mocha';
+	const isDark = theme === 'frappe' || theme === 'macchiato' || theme === 'mocha' || theme === 'cypher';
 
 	if (isDark) {
 		root.classList.add('dark');
@@ -245,7 +274,10 @@ export function applyTheme(theme: Theme) {
 
 export function applyThemeMode(mode: ThemeMode) {
 	const theme = getEffectiveThemeForMode(mode);
-	setStoredTheme(theme);
+	
+	if (theme !== 'cypher') {
+		setStoredTheme(theme);
+	}
 	applyTheme(theme);
 
 	if (typeof window === 'undefined') {
@@ -268,6 +300,9 @@ export function applyThemeMode(mode: ThemeMode) {
 		applyTheme(nextTheme);
 	};
 
+	// Remove existing listeners and add new one for system mode
+	mediaQuery.removeEventListener('change', handleChange);
+	
 	if (mode === 'system') {
 		mediaQuery.addEventListener('change', handleChange);
 	}

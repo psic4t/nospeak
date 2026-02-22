@@ -51,6 +51,11 @@
       background-color: rgb(var(--color-crust-rgb, 17 17 27) / 1);
   }
 
+  [data-theme="cypher"] .app-shell {
+      background-color: #000000;
+      background-image: none;
+  }
+
 
 /* Custom Scrollbar for Glass UI */
 .custom-scrollbar::-webkit-scrollbar {
@@ -147,4 +152,55 @@
     .typ-meta {
         @apply text-xs font-medium tracking-wide;
     }
+}
+
+/* Cypher theme neon glow effects */
+[data-theme="cypher"] {
+    --neon-glow: 0 0 10px rgba(0, 255, 255, 0.5);
+    --neon-glow-subtle: 0 0 5px rgba(0, 255, 255, 0.3);
+    --neon-border-glow: 0 0 2px rgba(0, 255, 255, 0.8);
+}
+
+[data-theme="cypher"] button:focus,
+[data-theme="cypher"] input:focus {
+    box-shadow: var(--neon-glow-subtle);
+}
+
+/* Cypher theme: force all inner UI backgrounds to pure black */
+[data-theme="cypher"] .dark\:bg-slate-900,
+[data-theme="cypher"] .dark\:bg-slate-800,
+[data-theme="cypher"] .dark\:bg-slate-950,
+[data-theme="cypher"] .dark\:bg-slate-900\/30,
+[data-theme="cypher"] .dark\:bg-slate-900\/50,
+[data-theme="cypher"] .dark\:bg-slate-900\/70,
+[data-theme="cypher"] .dark\:bg-slate-900\/80,
+[data-theme="cypher"] .dark\:bg-slate-800\/30,
+[data-theme="cypher"] .dark\:bg-slate-800\/50,
+[data-theme="cypher"] .dark\:bg-slate-800\/60,
+[data-theme="cypher"] .dark\:bg-slate-800\/80,
+[data-theme="cypher"] .dark\:bg-slate-800\/95,
+[data-theme="cypher"] .dark\:bg-gray-800,
+[data-theme="cypher"] .dark\:bg-gray-900 {
+    background-color: #000000 !important;
+}
+
+/* Cypher theme: override white backgrounds with transparency */
+[data-theme="cypher"] .bg-white\/30,
+[data-theme="cypher"] .bg-white\/50,
+[data-theme="cypher"] .bg-white\/70,
+[data-theme="cypher"] .bg-white\/80,
+[data-theme="cypher"] .bg-white\/90,
+[data-theme="cypher"] .bg-white\/95 {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="cypher"] .dark\:bg-white\/10,
+[data-theme="cypher"] .dark\:bg-white\/20 {
+    background-color: rgba(0, 255, 255, 0.05) !important;
+}
+
+/* Cypher theme: override hover states */
+[data-theme="cypher"] .dark\:hover\:bg-slate-700:hover,
+[data-theme="cypher"] .dark\:hover\:bg-slate-800:hover {
+    background-color: rgba(0, 255, 255, 0.1) !important;
 }
