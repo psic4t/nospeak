@@ -184,19 +184,19 @@
     background-color: #000000 !important;
 }
 
-/* Cypher theme: override white backgrounds with transparency */
+/* Cypher theme: override white backgrounds with transparency - less glassy */
 [data-theme="cypher"] .bg-white\/30,
 [data-theme="cypher"] .bg-white\/50,
 [data-theme="cypher"] .bg-white\/70,
 [data-theme="cypher"] .bg-white\/80,
 [data-theme="cypher"] .bg-white\/90,
 [data-theme="cypher"] .bg-white\/95 {
-    background-color: rgba(0, 0, 0, 0.3) !important;
+    background-color: rgba(0, 0, 0, 0.7) !important;
 }
 
 [data-theme="cypher"] .dark\:bg-white\/10,
 [data-theme="cypher"] .dark\:bg-white\/20 {
-    background-color: rgba(0, 255, 255, 0.05) !important;
+    background-color: rgba(0, 255, 255, 0.03) !important;
 }
 
 /* Cypher theme: override hover states */
