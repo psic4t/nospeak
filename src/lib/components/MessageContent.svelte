@@ -11,7 +11,7 @@
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { profileResolver } from '$lib/core/ProfileResolver';
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
-    import { saveToMediaCache, loadFromMediaCache, isMediaCacheEnabled, fetchDecryptAndSaveToGallery } from '$lib/core/AndroidMediaCache';
+    import { loadFromMediaCache, isMediaCacheEnabled, fetchDecryptAndSaveToGallery } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
     import { nip19 } from 'nostr-tools';
     import { t } from '$lib/i18n';
@@ -756,14 +756,6 @@
                             const plainBytes = await decryptAesGcmToBytes(ciphertextBuffer, key, nonce);
                             const blob = new Blob([plainBytes.buffer as ArrayBuffer], { type: mimeType });
                             const fallbackBlobUrl = URL.createObjectURL(blob);
-                            // For fallback path, save via blob (legacy path)
-                            if (mediaCacheEnabled) {
-                                const extracted = extractBlossomSha256FromUrl(url);
-                                if (extracted?.sha256) {
-                                    saveToMediaCache(extracted.sha256, mimeType, blob)
-                                        .catch((err: unknown) => console.warn('Failed to save media to gallery:', err));
-                                }
-                            }
                             return { blobUrl: fallbackBlobUrl };
                         },
                     );

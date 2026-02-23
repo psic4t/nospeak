@@ -73,62 +73,6 @@ public class AndroidMediaCachePlugin extends Plugin {
     private final OkHttpClient httpClient = new OkHttpClient();
 
     @PluginMethod
-    public void saveToCache(PluginCall call) {
-        String sha256 = call.getString("sha256");
-        String mimeType = call.getString("mimeType");
-        String base64Data = call.getString("base64Data");
-        String filename = call.getString("filename");
-
-        // Validate inputs on the main thread (fast)
-        if (sha256 == null || sha256.trim().isEmpty()) {
-            JSObject result = new JSObject();
-            result.put("success", false);
-            result.put("contentUri", null);
-            call.resolve(result);
-            return;
-        }
-
-        if (base64Data == null || base64Data.trim().isEmpty()) {
-            JSObject result = new JSObject();
-            result.put("success", false);
-            result.put("contentUri", null);
-            call.resolve(result);
-            return;
-        }
-
-        // Request permissions if needed (must happen on main thread for UI)
-        if (!hasMediaWritePermission()) {
-            savedCall = call;
-            requestMediaPermissions(call);
-            return;
-        }
-
-        try {
-            if (isAlreadyCached(sha256, mimeType)) {
-                Log.d(TAG, "File already cached, skipping save");
-                JSObject result = new JSObject();
-                result.put("success", true);
-                call.resolve(result);
-                return;
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Error checking existing cache", e);
-        }
-
-        try {
-            boolean saved = saveToMediaStore(sha256, mimeType, base64Data, filename);
-            JSObject result = new JSObject();
-            result.put("success", saved);
-            call.resolve(result);
-        } catch (Exception e) {
-            Log.e(TAG, "Error saving to cache", e);
-            JSObject result = new JSObject();
-            result.put("success", false);
-            call.resolve(result);
-        }
-    }
-
-    @PluginMethod
     public void loadFromCache(PluginCall call) {
         String sha256 = call.getString("sha256");
         String mimeType = call.getString("mimeType");
@@ -433,7 +377,7 @@ public class AndroidMediaCachePlugin extends Plugin {
             // Retry the save operation
             PluginCall originalCall = savedCall;
             savedCall = null;
-            saveToCache(originalCall);
+            fetchDecryptAndSave(originalCall);
         }
     }
 
@@ -463,61 +407,6 @@ public class AndroidMediaCachePlugin extends Plugin {
             return cursor != null && cursor.moveToFirst();
         } catch (Exception e) {
             Log.e(TAG, "Error querying MediaStore", e);
-            return false;
-        }
-    }
-
-    private boolean saveToMediaStore(String sha256, String mimeType, String base64Data, String filename) {
-        ContentResolver resolver = getContext().getContentResolver();
-        
-        Uri collection = getMediaCollectionUri(mimeType);
-        if (collection == null) {
-            Log.w(TAG, "Unsupported MIME type for caching: " + mimeType);
-            return false;
-        }
-
-        String hashPrefix = sha256.substring(0, Math.min(12, sha256.length()));
-        String extension = getExtensionForMimeType(mimeType);
-        String displayName = hashPrefix + "_" + (filename != null ? filename : "media" + extension);
-        String relativePath = getRelativePath(mimeType);
-
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName);
-        values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
-            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-        }
-
-        Uri uri = resolver.insert(collection, values);
-        if (uri == null) {
-            Log.e(TAG, "Failed to create MediaStore entry");
-            return false;
-        }
-
-        try {
-            byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
-            
-            try (OutputStream os = resolver.openOutputStream(uri)) {
-                if (os != null) {
-                    os.write(data);
-                }
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                values.clear();
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                resolver.update(uri, values, null, null);
-            }
-
-            Log.d(TAG, "Saved to MediaStore: " + uri);
-            return true;
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error writing to MediaStore", e);
-            // Clean up on failure
-            resolver.delete(uri, null, null);
             return false;
         }
     }

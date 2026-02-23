@@ -42,22 +42,6 @@ describe('AndroidMediaCache', () => {
         });
     });
 
-    describe('saveToMediaCache', () => {
-        it('returns failure when not on Android', async () => {
-            const { saveToMediaCache } = await import('./AndroidMediaCache');
-            const blob = new Blob(['test'], { type: 'image/jpeg' });
-            const result = await saveToMediaCache('abc123', 'image/jpeg', blob);
-            expect(result).toEqual({ success: false });
-        });
-
-        it('returns failure when sha256 is empty', async () => {
-            const { saveToMediaCache } = await import('./AndroidMediaCache');
-            const blob = new Blob(['test'], { type: 'image/jpeg' });
-            const result = await saveToMediaCache('', 'image/jpeg', blob);
-            expect(result).toEqual({ success: false });
-        });
-    });
-
     describe('fetchDecryptAndSaveToGallery', () => {
         it('returns failure when not on Android', async () => {
             const { fetchDecryptAndSaveToGallery } = await import('./AndroidMediaCache');
@@ -78,7 +62,6 @@ describe('AndroidMediaCache', () => {
 });
 
 describe('AndroidMediaCache on Android', () => {
-    const mockSaveToCache = vi.fn();
     const mockFetchDecryptAndSave = vi.fn();
 
     beforeEach(() => {
@@ -90,7 +73,6 @@ describe('AndroidMediaCache on Android', () => {
                 getPlatform: () => 'android',
             },
             registerPlugin: () => ({
-                saveToCache: mockSaveToCache,
                 fetchDecryptAndSave: mockFetchDecryptAndSave
             })
         }));
@@ -104,38 +86,11 @@ describe('AndroidMediaCache on Android', () => {
         // Mock window for isAndroidNative check
         (globalThis as any).window = {};
 
-        mockSaveToCache.mockReset();
         mockFetchDecryptAndSave.mockReset();
     });
 
     afterEach(() => {
         vi.restoreAllMocks();
-    });
-
-    it('saveToMediaCache calls native plugin when available', async () => {
-        mockSaveToCache.mockResolvedValue({ success: true });
-
-        const { saveToMediaCache } = await import('./AndroidMediaCache');
-        const blob = new Blob(['test data'], { type: 'image/jpeg' });
-        const result = await saveToMediaCache('abc123def456', 'image/jpeg', blob, 'photo.jpg');
-
-        expect(mockSaveToCache).toHaveBeenCalledWith({
-            sha256: 'abc123def456',
-            mimeType: 'image/jpeg',
-            base64Data: expect.any(String),
-            filename: 'photo.jpg'
-        });
-        expect(result).toEqual({ success: true });
-    });
-
-    it('saveToMediaCache handles native plugin failure', async () => {
-        mockSaveToCache.mockResolvedValue({ success: false });
-
-        const { saveToMediaCache } = await import('./AndroidMediaCache');
-        const blob = new Blob(['test data'], { type: 'image/jpeg' });
-        const result = await saveToMediaCache('abc123def456', 'image/jpeg', blob);
-
-        expect(result).toEqual({ success: false });
     });
 
     it('fetchDecryptAndSaveToGallery calls native plugin', async () => {
