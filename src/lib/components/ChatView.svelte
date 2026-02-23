@@ -460,6 +460,7 @@
   let chatRoot = $state<HTMLElement>(undefined!);
   let chatContainer = $state<HTMLElement>(undefined!);
   let inputElement = $state<HTMLTextAreaElement>(undefined!);
+  let inputBarElement = $state<HTMLElement>(undefined!);
   let currentTime = $state(Date.now());
    let relayStatusTimeout: number | null = null;
    
@@ -607,6 +608,9 @@
       window.addEventListener('nospeak:profiles-updated', handleProfilesUpdated);
       document.addEventListener('visibilitychange', handleVisibilityChange);
 
+      // Set initial padding based on actual input bar height
+      tick().then(() => updateInputBarPadding());
+
       return () => {
         window.removeEventListener('blur', handleBlur);
         window.removeEventListener('focus', handleFocus);
@@ -732,6 +736,7 @@
     // Auto-resize
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 150) + "px";
+    updateInputBarPadding();
 
     const cursorPosition = input.selectionStart || 0;
     const textBeforeCursor = inputText.slice(0, cursorPosition);
@@ -863,6 +868,7 @@
         // Re-trigger auto-resize
         inputElement.style.height = "auto";
         inputElement.style.height = Math.min(inputElement.scrollHeight, 150) + "px";
+        updateInputBarPadding();
       }, 0);
     }
 
@@ -1107,12 +1113,13 @@
        inputText = initialSharedText;
        initialSharedText = null;
 
-       if (inputElement) {
-         setTimeout(() => {
-           inputElement.style.height = "auto";
-           inputElement.style.height = Math.min(inputElement.scrollHeight, 150) + "px";
-         }, 0);
-       }
+        if (inputElement) {
+          setTimeout(() => {
+            inputElement.style.height = "auto";
+            inputElement.style.height = Math.min(inputElement.scrollHeight, 150) + "px";
+            updateInputBarPadding();
+          }, 0);
+        }
      }
    });
  
@@ -1125,6 +1132,22 @@
 
     return () => clearInterval(interval);
   });
+
+  function updateInputBarPadding() {
+    if (!inputBarElement || !chatContainer) return;
+    const barHeight = inputBarElement.offsetHeight;
+    // Read the CSS safe-area-inset-bottom (falls back to 0)
+    const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom') || '0', 10)
+        || parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)') || '0', 10);
+    chatContainer.style.paddingBottom = `${barHeight + safeBottom}px`;
+
+    // If user was near the bottom, keep them there
+    const threshold = 80;
+    const distanceFromBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+    if (distanceFromBottom < threshold + barHeight) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  }
 
   function scrollToBottom() {
     if (chatContainer) {
@@ -1207,6 +1230,7 @@
     if (inputElement) {
       inputElement.style.height = "auto";
     }
+    updateInputBarPadding();
 
     // Capture timestamp once to ensure optimistic and persisted messages match
     const createdAtSeconds = Math.floor(Date.now() / 1000);
@@ -1540,6 +1564,7 @@
         inputElement.style.height = "auto";
         inputElement.style.height =
           Math.min(inputElement.scrollHeight, 150) + "px";
+        updateInputBarPadding();
       }
     }, 0);
   }
@@ -1973,8 +1998,8 @@
     bind:this={chatContainer}
     role="region"
     tabindex="-1"
-    style="overflow-anchor: none;"
-    class="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-safe-offset-28 pt-[calc(5rem+env(safe-area-inset-top))] space-y-4 custom-scrollbar native-scroll focus:outline-none focus:ring-0"
+    style="overflow-anchor: none; padding-bottom: calc(7rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom)));"
+    class="flex-1 overflow-x-hidden overflow-y-auto px-4 pt-[calc(5rem+env(safe-area-inset-top))] space-y-4 custom-scrollbar native-scroll focus:outline-none focus:ring-0"
     onscroll={handleScroll}
     onpointerdown={activateMessageWindow}
     use:overscroll
@@ -2227,6 +2252,7 @@
 
   {#if !isArchived}
   <div
+    bind:this={inputBarElement}
     class="absolute bottom-0 left-0 right-0 z-20 p-4 p-4-safe-bottom border-t border-gray-200/50 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-lg transition-all duration-150 ease-out"
   >
     <form
