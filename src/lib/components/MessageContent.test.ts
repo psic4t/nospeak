@@ -27,7 +27,7 @@ function parseMarkdown(text: string): string {
             }
             // Recursively parse to handle nested citations and other block elements
             const citeContent = parseMarkdown(citeLines.join('\n'));
-            result.push(`<blockquote class="border-l-2 border-gray-400 dark:border-slate-500 bg-gray-100/50 dark:bg-slate-800/50 pl-3 pr-3 py-1 my-1 rounded-r text-gray-700 dark:text-slate-300">${citeContent}</blockquote>`);
+            result.push(`<blockquote class="border-s-2 border-gray-400 dark:border-slate-500 bg-gray-100/50 dark:bg-slate-800/50 ps-3 pe-3 py-1 my-1 rounded-e text-gray-700 dark:text-slate-300">${citeContent}</blockquote>`);
             continue;
         }
 
@@ -39,7 +39,7 @@ function parseMarkdown(text: string): string {
                 i++;
             }
             const listContent = listItems.map(item => `<li>${parseInlineMarkdown(item)}</li>`).join('');
-            result.push(`<ul class="list-disc pl-5 my-1">${listContent}</ul>`);
+            result.push(`<ul class="list-disc ps-5 my-1">${listContent}</ul>`);
             continue;
         }
 
@@ -51,7 +51,7 @@ function parseMarkdown(text: string): string {
                 i++;
             }
             const listContent = listItems.map(item => `<li>${parseInlineMarkdown(item)}</li>`).join('');
-            result.push(`<ol class="list-decimal pl-5 my-1">${listContent}</ol>`);
+            result.push(`<ol class="list-decimal ps-5 my-1">${listContent}</ol>`);
             continue;
         }
 
@@ -92,7 +92,7 @@ describe('MessageContent Block Markdown parsing', () => {
         const result = parseMarkdown('> quoted text');
         expect(result).toContain('<blockquote');
         expect(result).toContain('quoted text');
-        expect(result).toContain('border-l-2');
+        expect(result).toContain('border-s-2');
         expect(result).toContain('bg-gray-100/50');
     });
 
@@ -147,7 +147,7 @@ describe('MessageContent Block Markdown parsing', () => {
 
     it('should parse unordered list with dash', () => {
         const result = parseMarkdown('- item one\n- item two\n- item three');
-        expect(result).toContain('<ul class="list-disc pl-5 my-1">');
+        expect(result).toContain('<ul class="list-disc ps-5 my-1">');
         expect(result).toContain('<li>item one</li>');
         expect(result).toContain('<li>item two</li>');
         expect(result).toContain('<li>item three</li>');
@@ -155,14 +155,14 @@ describe('MessageContent Block Markdown parsing', () => {
 
     it('should parse unordered list with asterisk', () => {
         const result = parseMarkdown('* item one\n* item two');
-        expect(result).toContain('<ul class="list-disc pl-5 my-1">');
+        expect(result).toContain('<ul class="list-disc ps-5 my-1">');
         expect(result).toContain('<li>item one</li>');
         expect(result).toContain('<li>item two</li>');
     });
 
     it('should parse ordered list', () => {
         const result = parseMarkdown('1. first\n2. second\n3. third');
-        expect(result).toContain('<ol class="list-decimal pl-5 my-1">');
+        expect(result).toContain('<ol class="list-decimal ps-5 my-1">');
         expect(result).toContain('<li>first</li>');
         expect(result).toContain('<li>second</li>');
         expect(result).toContain('<li>third</li>');

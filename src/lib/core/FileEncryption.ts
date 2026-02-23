@@ -14,17 +14,6 @@ function getSubtle(): SubtleCrypto {
     throw new Error('WebCrypto SubtleCrypto is not available in this environment');
 }
 
-function toBase64Url(bytes: Uint8Array): string {
-    if (typeof Buffer !== 'undefined') {
-        const b64 = Buffer.from(bytes).toString('base64');
-        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-    // Browser fallback
-    const binary = String.fromCharCode(...bytes);
-    const b64 = btoa(binary);
-    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 function fromBase64Url(input: string): Uint8Array {
     const b64 = input.replace(/-/g, '+').replace(/_/g, '/');
     if (typeof Buffer !== 'undefined') {
