@@ -21,10 +21,6 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -166,85 +162,6 @@ public class AndroidMediaCachePlugin extends Plugin {
             Log.e(TAG, "Error loading from cache", e);
             JSObject result = new JSObject();
             result.put("found", false);
-            call.resolve(result);
-        }
-    }
-
-    @PluginMethod
-    public void writeCacheChunk(PluginCall call) {
-        String path = call.getString("path");
-        String base64Chunk = call.getString("base64Chunk");
-        Boolean append = call.getBoolean("append", false);
-
-        if (path == null || path.trim().isEmpty() || base64Chunk == null || base64Chunk.trim().isEmpty()) {
-            JSObject result = new JSObject();
-            result.put("success", false);
-            call.resolve(result);
-            return;
-        }
-
-        try {
-            File cacheDir = getContext().getCacheDir();
-            File tempFile = new File(cacheDir, path);
-
-            File parent = tempFile.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-
-            byte[] data = Base64.decode(base64Chunk, Base64.DEFAULT);
-
-            try (OutputStream os = new FileOutputStream(tempFile, append)) {
-                os.write(data);
-            }
-
-            JSObject result = new JSObject();
-            result.put("success", true);
-            call.resolve(result);
-        } catch (Exception e) {
-            Log.e(TAG, "Error writing cache chunk", e);
-            JSObject result = new JSObject();
-            result.put("success", false);
-            call.resolve(result);
-        }
-    }
-
-    @PluginMethod
-    public void commitCacheFile(PluginCall call) {
-        String path = call.getString("path");
-        String sha256 = call.getString("sha256");
-        String mimeType = call.getString("mimeType");
-        String filename = call.getString("filename");
-
-        if (path == null || sha256 == null || mimeType == null) {
-            JSObject result = new JSObject();
-            result.put("success", false);
-            call.resolve(result);
-            return;
-        }
-
-        try {
-            if (isAlreadyCached(sha256, mimeType)) {
-                File tempFile = new File(getContext().getCacheDir(), path);
-                tempFile.delete();
-                JSObject result = new JSObject();
-                result.put("success", true);
-                call.resolve(result);
-                return;
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Error checking existing cache during commit", e);
-        }
-
-        try {
-            boolean saved = commitTempFileToMediaStore(path, sha256, mimeType, filename);
-            JSObject result = new JSObject();
-            result.put("success", saved);
-            call.resolve(result);
-        } catch (Exception e) {
-            Log.e(TAG, "Error committing cache file", e);
-            JSObject result = new JSObject();
-            result.put("success", false);
             call.resolve(result);
         }
     }
@@ -599,73 +516,6 @@ public class AndroidMediaCachePlugin extends Plugin {
             // Clean up on failure
             resolver.delete(uri, null, null);
             return false;
-        }
-    }
-
-    private boolean commitTempFileToMediaStore(String tempPath, String sha256, String mimeType, String filename) {
-        ContentResolver resolver = getContext().getContentResolver();
-        File tempFile = new File(getContext().getCacheDir(), tempPath);
-
-        if (!tempFile.exists()) {
-            Log.e(TAG, "Temp file not found: " + tempPath);
-            return false;
-        }
-
-        Uri collection = getMediaCollectionUri(mimeType);
-        if (collection == null) {
-            Log.w(TAG, "Unsupported MIME type for caching: " + mimeType);
-            tempFile.delete();
-            return false;
-        }
-
-        String hashPrefix = sha256.substring(0, Math.min(12, sha256.length()));
-        String extension = getExtensionForMimeType(mimeType);
-        String displayName = hashPrefix + "_" + (filename != null ? filename : "media" + extension);
-        String relativePath = getRelativePath(mimeType);
-
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName);
-        values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
-            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-        }
-
-        Uri uri = resolver.insert(collection, values);
-        if (uri == null) {
-            Log.e(TAG, "Failed to create MediaStore entry");
-            tempFile.delete();
-            return false;
-        }
-
-        try {
-            try (InputStream is = new FileInputStream(tempFile);
-                 OutputStream os = resolver.openOutputStream(uri)) {
-                if (os != null) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = is.read(buffer)) != -1) {
-                        os.write(buffer, 0, bytesRead);
-                    }
-                }
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                values.clear();
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                resolver.update(uri, values, null, null);
-            }
-
-            Log.d(TAG, "Committed cache file to MediaStore: " + uri);
-            return true;
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error writing to MediaStore from temp file", e);
-            resolver.delete(uri, null, null);
-            return false;
-        } finally {
-            tempFile.delete();
         }
     }
 
