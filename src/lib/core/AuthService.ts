@@ -134,6 +134,7 @@ export async function checkAndAutoSetRelays(): Promise<void> {
 export class AuthService {
     private lastLoginNpub: string | null = null;
     private lastLoginContext: string = '';
+    private backgroundMessagingStartedDuringSync = false;
 
     public generateKeypair(): { npub: string; nsec: string } {
         const secret = generateSecretKey();
@@ -415,6 +416,17 @@ export class AuthService {
             }
         }
 
+        // Start the Android background messaging service early so that avatar
+        // pre-fetches triggered by profile resolution (steps 4-5) land in the
+        // native disk cache.  Without this, prefetchAvatar() calls are silently
+        // dropped because NativeBackgroundMessagingService.getInstance() is null.
+        try {
+            await syncAndroidBackgroundMessagingFromPreference();
+            this.backgroundMessagingStartedDuringSync = true;
+        } catch (error) {
+            console.error(`${context} early Android background messaging sync failed:`, error);
+        }
+
         // 4. Fetch and merge contacts, favorites, and archives in parallel
         // Note: Must happen BEFORE history fetch so we have the full contact list
         // before auto-adding contacts from messages (prevents overwriting saved contacts)
@@ -502,10 +514,13 @@ export class AuthService {
             console.error('Failed to start app-global message subscriptions after login flow:', e);
         });
 
-        // Sync Android background messaging with the saved preference once startup flow completes
-        syncAndroidBackgroundMessagingFromPreference().catch(e => {
-            console.error('Failed to sync Android background messaging preference after login flow:', e);
-        });
+        // Skip if already started during sync flow (early start for avatar prefetching)
+        if (!this.backgroundMessagingStartedDuringSync) {
+            syncAndroidBackgroundMessagingFromPreference().catch(e => {
+                console.error('Failed to sync Android background messaging preference after login flow:', e);
+            });
+        }
+        this.backgroundMessagingStartedDuringSync = false;
     }
 
     public async retrySyncFlow(): Promise<void> {

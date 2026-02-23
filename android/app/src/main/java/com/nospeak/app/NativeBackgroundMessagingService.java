@@ -932,7 +932,10 @@ public class NativeBackgroundMessagingService extends Service {
             shortcutAvailable = ensureConversationShortcut(conversationId, title, senderPerson, avatar, avatarKey);
         }
 
-        if (!lockedProfileActive && avatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
+        // Always attempt avatar fetch regardless of energy profile — the fetch is
+        // lightweight (async OkHttp) and the cached bitmap will be available for
+        // subsequent notification refreshes.  This matches prefetchAvatar() behavior.
+        if (avatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
             fetchConversationAvatar(senderPubkeyHex, pictureUrl.trim());
         }
 
@@ -1233,7 +1236,7 @@ public class NativeBackgroundMessagingService extends Service {
             shortcutAvailable = ensureConversationShortcut(conversationId, title, senderPerson, avatar, avatarKey);
         }
 
-        if (!lockedProfileActive && avatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
+        if (avatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
             fetchConversationAvatar(partnerPubkeyHex, pictureUrl.trim());
         }
 

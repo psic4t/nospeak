@@ -343,7 +343,7 @@
 
      // Publish Android sharing shortcuts for recent contacts (1-on-1 + groups)
      if (isAndroidNative() && restored && $currentUser) {
-       void (async () => {
+       const refreshSharingShortcuts = async () => {
          try {
            const { publishSharingShortcuts } = await import('$lib/core/AndroidSharingShortcuts');
            const { conversationRepo } = await import('$lib/db/ConversationRepository');
@@ -418,7 +418,15 @@
          } catch (e) {
            console.error('Failed to publish sharing shortcuts:', e);
          }
-       })();
+       };
+
+       // Publish immediately (for session restore where profiles are already cached)
+       void refreshSharingShortcuts();
+
+       // Re-publish when profiles are updated (after login sync completes)
+       // so shortcuts get real avatars instead of identicons.
+       const onProfilesUpdated = () => void refreshSharingShortcuts();
+       window.addEventListener('nospeak:profiles-updated', onProfilesUpdated);
      }
  
      // Load favorites and archives stores on startup (from local DB)
