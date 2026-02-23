@@ -7,10 +7,11 @@
     import YouTubeEmbed from './YouTubeEmbed.svelte';
     import { extractYouTubeVideoId, isYouTubeUrl } from '$lib/core/YouTube';
     import { decryptAesGcmToBytes } from '$lib/core/FileEncryption';
+    import { DecryptionScheduler } from '$lib/core/DecryptionScheduler';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { profileResolver } from '$lib/core/ProfileResolver';
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
-    import { saveToMediaCache, loadFromMediaCache, isMediaCacheEnabled } from '$lib/core/AndroidMediaCache';
+    import { saveToMediaCache, loadFromMediaCache, isMediaCacheEnabled, fetchDecryptAndSaveToGallery } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
     import { nip19 } from 'nostr-tools';
     import { t } from '$lib/i18n';
@@ -440,6 +441,7 @@
      let decryptError = $state<string | null>(null);
      let mediaLoaded = $state(false);
      let blurhashCanvas = $state<HTMLCanvasElement | null>(null);
+     let decryptAbortController: AbortController | null = null;
 
      const hasBlurhashPlaceholder = $derived(
          !!(fileWidth && fileHeight && fileBlurhash)
@@ -498,6 +500,9 @@
         return () => {
             if (container) manager.unobserve(container);
             if (fetchTimeout) clearTimeout(fetchTimeout);
+            // Abort any in-flight decryption when component unmounts
+            decryptAbortController?.abort();
+            decryptAbortController = null;
         };
     });
  
@@ -667,7 +672,8 @@
         }
     }
 
-    // Auto-decrypt encrypted attachments when the message is visible in the viewport
+    // Auto-decrypt encrypted attachments when the message is visible in the viewport.
+    // Uses DecryptionScheduler to limit concurrency and cache decrypted blob URLs.
     $effect(() => {
         if (!fileUrl || fileEncryptionAlgorithm !== 'aes-gcm' || !fileKey || !fileNonce) {
             return;
@@ -679,60 +685,109 @@
             return;
         }
         if (!isVisible) {
+            // Abort any in-flight decrypt when scrolling out of view
+            if (decryptAbortController) {
+                decryptAbortController.abort();
+                decryptAbortController = null;
+            }
             return;
         }
-        // Fire and forget; errors are captured inside decryptAttachment
-        void decryptAttachment();
+
+        // Abort any previous request (shouldn't happen, but defensive)
+        decryptAbortController?.abort();
+        decryptAbortController = new AbortController();
+
+        // Fire and forget; errors are captured inside
+        void enqueueDecryption(decryptAbortController.signal);
     });
 
-    async function decryptAttachment() {
+    async function enqueueDecryption(signal: AbortSignal) {
         if (!fileUrl || fileEncryptionAlgorithm !== 'aes-gcm' || !fileKey || !fileNonce) {
             return;
         }
-        if (isLegacyNospeakUserMediaUrl(fileUrl)) {
-            return;
-        }
 
+        const url = fileUrl;
+        const key = fileKey;
+        const nonce = fileNonce;
         const mimeType = fileType || 'application/octet-stream';
 
         try {
             isDecrypting = true;
             decryptError = null;
 
-            // Check Android gallery cache first (if enabled)
-            if (isMediaCacheEnabled()) {
-                const extracted = extractBlossomSha256FromUrl(fileUrl);
-                if (extracted?.sha256) {
-                    const cached = await loadFromMediaCache(extracted.sha256, mimeType);
-                    if (cached.found && cached.url) {
-                        // Cache hit - use the cached URL directly, skip network + decryption
-                        decryptedUrl = cached.url;
-                        return;
+            const scheduler = DecryptionScheduler.getInstance();
+
+            const mediaCacheEnabled = isMediaCacheEnabled();
+
+            const blobUrl = await scheduler.enqueue({
+                key: url,
+                signal,
+                decrypt: async (innerSignal: AbortSignal) => {
+                    // Check Android gallery cache first (if enabled)
+                    if (mediaCacheEnabled) {
+                        const extracted = extractBlossomSha256FromUrl(url);
+                        if (extracted?.sha256) {
+                            const cached = await loadFromMediaCache(extracted.sha256, mimeType);
+                            if (cached.found && cached.url) {
+                                return cached.url;
+                            }
+                        }
                     }
-                }
-            }
 
-            // Cache miss - fetch and decrypt
-            const ciphertextBuffer = await fetchCiphertextWithBlossomFallback(fileUrl);
-            const plainBytes = await decryptAesGcmToBytes(ciphertextBuffer, fileKey, fileNonce);
+                    // Abort check before dispatching to worker
+                    if (innerSignal.aborted) {
+                        throw new DOMException('Aborted', 'AbortError');
+                    }
 
-            const blob = new Blob([plainBytes.buffer as ArrayBuffer], { type: mimeType });
-            if (decryptedUrl) {
-                URL.revokeObjectURL(decryptedUrl);
-            }
-            decryptedUrl = URL.createObjectURL(blob);
+                    // Offload fetch + decrypt + Blob creation to Web Worker.
+                    // Worker only does display decryption (blob URL) — no base64.
+                    const result = await scheduler.decryptInWorker(
+                        { url, key, nonce, mimeType },
+                        innerSignal,
+                        // Fallback: main-thread decryption if worker unavailable
+                        async (fallbackSignal: AbortSignal) => {
+                            if (fallbackSignal.aborted) {
+                                throw new DOMException('Aborted', 'AbortError');
+                            }
+                            const ciphertextBuffer = await fetchCiphertextWithBlossomFallback(url);
+                            if (fallbackSignal.aborted) {
+                                throw new DOMException('Aborted', 'AbortError');
+                            }
+                            const plainBytes = await decryptAesGcmToBytes(ciphertextBuffer, key, nonce);
+                            const blob = new Blob([plainBytes.buffer as ArrayBuffer], { type: mimeType });
+                            const fallbackBlobUrl = URL.createObjectURL(blob);
+                            // For fallback path, save via blob (legacy path)
+                            if (mediaCacheEnabled) {
+                                const extracted = extractBlossomSha256FromUrl(url);
+                                if (extracted?.sha256) {
+                                    saveToMediaCache(extracted.sha256, mimeType, blob)
+                                        .catch((err: unknown) => console.warn('Failed to save media to gallery:', err));
+                                }
+                            }
+                            return { blobUrl: fallbackBlobUrl };
+                        },
+                    );
 
-            // Save to gallery in the background (Android only)
-            if (isMediaCacheEnabled()) {
-                const extracted = extractBlossomSha256FromUrl(fileUrl);
-                if (extracted?.sha256) {
-                    // Fire and forget - don't await
-                    saveToMediaCache(extracted.sha256, mimeType, blob).catch((e) => {
-                        console.warn('Failed to save media to gallery:', e);
-                    });
-                }
-            }
+                    // Fire-and-forget: Java fetches, decrypts, and saves to gallery independently.
+                    // This is completely decoupled from the display blob URL above.
+                    if (mediaCacheEnabled) {
+                        const extracted = extractBlossomSha256FromUrl(url);
+                        if (extracted?.sha256) {
+                            fetchDecryptAndSaveToGallery(url, key, nonce, extracted.sha256, mimeType)
+                                .catch((err: unknown) => console.warn('Failed to save media to gallery:', err));
+                        }
+                    }
+
+                    return result.blobUrl;
+                },
+            });
+
+            decryptedUrl = blobUrl;
         } catch (e) {
+            // Don't set error state for intentional cancellations
+            if ((e as Error).name === 'AbortError') {
+                return;
+            }
             decryptError = (e as Error).message;
         } finally {
             isDecrypting = false;
@@ -865,7 +920,11 @@
                      decryptedUrl={null}
                      isDecrypting={isDecrypting}
                      isOwn={isOwn}
-                     onDownload={decryptAttachment}
+                     onDownload={() => {
+                         decryptAbortController?.abort();
+                         decryptAbortController = new AbortController();
+                         void enqueueDecryption(decryptAbortController.signal);
+                     }}
                  />
                  {#if decryptError}
                      <div class="typ-meta text-xs text-red-500 mt-1">{decryptError}</div>
