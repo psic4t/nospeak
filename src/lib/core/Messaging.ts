@@ -1315,7 +1315,7 @@ import type { Conversation } from '$lib/db/db';
 
     // Encrypt file with AES-GCM
     const encrypted = await encryptFileWithAesGcm(file);
-    const mimeType = file.type || this.mediaTypeToMime(mediaType);
+    const mimeType = (file.type && !file.type.includes('*')) ? file.type : this.mediaTypeToMime(mediaType);
 
     const senderProfile = await profileRepo.getProfileIgnoreTTL(senderNpub);
     const blossomServers = (senderProfile as any)?.mediaServers ?? [];
@@ -1396,7 +1396,7 @@ import type { Conversation } from '$lib/db/db';
 
     // Encrypt file with AES-GCM
     const encrypted = await encryptFileWithAesGcm(file);
-    const mimeType = file.type || this.mediaTypeToMime(mediaType);
+    const mimeType = (file.type && !file.type.includes('*')) ? file.type : this.mediaTypeToMime(mediaType);
 
     const senderProfile = await profileRepo.getProfileIgnoreTTL(senderNpub);
     const blossomServers = (senderProfile as any)?.mediaServers ?? [];

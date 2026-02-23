@@ -270,8 +270,11 @@ public class AndroidMediaCachePlugin extends Plugin {
                 cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec);
                 byte[] plaintext = cipher.doFinal(ciphertext);
 
+                // Resolve wildcard MIME types (e.g. "image/*") to specific types
+                String resolvedMimeType = resolveWildcardMimeType(mimeType, plaintext);
+
                 // Write to MediaStore
-                boolean saved = saveBytesToMediaStore(sha256, mimeType, plaintext, filename);
+                boolean saved = saveBytesToMediaStore(sha256, resolvedMimeType, plaintext, filename);
                 JSObject result = new JSObject();
                 result.put("success", saved);
                 if (!saved) {
@@ -517,6 +520,66 @@ public class AndroidMediaCachePlugin extends Plugin {
             resolver.delete(uri, null, null);
             return false;
         }
+    }
+
+    /**
+     * Resolve wildcard MIME types (e.g. "image/*") to a specific type by inspecting
+     * the file's magic bytes. Returns the original mimeType if it's already specific.
+     */
+    private static String resolveWildcardMimeType(String mimeType, byte[] data) {
+        if (mimeType == null || !mimeType.contains("*")) {
+            return mimeType;
+        }
+
+        // Try to detect from magic bytes
+        if (data != null && data.length >= 4) {
+            // JPEG: FF D8 FF
+            if (data[0] == (byte)0xFF && data[1] == (byte)0xD8 && data[2] == (byte)0xFF) {
+                return "image/jpeg";
+            }
+            // PNG: 89 50 4E 47
+            if (data[0] == (byte)0x89 && data[1] == (byte)0x50 && data[2] == (byte)0x4E && data[3] == (byte)0x47) {
+                return "image/png";
+            }
+            // GIF: 47 49 46 38
+            if (data[0] == (byte)0x47 && data[1] == (byte)0x49 && data[2] == (byte)0x46 && data[3] == (byte)0x38) {
+                return "image/gif";
+            }
+            // WebP: 52 49 46 46 ... 57 45 42 50
+            if (data.length >= 12 && data[0] == (byte)0x52 && data[1] == (byte)0x49 && data[2] == (byte)0x46 && data[3] == (byte)0x46
+                && data[8] == (byte)0x57 && data[9] == (byte)0x45 && data[10] == (byte)0x42 && data[11] == (byte)0x50) {
+                return "image/webp";
+            }
+            // MP4/MOV: ... 66 74 79 70 (ftyp at offset 4)
+            if (data.length >= 8 && data[4] == (byte)0x66 && data[5] == (byte)0x74 && data[6] == (byte)0x79 && data[7] == (byte)0x70) {
+                return "video/mp4";
+            }
+            // WebM/MKV: 1A 45 DF A3
+            if (data[0] == (byte)0x1A && data[1] == (byte)0x45 && data[2] == (byte)0xDF && data[3] == (byte)0xA3) {
+                return "video/webm";
+            }
+            // MP3: FF FB, FF F3, FF F2, or ID3
+            if ((data[0] == (byte)0xFF && (data[1] == (byte)0xFB || data[1] == (byte)0xF3 || data[1] == (byte)0xF2))
+                || (data[0] == (byte)0x49 && data[1] == (byte)0x44 && data[2] == (byte)0x33)) {
+                return "audio/mpeg";
+            }
+            // OGG: 4F 67 67 53
+            if (data[0] == (byte)0x4F && data[1] == (byte)0x67 && data[2] == (byte)0x67 && data[3] == (byte)0x53) {
+                return "audio/ogg";
+            }
+            // WAV: 52 49 46 46 ... 57 41 56 45
+            if (data.length >= 12 && data[0] == (byte)0x52 && data[1] == (byte)0x49 && data[2] == (byte)0x46 && data[3] == (byte)0x46
+                && data[8] == (byte)0x57 && data[9] == (byte)0x41 && data[10] == (byte)0x56 && data[11] == (byte)0x45) {
+                return "audio/wav";
+            }
+        }
+
+        // Fallback: use the category from the wildcard (e.g., "image/*" -> "image/jpeg")
+        if (mimeType.startsWith("image/")) return "image/jpeg";
+        if (mimeType.startsWith("video/")) return "video/mp4";
+        if (mimeType.startsWith("audio/")) return "audio/mpeg";
+
+        return "application/octet-stream";
     }
 
     private Uri getMediaCollectionUri(String mimeType) {

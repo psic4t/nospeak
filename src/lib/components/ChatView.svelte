@@ -1446,7 +1446,7 @@
       createdAt: Date.now(),
       rumorKind: 15,
       fileUrl: optimisticUrl,
-      fileType: file.type || mediaTypeToMime(mediaType),
+      fileType: (file.type && !file.type.includes('*')) ? file.type : mediaTypeToMime(mediaType),
       // Group-specific fields
       ...(isGroup && groupConversation ? {
         conversationId: groupConversation.id,

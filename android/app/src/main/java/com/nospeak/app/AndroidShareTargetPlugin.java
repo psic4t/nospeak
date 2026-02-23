@@ -151,8 +151,11 @@ public class AndroidShareTargetPlugin extends Plugin {
 
     private MediaData readMediaFromUri(Uri uri, String mimeType) throws IOException, SecurityException {
         ContentResolver resolver = getContext().getContentResolver();
-        String resolvedMime = mimeType != null ? mimeType : resolver.getType(uri);
-        if (resolvedMime == null) {
+        String resolvedMime = resolver.getType(uri);
+        if (resolvedMime == null || resolvedMime.contains("*")) {
+            resolvedMime = mimeType;
+        }
+        if (resolvedMime == null || resolvedMime.contains("*")) {
             resolvedMime = "application/octet-stream";
         }
 
