@@ -41,6 +41,42 @@ interface AndroidMediaCachePlugin {
         sha256: string;
         mimeType: string;
     }): Promise<MediaCacheLoadResult>;
+
+    /**
+     * Write a base64-encoded chunk to a cache file.
+     * Use append=false for the first chunk (creates/truncates the file),
+     * append=true for subsequent chunks.
+     */
+    writeCacheChunk(options: {
+        path: string;
+        base64Chunk: string;
+        append: boolean;
+    }): Promise<MediaCacheSaveResult>;
+
+    /**
+     * Commit a fully-written cache file to MediaStore.
+     * Call after all chunks have been written via writeCacheChunk.
+     */
+    commitCacheFile(options: {
+        path: string;
+        sha256: string;
+        mimeType: string;
+        filename?: string;
+    }): Promise<MediaCacheSaveResult>;
+
+    /**
+     * Fetch encrypted media, decrypt with AES-GCM, and save to MediaStore.
+     * All heavy work (HTTP fetch, crypto, disk I/O) runs on a Java background thread.
+     * Only tiny strings cross the Capacitor bridge.
+     */
+    fetchDecryptAndSave(options: {
+        url: string;
+        key: string;
+        nonce: string;
+        sha256: string;
+        mimeType: string;
+        filename?: string;
+    }): Promise<MediaCacheSaveResult>;
 }
 
 const AndroidMediaCache = ((): AndroidMediaCachePlugin | null => {
@@ -83,6 +119,119 @@ export async function saveToMediaCache(
         return { success: result.success };
     } catch (e) {
         console.error('Failed to save to media cache:', e);
+        return { success: false };
+    }
+}
+
+/**
+ * Save decrypted media to the local cache using pre-encoded base64 data.
+ * This avoids the expensive Blob → base64 conversion on the main thread
+ * by accepting base64 data that was already encoded in the Web Worker.
+ */
+export async function saveToMediaCacheFromBase64(
+    sha256: string,
+    mimeType: string,
+    base64Data: string,
+    filename?: string
+): Promise<MediaCacheSaveResult> {
+    if (!isAndroidNative() || !AndroidMediaCache) {
+        return { success: false };
+    }
+
+    if (!sha256 || sha256.trim().length === 0) {
+        return { success: false };
+    }
+
+    if (!base64Data || base64Data.length === 0) {
+        return { success: false };
+    }
+
+    try {
+        const result = await AndroidMediaCache.saveToCache({
+            sha256,
+            mimeType,
+            base64Data,
+            filename
+        });
+
+        return { success: result.success };
+    } catch (e) {
+        console.error('Failed to save to media cache from base64:', e);
+        return { success: false };
+    }
+}
+
+/**
+ * Write a base64-encoded chunk to a cache file.
+ * Use append=false for the first chunk (creates/truncates the file),
+ * append=true for subsequent chunks.
+ */
+export async function writeCacheChunk(
+    path: string,
+    base64Chunk: string,
+    append: boolean
+): Promise<MediaCacheSaveResult> {
+    if (!isAndroidNative() || !AndroidMediaCache) {
+        return { success: false };
+    }
+
+    try {
+        return await AndroidMediaCache.writeCacheChunk({ path, base64Chunk, append });
+    } catch (e) {
+        console.error('Failed to write cache chunk:', e);
+        return { success: false };
+    }
+}
+
+/**
+ * Commit a fully-written cache file to MediaStore.
+ * Call after all chunks have been written via writeCacheChunk.
+ */
+export async function commitCacheFile(
+    path: string,
+    sha256: string,
+    mimeType: string,
+    filename?: string
+): Promise<MediaCacheSaveResult> {
+    if (!isAndroidNative() || !AndroidMediaCache) {
+        return { success: false };
+    }
+
+    try {
+        return await AndroidMediaCache.commitCacheFile({ path, sha256, mimeType, filename });
+    } catch (e) {
+        console.error('Failed to commit cache file:', e);
+        return { success: false };
+    }
+}
+
+/**
+ * Fetch, decrypt, and save media to gallery entirely on the Java side.
+ * Only tiny strings cross the Capacitor bridge — no large binary data.
+ * Returns { success: true } if saved, { success: false } on any error.
+ */
+export async function fetchDecryptAndSaveToGallery(
+    url: string,
+    key: string,
+    nonce: string,
+    sha256: string,
+    mimeType: string,
+    filename?: string
+): Promise<MediaCacheSaveResult> {
+    if (!isAndroidNative() || !AndroidMediaCache) {
+        return { success: false };
+    }
+
+    if (!sha256 || sha256.trim().length === 0) {
+        return { success: false };
+    }
+
+    try {
+        return await AndroidMediaCache.fetchDecryptAndSave({
+            url, key, nonce, sha256, mimeType, filename
+        });
+    } catch (e) {
+        console.error('Failed to fetch-decrypt-save media:', e);
         return { success: false };
     }
 }
