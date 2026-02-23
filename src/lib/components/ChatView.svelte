@@ -1136,10 +1136,10 @@
   function updateInputBarPadding() {
     if (!inputBarElement || !chatContainer) return;
     const barHeight = inputBarElement.offsetHeight;
-    // Read the CSS safe-area-inset-bottom (falls back to 0)
-    const safeBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom') || '0', 10)
-        || parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)') || '0', 10);
-    chatContainer.style.paddingBottom = `${barHeight + safeBottom}px`;
+    // offsetHeight already includes the input bar's own safe-area padding.
+    // Add a small buffer so the last message doesn't touch the bar border.
+    const buffer = 24;
+    chatContainer.style.paddingBottom = `${barHeight + buffer}px`;
 
     // If user was near the bottom, keep them there
     const threshold = 80;
