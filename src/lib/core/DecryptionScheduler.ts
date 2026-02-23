@@ -19,7 +19,7 @@ export interface DecryptRequest {
 }
 
 export interface WorkerDecryptParams {
-    url: string;
+    urls: string[];
     key: string;
     nonce: string;
     mimeType: string;
@@ -196,7 +196,7 @@ export class DecryptionScheduler {
 
             worker.postMessage({
                 id,
-                url: params.url,
+                urls: params.urls,
                 key: params.key,
                 nonce: params.nonce,
                 mimeType: params.mimeType,

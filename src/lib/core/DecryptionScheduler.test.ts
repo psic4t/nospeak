@@ -297,7 +297,7 @@ describe('DecryptionScheduler', () => {
             const signal = new AbortController().signal;
 
             const result = await scheduler.decryptInWorker(
-                { url: 'https://example.com/file', key: 'aabbccdd', nonce: '11223344', mimeType: 'video/mp4' },
+                { urls: ['https://example.com/file'], key: 'aabbccdd', nonce: '11223344', mimeType: 'video/mp4' },
                 signal,
                 fallback
             );
@@ -313,7 +313,7 @@ describe('DecryptionScheduler', () => {
 
             await expect(
                 scheduler.decryptInWorker(
-                    { url: 'https://example.com/file', key: 'aa', nonce: 'bb', mimeType: 'video/mp4' },
+                    { urls: ['https://example.com/file'], key: 'aa', nonce: 'bb', mimeType: 'video/mp4' },
                     controller.signal,
                     async () => ({ blobUrl: 'blob:should-not-run' })
                 )
@@ -325,7 +325,7 @@ describe('DecryptionScheduler', () => {
 
             await expect(
                 scheduler.decryptInWorker(
-                    { url: 'https://example.com/file', key: 'aa', nonce: 'bb', mimeType: 'video/mp4' },
+                    { urls: ['https://example.com/file'], key: 'aa', nonce: 'bb', mimeType: 'video/mp4' },
                     signal,
                     async () => { throw new Error('network failure'); }
                 )

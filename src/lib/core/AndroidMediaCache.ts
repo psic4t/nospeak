@@ -36,7 +36,7 @@ interface AndroidMediaCachePlugin {
      * Only tiny strings cross the Capacitor bridge.
      */
     fetchDecryptAndSave(options: {
-        url: string;
+        urls: string[];
         key: string;
         nonce: string;
         sha256: string;
@@ -59,7 +59,7 @@ const AndroidMediaCache = ((): AndroidMediaCachePlugin | null => {
  * Returns { success: true } if saved, { success: false } on any error.
  */
 export async function fetchDecryptAndSaveToGallery(
-    url: string,
+    urls: string[],
     key: string,
     nonce: string,
     sha256: string,
@@ -70,13 +70,17 @@ export async function fetchDecryptAndSaveToGallery(
         return { success: false };
     }
 
+    if (!urls.length) {
+        return { success: false };
+    }
+
     if (!sha256 || sha256.trim().length === 0) {
         return { success: false };
     }
 
     try {
         return await AndroidMediaCache.fetchDecryptAndSave({
-            url, key, nonce, sha256, mimeType, filename
+            urls, key, nonce, sha256, mimeType, filename
         });
     } catch (e) {
         console.error('Failed to fetch-decrypt-save media:', e);

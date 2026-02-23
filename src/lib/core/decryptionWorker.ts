@@ -1,7 +1,7 @@
 /**
  * Web Worker that performs media fetch + AES-GCM decryption off the main thread.
  *
- * Receives:  { id, url, key, nonce, mimeType }
+ * Receives:  { id, urls, key, nonce, mimeType }
  * Returns:   { id, blobUrl }   on success
  *            { id, error }     on failure
  *
@@ -63,9 +63,9 @@ self.onmessage = async (e: MessageEvent) => {
         return;
     }
 
-    const { id, url, key, nonce, mimeType } = data as {
+    const { id, urls, key, nonce, mimeType } = data as {
         id: string;
-        url: string;
+        urls: string[];
         key: string;
         nonce: string;
         mimeType: string;
@@ -75,12 +75,29 @@ self.onmessage = async (e: MessageEvent) => {
     inflightAbortControllers.set(id, abortController);
 
     try {
-        // 1. Fetch ciphertext
-        const response = await fetch(url, { signal: abortController.signal });
-        if (!response.ok) {
-            throw new Error(`Download failed with status ${response.status}`);
+        // 1. Fetch ciphertext — try each candidate URL until one succeeds
+        let ciphertextBuffer: ArrayBuffer | null = null;
+        let lastFetchError: Error | null = null;
+
+        for (const url of urls) {
+            try {
+                const response = await fetch(url, { signal: abortController.signal });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} from ${url}`);
+                }
+                ciphertextBuffer = await response.arrayBuffer();
+                lastFetchError = null;
+                break;
+            } catch (fetchErr) {
+                const err = fetchErr as Error;
+                if (err.name === 'AbortError') throw err;
+                lastFetchError = err;
+            }
         }
-        const ciphertextBuffer = await response.arrayBuffer();
+
+        if (!ciphertextBuffer) {
+            throw lastFetchError ?? new Error('No URLs provided');
+        }
 
         // Abort check after expensive fetch
         if (abortController.signal.aborted) {

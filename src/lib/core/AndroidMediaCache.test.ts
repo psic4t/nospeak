@@ -46,7 +46,7 @@ describe('AndroidMediaCache', () => {
         it('returns failure when not on Android', async () => {
             const { fetchDecryptAndSaveToGallery } = await import('./AndroidMediaCache');
             const result = await fetchDecryptAndSaveToGallery(
-                'https://example.com/file', 'aabb', '1122', 'abc123', 'video/mp4'
+                ['https://example.com/file'], 'aabb', '1122', 'abc123', 'video/mp4'
             );
             expect(result).toEqual({ success: false });
         });
@@ -54,7 +54,7 @@ describe('AndroidMediaCache', () => {
         it('returns failure when sha256 is empty', async () => {
             const { fetchDecryptAndSaveToGallery } = await import('./AndroidMediaCache');
             const result = await fetchDecryptAndSaveToGallery(
-                'https://example.com/file', 'aabb', '1122', '', 'video/mp4'
+                ['https://example.com/file'], 'aabb', '1122', '', 'video/mp4'
             );
             expect(result).toEqual({ success: false });
         });
@@ -98,12 +98,12 @@ describe('AndroidMediaCache on Android', () => {
 
         const { fetchDecryptAndSaveToGallery } = await import('./AndroidMediaCache');
         const result = await fetchDecryptAndSaveToGallery(
-            'https://blossom.example.com/abc123def456.mp4',
+            ['https://blossom.example.com/abc123def456.mp4'],
             'aabbccdd', '11223344', 'abc123def456', 'video/mp4', 'video.mp4'
         );
 
         expect(mockFetchDecryptAndSave).toHaveBeenCalledWith({
-            url: 'https://blossom.example.com/abc123def456.mp4',
+            urls: ['https://blossom.example.com/abc123def456.mp4'],
             key: 'aabbccdd',
             nonce: '11223344',
             sha256: 'abc123def456',

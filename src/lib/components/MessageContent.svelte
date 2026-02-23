@@ -627,48 +627,27 @@
         return refreshed?.mediaServers ?? [];
     }
 
-    async function fetchCiphertextWithBlossomFallback(originalUrl: string): Promise<Uint8Array> {
-        const primaryUrl = originalUrl;
+    async function buildCandidateUrls(originalUrl: string): Promise<string[]> {
+        const urls = [originalUrl];
+        const extracted = extractBlossomSha256FromUrl(originalUrl);
+        if (!extracted) return urls;
 
         try {
-            return await fetchCiphertext(primaryUrl);
-        } catch (e) {
-            const extracted = extractBlossomSha256FromUrl(originalUrl);
-            if (!extracted) {
-                throw e;
-            }
-
             const servers = await getAuthorMediaServers();
-            if (servers.length === 0) {
-                throw e;
-            }
+            if (servers.length === 0) return urls;
 
-            const candidatesWithExtension = buildBlossomCandidateUrls({
+            const withExt = buildBlossomCandidateUrls({
                 servers,
                 sha256: extracted.sha256,
-                extension: extracted.extension
+                extension: extracted.extension,
             });
-            const candidatesWithoutExtension = extracted.extension
+            const withoutExt = extracted.extension
                 ? buildBlossomCandidateUrls({ servers, sha256: extracted.sha256, extension: '' })
                 : [];
 
-            const candidates = Array.from(
-                new Set([
-                    ...candidatesWithExtension,
-                    ...candidatesWithoutExtension
-                ])
-            ).filter((candidate) => candidate !== primaryUrl);
-
-            let lastError: unknown = e;
-            for (const candidate of candidates) {
-                try {
-                    return await fetchCiphertext(candidate);
-                } catch (inner) {
-                    lastError = inner;
-                }
-            }
-
-            throw lastError;
+            return Array.from(new Set([originalUrl, ...withExt, ...withoutExt]));
+        } catch {
+            return urls;
         }
     }
 
@@ -734,22 +713,43 @@
                         }
                     }
 
-                    // Abort check before dispatching to worker
+                    // Abort check before building candidate URLs
+                    if (innerSignal.aborted) {
+                        throw new DOMException('Aborted', 'AbortError');
+                    }
+
+                    // Build Blossom candidate URLs for server fallback
+                    const candidateUrls = await buildCandidateUrls(url);
+
+                    // Abort check after candidate URL resolution
                     if (innerSignal.aborted) {
                         throw new DOMException('Aborted', 'AbortError');
                     }
 
                     // Offload fetch + decrypt + Blob creation to Web Worker.
-                    // Worker only does display decryption (blob URL) — no base64.
+                    // Worker tries each candidate URL until one succeeds.
                     const result = await scheduler.decryptInWorker(
-                        { url, key, nonce, mimeType },
+                        { urls: candidateUrls, key, nonce, mimeType },
                         innerSignal,
                         // Fallback: main-thread decryption if worker unavailable
                         async (fallbackSignal: AbortSignal) => {
                             if (fallbackSignal.aborted) {
                                 throw new DOMException('Aborted', 'AbortError');
                             }
-                            const ciphertextBuffer = await fetchCiphertextWithBlossomFallback(url);
+                            let ciphertextBuffer: Uint8Array | null = null;
+                            let lastError: unknown = null;
+                            for (const candidateUrl of candidateUrls) {
+                                try {
+                                    ciphertextBuffer = await fetchCiphertext(candidateUrl);
+                                    break;
+                                } catch (e) {
+                                    if ((e as Error).name === 'AbortError') throw e;
+                                    lastError = e;
+                                }
+                            }
+                            if (!ciphertextBuffer) {
+                                throw lastError ?? new Error('All URLs failed');
+                            }
                             if (fallbackSignal.aborted) {
                                 throw new DOMException('Aborted', 'AbortError');
                             }
@@ -765,7 +765,7 @@
                     if (mediaCacheEnabled) {
                         const extracted = extractBlossomSha256FromUrl(url);
                         if (extracted?.sha256) {
-                            fetchDecryptAndSaveToGallery(url, key, nonce, extracted.sha256, mimeType)
+                            fetchDecryptAndSaveToGallery(candidateUrls, key, nonce, extracted.sha256, mimeType)
                                 .catch((err: unknown) => console.warn('Failed to save media to gallery:', err));
                         }
                     }

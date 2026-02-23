@@ -11,6 +11,9 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+
 import com.getcapacitor.FileUtils;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -112,7 +115,12 @@ public class AndroidMediaCachePlugin extends Plugin {
 
     @PluginMethod
     public void fetchDecryptAndSave(PluginCall call) {
-        String url = call.getString("url");
+        JSONArray urlsArray;
+        try {
+            urlsArray = call.getArray("urls");
+        } catch (Exception e) {
+            urlsArray = null;
+        }
         String key = call.getString("key");
         String nonce = call.getString("nonce");
         String sha256 = call.getString("sha256");
@@ -120,10 +128,10 @@ public class AndroidMediaCachePlugin extends Plugin {
         String filename = call.getString("filename");
 
         // Validate required params on plugin thread
-        if (url == null || url.trim().isEmpty()) {
+        if (urlsArray == null || urlsArray.length() == 0) {
             JSObject result = new JSObject();
             result.put("success", false);
-            result.put("error", "Missing url");
+            result.put("error", "Missing urls");
             call.resolve(result);
             return;
         }
@@ -193,19 +201,42 @@ public class AndroidMediaCachePlugin extends Plugin {
                     return;
                 }
 
-                // Fetch ciphertext from blossom server
-                Request request = new Request.Builder().url(url).build();
-                Response response = httpClient.newCall(request).execute();
-                ResponseBody body = response.body();
-                if (!response.isSuccessful() || body == null) {
-                    Log.e(TAG, "fetchDecryptAndSave: HTTP " + response.code());
+                // Fetch ciphertext — try each candidate URL until one succeeds
+                byte[] ciphertext = null;
+                String lastFetchError = null;
+                for (int i = 0; i < urlsArray.length(); i++) {
+                    String candidateUrl;
+                    try {
+                        candidateUrl = urlsArray.getString(i);
+                    } catch (JSONException e) {
+                        continue;
+                    }
+                    try {
+                        Request request = new Request.Builder().url(candidateUrl).build();
+                        Response response = httpClient.newCall(request).execute();
+                        ResponseBody body = response.body();
+                        if (response.isSuccessful() && body != null) {
+                            ciphertext = body.bytes();
+                            break;
+                        } else {
+                            lastFetchError = "HTTP " + response.code() + " from " + candidateUrl;
+                            Log.w(TAG, "fetchDecryptAndSave: " + lastFetchError);
+                            if (body != null) body.close();
+                        }
+                    } catch (Exception e) {
+                        lastFetchError = e.getMessage() + " from " + candidateUrl;
+                        Log.w(TAG, "fetchDecryptAndSave: fetch failed for " + candidateUrl, e);
+                    }
+                }
+
+                if (ciphertext == null) {
+                    Log.e(TAG, "fetchDecryptAndSave: all URLs failed");
                     JSObject result = new JSObject();
                     result.put("success", false);
-                    result.put("error", "HTTP " + response.code());
+                    result.put("error", lastFetchError != null ? lastFetchError : "All URLs failed");
                     call.resolve(result);
                     return;
                 }
-                byte[] ciphertext = body.bytes();
 
                 // Decrypt AES-GCM
                 GCMParameterSpec gcmSpec = new GCMParameterSpec(128, nonceBytes);
@@ -237,8 +268,7 @@ public class AndroidMediaCachePlugin extends Plugin {
     }
 
     /**
-     * Write raw bytes to MediaStore. Like saveToMediaStore but accepts byte[]
-     * directly instead of a base64 string. Uses 64KB write chunks.
+     * Write raw bytes to MediaStore using 64KB write chunks.
      */
     private boolean saveBytesToMediaStore(String sha256, String mimeType, byte[] data, String filename) {
         ContentResolver resolver = getContext().getContentResolver();
