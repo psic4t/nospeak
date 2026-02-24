@@ -17,6 +17,44 @@ function extractBetween(html: string, regex: RegExp): string | undefined {
     return value.length > 0 ? value : undefined;
 }
 
+/**
+ * Extract content from a <meta> tag by attribute name/value, handling:
+ * - Bidirectional attribute order (property before content, or content before property)
+ * - Correct quote matching (double-quoted values can contain single quotes and vice versa)
+ */
+function extractMetaContent(html: string, attr: string, value: string): string | undefined {
+    // Match <meta> tags that contain the specified attribute=value pair
+    const tagRegex = new RegExp(`<meta\\s[^>]*${attr}=["']${value}["'][^>]*>`, 'gi');
+    let match;
+    while ((match = tagRegex.exec(html)) !== null) {
+        const tag = match[0];
+        // Extract content value, respecting the specific quote character used
+        const contentMatch = tag.match(/\bcontent="([^"]*)"|content='([^']*)'/i);
+        if (contentMatch) {
+            const val = (contentMatch[1] ?? contentMatch[2] ?? '').trim();
+            if (val) return val;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Extract href from a <link> tag by rel value, handling bidirectional attribute order.
+ */
+function extractLinkHref(html: string, relValue: string): string | undefined {
+    const tagRegex = new RegExp(`<link\\s[^>]*rel=["']${relValue}["'][^>]*>`, 'gi');
+    let match;
+    while ((match = tagRegex.exec(html)) !== null) {
+        const tag = match[0];
+        const hrefMatch = tag.match(/\bhref="([^"]*)"|href='([^']*)'/i);
+        if (hrefMatch) {
+            const val = (hrefMatch[1] ?? hrefMatch[2] ?? '').trim();
+            if (val) return val;
+        }
+    }
+    return undefined;
+}
+
 function getCharsetFromContentType(contentType: string | null): string {
     if (!contentType) {
         return 'utf-8';
@@ -130,7 +168,8 @@ export async function fetchUrlPreviewMetadata(url: string, fetchImpl: typeof fet
             method: 'GET',
             signal: controller.signal,
             headers: {
-                Accept: 'text/html,application/xhtml+xml'
+                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'User-Agent': 'Mozilla/5.0 (compatible; nospeak/1.0; +https://nospeak.chat)'
             }
         });
 
@@ -189,22 +228,22 @@ export async function fetchUrlPreviewMetadata(url: string, fetchImpl: typeof fet
         const html = decoder.decode(combined);
 
         const rawTitle =
-            extractBetween(html, /<meta[^>]+property=["']og:title["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+name=["']twitter:title["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+name=["']title["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+            extractMetaContent(html, 'property', 'og:title') ||
+            extractMetaContent(html, 'name', 'twitter:title') ||
+            extractMetaContent(html, 'name', 'title') ||
             extractBetween(html, /<title[^>]*>([^<]{1,200})<\/title>/i);
 
         const rawDescription =
-            extractBetween(html, /<meta[^>]+property=["']og:description["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+name=["']twitter:description["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+            extractMetaContent(html, 'property', 'og:description') ||
+            extractMetaContent(html, 'name', 'twitter:description') ||
+            extractMetaContent(html, 'name', 'description');
 
         const rawImage =
-            extractBetween(html, /<meta[^>]+property=["']og:image:secure_url["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+name=["']twitter:image:src["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<meta[^>]+name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-            extractBetween(html, /<link[^>]+rel=["']image_src["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+            extractMetaContent(html, 'property', 'og:image:secure_url') ||
+            extractMetaContent(html, 'property', 'og:image') ||
+            extractMetaContent(html, 'name', 'twitter:image:src') ||
+            extractMetaContent(html, 'name', 'twitter:image') ||
+            extractLinkHref(html, 'image_src');
 
         const title = rawTitle ? decodeHtmlEntities(rawTitle) : undefined;
         const description = rawDescription ? decodeHtmlEntities(rawDescription) : undefined;
