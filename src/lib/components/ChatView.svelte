@@ -1804,6 +1804,8 @@
       >nospeak: chat with {partnerName ||
         partnerNpub.slice(0, 10) + "..."}</title
     >
+  {:else if isGroup}
+    <title>nospeak: chat in {groupTitle || 'Group Chat'}</title>
   {/if}
 </svelte:head>
 
