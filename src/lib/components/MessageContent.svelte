@@ -13,6 +13,7 @@
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
     import { loadFromMediaCache, isMediaCacheEnabled, fetchDecryptAndSaveToGallery } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
+    import { generateVideoPoster } from '$lib/utils/mediaMetadata';
     import { nip19 } from 'nostr-tools';
     import { t } from '$lib/i18n';
     import { openProfileModal } from '$lib/stores/modals';
@@ -483,6 +484,20 @@
              renderBlurhash(blurhashCanvas);
          }
      });
+
+    // Generate a poster image from the first video frame for Android WebView,
+    // which does not display a static preview frame natively.
+    let videoPosterUrl = $state('');
+
+    $effect(() => {
+        const videoSrc = decryptedUrl ?? fileUrl ?? null;
+        if (!videoSrc) return;
+        if (!isVideoMime(fileType) && !isVideo(videoSrc)) return;
+
+        generateVideoPoster(videoSrc).then((poster) => {
+            videoPosterUrl = poster;
+        });
+    });
  
      onMount(() => {
         if (typeof window === 'undefined') return;
@@ -866,11 +881,11 @@
                              {#if !mediaLoaded}
                                  <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                              {/if}
-                             <video controls src={decryptedUrl} class="{mediaLoaded ? 'relative' : 'absolute inset-0'} w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
+                             <video controls src={decryptedUrl} poster={videoPosterUrl || undefined} class="{mediaLoaded ? 'relative' : 'absolute inset-0'} w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
                          </div>
                      {:else}
                      <div class="my-1">
-                         <video controls src={decryptedUrl} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
+                         <video controls src={decryptedUrl} poster={videoPosterUrl || undefined} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
                      </div>
                      {/if}
               {:else if isAudioMime(fileType) || isAudio(decryptedUrl)}
@@ -980,11 +995,11 @@
                          {#if !mediaLoaded}
                              <canvas bind:this={blurhashCanvas} width={blurhashDisplayWidth} height={blurhashDisplayHeight} class="block w-full h-auto rounded"></canvas>
                          {/if}
-                         <video controls src={fileUrl} class="{mediaLoaded ? 'relative' : 'absolute inset-0'} w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
+                         <video controls src={fileUrl} poster={videoPosterUrl || undefined} class="{mediaLoaded ? 'relative' : 'absolute inset-0'} w-full h-full rounded" preload="metadata" onloadedmetadata={handleRealMediaLoad}></video>
                      </div>
                  {:else}
                  <div class="my-1">
-                     <video controls src={fileUrl} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
+                     <video controls src={fileUrl} poster={videoPosterUrl || undefined} class="max-w-full rounded max-h-[300px]" preload="metadata" onloadedmetadata={() => onMediaLoad?.()}></video>
                  </div>
                  {/if}
               {:else if isAudioMime(fileType) || isAudio(fileUrl)}

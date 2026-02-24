@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getImageMetadata, getVideoMetadata } from './mediaMetadata';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getImageMetadata, getVideoMetadata, generateVideoPoster } from './mediaMetadata';
 
 // Mock blurhash encode
 vi.mock('blurhash', () => ({
@@ -229,5 +229,158 @@ describe('getVideoMetadata', () => {
 
         const file = new File(['test'], 'bad.mp4', { type: 'video/mp4' });
         await expect(getVideoMetadata(file)).rejects.toThrow('Failed to load video');
+    });
+});
+
+describe('generateVideoPoster', () => {
+    let mockCanvas: any;
+    let mockCtx: any;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        mockCtx = {
+            drawImage: vi.fn(),
+        };
+        mockCanvas = {
+            width: 0,
+            height: 0,
+            getContext: vi.fn(() => mockCtx),
+            toDataURL: vi.fn(() => 'data:image/jpeg;base64,fakeposter'),
+        };
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    function setupMockVideo(opts: { videoWidth?: number; videoHeight?: number; triggerError?: boolean } = {}) {
+        const { videoWidth = 1280, videoHeight = 720, triggerError = false } = opts;
+        vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+            if (tag === 'canvas') return mockCanvas as any;
+            if (tag === 'video') {
+                const video: any = {
+                    preload: '',
+                    muted: false,
+                    playsInline: false,
+                    videoWidth,
+                    videoHeight,
+                    _src: '',
+                    _currentTime: 0,
+                    onloadeddata: null as (() => void) | null,
+                    onerror: null as (() => void) | null,
+                    removeAttribute: vi.fn(),
+                    load: vi.fn(),
+                };
+                Object.defineProperty(video, 'src', {
+                    set(val: string) {
+                        video._src = val;
+                    },
+                    get() { return video._src; },
+                });
+                Object.defineProperty(video, 'currentTime', {
+                    set(_val: number) {
+                        if (triggerError) {
+                            setTimeout(() => video.onerror?.(), 0);
+                        } else {
+                            setTimeout(() => video.onloadeddata?.(), 0);
+                        }
+                    },
+                    get() { return 0; },
+                });
+                return video;
+            }
+            return {} as any;
+        });
+    }
+
+    it('returns a data URL on success', async () => {
+        setupMockVideo();
+        const promise = generateVideoPoster('blob:test-url');
+        await vi.advanceTimersByTimeAsync(10);
+        const result = await promise;
+        expect(result).toBe('data:image/jpeg;base64,fakeposter');
+    });
+
+    it('scales down to max 320px width', async () => {
+        setupMockVideo({ videoWidth: 1920, videoHeight: 1080 });
+        const promise = generateVideoPoster('blob:test-url');
+        await vi.advanceTimersByTimeAsync(10);
+        await promise;
+
+        // scale = 320 / 1920 = 1/6, cw = 320, ch = 180
+        expect(mockCanvas.width).toBe(320);
+        expect(mockCanvas.height).toBe(180);
+    });
+
+    it('does not upscale small videos', async () => {
+        setupMockVideo({ videoWidth: 200, videoHeight: 150 });
+        const promise = generateVideoPoster('blob:test-url');
+        await vi.advanceTimersByTimeAsync(10);
+        await promise;
+
+        expect(mockCanvas.width).toBe(200);
+        expect(mockCanvas.height).toBe(150);
+    });
+
+    it('returns empty string when video fails to load', async () => {
+        setupMockVideo({ triggerError: true });
+        const promise = generateVideoPoster('blob:bad-url');
+        await vi.advanceTimersByTimeAsync(10);
+        const result = await promise;
+        expect(result).toBe('');
+    });
+
+    it('returns empty string on timeout', async () => {
+        // Set up a video that never fires loadeddata or onerror
+        vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+            if (tag === 'canvas') return mockCanvas as any;
+            if (tag === 'video') {
+                const video: any = {
+                    preload: '',
+                    muted: false,
+                    playsInline: false,
+                    videoWidth: 0,
+                    videoHeight: 0,
+                    _src: '',
+                    onloadeddata: null,
+                    onerror: null,
+                    removeAttribute: vi.fn(),
+                    load: vi.fn(),
+                };
+                Object.defineProperty(video, 'src', {
+                    set(val: string) { video._src = val; },
+                    get() { return video._src; },
+                });
+                Object.defineProperty(video, 'currentTime', {
+                    set() { /* never fires callback */ },
+                    get() { return 0; },
+                });
+                return video;
+            }
+            return {} as any;
+        });
+
+        const promise = generateVideoPoster('blob:stuck-url');
+        // Advance past the 3000ms timeout
+        await vi.advanceTimersByTimeAsync(3100);
+        const result = await promise;
+        expect(result).toBe('');
+    });
+
+    it('returns empty string when video dimensions are zero', async () => {
+        setupMockVideo({ videoWidth: 0, videoHeight: 0 });
+        const promise = generateVideoPoster('blob:test-url');
+        await vi.advanceTimersByTimeAsync(10);
+        const result = await promise;
+        expect(result).toBe('');
+    });
+
+    it('returns empty string when canvas context is unavailable', async () => {
+        mockCanvas.getContext = vi.fn(() => null);
+        setupMockVideo();
+        const promise = generateVideoPoster('blob:test-url');
+        await vi.advanceTimersByTimeAsync(10);
+        const result = await promise;
+        expect(result).toBe('');
     });
 });

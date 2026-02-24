@@ -115,12 +115,13 @@ public class AndroidMediaCachePlugin extends Plugin {
 
     @PluginMethod
     public void fetchDecryptAndSave(PluginCall call) {
-        JSONArray urlsArray;
+        JSONArray urlsArrayTemp;
         try {
-            urlsArray = call.getArray("urls");
+            urlsArrayTemp = call.getArray("urls");
         } catch (Exception e) {
-            urlsArray = null;
+            urlsArrayTemp = null;
         }
+        final JSONArray urlsArray = urlsArrayTemp;
         String key = call.getString("key");
         String nonce = call.getString("nonce");
         String sha256 = call.getString("sha256");

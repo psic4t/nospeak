@@ -81,6 +81,67 @@ function encodeFromImage(img: HTMLImageElement): string {
     return encode(imageData.data, ENCODE_WIDTH, ENCODE_HEIGHT, COMPONENT_X, COMPONENT_Y);
 }
 
+const POSTER_MAX_WIDTH = 320;
+const POSTER_TIMEOUT_MS = 3000;
+
+/**
+ * Generate a poster image (data URL) from the first frame of a video.
+ * Returns empty string on failure or timeout — safe to pass as poster attribute.
+ */
+export async function generateVideoPoster(src: string): Promise<string> {
+    return Promise.race([
+        extractFirstFrame(src),
+        new Promise<string>((resolve) =>
+            setTimeout(() => resolve(''), POSTER_TIMEOUT_MS)
+        )
+    ]);
+}
+
+function extractFirstFrame(src: string): Promise<string> {
+    return new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.preload = 'auto';
+        video.muted = true;
+        video.playsInline = true;
+
+        const cleanup = () => {
+            video.removeAttribute('src');
+            video.load();
+        };
+
+        video.onerror = () => { cleanup(); resolve(''); };
+
+        video.onloadeddata = () => {
+            try {
+                const w = video.videoWidth;
+                const h = video.videoHeight;
+                if (!w || !h) { cleanup(); resolve(''); return; }
+
+                const scale = Math.min(1, POSTER_MAX_WIDTH / w);
+                const cw = Math.round(w * scale);
+                const ch = Math.round(h * scale);
+
+                const canvas = document.createElement('canvas');
+                canvas.width = cw;
+                canvas.height = ch;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { cleanup(); resolve(''); return; }
+
+                ctx.drawImage(video, 0, 0, cw, ch);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                cleanup();
+                resolve(dataUrl);
+            } catch {
+                cleanup();
+                resolve('');
+            }
+        };
+
+        video.src = src;
+        video.currentTime = 0.001;
+    });
+}
+
 function encodeFromVideo(video: HTMLVideoElement): string {
     const canvas = document.createElement('canvas');
     canvas.width = ENCODE_WIDTH;
