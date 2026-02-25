@@ -645,7 +645,8 @@
   });
   let longPressTimer: number | null = null;
   const isAndroidShell = isAndroidCapacitorShell();
-  const isMobileLayout = isAndroidShell || isMobileWeb();
+  const useFullWidthBubbles = isAndroidShell || isMobileWeb();
+  const useSmallAvatars = useFullWidthBubbles;
  
   // Emoji picker state
   let showEmojiPicker = $state(false);
@@ -2095,14 +2096,14 @@
         {@const hasLocation = !!msg.location}
         {@const bubbleWidthClass = (hasYouTubeLink || hasLocation)
           ? 'w-full max-w-full md:w-[560px] md:max-w-full'
-          : (isMobileLayout ? 'max-w-[90%]' : 'max-w-[70%]')}
+          : (useFullWidthBubbles ? 'max-w-full' : 'max-w-[70%]')}
  
       <div
         data-event-id={msg.eventId}
         class={`flex ${msg.direction === "sent" ? "justify-end" : "justify-start"} items-end gap-2`}
         in:fly={isAndroidShell ? { duration: 0 } : { y: 20, duration: 300, easing: cubicOut }}
       >
-        {#if msg.direction === "received" && !isMobileLayout}
+        {#if msg.direction === "received"}
           {#if isGroup && msg.senderNpub}
             <!-- Group message: show sender's avatar -->
             <button
@@ -2113,7 +2114,7 @@
                 npub={msg.senderNpub}
                 src={getParticipantPicture(msg.senderNpub)}
                 size="md"
-                class="!w-10 !h-10 transition-all duration-150 ease-out"
+                class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
               />
             </button>
           {:else if partnerNpub}
@@ -2126,7 +2127,7 @@
                 npub={partnerNpub}
                 src={partnerPicture}
                 size="md"
-                class="!w-10 !h-10 transition-all duration-150 ease-out"
+                class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
               />
             </button>
           {/if}
@@ -2234,7 +2235,7 @@
         />
         </div>
 
-        {#if msg.direction === "sent" && $currentUser && !isMobileLayout}
+        {#if msg.direction === "sent" && $currentUser}
           <button
             class="mb-1 hover:opacity-80 transition-opacity duration-150 ease-out cursor-pointer"
             onclick={() => $currentUser && openProfile($currentUser.npub)}
@@ -2243,7 +2244,7 @@
               npub={$currentUser.npub}
               src={myPicture}
               size="md"
-              class="!w-10 !h-10 transition-all duration-150 ease-out"
+              class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
             />
           </button>
         {/if}
