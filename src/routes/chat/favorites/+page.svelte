@@ -38,7 +38,7 @@
     let myPicture = $state<string | undefined>(undefined);
 
     const isAndroidShell = isAndroidCapacitorShell();
-    const useFullWidthBubbles = isAndroidShell || isMobileWeb();
+    const isMobileLayout = isAndroidShell || isMobileWeb();
 
     // Context menu state
     let contextMenu = $state<{
@@ -285,11 +285,11 @@
                                 {@const hasLocation = !!message.location}
                                 {@const bubbleWidthClass = (hasYouTubeLink || hasLocation)
                                     ? 'w-full max-w-full md:w-[560px] md:max-w-full'
-                                    : (useFullWidthBubbles ? 'max-w-full' : 'max-w-[70%]')}
+                                    : (isMobileLayout ? 'max-w-[90%]' : 'max-w-[70%]')}
 
                                 <div class={`flex ${isSent ? 'justify-end' : 'justify-start'} items-end gap-2`}>
-                                    <!-- Avatar (received only) -->
-                                    {#if !isSent}
+                                    <!-- Avatar (received only, desktop) -->
+                                    {#if !isSent && !isMobileLayout}
                                         <Avatar
                                             npub={avatarNpub}
                                             src={avatarPic}
@@ -366,8 +366,8 @@
                                          </div>
                                      </div>
 
-                                     <!-- Avatar (sent only) -->
-                                    {#if isSent && $currentUser}
+                                     <!-- Avatar (sent only, desktop) -->
+                                    {#if isSent && $currentUser && !isMobileLayout}
                                         <Avatar
                                             npub={$currentUser.npub}
                                             src={myPicture}
