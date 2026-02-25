@@ -645,8 +645,8 @@
   });
   let longPressTimer: number | null = null;
   const isAndroidShell = isAndroidCapacitorShell();
-  const useFullWidthBubbles = isAndroidShell || isMobileWeb();
-  const useSmallAvatars = useFullWidthBubbles;
+  const isMobileLayout = isAndroidShell || isMobileWeb();
+  const useSmallAvatars = isMobileLayout;
  
   // Emoji picker state
   let showEmojiPicker = $state(false);
@@ -2096,7 +2096,7 @@
         {@const hasLocation = !!msg.location}
         {@const bubbleWidthClass = (hasYouTubeLink || hasLocation)
           ? 'w-full max-w-full md:w-[560px] md:max-w-full'
-          : (useFullWidthBubbles ? 'max-w-full' : 'max-w-[70%]')}
+          : (isMobileLayout ? 'max-w-[80%]' : 'max-w-[70%]')}
  
       <div
         data-event-id={msg.eventId}
@@ -2114,7 +2114,7 @@
                 npub={msg.senderNpub}
                 src={getParticipantPicture(msg.senderNpub)}
                 size="md"
-                class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
+                class={`${useSmallAvatars ? '!w-8 !h-8' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
               />
             </button>
           {:else if partnerNpub}
@@ -2127,7 +2127,7 @@
                 npub={partnerNpub}
                 src={partnerPicture}
                 size="md"
-                class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
+                class={`${useSmallAvatars ? '!w-8 !h-8' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
               />
             </button>
           {/if}
@@ -2244,7 +2244,7 @@
               npub={$currentUser.npub}
               src={myPicture}
               size="md"
-              class={`${useSmallAvatars ? '!w-10 !h-10' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
+              class={`${useSmallAvatars ? '!w-8 !h-8' : '!w-14 !h-14'} md:!w-10 md:!h-10 transition-all duration-150 ease-out`}
             />
           </button>
         {/if}
