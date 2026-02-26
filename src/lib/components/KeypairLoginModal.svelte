@@ -84,7 +84,7 @@
                     <p class="block typ-meta text-gray-700 dark:text-slate-200 mb-1">
                         {$t('auth.keypair.npubLabel')}
                     </p>
-                    <div class="text-xs font-mono break-all p-2 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-700/60">
+                    <div dir="ltr" class="text-xs font-mono break-all p-2 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-700/60">
                         {npub}
                     </div>
                 </div>
@@ -92,7 +92,7 @@
                     <p class="block typ-meta text-gray-700 dark:text-slate-200 mb-1">
                         {$t('auth.keypair.nsecLabel')}
                     </p>
-                    <div class="text-xs font-mono break-all p-2 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-700/60">
+                    <div dir="ltr" class="text-xs font-mono break-all p-2 rounded-xl bg-gray-50 dark:bg-slate-800 dark:text-slate-100 border border-gray-200/60 dark:border-slate-700/60">
                         {nsec}
                     </div>
                 </div>

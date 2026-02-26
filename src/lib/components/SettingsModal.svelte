@@ -1293,6 +1293,7 @@
                       id="profile-picture"
                       bind:value={profilePicture}
                       type="url"
+                      dir="ltr"
                       placeholder={$t('settings.profile.pictureUrlPlaceholder')}
                     />
                   </div>
@@ -1316,6 +1317,7 @@
                       id="profile-banner"
                       bind:value={profileBanner}
                       type="url"
+                      dir="ltr"
                       placeholder={$t('settings.profile.bannerUrlPlaceholder')}
                     />
                   </div>
@@ -1331,6 +1333,7 @@
                   <Input
                     id="profile-nip05"
                     bind:value={profileNip05}
+                    dir="ltr"
                     placeholder={$t('settings.profile.nip05Placeholder')}
                     oninput={() => (profileNip05Status = "unknown")}
                   />
@@ -1395,6 +1398,7 @@
                     id="profile-website"
                     bind:value={profileWebsite}
                     type="url"
+                    dir="ltr"
                     placeholder={$t('settings.profile.websitePlaceholder')}
                   />
                 </div>
@@ -1409,6 +1413,7 @@
                   <Input
                     id="profile-lud16"
                     bind:value={profileLud16}
+                    dir="ltr"
                     placeholder={$t('settings.profile.lightningPlaceholder')}
                   />
                 </div>
@@ -1465,6 +1470,7 @@
                   bind:value={newRelayUrl}
                   placeholder={$t('settings.messagingRelays.inputPlaceholder')}
                   class="flex-1"
+                  dir="ltr"
                   onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addRelay()}
                 />
                 <Button
@@ -1516,6 +1522,7 @@
                         }`}
                       ></div>
                       <p
+                        dir="ltr"
                         class="text-sm font-medium dark:text-white truncate"
                         title={relay.url}
                       >
@@ -1569,6 +1576,7 @@
                   bind:value={newMediaServerUrl}
                   placeholder={$t('settings.mediaServers.inputPlaceholder')}
                   class="flex-1"
+                  dir="ltr"
                   onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addMediaServer()}
                 />
                 <Button
@@ -1610,6 +1618,7 @@
                   <div class="px-4 py-3 flex items-center justify-between">
                     <div class="flex-1 min-w-0 pe-4 flex items-center gap-2">
                       <p
+                        dir="ltr"
                         class="text-sm font-medium dark:text-white truncate"
                         title={server.url}
                       >
@@ -1777,6 +1786,7 @@
                   id="security-npub"
                   readonly
                   value={$currentUser?.npub || ""}
+                  dir="ltr"
                   class="font-mono overflow-x-auto"
                 />
               </div>
@@ -1792,6 +1802,7 @@
                       type={showNsec ? "text" : "password"}
                       readonly
                       value={storedNsec}
+                      dir="ltr"
                       class="pe-10 font-mono"
                     />
                       <Button

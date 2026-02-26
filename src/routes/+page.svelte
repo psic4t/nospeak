@@ -124,6 +124,7 @@
                 id="nsec-input"
                 type="password" 
                 bind:value={nsec} 
+                dir="ltr"
                 class="w-full px-4 py-3 border border-gray-200/50 dark:border-white/10 rounded-xl bg-white/50 dark:bg-slate-800/50 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-gray-400" 
                 placeholder={$t('auth.nsecPlaceholder')}
             />

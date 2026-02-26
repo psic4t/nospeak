@@ -109,6 +109,7 @@
                             type="text"
                             bind:value={manualRelayUrl}
                             placeholder={$t('sync.manualRelay.placeholder')}
+                            dir="ltr"
                             class="flex-1 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                             onkeydown={(e) => { if (e.key === 'Enter') handleManualRelay(); }}
                             disabled={isConnecting}

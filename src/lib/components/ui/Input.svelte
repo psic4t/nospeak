@@ -9,6 +9,7 @@
         class: className = '',
         disabled = false,
         readonly = false,
+        dir = undefined,
         oninput = undefined,
         onkeydown = undefined,
         ...rest 
@@ -20,6 +21,7 @@
         class?: string;
         disabled?: boolean;
         readonly?: boolean;
+        dir?: 'ltr' | 'rtl' | 'auto';
         oninput?: (e: Event) => void;
         onkeydown?: (e: KeyboardEvent) => void;
         [key: string]: any;
@@ -35,6 +37,7 @@
     {placeholder}
     {disabled}
     {readonly}
+    {dir}
     class="{baseStyles} {className}"
     oninput={oninput}
     onkeydown={onkeydown}

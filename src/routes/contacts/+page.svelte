@@ -256,6 +256,7 @@
                         bind:value={ctrl.newNpub}
                         placeholder={$t('modals.manageContacts.searchPlaceholder')} 
                         class="flex-1"
+                        dir="ltr"
                     />
                     <Button 
                         onclick={() => ctrl.add()}
