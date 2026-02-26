@@ -9,7 +9,7 @@
     import Input from '$lib/components/ui/Input.svelte';
     import ContactContextMenu from '$lib/components/ContactContextMenu.svelte';
     import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-    import { showScanContactQrModal, showManageContactsModal } from '$lib/stores/modals';
+    import { showScanContactQrModal, showManageContactsModal, openProfileModal } from '$lib/stores/modals';
     import { overscroll } from '$lib/utils/overscroll';
     import {
         createContactsController,
@@ -144,6 +144,13 @@
         if (dx > 10 || dy > 10) {
             clearTimeout(longPressTimer);
             longPressTimer = null;
+        }
+    }
+
+    function handleViewProfile() {
+        if (selectedContact) {
+            contextMenuOpen = false;
+            openProfileModal(selectedContact.npub);
         }
     }
 
@@ -487,6 +494,7 @@
     y={contextMenuY}
     isOpen={contextMenuOpen}
     onClose={() => { contextMenuOpen = false; contextMenuClosedAt = Date.now(); }}
+    onViewProfile={handleViewProfile}
     onDelete={handleDeleteOption}
 />
 

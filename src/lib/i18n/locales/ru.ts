@@ -93,7 +93,7 @@ const ru = {
             alreadyAdded: 'Уже добавлен', syncing: 'Синхронизация контактов…',
             pullToRefresh: 'Потяните для обновления', releaseToRefresh: 'Отпустите для обновления',
             newContact: 'Добавить контакт', createGroup: 'Создать группу',
-            contextMenu: { openMenu: 'Открыть меню', delete: 'Удалить' },
+            contextMenu: { openMenu: 'Открыть меню', viewProfile: 'Просмотр профиля', delete: 'Удалить' },
             confirmDelete: { title: 'Удалить контакт', message: 'Вы уверены, что хотите удалить {name}?', confirm: 'Удалить' }
         },
         createGroup: {

@@ -1,11 +1,12 @@
 <script lang="ts">
     import { t } from '$lib/i18n';
 
-    let { x = 0, y = 0, isOpen = false, onClose, onDelete } = $props<{
+    let { x = 0, y = 0, isOpen = false, onClose, onViewProfile, onDelete } = $props<{
         x: number;
         y: number;
         isOpen: boolean;
         onClose: () => void;
+        onViewProfile: () => void;
         onDelete: () => void;
     }>();
 
@@ -85,6 +86,16 @@
         use:reposition={{x, y}}
         class="contact-context-menu fixed bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl py-1 z-[9999] min-w-[140px] outline-none"
     >
+        <button
+            class="w-full text-start px-4 py-2 hover:bg-gray-100 dark:hover:bg-slate-700/50 text-sm text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-2"
+            onclick={() => { onViewProfile(); onClose(); }}
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+            </svg>
+            {$t('modals.manageContacts.contextMenu.viewProfile')}
+        </button>
         <button
             class="w-full text-start px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm text-red-600 dark:text-red-400 transition-colors flex items-center gap-2"
             onclick={() => { onDelete(); onClose(); }}

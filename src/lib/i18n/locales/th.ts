@@ -40,7 +40,7 @@ const th = {
             alreadyAdded: 'เพิ่มแล้ว', syncing: 'กำลังซิงค์ผู้ติดต่อ…',
             pullToRefresh: 'ดึงลงเพื่อรีเฟรช', releaseToRefresh: 'ปล่อยเพื่อรีเฟรช',
             newContact: 'เพิ่มผู้ติดต่อ', createGroup: 'สร้างกลุ่ม',
-            contextMenu: { openMenu: 'เปิดเมนู', delete: 'ลบ' },
+            contextMenu: { openMenu: 'เปิดเมนู', viewProfile: 'ดูโปรไฟล์', delete: 'ลบ' },
             confirmDelete: { title: 'ลบผู้ติดต่อ', message: 'คุณแน่ใจหรือไม่ว่าต้องการลบ {name}?', confirm: 'ลบ' }
         },
         createGroup: { title: 'สร้างแชทกลุ่ม', searchPlaceholder: 'ค้นหาผู้ติดต่อ', selectedCount: 'เลือกแล้ว {count} คน', minContactsHint: 'เลือกผู้ติดต่ออย่างน้อย 2 คน', createButton: 'สร้างกลุ่ม', creating: 'กำลังสร้าง...', noContacts: 'ไม่มีผู้ติดต่อที่จะเพิ่มในกลุ่ม' },

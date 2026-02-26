@@ -124,6 +124,7 @@ const vi = {
             createGroup: 'Tạo nhóm',
             contextMenu: {
                 openMenu: 'Mở menu',
+                viewProfile: 'Xem hồ sơ',
                 delete: 'Xóa'
             },
             confirmDelete: {

@@ -9,7 +9,7 @@
     import ContactContextMenu from './ContactContextMenu.svelte';
     import ConfirmDialog from './ConfirmDialog.svelte';
     import { goto } from '$app/navigation';
-    import { showScanContactQrModal, showCreateGroupModal } from '$lib/stores/modals';
+    import { showScanContactQrModal, showCreateGroupModal, openProfileModal } from '$lib/stores/modals';
     import {
         createContactsController,
         shortenNpub,
@@ -135,6 +135,14 @@
         contextMenuX = rect.left;
         contextMenuY = rect.bottom + 4;
         contextMenuOpen = true;
+    }
+
+    function handleViewProfile() {
+        if (selectedContact) {
+            contextMenuOpen = false;
+            close();
+            openProfileModal(selectedContact.npub);
+        }
     }
 
     function handleDeleteOption() {
@@ -490,6 +498,7 @@
         y={contextMenuY}
         isOpen={contextMenuOpen}
         onClose={() => { contextMenuOpen = false; contextMenuClosedAt = Date.now(); }}
+        onViewProfile={handleViewProfile}
         onDelete={handleDeleteOption}
     />
 

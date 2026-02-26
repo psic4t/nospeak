@@ -125,6 +125,7 @@ const nl = {
               createGroup: 'Groep aanmaken',
               contextMenu: {
                   openMenu: 'Menu openen',
+                  viewProfile: 'Profiel bekijken',
                   delete: 'Verwijderen'
               },
               confirmDelete: {

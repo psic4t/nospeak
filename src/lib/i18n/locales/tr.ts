@@ -124,6 +124,7 @@ const tr = {
             createGroup: 'Grup oluştur',
             contextMenu: {
                 openMenu: 'Menüyü aç',
+                viewProfile: 'Profili görüntüle',
                 delete: 'Sil'
             },
             confirmDelete: {

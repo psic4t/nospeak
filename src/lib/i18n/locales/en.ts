@@ -125,6 +125,7 @@ const en = {
               createGroup: 'Create group',
               contextMenu: {
                   openMenu: 'Open menu',
+                  viewProfile: 'View Profile',
                   delete: 'Delete'
               },
               confirmDelete: {

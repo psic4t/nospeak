@@ -124,6 +124,7 @@ const ar = {
             createGroup: 'إنشاء مجموعة',
             contextMenu: {
                 openMenu: 'فتح القائمة',
+                viewProfile: 'عرض الملف الشخصي',
                 delete: 'حذف'
             },
             confirmDelete: {

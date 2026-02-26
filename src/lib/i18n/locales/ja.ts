@@ -124,6 +124,7 @@ const ja = {
             createGroup: 'グループを作成',
             contextMenu: {
                 openMenu: 'メニューを開く',
+                viewProfile: 'プロフィールを表示',
                 delete: '削除'
             },
             confirmDelete: {

@@ -124,6 +124,7 @@ const hi = {
             createGroup: 'समूह बनाएँ',
             contextMenu: {
                 openMenu: 'मेनू खोलें',
+                viewProfile: 'प्रोफ़ाइल देखें',
                 delete: 'हटाएँ'
             },
             confirmDelete: {

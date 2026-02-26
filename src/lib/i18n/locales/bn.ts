@@ -124,6 +124,7 @@ const bn = {
             createGroup: 'গ্রুপ তৈরি করুন',
             contextMenu: {
                 openMenu: 'মেনু খুলুন',
+                viewProfile: 'প্রোফাইল দেখুন',
                 delete: 'মুছুন'
             },
             confirmDelete: {

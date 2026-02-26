@@ -124,6 +124,7 @@ const de = {
               releaseToRefresh: 'Loslassen zum Aktualisieren',
               contextMenu: {
                   openMenu: 'Menü öffnen',
+                  viewProfile: 'Profil anzeigen',
                   delete: 'Löschen'
               },
               confirmDelete: {

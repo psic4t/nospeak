@@ -124,6 +124,7 @@ const ur = {
             createGroup: 'گروپ بنائیں',
             contextMenu: {
                 openMenu: 'مینو کھولیں',
+                viewProfile: 'پروفائل دیکھیں',
                 delete: 'حذف کریں'
             },
             confirmDelete: {

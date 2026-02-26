@@ -124,6 +124,7 @@ const he = {
             createGroup: 'צור קבוצה',
             contextMenu: {
                 openMenu: 'פתח תפריט',
+                viewProfile: 'צפה בפרופיל',
                 delete: 'מחק'
             },
             confirmDelete: {

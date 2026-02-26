@@ -124,6 +124,7 @@ const zh = {
             createGroup: '创建群组',
             contextMenu: {
                 openMenu: '打开菜单',
+                viewProfile: '查看资料',
                 delete: '删除'
             },
             confirmDelete: {

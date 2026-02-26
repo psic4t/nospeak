@@ -125,6 +125,7 @@ const fa = {
               createGroup: 'ایجاد گروه',
               contextMenu: {
                   openMenu: 'باز کردن منو',
+                  viewProfile: 'مشاهده پروفایل',
                   delete: 'حذف'
               },
               confirmDelete: {

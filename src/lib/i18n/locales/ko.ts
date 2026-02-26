@@ -125,6 +125,7 @@ const ko = {
               createGroup: '그룹 만들기',
               contextMenu: {
                   openMenu: '메뉴 열기',
+                  viewProfile: '프로필 보기',
                   delete: '삭제'
               },
               confirmDelete: {

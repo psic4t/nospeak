@@ -119,6 +119,7 @@ const it = {
             releaseToRefresh: 'Rilascia per aggiornare',
             contextMenu: {
                 openMenu: 'Apri menu',
+                viewProfile: 'Visualizza profilo',
                 delete: 'Elimina'
             },
             confirmDelete: {

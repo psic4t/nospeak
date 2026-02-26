@@ -119,6 +119,7 @@ const fr = {
             releaseToRefresh: 'Relâchez pour actualiser',
             contextMenu: {
                 openMenu: 'Ouvrir le menu',
+                viewProfile: 'Voir le profil',
                 delete: 'Supprimer'
             },
             confirmDelete: {

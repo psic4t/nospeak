@@ -93,7 +93,7 @@ const pl = {
             alreadyAdded: 'Już dodano', syncing: 'Synchronizacja kontaktów…',
             pullToRefresh: 'Pociągnij, aby odświeżyć', releaseToRefresh: 'Puść, aby odświeżyć',
             newContact: 'Dodaj kontakt', createGroup: 'Utwórz grupę',
-            contextMenu: { openMenu: 'Otwórz menu', delete: 'Usuń' },
+            contextMenu: { openMenu: 'Otwórz menu', viewProfile: 'Zobacz profil', delete: 'Usuń' },
             confirmDelete: { title: 'Usuń kontakt', message: 'Czy na pewno chcesz usunąć {name}?', confirm: 'Usuń' }
         },
         createGroup: {
