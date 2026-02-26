@@ -13,6 +13,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { getRelativeTime } from '$lib/utils/time';
     import { blur } from '$lib/utils/platform';
+    import { resolveDisplayName } from '$lib/core/nameUtils';
     import Avatar from '$lib/components/Avatar.svelte';
     import GroupAvatar from '$lib/components/GroupAvatar.svelte';
     import ChatContextMenu from '$lib/components/ChatContextMenu.svelte';
@@ -81,9 +82,7 @@
                                     .slice(0, 5)
                                     .map(async (npub: string) => {
                                         const profile = await profileRepo.getProfileIgnoreTTL(npub);
-                                        return profile?.metadata?.name || 
-                                               profile?.metadata?.display_name || 
-                                               npub.slice(0, 8) + '...';
+                                        return resolveDisplayName(profile?.metadata, npub);
                                     })
                             );
                             name = generateGroupTitle(participantNames);
@@ -106,9 +105,7 @@
                 } else {
                     // 1-on-1 chat
                     const profile = await profileRepo.getProfileIgnoreTTL(conversationId);
-                    name = profile?.metadata?.display_name || 
-                          profile?.metadata?.name || 
-                          conversationId.slice(0, 10) + "...";
+                    name = resolveDisplayName(profile?.metadata, conversationId);
                     picture = profile?.metadata?.picture;
 
                     // Get messages

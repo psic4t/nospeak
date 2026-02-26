@@ -10,6 +10,7 @@
     import { DecryptionScheduler } from '$lib/core/DecryptionScheduler';
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { profileResolver } from '$lib/core/ProfileResolver';
+    import { resolveDisplayName } from '$lib/core/nameUtils';
     import { buildBlossomCandidateUrls, extractBlossomSha256FromUrl } from '$lib/core/BlossomRetrieval';
     import { loadFromMediaCache, isMediaCacheEnabled, fetchDecryptAndSaveToGallery } from '$lib/core/AndroidMediaCache';
     import { decode as decodeBlurhash } from 'blurhash';
@@ -121,8 +122,8 @@
                 try {
                     const profile = await profileRepo.getProfileIgnoreTTL(npub);
                     if (profile?.metadata) {
-                        const name = profile.metadata.name || profile.metadata.display_name;
-                        if (name) newMap.set(npub, name);
+                        const name = resolveDisplayName(profile.metadata, npub);
+                        newMap.set(npub, name);
                     } else {
                         uncached.push(npub);
                     }
@@ -143,8 +144,8 @@
                     try {
                         const profile = await profileRepo.getProfileIgnoreTTL(npub);
                         if (profile?.metadata) {
-                            const name = profile.metadata.name || profile.metadata.display_name;
-                            if (name) newMap.set(npub, name);
+                            const name = resolveDisplayName(profile.metadata, npub);
+                            newMap.set(npub, name);
                         }
                     } catch { /* ignore */ }
                 }

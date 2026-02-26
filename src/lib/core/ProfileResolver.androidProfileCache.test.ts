@@ -30,7 +30,7 @@ vi.mock('nostr-tools', () => {
 
 vi.mock('./AndroidProfileCache', () => {
     return {
-        extractKind0Username: vi.fn(() => 'alice'),
+        extractKind0DisplayName: vi.fn(() => 'alice'),
         extractKind0Picture: vi.fn(() => 'https://example.com/a.png'),
         cacheAndroidProfileIdentity: vi.fn(async () => undefined)
     };

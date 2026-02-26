@@ -44,6 +44,7 @@
   import { getCurrentPosition } from '$lib/core/LocationService';
   import { isVoiceRecordingSupported } from '$lib/core/VoiceRecorder';
   import { generateGroupTitle } from '$lib/db/ConversationRepository';
+  import { resolveDisplayName, resolveMentionLabel } from '$lib/core/nameUtils';
   import Button from '$lib/components/ui/Button.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import CircularProgress from '$lib/components/ui/CircularProgress.svelte';
@@ -105,14 +106,12 @@
                    groupConversation.participants
                        .filter((p: string) => p !== $currentUser?.npub)
                        .slice(0, 5)
-                       .map(async (npub: string) => {
-                           const profile = await profileRepo.getProfileIgnoreTTL(npub);
-                           const name = profile?.metadata?.name || 
-                                        profile?.metadata?.display_name || 
-                                        npub.slice(0, 8) + '...';
-                           const picture = profile?.metadata?.picture;
-                           participantProfiles.set(npub, { name, picture });
-                           return name;
+                        .map(async (npub: string) => {
+                            const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                            const name = resolveDisplayName(profile?.metadata, npub);
+                            const picture = profile?.metadata?.picture;
+                            participantProfiles.set(npub, { name, picture });
+                            return name;
                        })
                );
                groupTitle = generateGroupTitle(names);
@@ -136,13 +135,11 @@
        if (participantProfiles.has(npub)) {
            return participantProfiles.get(npub)!;
        }
-       const profile = await profileRepo.getProfileIgnoreTTL(npub);
-       const name = profile?.metadata?.name || 
-                    profile?.metadata?.display_name || 
-                    npub.slice(0, 8) + '...';
-       const picture = profile?.metadata?.picture;
-       const profileData = { name, picture };
-       participantProfiles.set(npub, profileData);
+        const profile = await profileRepo.getProfileIgnoreTTL(npub);
+        const name = resolveDisplayName(profile?.metadata, npub);
+        const picture = profile?.metadata?.picture;
+        const profileData = { name, picture };
+        participantProfiles.set(npub, profileData);
        participantProfiles = new Map(participantProfiles);
        return profileData;
    }
@@ -151,12 +148,10 @@
     async function refreshGroupParticipantProfiles(participants: string[]) {
         const others = participants.filter((p: string) => p !== $currentUser?.npub);
         for (const npub of others) {
-            const profile = await profileRepo.getProfileIgnoreTTL(npub);
-            const name = profile?.metadata?.name || 
-                         profile?.metadata?.display_name || 
-                         npub.slice(0, 8) + '...';
-            const picture = profile?.metadata?.picture;
-            participantProfiles.set(npub, { name, picture });
+             const profile = await profileRepo.getProfileIgnoreTTL(npub);
+             const name = resolveDisplayName(profile?.metadata, npub);
+             const picture = profile?.metadata?.picture;
+             participantProfiles.set(npub, { name, picture });
         }
         participantProfiles = new Map(participantProfiles);
 
@@ -212,10 +207,8 @@
                     .filter((p: string) => p !== $currentUser?.npub)
                     .slice(0, 5)
                     .map(async (npub: string) => {
-                        const profile = await profileRepo.getProfileIgnoreTTL(npub);
-                        return profile?.metadata?.name || 
-                               profile?.metadata?.display_name || 
-                               npub.slice(0, 8) + '...';
+                         const profile = await profileRepo.getProfileIgnoreTTL(npub);
+                         return resolveDisplayName(profile?.metadata, npub);
                     })
             );
             groupTitle = generateGroupTitle(names);
@@ -666,6 +659,7 @@
   interface MentionCandidate {
     npub: string;
     name: string;
+    displayLabel: string;
     picture?: string;
   }
 
@@ -679,7 +673,9 @@
       ? (mentionSearch
           ? mentionCandidates.filter((c) => {
               const q = mentionSearch.toLowerCase();
-              return c.name.toLowerCase().includes(q) || c.npub.toLowerCase().includes(q);
+              return c.name.toLowerCase().includes(q)
+                || c.displayLabel.toLowerCase().includes(q)
+                || c.npub.toLowerCase().includes(q);
             })
           : mentionCandidates
         ).slice(0, 5)
@@ -702,11 +698,9 @@
         if (user && c.npub === user.npub) continue;
         npubSet.add(c.npub);
         const profile = await profileRepo.getProfileIgnoreTTL(c.npub);
-        const name = profile?.metadata?.name
-          || profile?.metadata?.display_name
-          || profile?.metadata?.displayName
-          || c.npub.slice(0, 12) + '...' + c.npub.slice(-6);
-        candidates.push({ npub: c.npub, name, picture: profile?.metadata?.picture });
+        const name = resolveDisplayName(profile?.metadata, c.npub);
+        const displayLabel = resolveMentionLabel(profile?.metadata, c.npub);
+        candidates.push({ npub: c.npub, name, displayLabel, picture: profile?.metadata?.picture });
       }
 
       // Add group participants not already in contacts
@@ -716,11 +710,9 @@
           if (npubSet.has(npub)) continue;
           npubSet.add(npub);
           const profile = await profileRepo.getProfileIgnoreTTL(npub);
-          const name = profile?.metadata?.name
-            || profile?.metadata?.display_name
-            || profile?.metadata?.displayName
-            || npub.slice(0, 12) + '...' + npub.slice(-6);
-          candidates.push({ npub, name, picture: profile?.metadata?.picture });
+          const name = resolveDisplayName(profile?.metadata, npub);
+          const displayLabel = resolveMentionLabel(profile?.metadata, npub);
+          candidates.push({ npub, name, displayLabel, picture: profile?.metadata?.picture });
         }
       }
 
@@ -884,10 +876,7 @@
     if (partnerNpub) {
       profileRepo.getProfileIgnoreTTL(partnerNpub).then((p) => {
         if (p && p.metadata) {
-          partnerName =
-            p.metadata.name ||
-            p.metadata.display_name ||
-            p.metadata.displayName;
+          partnerName = resolveDisplayName(p.metadata, partnerNpub);
           partnerPicture = p.metadata.picture;
         }
       });
@@ -2300,7 +2289,7 @@
                 class="!w-7 !h-7 flex-shrink-0"
               />
               <div class="flex flex-col min-w-0">
-                <span class="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{candidate.name}</span>
+                <span class="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{candidate.displayLabel}</span>
                 <span class="text-xs text-gray-500 dark:text-slate-400 truncate">{candidate.npub.slice(0, 12)}...{candidate.npub.slice(-6)}</span>
               </div>
             </button>

@@ -3,6 +3,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { profileRepo } from '$lib/db/ProfileRepository';
 
 import { getIdenticonDataUri } from './identicon';
+import { resolveDisplayName } from './nameUtils';
 import { isAndroidNative } from './NativeDialogs';
 
 const DEFAULT_NOTIFICATION_ICON = '/nospeak.svg';
@@ -204,7 +205,7 @@ export class NotificationService {
             const profile = await profileRepo.getProfileIgnoreTTL(senderNpub);
 
             if (profile && profile.metadata) {
-                senderName = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || senderName;
+                senderName = resolveDisplayName(profile.metadata, senderNpub);
                 senderPicture = profile.metadata.picture;
             }
         } catch (e) {
@@ -428,7 +429,7 @@ export class NotificationService {
             const profile = await profileRepo.getProfileIgnoreTTL(senderNpub);
 
             if (profile && profile.metadata) {
-                senderName = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || senderName;
+                senderName = resolveDisplayName(profile.metadata, senderNpub);
                 senderPicture = profile.metadata.picture;
             }
         } catch (e) {

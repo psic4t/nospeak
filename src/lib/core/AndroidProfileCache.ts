@@ -43,6 +43,28 @@ export function extractKind0Username(metadata: unknown): string | null {
     return trimmed;
 }
 
+/**
+ * Extract the best display name from kind-0 metadata.
+ * Priority: display_name → name → displayName → null
+ */
+export function extractKind0DisplayName(metadata: unknown): string | null {
+    if (!isRecord(metadata)) {
+        return null;
+    }
+
+    for (const key of ['display_name', 'name', 'displayName']) {
+        const raw = metadata[key];
+        if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            if (trimmed.length > 0) {
+                return trimmed;
+            }
+        }
+    }
+
+    return null;
+}
+
 export function extractKind0Picture(metadata: unknown): string | null {
     if (!isRecord(metadata)) {
         return null;

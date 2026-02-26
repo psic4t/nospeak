@@ -18,6 +18,7 @@
     import BottomSheetHandle from '$lib/components/ui/BottomSheetHandle.svelte';
     import { bottomSheet } from '$lib/actions/bottomSheet';
     import { currentUser } from '$lib/stores/auth';
+    import { resolveDisplayName } from '$lib/core/nameUtils';
     import { glassModal } from '$lib/utils/transitions';
     import { hapticSelection } from '$lib/utils/haptics';
 
@@ -272,7 +273,7 @@
 
                         <div class="flex flex-col mb-4">
                             <h3 class="text-2xl font-bold dark:text-white break-words">
-                                {profile.metadata?.name || profile.metadata?.display_name || $t('modals.profile.unknownName')}
+                                {resolveDisplayName(profile.metadata, npub)}
                             </h3>
                             {#if profile.metadata?.nip05}
                                 <div class="text-sm text-purple-600 dark:text-purple-400 font-medium flex items-center gap-1">

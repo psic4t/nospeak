@@ -2,6 +2,7 @@ import { Relay } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
 
 import { getSearchRelayUrl } from '$lib/core/runtimeConfig';
+import { resolveDisplayName } from '$lib/core/nameUtils';
 
 export interface UserSearchResult {
     npub: string;
@@ -70,8 +71,7 @@ export async function searchProfiles(query: string, limit: number = 20): Promise
                     }
 
                     const npub = nip19.npubEncode(event.pubkey);
-                    const shortened = npub.length > 20 ? `${npub.slice(0, 12)}...${npub.slice(-6)}` : npub;
-                    const name = metadata.name || metadata.display_name || metadata.displayName || shortened;
+                    const name = resolveDisplayName(metadata, npub);
 
                     results.push({
                         npub,

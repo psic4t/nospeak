@@ -10,6 +10,7 @@
     import { bottomSheet } from '$lib/actions/bottomSheet';
     import Avatar from './Avatar.svelte';
     import { profileRepo } from '$lib/db/ProfileRepository';
+    import { resolveDisplayName } from '$lib/core/nameUtils';
     import { currentUser } from '$lib/stores/auth';
 
     let { isOpen, close, participants, onMemberClick } = $props<{
@@ -51,7 +52,7 @@
                     let picture: string | undefined = undefined;
 
                     if (profile?.metadata) {
-                        name = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || shortenNpub(npub);
+                        name = resolveDisplayName(profile.metadata, npub);
                         picture = profile.metadata.picture;
                     }
 

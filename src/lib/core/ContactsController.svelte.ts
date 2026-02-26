@@ -18,6 +18,7 @@ import { archiveRepo } from '$lib/db/ArchiveRepository';
 import { archivedConversationIds } from '$lib/stores/archive';
 import { archiveSyncService } from '$lib/core/ArchiveSyncService';
 import { showToast } from '$lib/stores/toast';
+import { resolveDisplayName } from '$lib/core/nameUtils';
 import { t } from '$lib/i18n';
 
 export { getDisplayedNip05 };
@@ -165,7 +166,7 @@ export function createContactsController() {
             let picture: string | undefined = undefined;
 
             if (profile && profile.metadata) {
-                name = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || shortNpub;
+                name = resolveDisplayName(profile.metadata, c.npub);
                 picture = profile.metadata.picture;
             }
 
@@ -310,10 +311,7 @@ export function createContactsController() {
                 await profileResolver.resolveProfile(npub, true);
                 const profile = await profileRepo.getProfileIgnoreTTL(npub);
 
-                const name = profile?.metadata?.name ||
-                            profile?.metadata?.display_name ||
-                            profile?.metadata?.displayName ||
-                            shortenNpub(npub);
+                const name = resolveDisplayName(profile?.metadata, npub);
 
                 const result: SearchResultWithStatus = {
                     npub,

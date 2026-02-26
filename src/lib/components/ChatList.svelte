@@ -28,6 +28,7 @@
   import { db } from "$lib/db/db";
   import { archivedConversationIds, toggleArchive } from "$lib/stores/archive";
   import { archiveRepo } from "$lib/db/ArchiveRepository";
+  import { resolveDisplayName } from "$lib/core/nameUtils";
   import ChatContextMenu from "./ChatContextMenu.svelte";
 
   // Extended contact type that includes group chats
@@ -177,11 +178,7 @@
   function replaceNpubMentionsInPreview(text: string, profileCache: Map<string, Profile | undefined>): string {
     return text.replace(npubMentionRegex, (_match, npub: string) => {
       const profile = profileCache.get(npub);
-      const displayName = profile?.metadata?.name
-        || profile?.metadata?.display_name
-        || profile?.metadata?.displayName
-        || npub.slice(0, 12) + '...';
-      return '@' + displayName;
+      return '@' + resolveDisplayName(profile?.metadata, npub);
     });
   }
 
@@ -229,11 +226,7 @@
     let nip05Status: "valid" | "invalid" | "unknown" | undefined = undefined;
 
     if (profile && profile.metadata) {
-      name =
-        profile.metadata.name ||
-        profile.metadata.display_name ||
-        profile.metadata.displayName ||
-        name;
+      name = resolveDisplayName(profile.metadata, npub);
       picture = profile.metadata.picture;
       nip05 = profile.metadata.nip05 || undefined;
       nip05Status = profile.nip05Status;
@@ -358,9 +351,7 @@
           lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
         } else if (lastMessageText && lastMsg.senderNpub) {
           const senderProfile = profileCache.get(lastMsg.senderNpub);
-          const senderName = senderProfile?.metadata?.name ||
-                             senderProfile?.metadata?.display_name ||
-                             lastMsg.senderNpub.slice(0, 8) + '...';
+          const senderName = resolveDisplayName(senderProfile?.metadata, lastMsg.senderNpub);
           lastMessageText = `${senderName}: ${lastMessageText}`;
         }
       }
@@ -377,9 +368,7 @@
           .slice(0, 5)
           .map((npub: string) => {
             const profile = profileCache.get(npub);
-            return profile?.metadata?.name ||
-                   profile?.metadata?.display_name ||
-                   npub.slice(0, 8) + '...';
+            return resolveDisplayName(profile?.metadata, npub);
           });
         groupName = generateGroupTitle(participantNames);
       }

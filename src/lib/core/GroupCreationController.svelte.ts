@@ -7,6 +7,7 @@ import { contactRepo } from '$lib/db/ContactRepository';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { conversationRepo, deriveConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import { signer } from '$lib/stores/auth';
+import { resolveDisplayName } from '$lib/core/nameUtils';
 import { hapticSelection } from '$lib/utils/haptics';
 
 export interface DisplayContact {
@@ -59,7 +60,7 @@ export function createGroupCreationController() {
             let picture: string | undefined = undefined;
 
             if (profile && profile.metadata) {
-                name = profile.metadata.name || profile.metadata.display_name || profile.metadata.displayName || shortNpub;
+                name = resolveDisplayName(profile.metadata, c.npub);
                 picture = profile.metadata.picture;
             }
 

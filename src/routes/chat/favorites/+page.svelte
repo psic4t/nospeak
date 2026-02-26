@@ -11,6 +11,7 @@
     import { getRelativeTime } from '$lib/utils/time';
     import { blur, isAndroidCapacitorShell } from '$lib/utils/platform';
     import { isMobileWeb } from '$lib/core/NativeDialogs';
+    import { resolveDisplayName } from '$lib/core/nameUtils';
     import { tapSoundClick } from '$lib/utils/tapSound';
     import { t } from '$lib/i18n';
     import { onMount, onDestroy } from 'svelte';
@@ -125,7 +126,7 @@
                                 resolvedNpubs.add(sNpub);
                                 const senderProfile = await profileRepo.getProfileIgnoreTTL(sNpub);
                                 const pic = senderProfile?.metadata?.picture;
-                                const name = senderProfile?.metadata?.display_name || senderProfile?.metadata?.name || sNpub.slice(0, 12) + '...';
+                                const name = resolveDisplayName(senderProfile?.metadata, sNpub);
                                 // Apply to all items from this sender
                                 for (const it of items) {
                                     if (it.message?.senderNpub === sNpub) {
@@ -139,7 +140,7 @@
                 } else {
                     const profile = await profileRepo.getProfileIgnoreTTL(convId);
                     if (profile?.metadata) {
-                        conversationName = profile.metadata.display_name || profile.metadata.name || convId.slice(0, 12) + '...';
+                        conversationName = resolveDisplayName(profile.metadata, convId);
                         conversationPicture = profile.metadata.picture;
                     }
                 }

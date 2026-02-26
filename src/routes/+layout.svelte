@@ -400,9 +400,10 @@
                  displayName = chat.subject || 'Group Chat';
                  avatarUrl = 'group_default'; // Signal Android to use default group icon
                } else {
-                 const profile = await profileRepo.getProfileIgnoreTTL(chat.id);
-                 const metadata = profile?.metadata;
-                 displayName = metadata?.display_name || metadata?.name || chat.id.slice(0, 12) + '...';
+                  const { resolveDisplayName } = await import('$lib/core/nameUtils');
+                  const profile = await profileRepo.getProfileIgnoreTTL(chat.id);
+                  const metadata = profile?.metadata;
+                  displayName = resolveDisplayName(metadata, chat.id);
                  avatarUrl = metadata?.picture;
                }
 

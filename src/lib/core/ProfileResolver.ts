@@ -2,7 +2,7 @@ import { connectionManager } from './connection/instance';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { nip19 } from 'nostr-tools';
 import { verifyNip05 } from './Nip05Verifier';
-import { cacheAndroidProfileIdentity, extractKind0Picture, extractKind0Username } from './AndroidProfileCache';
+import { cacheAndroidProfileIdentity, extractKind0DisplayName, extractKind0Picture } from './AndroidProfileCache';
 import { parseBlossomServerListEvent } from './BlossomServers';
 import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
@@ -15,7 +15,7 @@ export class ProfileResolver {
             try {
                 const decoded = nip19.decode(npub);
                 const pubkey = typeof decoded.data === 'string' ? decoded.data : null;
-                const username = extractKind0Username(cached.metadata);
+                const username = extractKind0DisplayName(cached.metadata);
                 if (pubkey && username) {
                     await cacheAndroidProfileIdentity({
                         pubkeyHex: pubkey,
@@ -103,7 +103,7 @@ export class ProfileResolver {
                     nip05Info
                 );
 
-                const username = extractKind0Username(metadata);
+                const username = extractKind0DisplayName(metadata);
                 if (username) {
                     await cacheAndroidProfileIdentity({
                         pubkeyHex: pubkey,
@@ -270,7 +270,7 @@ export class ProfileResolver {
                 );
 
                 // Cache Android profile identity if we have metadata
-                const username = extractKind0Username(data.metadata);
+                const username = extractKind0DisplayName(data.metadata);
                 if (username) {
                     await cacheAndroidProfileIdentity({
                         pubkeyHex: pubkey as string,

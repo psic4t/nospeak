@@ -7,6 +7,7 @@
      import { glassModal } from '$lib/utils/transitions';
      import { isAndroidNative } from '$lib/core/NativeDialogs';
      import { t } from '$lib/i18n';
+     import { resolveDisplayName } from '$lib/core/nameUtils';
      import { hapticSelection } from '$lib/utils/haptics';
      import Button from '$lib/components/ui/Button.svelte';
  
@@ -36,14 +37,10 @@
             const profile = await profileRepo.getProfileIgnoreTTL(user.npub);
 
             if (profile?.metadata) {
-                displayName =
-                    profile.metadata.name ||
-                    profile.metadata.display_name ||
-                    (profile.metadata as any).displayName ||
-                    user.npub.slice(0, 10) + '...';
+                displayName = resolveDisplayName(profile.metadata, user.npub);
                 picture = profile.metadata.picture;
             } else {
-                displayName = user.npub.slice(0, 10) + '...';
+                displayName = resolveDisplayName(null, user.npub);
                 picture = undefined;
             }
 

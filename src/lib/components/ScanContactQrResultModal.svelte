@@ -7,6 +7,7 @@
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { contactRepo } from '$lib/db/ContactRepository';
     import { addContactByNpub } from '$lib/core/ContactService';
+    import { resolveDisplayName } from '$lib/core/nameUtils';
     import Button from '$lib/components/ui/Button.svelte';
 
     let { isOpen, npub, close } = $props<{ isOpen: boolean; npub: string | null; close: () => void }>();
@@ -47,12 +48,8 @@
 
     function updateFromProfile(profile: any, currentNpub: string): void {
         if (!profile || !profile.metadata) {
-            const short =
-                currentNpub.length <= 20
-                    ? currentNpub
-                    : `${currentNpub.slice(0, 12)}...${currentNpub.slice(-6)}`;
             if (!displayName) {
-                displayName = short;
+                displayName = resolveDisplayName(null, currentNpub);
             }
             if (!picture) {
                 picture = null;
@@ -60,17 +57,7 @@
             return;
         }
 
-        const short =
-            currentNpub.length <= 20
-                ? currentNpub
-                : `${currentNpub.slice(0, 12)}...${currentNpub.slice(-6)}`;
-
-        displayName =
-            profile.metadata.name ||
-            profile.metadata.display_name ||
-            profile.metadata.displayName ||
-            displayName ||
-            short;
+        displayName = resolveDisplayName(profile.metadata, currentNpub);
         picture = profile.metadata.picture || picture;
     }
 
