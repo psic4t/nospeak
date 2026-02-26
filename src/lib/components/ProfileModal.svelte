@@ -274,6 +274,9 @@
                         <div class="flex flex-col mb-4">
                             <h3 class="text-2xl font-bold dark:text-white break-words">
                                 {resolveDisplayName(profile.metadata, npub)}
+                                {#if profile.metadata?.display_name?.trim() && profile.metadata?.name?.trim() && profile.metadata.display_name.trim() !== profile.metadata.name.trim()}
+                                    <span class="text-sm font-normal text-gray-500 dark:text-slate-400 ml-1">@{profile.metadata.name.trim()}</span>
+                                {/if}
                             </h3>
                             {#if profile.metadata?.nip05}
                                 <div class="text-sm text-purple-600 dark:text-purple-400 font-medium flex items-center gap-1">
