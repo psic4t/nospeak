@@ -160,11 +160,39 @@
         }
     });
 
+    const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.avif', '.bmp', '.ico'];
+
+    const MIME_TO_EXT: Record<string, string> = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/gif': '.gif',
+        'image/webp': '.webp',
+        'image/svg+xml': '.svg',
+        'image/avif': '.avif',
+        'image/bmp': '.bmp',
+        'image/x-icon': '.ico',
+    };
+
+    function ensureImageExtension(filename: string, mimeType: string): string {
+        const lowerName = filename.toLowerCase();
+        if (IMAGE_EXTENSIONS.some(ext => lowerName.endsWith(ext))) {
+            return filename;
+        }
+        const ext = MIME_TO_EXT[mimeType];
+        if (!ext) return filename;
+        // Strip any existing non-image extension (e.g. ".bin") before appending
+        const dotIndex = filename.lastIndexOf('.');
+        if (dotIndex > 0) {
+            return filename.substring(0, dotIndex) + ext;
+        }
+        return filename + ext;
+    }
+
     async function downloadActiveImage() {
         if (!imageViewerUrl || typeof window === 'undefined') {
             return;
         }
- 
+
         const filenameFromOriginal = (() => {
             if (!imageViewerOriginalUrl) {
                 return 'image';
@@ -178,47 +206,43 @@
                 return 'image';
             }
         })();
- 
+
         // Android native: use Filesystem to write a decrypted file to Documents
         if (isAndroidNativeEnv && imageViewerUrl.startsWith('blob:')) {
             try {
-                const uri = await createAndroidDownloadFileFromUrl(imageViewerUrl, filenameFromOriginal);
- 
+                const blob = await fetch(imageViewerUrl).then(r => r.blob());
+                const filename = ensureImageExtension(filenameFromOriginal, blob.type);
+                const uri = await createAndroidDownloadFileFromUrl(imageViewerUrl, filename);
+
                 // Inform the user that the image has been saved. Exact path handling
                 // depends on Android version and Documents visibility.
                 await nativeDialogService.alert({
                     title: 'Image saved',
                     message: 'Image has been saved to device storage.'
                 });
- 
+
                 return;
             } catch (e) {
                 console.error('Android download via Filesystem failed, falling back to browser download:', e);
             }
         }
- 
+
         // Default: browser-style download using an anchor element
         try {
+            const response = await fetch(imageViewerUrl);
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+
             const anchor = document.createElement('a');
- 
-            if (imageViewerUrl.startsWith('blob:')) {
-                anchor.href = imageViewerUrl;
-                anchor.download = filenameFromOriginal;
-            } else {
-                const response = await fetch(imageViewerUrl);
-                const blob = await response.blob();
-                const objectUrl = URL.createObjectURL(blob);
-                anchor.href = objectUrl;
- 
-                anchor.download = filenameFromOriginal;
- 
-                anchor.addEventListener('click', () => {
-                    setTimeout(() => {
-                        URL.revokeObjectURL(objectUrl);
-                    }, 0);
-                });
-            }
- 
+            anchor.href = objectUrl;
+            anchor.download = ensureImageExtension(filenameFromOriginal, blob.type);
+
+            anchor.addEventListener('click', () => {
+                setTimeout(() => {
+                    URL.revokeObjectURL(objectUrl);
+                }, 0);
+            });
+
             document.body.appendChild(anchor);
             anchor.click();
             document.body.removeChild(anchor);
