@@ -40,6 +40,7 @@ const fr = {
         filterGroups: 'Groupes',
         emptyUnread: 'Aucun chat non lu',
         emptyGroups: 'Aucun groupe',
+        export: 'Exporter',
         archive: 'Archiver',
         unarchive: 'Désarchiver',
         archived: 'Archivés',

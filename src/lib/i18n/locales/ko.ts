@@ -44,6 +44,7 @@ const ko = {
         favoriteMessage: '메시지',
         favoriteMessages: '메시지',
         emptyFavorites: '즐겨찾기한 메시지가 아직 없습니다',
+        export: '내보내기',
         archive: '보관',
         unarchive: '보관 해제',
         archived: '보관됨',

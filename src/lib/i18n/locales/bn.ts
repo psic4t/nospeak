@@ -44,6 +44,7 @@ const bn = {
         favoriteMessage: 'বার্তা',
         favoriteMessages: 'বার্তা',
         emptyFavorites: 'এখনো কোনো প্রিয় বার্তা নেই',
+        export: 'রপ্তানি',
         archive: 'আর্কাইভ',
         unarchive: 'আর্কাইভ মুক্ত করুন',
         archived: 'আর্কাইভ করা',

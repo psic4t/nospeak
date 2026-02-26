@@ -44,6 +44,7 @@ const tr = {
         favoriteMessage: 'mesaj',
         favoriteMessages: 'mesaj',
         emptyFavorites: 'Henüz favori mesaj yok',
+        export: 'Dışa aktar',
         archive: 'Arşivle',
         unarchive: 'Arşivden Çıkar',
         archived: 'Arşivlendi',

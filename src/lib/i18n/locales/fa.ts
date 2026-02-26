@@ -44,6 +44,7 @@ const fa = {
         favoriteMessage: 'پیام',
         favoriteMessages: 'پیام',
         emptyFavorites: 'هنوز پیام موردعلاقه‌ای نیست',
+        export: 'خروجی',
         archive: 'بایگانی',
         unarchive: 'خارج کردن از بایگانی',
         archived: 'بایگانی‌شده',

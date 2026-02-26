@@ -44,6 +44,7 @@ const vi = {
         favoriteMessage: 'tin nhắn',
         favoriteMessages: 'tin nhắn',
         emptyFavorites: 'Chưa có tin nhắn yêu thích',
+        export: 'Xuất',
         archive: 'Lưu trữ',
         unarchive: 'Bỏ lưu trữ',
         archived: 'Đã lưu trữ',

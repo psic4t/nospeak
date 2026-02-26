@@ -44,6 +44,7 @@ const de = {
         favoriteMessage: 'Nachricht',
         favoriteMessages: 'Nachrichten',
         emptyFavorites: 'Noch keine Favoriten',
+        export: 'Exportieren',
         archive: 'Archivieren',
         unarchive: 'Dearchivieren',
         archived: 'Archiviert',

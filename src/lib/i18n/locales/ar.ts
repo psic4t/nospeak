@@ -44,6 +44,7 @@ const ar = {
         favoriteMessage: 'رسالة',
         favoriteMessages: 'رسائل',
         emptyFavorites: 'لا توجد رسائل مفضلة بعد',
+        export: 'تصدير',
         archive: 'أرشفة',
         unarchive: 'إلغاء الأرشفة',
         archived: 'المؤرشفة',

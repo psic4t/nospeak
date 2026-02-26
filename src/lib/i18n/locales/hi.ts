@@ -44,6 +44,7 @@ const hi = {
         favoriteMessage: 'संदेश',
         favoriteMessages: 'संदेश',
         emptyFavorites: 'अभी कोई पसंदीदा संदेश नहीं',
+        export: 'निर्यात',
         archive: 'संग्रहित करें',
         unarchive: 'असंग्रहित करें',
         archived: 'संग्रहित',

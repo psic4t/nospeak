@@ -44,6 +44,7 @@ const ja = {
         favoriteMessage: '件のメッセージ',
         favoriteMessages: '件のメッセージ',
         emptyFavorites: 'お気に入りのメッセージはまだありません',
+        export: 'エクスポート',
         archive: 'アーカイブ',
         unarchive: 'アーカイブ解除',
         archived: 'アーカイブ済み',

@@ -44,6 +44,7 @@ const nl = {
         favoriteMessage: 'bericht',
         favoriteMessages: 'berichten',
         emptyFavorites: 'Nog geen favoriete berichten',
+        export: 'Exporteren',
         archive: 'Archiveren',
         unarchive: 'Dearchiveren',
         archived: 'Gearchiveerd',

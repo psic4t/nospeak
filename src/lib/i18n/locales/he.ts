@@ -44,6 +44,7 @@ const he = {
         favoriteMessage: 'הודעה',
         favoriteMessages: 'הודעות',
         emptyFavorites: 'אין הודעות מועדפות עדיין',
+        export: 'ייצוא',
         archive: 'ארכיון',
         unarchive: 'הוצאה מארכיון',
         archived: 'בארכיון',

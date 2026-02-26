@@ -40,6 +40,7 @@ const it = {
         filterGroups: 'Gruppi',
         emptyUnread: 'Nessuna chat non letta',
         emptyGroups: 'Nessun gruppo',
+        export: 'Esporta',
         archive: 'Archivia',
         unarchive: 'Ripristina',
         archived: 'Archiviati',

@@ -44,6 +44,7 @@ const zh = {
         favoriteMessage: '条消息',
         favoriteMessages: '条消息',
         emptyFavorites: '暂无收藏消息',
+        export: '导出',
         archive: '归档',
         unarchive: '取消归档',
         archived: '已归档',

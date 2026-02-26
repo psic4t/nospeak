@@ -13,6 +13,7 @@ const th = {
         addContact: 'เพิ่มผู้ติดต่อ', filterAll: 'ทั้งหมด', filterUnread: 'ยังไม่ได้อ่าน', filterGroups: 'กลุ่ม',
         emptyUnread: 'ไม่มีแชทที่ยังไม่ได้อ่าน', emptyGroups: 'ไม่มีกลุ่ม', favorites: 'รายการโปรด',
         favoriteMessage: 'ข้อความ', favoriteMessages: 'ข้อความ', emptyFavorites: 'ยังไม่มีข้อความที่ชื่นชอบ',
+        export: 'ส่งออก',
         archive: 'เก็บถาวร', unarchive: 'ยกเลิกการเก็บถาวร', archived: 'เก็บถาวรแล้ว', emptyArchive: 'ไม่มีแชทที่เก็บถาวร', chatArchived: 'เก็บถาวรแชทแล้ว'
     },
     contacts: {

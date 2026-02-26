@@ -44,6 +44,7 @@ const ru = {
         favoriteMessage: 'сообщение',
         favoriteMessages: 'сообщений',
         emptyFavorites: 'Нет избранных сообщений',
+        export: 'Экспортировать',
         archive: 'Архивировать',
         unarchive: 'Разархивировать',
         archived: 'Архив',

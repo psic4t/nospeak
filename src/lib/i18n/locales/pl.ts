@@ -44,6 +44,7 @@ const pl = {
         favoriteMessage: 'wiadomość',
         favoriteMessages: 'wiadomości',
         emptyFavorites: 'Brak ulubionych wiadomości',
+        export: 'Eksportuj',
         archive: 'Archiwizuj',
         unarchive: 'Przywróć z archiwum',
         archived: 'Zarchiwizowane',

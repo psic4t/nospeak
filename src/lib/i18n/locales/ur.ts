@@ -44,6 +44,7 @@ const ur = {
         favoriteMessage: 'پیغام',
         favoriteMessages: 'پیغامات',
         emptyFavorites: 'ابھی کوئی پسندیدہ پیغام نہیں',
+        export: 'برآمد',
         archive: 'آرکائیو',
         unarchive: 'آرکائیو سے نکالیں',
         archived: 'آرکائیو شدہ',
