@@ -406,8 +406,18 @@
       ),
     );
 
-    // ── Phase 7: Combine, filter, sort ───────────────────────────────
-    const allItems = [...contactItems, ...groupItems, ...orphanedArchiveItems];
+    // ── Phase 7: Combine, deduplicate, filter, sort ────────────────
+    // Deduplicate by id: contacts take priority over groups (handles edge
+    // case where a 1-on-1 conversation is stored with isGroup:true due to
+    // other clients redundantly including the sender in p-tags).
+    const seenIds = new Set<string>();
+    const allItems: ChatListItem[] = [];
+    for (const item of [...contactItems, ...groupItems, ...orphanedArchiveItems]) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        allItems.push(item);
+      }
+    }
     const itemsWithMessages = allItems.filter(item => item.lastMessageTime > 0);
     const sortedItems = itemsWithMessages.sort(
       (a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0),

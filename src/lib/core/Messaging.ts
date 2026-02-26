@@ -253,15 +253,20 @@ import type { Conversation } from '$lib/db/db';
       // My pubkey (hex)
       const myPubkey = await s.getPublicKey();
       
-      // Extract all p-tags to determine if this is a group message
+      // Extract all p-tags and compute unique participant set (p-tags + sender).
+      // NIP-17: "The set of pubkey + p tags defines a chat room."
+      // Some clients (e.g. Amethyst) redundantly include the sender in p-tags,
+      // so we must deduplicate before deciding if this is a group chat.
       const pTags = rumor.tags.filter(t => t[0] === 'p');
       const pTagPubkeys = pTags.map(t => t[1]);
-      const isGroup = pTagPubkeys.length > 1;
+      const allParticipantPubkeys = [...new Set([...pTagPubkeys, rumor.pubkey])];
+      const otherParticipants = allParticipantPubkeys.filter(p => p !== myPubkey);
+      const isGroup = otherParticipants.length > 1;
       
       // Determine direction
       const direction: 'sent' | 'received' = rumor.pubkey === myPubkey ? 'sent' : 'received';
       
-      // For group messages: all p-tag pubkeys + sender = participants
+      // For group messages: all unique pubkeys = participants
       // For 1-on-1: use traditional partnerNpub logic
       let partnerNpub: string;
       let conversationId: string;
@@ -270,14 +275,12 @@ import type { Conversation } from '$lib/db/db';
       
       if (isGroup) {
         // Group message: derive conversation ID from all participants (including sender)
-        const allParticipantPubkeys = [...new Set([...pTagPubkeys, rumor.pubkey])];
         conversationId = deriveConversationId(allParticipantPubkeys, myPubkey);
         participants = allParticipantPubkeys.map(p => nip19.npubEncode(p));
         senderNpub = nip19.npubEncode(rumor.pubkey);
         
         // For backward compatibility, set partnerNpub to first non-self participant
-        const otherPubkeys = pTagPubkeys.filter(p => p !== myPubkey);
-        partnerNpub = nip19.npubEncode(otherPubkeys[0] || myPubkey);
+        partnerNpub = nip19.npubEncode(otherParticipants[0] || myPubkey);
         
         // Create/update conversation entry for group
         await this.ensureGroupConversation(conversationId, participants, rumor);
