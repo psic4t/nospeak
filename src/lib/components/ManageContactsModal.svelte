@@ -470,7 +470,12 @@
                                 class="!w-12 !h-12 flex-shrink-0"
                             />
                             <div class="flex flex-col min-w-0">
-                                <span class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]">{contact.name}</span>
+                                <span class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px] flex items-baseline gap-1.5">
+                                    <span class="truncate">{contact.name}</span>
+                                    {#if contact.username}
+                                        <span class="text-xs font-normal text-gray-500 dark:text-slate-400 shrink-0">@{contact.username}</span>
+                                    {/if}
+                                </span>
                                 <span class="typ-meta text-gray-500 dark:text-slate-400 truncate font-mono opacity-75">{contact.shortNpub}</span>
                             </div>
                         </div>

@@ -272,10 +272,10 @@
                         </div>
 
                         <div class="flex flex-col mb-4">
-                            <h3 class="text-2xl font-bold dark:text-white break-words">
-                                {resolveDisplayName(profile.metadata, npub)}
+                            <h3 class="text-2xl font-bold dark:text-white break-words flex items-baseline gap-2">
+                                <span>{resolveDisplayName(profile.metadata, npub)}</span>
                                 {#if profile.metadata?.display_name?.trim() && profile.metadata?.name?.trim() && profile.metadata.display_name.trim() !== profile.metadata.name.trim()}
-                                    <span class="text-sm font-normal text-gray-500 dark:text-slate-400 ml-1">@{profile.metadata.name.trim()}</span>
+                                    <span class="text-sm font-normal text-gray-500 dark:text-slate-400">@{profile.metadata.name.trim()}</span>
                                 {/if}
                             </h3>
                             {#if profile.metadata?.nip05}

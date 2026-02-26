@@ -26,6 +26,7 @@ export { getDisplayedNip05 };
 export interface DisplayContact {
     npub: string;
     name: string;
+    username?: string;
     picture?: string;
     shortNpub: string;
 }
@@ -123,7 +124,9 @@ export function createContactsController() {
         if (!contactSearchQuery.trim()) return displayContacts;
         const query = contactSearchQuery.toLowerCase();
         return displayContacts.filter((c) =>
-            c.name.toLowerCase().includes(query) || c.npub.toLowerCase().includes(query)
+            c.name.toLowerCase().includes(query)
+            || c.username?.toLowerCase().includes(query)
+            || c.npub.toLowerCase().includes(query)
         );
     });
 
@@ -163,16 +166,23 @@ export function createContactsController() {
             const shortNpub = shortenNpub(c.npub);
 
             let name = shortNpub;
+            let username: string | undefined = undefined;
             let picture: string | undefined = undefined;
 
             if (profile && profile.metadata) {
                 name = resolveDisplayName(profile.metadata, c.npub);
                 picture = profile.metadata.picture;
+                const rawName = profile.metadata.name?.trim();
+                const rawDisplay = profile.metadata.display_name?.trim();
+                if (rawDisplay && rawName && rawDisplay !== rawName) {
+                    username = rawName;
+                }
             }
 
             return {
                 npub: c.npub,
                 name,
+                username,
                 picture,
                 shortNpub
             };
