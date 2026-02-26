@@ -1,11 +1,12 @@
 <script lang="ts">
     import { t } from '$lib/i18n';
 
-    let { x = 0, y = 0, isOpen = false, onClose, onArchive, isArchived = false } = $props<{
+    let { x = 0, y = 0, isOpen = false, onClose, onExport, onArchive, isArchived = false } = $props<{
         x: number;
         y: number;
         isOpen: boolean;
         onClose: () => void;
+        onExport: () => void;
         onArchive: () => void;
         isArchived?: boolean;
     }>();
@@ -86,6 +87,18 @@
         use:reposition={{x, y}}
         class="chat-context-menu fixed bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl py-1 z-[9999] min-w-[160px] outline-none"
     >
+        <button
+            class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"
+            onclick={() => { onExport(); onClose(); }}
+        >
+            <!-- Export icon (download/arrow-down-to-line) -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v12"/>
+                <path d="m8 11 4 4 4-4"/>
+                <path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/>
+            </svg>
+            {$t('chats.export')}
+        </button>
         <button
             class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"
             onclick={() => { onArchive(); onClose(); }}

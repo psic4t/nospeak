@@ -44,6 +44,7 @@ const en = {
         favoriteMessage: 'message',
         favoriteMessages: 'messages',
         emptyFavorites: 'No favorited messages yet',
+        export: 'Export',
         archive: 'Archive',
         unarchive: 'Unarchive',
         archived: 'Archived',

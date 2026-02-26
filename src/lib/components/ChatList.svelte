@@ -30,6 +30,7 @@
   import { archiveRepo } from "$lib/db/ArchiveRepository";
   import { resolveDisplayName } from "$lib/core/nameUtils";
   import ChatContextMenu from "./ChatContextMenu.svelte";
+  import { exportChatToHtml } from "$lib/core/ChatExporter";
 
   // Extended contact type that includes group chats
   interface ChatListItem {
@@ -545,6 +546,12 @@
     contextMenu.isOpen = false;
   }
 
+  async function handleExport() {
+    if (!contextMenu.conversationId) return;
+    contextMenu.isOpen = false;
+    await exportChatToHtml(contextMenu.conversationId);
+  }
+
   async function handleArchiveToggle() {
     if (!contextMenu.conversationId) return;
     await toggleArchive(contextMenu.conversationId);
@@ -933,6 +940,7 @@
   x={contextMenu.x}
   y={contextMenu.y}
   onClose={closeContextMenu}
+  onExport={handleExport}
   onArchive={handleArchiveToggle}
   isArchived={$archivedConversationIds.has(contextMenu.conversationId)}
 />

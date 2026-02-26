@@ -17,6 +17,7 @@
     import Avatar from '$lib/components/Avatar.svelte';
     import GroupAvatar from '$lib/components/GroupAvatar.svelte';
     import ChatContextMenu from '$lib/components/ChatContextMenu.svelte';
+    import { exportChatToHtml } from '$lib/core/ChatExporter';
 
     interface ArchivedChat {
         id: string;
@@ -191,6 +192,12 @@
         contextMenu.isOpen = false;
     }
 
+    async function handleExport() {
+        if (!contextMenu.conversationId) return;
+        contextMenu.isOpen = false;
+        await exportChatToHtml(contextMenu.conversationId);
+    }
+
     async function handleUnarchive() {
         if (!contextMenu.conversationId) return;
         await toggleArchive(contextMenu.conversationId);
@@ -330,6 +337,7 @@
     x={contextMenu.x}
     y={contextMenu.y}
     onClose={closeContextMenu}
+    onExport={handleExport}
     onArchive={handleUnarchive}
     isArchived={true}
 />
