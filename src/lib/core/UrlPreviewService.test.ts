@@ -102,7 +102,7 @@ describe('fetchUrlPreviewMetadata', () => {
         expect(fakeFetch).toHaveBeenCalledOnce();
         const callArgs = fakeFetch.mock.calls[0] as unknown as [string, RequestInit];
         const headers = callArgs[1]?.headers as Record<string, string>;
-        expect(headers['User-Agent']).toContain('nospeak');
+        expect(headers['User-Agent']).toContain('Chrome/');
     });
 
     it('parses meta tags with content attribute before property (reversed order)', async () => {
