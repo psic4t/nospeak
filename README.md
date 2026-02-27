@@ -3,7 +3,7 @@
 nospeak is a decentralized Nostr chat client for secure, private messaging. It is easy to
 use but has state of the art end-to-end encryption without metadata leakage. 
 
-Install on Android over [F-Droid](https://fdroid.org), [Obtainium](https://github.com/ImranR98/Obtainium) or [Zapstore](https://github.com/zapstore/zapstore/releases) or use the Progressive Web App on https://nospeak.chat
+Install on Android from [F-Droid](https://fdroid.org), [Obtainium](https://github.com/ImranR98/Obtainium) or [Zapstore](https://github.com/zapstore/zapstore/releases) or use the Progressive Web App on https://nospeak.chat
 
 ## Features
 
@@ -13,6 +13,8 @@ Install on Android over [F-Droid](https://fdroid.org), [Obtainium](https://githu
 - **Emoji Reactions** — React to messages with emoji; reactions are privacy-wrapped just like messages
 - **Reply & Quote** — Reply to specific messages in a conversation
 - **Message Search** — Search through your chat history
+- **Markdown** — Bold, italic, lists, and code formatting in messages
+- **Chat Export** — Export conversation history
 
 ### Always-On Notifications
 - **Background Messaging Service (Android)** — A permanent foreground service stays connected to your relays so you never miss a message, even when the app is closed
@@ -26,12 +28,14 @@ Install on Android over [F-Droid](https://fdroid.org), [Obtainium](https://githu
 - **File Attachments** — Send any file type, fully encrypted
 - **Link Previews & YouTube Embeds** — Rich URL previews with Open Graph metadata
 - **Android Share Target** — Share images, videos, and text directly from other apps into nospeak
+- **Android Media Cache** — Save received photos and videos to your gallery
 
 ### Privacy & Security
 - **NIP-17 Gift Wrap Protocol** — Triple-layer encryption (Gift Wrap, Seal, Rumor) with randomized timestamps to prevent timing analysis
 - **NIP-44 Encryption** — State-of-the-art versioned encryption for all message content
 - **Encrypted Contact Lists** — Your contact list is encrypted before syncing to relays
 - **Android Keystore** — When using nsec to login, secret keys stored in hardware-backed secure storage on Android
+- **App Lock (PIN)** — Optional 4-digit PIN to lock the app; auto-locks when backgrounded
 - **No Central Server** — All data lives locally on your device and on Nostr relays you choose
 
 ### Multi-Platform
@@ -55,8 +59,8 @@ Install on Android over [F-Droid](https://fdroid.org), [Obtainium](https://githu
 - **Auto-Reconnect** — Automatic reconnection with exponential backoff
 
 ### Personalization
-- **6 Languages** — English, Deutsch, Español, Português, Français, Italiano
-- **Theme Support** — System, light, and dark mode
+- **21 Languages** — English, العربية, বাংলা, Deutsch, Español, فارسی, Français, עברית, हिन्दी, Italiano, 日本語, 한국어, Nederlands, Polski, Português, Русский, ไทย, Türkçe, اردو, Tiếng Việt, 简体中文 — with full RTL support
+- **Theme Support** — System, light, dark, and Cypher (cyberpunk neon) mode with Catppuccin color palette
 - **Profile Customization** — Set your name, avatar, banner, bio, and Lightning address
 
 ## Quick Start
