@@ -34,6 +34,15 @@ function toHex(bytes: Uint8Array): string {
         .join('');
 }
 
+function safeHostname(url: string | null): string {
+    if (!url) return 'server';
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return url;
+    }
+}
+
 export async function sha256HexFromBlob(blob: Blob): Promise<string> {
     const subtle = getSubtle();
     const buffer = await blob.arrayBuffer();
@@ -91,11 +100,11 @@ async function putUpload(params: {
 
             const reason = xhr.getResponseHeader('X-Reason');
             if (reason) {
-                reject(new Error(reason));
+                reject(new BlossomHttpError(reason, { status: xhr.status, reason }));
                 return;
             }
 
-            reject(new Error(`Upload failed with status ${xhr.status}`));
+            reject(new BlossomHttpError(`Upload failed with status ${xhr.status}`, { status: xhr.status, reason: null }));
         };
 
         xhr.onerror = () => {
@@ -199,6 +208,7 @@ export async function uploadToBlossomServers(params: {
 
     let primary: { server: string; descriptor: BlossomBlobDescriptor } | null = null;
     let lastError: Error | null = null;
+    let lastFailedServer: string | null = null;
 
     for (const server of normalizedServers) {
         try {
@@ -214,11 +224,14 @@ export async function uploadToBlossomServers(params: {
             break;
         } catch (e) {
             lastError = e as Error;
+            lastFailedServer = server;
         }
     }
 
     if (!primary) {
-        throw lastError ?? new Error('Upload failed');
+        const hostname = safeHostname(lastFailedServer);
+        const reason = lastError?.message ?? 'Upload failed';
+        throw new Error(`${hostname}: ${reason}`);
     }
 
     // Best-effort mirroring to remaining servers.

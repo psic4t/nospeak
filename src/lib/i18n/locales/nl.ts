@@ -246,6 +246,7 @@ const nl = {
     chat: {
         sendFailedTitle: 'Verzenden mislukt',
         sendFailedMessagePrefix: 'Bericht verzenden mislukt: ',
+        uploadRejectedHint: 'Je kunt je mediaservers wijzigen in Instellingen → Mediaservers.',
         location: {
             errorTitle: 'Locatiefout',
             errorMessage: 'Kon je locatie niet ophalen. Controleer de machtigingen.'

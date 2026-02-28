@@ -246,6 +246,7 @@ const ko = {
     chat: {
         sendFailedTitle: '전송 실패',
         sendFailedMessagePrefix: '메시지 전송 실패: ',
+        uploadRejectedHint: '설정 → 미디어 서버에서 미디어 서버를 변경할 수 있습니다.',
         location: {
             errorTitle: '위치 오류',
             errorMessage: '위치를 가져오지 못했습니다. 권한을 확인해 주세요.'

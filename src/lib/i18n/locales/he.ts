@@ -244,6 +244,7 @@ const he = {
     chat: {
         sendFailedTitle: 'השליחה נכשלה',
         sendFailedMessagePrefix: 'נכשל בשליחת הודעה: ',
+        uploadRejectedHint: 'ניתן לשנות את שרתי המדיה בהגדרות → שרתי מדיה.',
         location: {
             errorTitle: 'שגיאת מיקום',
             errorMessage: 'נכשל בקבלת המיקום שלך. אנא בדוק את ההרשאות.'

@@ -244,6 +244,7 @@ const vi = {
     chat: {
         sendFailedTitle: 'Gửi thất bại',
         sendFailedMessagePrefix: 'Không thể gửi tin nhắn: ',
+        uploadRejectedHint: 'Bạn có thể thay đổi máy chủ phương tiện trong Cài đặt → Máy chủ phương tiện.',
         location: {
             errorTitle: 'Lỗi vị trí',
             errorMessage: 'Không thể lấy vị trí của bạn. Vui lòng kiểm tra quyền truy cập.'

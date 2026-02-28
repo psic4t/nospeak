@@ -244,6 +244,7 @@ const bn = {
     chat: {
         sendFailedTitle: 'পাঠানো ব্যর্থ',
         sendFailedMessagePrefix: 'বার্তা পাঠাতে ব্যর্থ: ',
+        uploadRejectedHint: 'আপনি সেটিংস → মিডিয়া সার্ভারে আপনার মিডিয়া সার্ভার পরিবর্তন করতে পারেন।',
         location: {
             errorTitle: 'অবস্থান ত্রুটি',
             errorMessage: 'আপনার অবস্থান পেতে ব্যর্থ হয়েছে। অনুগ্রহ করে অনুমতি পরীক্ষা করুন।'

@@ -155,7 +155,7 @@ const ru = {
         }
     },
     chat: {
-        sendFailedTitle: 'Ошибка отправки', sendFailedMessagePrefix: 'Не удалось отправить сообщение: ',
+        sendFailedTitle: 'Ошибка отправки', sendFailedMessagePrefix: 'Не удалось отправить сообщение: ', uploadRejectedHint: 'Вы можете изменить медиасерверы в Настройках → Медиасерверы.',
         location: { errorTitle: 'Ошибка местоположения', errorMessage: 'Не удалось определить ваше местоположение. Проверьте разрешения.' },
         relative: {
             justNow: 'только что', minutes: '{count} мин назад', minutesPlural: '{count} мин назад',

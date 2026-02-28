@@ -242,6 +242,7 @@ const fr = {
     chat: {
         sendFailedTitle: "Échec de l’envoi",
         sendFailedMessagePrefix: "Impossible d’envoyer le message : ",
+        uploadRejectedHint: 'Vous pouvez changer vos serveurs de médias dans Paramètres → Serveurs de médias.',
         location: {
             errorTitle: 'Erreur de localisation',
             errorMessage: "Impossible d’obtenir votre localisation. Veuillez vérifier les autorisations."

@@ -244,6 +244,7 @@ const ar = {
     chat: {
         sendFailedTitle: 'فشل الإرسال',
         sendFailedMessagePrefix: 'فشل إرسال الرسالة: ',
+        uploadRejectedHint: 'يمكنك تغيير خوادم الوسائط في الإعدادات → خوادم الوسائط.',
         location: {
             errorTitle: 'خطأ في الموقع',
             errorMessage: 'فشل الحصول على موقعك. يرجى التحقق من الأذونات.'

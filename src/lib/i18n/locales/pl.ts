@@ -155,7 +155,7 @@ const pl = {
         }
     },
     chat: {
-        sendFailedTitle: 'Wysyłanie nie powiodło się', sendFailedMessagePrefix: 'Nie udało się wysłać wiadomości: ',
+        sendFailedTitle: 'Wysyłanie nie powiodło się', sendFailedMessagePrefix: 'Nie udało się wysłać wiadomości: ', uploadRejectedHint: 'Możesz zmienić serwery multimediów w Ustawienia → Serwery multimediów.',
         location: { errorTitle: 'Błąd lokalizacji', errorMessage: 'Nie udało się pobrać Twojej lokalizacji. Sprawdź uprawnienia.' },
         relative: {
             justNow: 'przed chwilą', minutes: '{count} min temu', minutesPlural: '{count} min temu',

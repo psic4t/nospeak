@@ -244,6 +244,7 @@ const zh = {
     chat: {
         sendFailedTitle: '发送失败',
         sendFailedMessagePrefix: '消息发送失败：',
+        uploadRejectedHint: '您可以在设置 → 媒体服务器中更改您的媒体服务器。',
         location: {
             errorTitle: '位置错误',
             errorMessage: '无法获取您的位置。请检查权限设置。'

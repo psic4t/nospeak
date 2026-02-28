@@ -244,6 +244,7 @@ const tr = {
     chat: {
         sendFailedTitle: 'Gönderme başarısız',
         sendFailedMessagePrefix: 'Mesaj gönderilemedi: ',
+        uploadRejectedHint: 'Medya sunucularınızı Ayarlar → Medya Sunucuları bölümünden değiştirebilirsiniz.',
         location: {
             errorTitle: 'Konum Hatası',
             errorMessage: 'Konumunuz alınamadı. Lütfen izinleri kontrol edin.'

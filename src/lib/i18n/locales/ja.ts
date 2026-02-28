@@ -244,6 +244,7 @@ const ja = {
     chat: {
         sendFailedTitle: '送信に失敗しました',
         sendFailedMessagePrefix: 'メッセージの送信に失敗しました: ',
+        uploadRejectedHint: '設定 → メディアサーバーでメディアサーバーを変更できます。',
         location: {
             errorTitle: '位置情報エラー',
             errorMessage: '位置情報を取得できませんでした。権限を確認してください。'

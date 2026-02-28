@@ -246,6 +246,7 @@ const en = {
     chat: {
         sendFailedTitle: 'Send failed',
         sendFailedMessagePrefix: 'Failed to send message: ',
+        uploadRejectedHint: 'You can change your media servers in Settings → Media Servers.',
         location: {
             errorTitle: 'Location Error',
             errorMessage: 'Failed to get your location. Please check permissions.'

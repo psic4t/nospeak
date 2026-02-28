@@ -242,6 +242,7 @@ const es = {
     chat: {
         sendFailedTitle: 'Error al enviar',
         sendFailedMessagePrefix: 'No se pudo enviar el mensaje: ',
+        uploadRejectedHint: 'Puedes cambiar tus servidores de medios en Ajustes → Servidores de medios.',
         location: {
             errorTitle: 'Error de ubicación',
             errorMessage: 'No se pudo obtener tu ubicación. Comprueba los permisos.'

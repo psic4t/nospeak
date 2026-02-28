@@ -244,6 +244,7 @@ const ur = {
     chat: {
         sendFailedTitle: 'بھیجنا ناکام',
         sendFailedMessagePrefix: 'پیغام بھیجنے میں ناکامی: ',
+        uploadRejectedHint: 'آپ ترتیبات → میڈیا سرورز میں اپنے میڈیا سرورز تبدیل کر سکتے ہیں۔',
         location: {
             errorTitle: 'مقام کی خرابی',
             errorMessage: 'آپ کا مقام حاصل نہیں ہو سکا۔ اجازتیں چیک کریں۔'

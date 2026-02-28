@@ -242,6 +242,7 @@ const it = {
     chat: {
         sendFailedTitle: 'Invio non riuscito',
         sendFailedMessagePrefix: 'Impossibile inviare il messaggio: ',
+        uploadRejectedHint: 'Puoi cambiare i server multimediali in Impostazioni → Server multimediali.',
         location: {
             errorTitle: 'Errore di posizione',
             errorMessage: 'Impossibile ottenere la tua posizione. Controlla i permessi.'

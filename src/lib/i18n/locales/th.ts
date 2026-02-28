@@ -57,7 +57,7 @@ const th = {
         mediaServersAutoConfigured: { title: 'กำหนดค่าเซิร์ฟเวอร์สื่อแล้ว', message: 'ไม่มีเซิร์ฟเวอร์ Blossom ที่กำหนดค่าไว้ เราได้เพิ่ม {server1} และ {server2}\n\nคุณสามารถเปลี่ยนได้ในการตั้งค่า → เซิร์ฟเวอร์สื่อ' }
     },
     chat: {
-        sendFailedTitle: 'การส่งล้มเหลว', sendFailedMessagePrefix: 'ส่งข้อความไม่สำเร็จ: ',
+        sendFailedTitle: 'การส่งล้มเหลว', sendFailedMessagePrefix: 'ส่งข้อความไม่สำเร็จ: ', uploadRejectedHint: 'คุณสามารถเปลี่ยนเซิร์ฟเวอร์สื่อได้ในการตั้งค่า → เซิร์ฟเวอร์สื่อ',
         location: { errorTitle: 'ข้อผิดพลาดตำแหน่ง', errorMessage: 'ไม่สามารถรับตำแหน่งของคุณได้ กรุณาตรวจสอบสิทธิ์' },
         relative: { justNow: 'เมื่อสักครู่', minutes: '{count} นาทีที่แล้ว', minutesPlural: '{count} นาทีที่แล้ว', hours: '{count} ชั่วโมงที่แล้ว', hoursPlural: '{count} ชั่วโมงที่แล้ว', days: '{count} วันที่แล้ว', daysPlural: '{count} วันที่แล้ว', weeks: '{count} สัปดาห์ที่แล้ว', weeksPlural: '{count} สัปดาห์ที่แล้ว', months: '{count} เดือนที่แล้ว', monthsPlural: '{count} เดือนที่แล้ว', years: '{count} ปีที่แล้ว', yearsPlural: '{count} ปีที่แล้ว' },
         dateLabel: { today: 'วันนี้', yesterday: 'เมื่อวาน' },

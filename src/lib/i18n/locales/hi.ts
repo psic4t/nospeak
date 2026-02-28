@@ -244,6 +244,7 @@ const hi = {
     chat: {
         sendFailedTitle: 'भेजना विफल',
         sendFailedMessagePrefix: 'संदेश भेजने में विफल: ',
+        uploadRejectedHint: 'आप सेटिंग्स → मीडिया सर्वर में अपने मीडिया सर्वर बदल सकते हैं।',
         location: {
             errorTitle: 'स्थान त्रुटि',
             errorMessage: 'आपका स्थान प्राप्त करने में विफल। कृपया अनुमतियाँ जाँचें।'

@@ -246,6 +246,7 @@ const fa = {
     chat: {
         sendFailedTitle: 'ارسال ناموفق بود',
         sendFailedMessagePrefix: 'ارسال پیام ناموفق بود: ',
+        uploadRejectedHint: 'می‌توانید سرورهای رسانه خود را در تنظیمات → سرورهای رسانه تغییر دهید.',
         location: {
             errorTitle: 'خطای موقعیت مکانی',
             errorMessage: 'دریافت موقعیت مکانی شما ناموفق بود. لطفاً دسترسی‌ها را بررسی کنید.'

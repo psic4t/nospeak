@@ -248,6 +248,7 @@ const de = {
     chat: {
         sendFailedTitle: 'Senden fehlgeschlagen',
         sendFailedMessagePrefix: 'Nachricht konnte nicht gesendet werden: ',
+        uploadRejectedHint: 'Du kannst deine Medienserver unter Einstellungen → Medienserver ändern.',
         location: {
             errorTitle: 'Standortfehler',
             errorMessage: 'Standort konnte nicht abgerufen werden. Bitte überprüfe die Berechtigungen.'

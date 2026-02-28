@@ -1506,7 +1506,7 @@
         pendingMediaError = translate('chat.sendFailedMessagePrefix') + (e as Error).message;
         pendingMediaObjectUrl = URL.createObjectURL(file);
         showMediaPreview = true;
-        pendingMediaServersHint = null;
+        pendingMediaServersHint = translate('chat.uploadRejectedHint');
         isEnsuringMediaServers = false;
       }
     })();
