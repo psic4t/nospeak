@@ -7,19 +7,26 @@
     import { profileRepo } from '$lib/db/ProfileRepository';
     import { contactRepo } from '$lib/db/ContactRepository';
     import { addContactByNpub } from '$lib/core/ContactService';
-    import { resolveDisplayName } from '$lib/core/nameUtils';
+    import { resolveDisplayName, resolveUsername } from '$lib/core/nameUtils';
+    import Avatar from '$lib/components/Avatar.svelte';
     import Button from '$lib/components/ui/Button.svelte';
 
-    let { isOpen, npub, close } = $props<{ isOpen: boolean; npub: string | null; close: () => void }>();
+    let { isOpen, npub, relays, close } = $props<{
+        isOpen: boolean;
+        npub: string | null;
+        relays?: string[];
+        close: () => void;
+    }>();
 
     let displayName = $state<string | null>(null);
+    let username = $state<string | null>(null);
     let picture = $state<string | null>(null);
     let isExistingContact = $state(false);
     let isLoading = $state(false);
     let errorMessage = $state<string | null>(null);
     let isAdding = $state(false);
 
-    async function loadInfo(currentNpub: string): Promise<void> {
+    async function loadInfo(currentNpub: string, relayHints?: string[]): Promise<void> {
         isLoading = true;
         errorMessage = null;
 
@@ -32,7 +39,7 @@
 
             try {
                 const { profileResolver } = await import('$lib/core/ProfileResolver');
-                await profileResolver.resolveProfile(currentNpub, true);
+                await profileResolver.resolveProfile(currentNpub, true, relayHints);
                 const freshProfile = await profileRepo.getProfileIgnoreTTL(currentNpub);
                 updateFromProfile(freshProfile, currentNpub);
             } catch (e) {
@@ -51,6 +58,9 @@
             if (!displayName) {
                 displayName = resolveDisplayName(null, currentNpub);
             }
+            if (!username) {
+                username = null;
+            }
             if (!picture) {
                 picture = null;
             }
@@ -58,6 +68,7 @@
         }
 
         displayName = resolveDisplayName(profile.metadata, currentNpub);
+        username = resolveUsername(profile.metadata, currentNpub);
         picture = profile.metadata.picture || picture;
     }
 
@@ -95,13 +106,14 @@
         }
 
         displayName = null;
+        username = null;
         picture = null;
         isExistingContact = false;
         isLoading = false;
         errorMessage = null;
         isAdding = false;
 
-        loadInfo(npub);
+        loadInfo(npub, relays);
     });
 </script>
 
@@ -146,16 +158,17 @@
             </div>
 
             <div class="flex flex-col items-center gap-3">
-                <div class="w-16 h-16 rounded-full bg-slate-700/40 overflow-hidden flex items-center justify-center text-xl text-white">
-                    {#if picture}
-                        <img src={picture} alt={displayName || npub} class="w-full h-full object-cover" />
-                    {:else}
-                        <span>{(displayName || npub).slice(0, 2).toUpperCase()}</span>
-                    {/if}
-                </div>
+                <Avatar src={picture ?? undefined} npub={npub} size="lg" />
 
-                <div class="text-sm font-semibold text-gray-900 dark:text-slate-50">
-                    {displayName || npub}
+                <div class="text-center">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-slate-50">
+                        {displayName || npub}
+                    </div>
+                    {#if username && username !== displayName}
+                        <div class="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                            @{username}
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="text-[11px] text-gray-500 dark:text-slate-400 break-all max-w-full">

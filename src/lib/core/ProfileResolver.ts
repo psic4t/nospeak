@@ -8,7 +8,7 @@ import { getDiscoveryRelays } from '$lib/core/runtimeConfig';
 
 export class ProfileResolver {
     
-    public async resolveProfile(npub: string, forceRefresh: boolean = false): Promise<void> {
+    public async resolveProfile(npub: string, forceRefresh: boolean = false, relayHints?: string[]): Promise<void> {
         // 1. Try cache
         const cached = await profileRepo.getProfile(npub);
         if (cached && !forceRefresh) {
@@ -149,10 +149,7 @@ export class ProfileResolver {
                     void finalize();
                 }
             }, {
-            extraRelays: getDiscoveryRelays().filter(url => {
-                const health = connectionManager.getRelayHealth(url);
-                return health?.isConnected;
-            })
+            extraRelays: [...getDiscoveryRelays(), ...(relayHints ?? [])]
         });
     });
     }
@@ -218,10 +215,7 @@ export class ProfileResolver {
         }
 
         // Fetch events using EOSE-aware fetchEvents (with 5s safety timeout)
-        const extraRelays = getDiscoveryRelays().filter(url => {
-            const health = connectionManager.getRelayHealth(url);
-            return health?.isConnected;
-        });
+        const extraRelays = getDiscoveryRelays();
 
         const events = await connectionManager.fetchEvents(filters, 5000, {
             extraRelays: extraRelays.length > 0 ? extraRelays : undefined

@@ -13,7 +13,7 @@ import { writable } from 'svelte/store';
 
 
  
- export const scanContactQrResultState = writable<{ isOpen: boolean; npub: string | null }>({
+ export const scanContactQrResultState = writable<{ isOpen: boolean; npub: string | null; relays?: string[] }>({
      isOpen: false,
      npub: null
  });
@@ -26,12 +26,12 @@ import { writable } from 'svelte/store';
      profileModalState.set({ isOpen: false, npub: null });
  }
  
- export function openScanContactQrResult(npub: string) {
-     scanContactQrResultState.set({ isOpen: true, npub });
+ export function openScanContactQrResult(npub: string, relays?: string[]) {
+     scanContactQrResultState.set({ isOpen: true, npub, relays });
  }
  
 export function closeScanContactQrResult() {
-    scanContactQrResultState.set({ isOpen: false, npub: null });
+    scanContactQrResultState.set({ isOpen: false, npub: null, relays: undefined });
 }
 
 export type PinSetupMode = 'set' | 'verify' | 'change';

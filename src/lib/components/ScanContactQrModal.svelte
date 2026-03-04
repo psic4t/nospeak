@@ -10,7 +10,7 @@
     import { currentUser } from '$lib/stores/auth';
     import { openScanContactQrResult } from '$lib/stores/modals';
     import { glassModal } from '$lib/utils/transitions';
-    import { decodeQrFromImageData, parseNpubFromQrPayload } from '$lib/utils/qr';
+    import { decodeQrFromImageData, parseNostrContactFromQrPayload } from '$lib/utils/qr';
     import { hapticSelection } from '$lib/utils/haptics';
     import { t } from '$lib/i18n';
 
@@ -172,17 +172,17 @@
         const raw = decodeQrFromImageData(imageData);
 
         if (raw) {
-            const npub = parseNpubFromQrPayload(raw);
+            const contact = parseNostrContactFromQrPayload(raw);
 
-            if (npub) {
+            if (contact) {
                 scanActive = false;
                 stopCamera();
-                openScanContactQrResult(npub);
+                openScanContactQrResult(contact.npub, contact.relays);
                 closeWithCleanup();
                 return;
             }
 
-            // QR present but not a valid contact npub
+            // QR present but not a valid contact identifier
             status = 'invalid';
         }
 

@@ -539,6 +539,7 @@
       <ScanContactQrResultModal
         isOpen={$scanContactQrResultState.isOpen}
         npub={$scanContactQrResultState.npub}
+        relays={$scanContactQrResultState.relays}
         close={closeScanContactQrResult}
       />
     {/if}
