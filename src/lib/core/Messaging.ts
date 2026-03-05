@@ -1275,7 +1275,8 @@ import type { Conversation } from '$lib/db/db';
     encrypted: EncryptedFileResult,
     mediaType: 'image' | 'video' | 'audio' | 'file',
     mimeType: string,
-    blossomServers: string[]
+    blossomServers: string[],
+    onProgress?: (percent: number) => void
   ): Promise<string> {
     const blob = new Blob([encrypted.ciphertext.buffer as ArrayBuffer], { type: 'application/octet-stream' });
 
@@ -1287,7 +1288,8 @@ import type { Conversation } from '$lib/db/db';
       servers: blossomServers,
       body: blob,
       mimeType: 'application/octet-stream',
-      sha256: encrypted.hashEncrypted
+      sha256: encrypted.hashEncrypted,
+      onProgress
     });
 
     return result.url;
@@ -1300,10 +1302,11 @@ import type { Conversation } from '$lib/db/db';
     createdAtSeconds?: number,
     conversationId?: string,
     mediaMeta?: { width?: number; height?: number; blurhash?: string },
-    caption?: string
+    caption?: string,
+    onProgress?: (phase: 'encrypting' | 'uploading' | 'delivering', percent: number) => void
   ): Promise<string> {
     if (conversationId) {
-      return this.sendGroupFileMessage(conversationId, file, mediaType, createdAtSeconds, mediaMeta, caption);
+      return this.sendGroupFileMessage(conversationId, file, mediaType, createdAtSeconds, mediaMeta, caption, onProgress);
     }
 
     if (!recipientNpub) {
@@ -1317,12 +1320,14 @@ import type { Conversation } from '$lib/db/db';
     const { data: recipientPubkey } = nip19.decode(recipientNpub);
 
     // Encrypt file with AES-GCM
+    onProgress?.('encrypting', 0);
     const encrypted = await encryptFileWithAesGcm(file);
     const mimeType = (file.type && !file.type.includes('*')) ? file.type : this.mediaTypeToMime(mediaType);
 
     const senderProfile = await profileRepo.getProfileIgnoreTTL(senderNpub);
     const blossomServers = (senderProfile as any)?.mediaServers ?? [];
-    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers);
+    onProgress?.('uploading', 0);
+    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers, (percent) => onProgress?.('uploading', percent));
 
     const now = createdAtSeconds ?? Math.floor(Date.now() / 1000);
 
@@ -1356,6 +1361,7 @@ import type { Conversation } from '$lib/db/db';
       tags
     };
 
+    onProgress?.('delivering', 0);
     const { rumorId } = await this.sendEnvelope({
       recipients: [recipientNpub],
       rumor,
@@ -1384,7 +1390,8 @@ import type { Conversation } from '$lib/db/db';
     mediaType: 'image' | 'video' | 'audio' | 'file',
     createdAtSeconds?: number,
     mediaMeta?: { width?: number; height?: number; blurhash?: string },
-    caption?: string
+    caption?: string,
+    onProgress?: (phase: 'encrypting' | 'uploading' | 'delivering', percent: number) => void
   ): Promise<string> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -1398,12 +1405,14 @@ import type { Conversation } from '$lib/db/db';
     const senderNpub = nip19.npubEncode(senderPubkey);
 
     // Encrypt file with AES-GCM
+    onProgress?.('encrypting', 0);
     const encrypted = await encryptFileWithAesGcm(file);
     const mimeType = (file.type && !file.type.includes('*')) ? file.type : this.mediaTypeToMime(mediaType);
 
     const senderProfile = await profileRepo.getProfileIgnoreTTL(senderNpub);
     const blossomServers = (senderProfile as any)?.mediaServers ?? [];
-    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers);
+    onProgress?.('uploading', 0);
+    const fileUrl = await this.uploadEncryptedMedia(encrypted, mediaType, mimeType, blossomServers, (percent) => onProgress?.('uploading', percent));
 
     // Build p-tags for all participants (excluding self per NIP-17)
     const participantPubkeys = conversation.participants.map(npub => {
@@ -1450,6 +1459,7 @@ import type { Conversation } from '$lib/db/db';
       tags
     };
 
+    onProgress?.('delivering', 0);
     const { rumorId } = await this.sendEnvelope({
       recipients: conversation.participants,
       rumor,

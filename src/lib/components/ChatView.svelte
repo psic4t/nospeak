@@ -48,6 +48,8 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import CircularProgress from '$lib/components/ui/CircularProgress.svelte';
+  import UploadProgressOverlay from '$lib/components/UploadProgressOverlay.svelte';
+  import { setUploadPhase, setUploadPercent, clearUploadProgress } from '$lib/stores/uploadProgress';
 
    let {
      messages = [],
@@ -1445,6 +1447,7 @@
     };
 
     optimisticMessages = [...optimisticMessages, optimistic];
+    setUploadPhase(optimisticEventId, 'encrypting');
 
     // Dismiss the preview immediately after initiating send.
     resetMediaPreview();
@@ -1465,6 +1468,7 @@
           }
         }
 
+        let currentPhase: string | null = null;
         await messagingService.sendFileMessage(
           isGroup ? null : partnerNpub!,
           file,
@@ -1472,13 +1476,24 @@
           createdAtSeconds,
           isGroup ? groupConversation!.id : undefined,
           mediaMeta,
-          caption.length > 0 ? caption : undefined
+          caption.length > 0 ? caption : undefined,
+          (phase, percent) => {
+            if (isDestroyed) return;
+            if (phase !== currentPhase) {
+              currentPhase = phase;
+              setUploadPhase(optimisticEventId, phase);
+            }
+            if (phase === 'uploading' && percent > 0) {
+              setUploadPercent(optimisticEventId, percent);
+            }
+          }
         );
 
         if (isDestroyed) return;
 
         // The persisted attachment message will arrive via the parent refresh.
         // Remove the optimistic placeholder to avoid duplicates.
+        clearUploadProgress(optimisticEventId);
         setTimeout(() => {
           if (!isDestroyed) {
             removeOptimisticMessage(optimisticEventId);
@@ -1492,6 +1507,7 @@
         if (isDestroyed) return;
         console.error('Failed to send file message:', e);
         clearRelayStatus();
+        clearUploadProgress(optimisticEventId);
         removeOptimisticMessage(optimisticEventId);
 
         await nativeDialogService.alert({
@@ -2160,7 +2176,8 @@
               </button>
             {/if}
             
-             <MessageContent
+            <div class="relative">
+              <MessageContent
                 content={msg.message}
                 highlight={isSearchActive ? searchQuery : undefined}
                isOwn={msg.direction === "sent"}
@@ -2177,6 +2194,10 @@
                 fileHeight={msg.fileHeight}
                 fileBlurhash={msg.fileBlurhash}
               />
+              {#if msg.eventId?.startsWith('optimistic:') && msg.rumorKind === 15}
+                <UploadProgressOverlay eventId={msg.eventId} />
+              {/if}
+            </div>
 
             {#if msg.rumorKind === 15 && msg.message && msg.message !== msg.fileUrl}
               <div class="mt-2 text-sm text-gray-900 dark:text-slate-100">
