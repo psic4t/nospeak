@@ -21,6 +21,7 @@
     import { resolveDisplayName } from '$lib/core/nameUtils';
     import { glassModal } from '$lib/utils/transitions';
     import { hapticSelection } from '$lib/utils/haptics';
+    import { openContactQrModal } from '$lib/stores/modals';
 
     import { fade } from 'svelte/transition';
     import { get } from 'svelte/store';
@@ -384,8 +385,25 @@
                         <div class="pt-6 border-t border-gray-100 dark:border-slate-800/50 space-y-5">
                             <div>
                                 <div class="font-bold text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2">{$t('modals.profile.publicKey')}</div>
-                                <div class="dark:text-slate-300 font-mono text-xs break-all bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-100 dark:border-slate-800 select-all text-gray-600 shadow-inner">
-                                    {npub}
+                                <div class="flex items-center gap-2 dark:text-slate-300 font-mono text-xs break-all bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-100 dark:border-slate-800 text-gray-600 shadow-inner">
+                                    <span class="select-all flex-1">{npub}</span>
+                                    <button
+                                        onclick={() => { hapticSelection(); openContactQrModal(npub); }}
+                                        class="flex-shrink-0 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                                        aria-label="Show QR code"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="2" y="2" width="8" height="8" rx="1" />
+                                            <rect x="14" y="2" width="8" height="8" rx="1" />
+                                            <rect x="2" y="14" width="8" height="8" rx="1" />
+                                            <rect x="14" y="14" width="4" height="4" rx="0.5" />
+                                            <line x1="22" y1="14" x2="22" y2="14.01" />
+                                            <line x1="18" y1="18" x2="18" y2="18.01" />
+                                            <line x1="22" y1="18" x2="22" y2="22" />
+                                            <line x1="14" y1="22" x2="14" y2="22.01" />
+                                            <line x1="18" y1="22" x2="22" y2="22" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
 

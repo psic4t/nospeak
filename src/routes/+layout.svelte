@@ -24,6 +24,7 @@
     import EmptyProfileModal from "$lib/components/EmptyProfileModal.svelte";
     import ScanContactQrModal from "$lib/components/ScanContactQrModal.svelte";
     import ScanContactQrResultModal from "$lib/components/ScanContactQrResultModal.svelte";
+    import ContactQrModal from "$lib/components/ContactQrModal.svelte";
     import * as modals from "$lib/stores/modals";
     import SyncProgressModal from "$lib/components/SyncProgressModal.svelte";
     import SignerMismatchModal from "$lib/components/SignerMismatchModal.svelte";
@@ -45,7 +46,7 @@
      import { pinSetupModalState, closePinSetupModal } from "$lib/stores/modals";
  
 
-   const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult } = modals;
+   const { showSettingsModal, showManageContactsModal, showCreateGroupModal, showEmptyProfileModal, showUserQrModal, showScanContactQrModal, profileModalState, scanContactQrResultState, closeProfileModal, closeScanContactQrResult, contactQrModalState, closeContactQrModal } = modals;
  
    let { children } = $props();
 
@@ -551,6 +552,14 @@
         isOpen={$profileModalState.isOpen}
         close={closeProfileModal}
         npub={$profileModalState.npub}
+      />
+    {/if}
+
+    {#if $contactQrModalState.isOpen && $contactQrModalState.npub}
+      <ContactQrModal
+        isOpen={$contactQrModalState.isOpen}
+        close={closeContactQrModal}
+        npub={$contactQrModalState.npub}
       />
     {/if}
 

@@ -50,4 +50,17 @@ export function closePinSetupModal() {
     pinSetupModalState.set({ isOpen: false, mode: 'set', onSuccess: null });
 }
 
+export const contactQrModalState = writable<{ isOpen: boolean; npub: string | null }>({
+    isOpen: false,
+    npub: null
+});
+
+export function openContactQrModal(npub: string) {
+    contactQrModalState.set({ isOpen: true, npub });
+}
+
+export function closeContactQrModal() {
+    contactQrModalState.set({ isOpen: false, npub: null });
+}
+
 
