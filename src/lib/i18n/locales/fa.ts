@@ -413,7 +413,12 @@ const fa = {
             lightningLabel: 'آدرس Lightning (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'ذخیره تغییرات',
-            savingButton: 'در حال ذخیره...'
+            savingButton: 'در حال ذخیره...',
+            savingStatus: 'در حال ذخیره پروفایل…',
+            saveStatusSuccess: 'پروفایل در {count} رله ذخیره شد.',
+            saveStatusPartial: 'پروفایل در {succeeded} از {attempted} رله ذخیره شد.',
+            saveStatusNone: 'پروفایل در هیچ رله‌ای ذخیره نشد.',
+            saveStatusError: 'خطا در ذخیره پروفایل. تنظیمات شما ممکن است به طور کامل منتشر نشده باشد.'
         },
           messagingRelays: {
               description: 'رله‌های پیام‌رسانی NIP-17 خود را پیکربندی کنید. این رله‌ها برای دریافت پیام‌های رمزنگاری‌شده شما استفاده می‌شوند. برای بهترین عملکرد، معمولاً ۲ رله پیام‌رسانی بهتر کار می‌کنند.',

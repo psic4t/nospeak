@@ -404,7 +404,12 @@ const pt = {
             lightningLabel: 'Endereço Lightning (LUD-16)',
             lightningPlaceholder: 'utilizador@fornecedor.com',
             saveButton: 'Guardar alterações',
-            savingButton: 'A guardar...'
+            savingButton: 'A guardar...',
+            savingStatus: 'A guardar perfil\u2026',
+            saveStatusSuccess: 'Perfil guardado em {count} relays.',
+            saveStatusPartial: 'Perfil guardado em {succeeded} de {attempted} relays.',
+            saveStatusNone: 'N\u00e3o foi poss\u00edvel guardar o perfil em nenhum relay.',
+            saveStatusError: 'Erro ao guardar o perfil. As suas defini\u00e7\u00f5es podem n\u00e3o ser totalmente propagadas.'
         },
         messagingRelays: {
             description: 'Configure os seus relays de mensagens NIP-17. Estes relays são usados para receber as suas mensagens encriptadas. Para melhor desempenho, normalmente 2–3 relays de mensagens funcionam melhor.',

@@ -170,6 +170,7 @@
   let profileDisplayName = $state("");
   let profileLud16 = $state("");
   let isSavingProfile = $state(false);
+  let profileSaveStatus = $state<string | null>(null);
   let profileNip05Status = $state<"valid" | "invalid" | "unknown" | null>(null);
 
   // Relay settings (messaging relays)
@@ -316,9 +317,10 @@
   async function saveProfile() {
     if (isSavingProfile) return;
     isSavingProfile = true;
+    profileSaveStatus = null;
 
     try {
-      await profileService.updateProfile({
+      const result = await profileService.updateProfile({
         name: profileName,
         about: profileAbout,
         picture: profilePicture,
@@ -329,10 +331,21 @@
         lud16: profileLud16
       });
       await loadProfile();
-      // Optional: Show success feedback
+
+      if (result.succeeded === 0) {
+        profileSaveStatus = $t('settings.profile.saveStatusNone') as string;
+      } else if (result.failed === 0) {
+        const template = $t('settings.profile.saveStatusSuccess') as string;
+        profileSaveStatus = template.replace('{count}', String(result.succeeded));
+      } else {
+        let template = $t('settings.profile.saveStatusPartial') as string;
+        template = template.replace('{succeeded}', String(result.succeeded));
+        template = template.replace('{attempted}', String(result.attempted));
+        profileSaveStatus = template;
+      }
     } catch (e) {
       console.error("Failed to save profile:", e);
-      // Optional: Show error feedback
+      profileSaveStatus = $t('settings.profile.saveStatusError') as string;
     } finally {
       isSavingProfile = false;
     }
@@ -1421,7 +1434,16 @@
                   />
                 </div>
 
-                <div class="pt-4 flex justify-end">
+                <div class="pt-4 flex items-center justify-end gap-3">
+                  {#if isSavingProfile || profileSaveStatus}
+                    <p class="text-xs text-gray-600 dark:text-slate-400">
+                      {#if isSavingProfile}
+                        {$t('settings.profile.savingStatus')}
+                      {:else}
+                        {profileSaveStatus}
+                      {/if}
+                    </p>
+                  {/if}
                   <Button
                     onclick={saveProfile}
                     disabled={isSavingProfile}

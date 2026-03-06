@@ -404,7 +404,12 @@ const es = {
             lightningLabel: 'Dirección Lightning (LUD-16)',
             lightningPlaceholder: 'usuario@proveedor.com',
             saveButton: 'Guardar cambios',
-            savingButton: 'Guardando...'
+            savingButton: 'Guardando...',
+            savingStatus: 'Guardando perfil\u2026',
+            saveStatusSuccess: 'Perfil guardado en {count} relays.',
+            saveStatusPartial: 'Perfil guardado en {succeeded} de {attempted} relays.',
+            saveStatusNone: 'No se pudo guardar el perfil en ning\u00fan relay.',
+            saveStatusError: 'Error al guardar el perfil. Es posible que tus ajustes no se propaguen completamente.'
         },
         messagingRelays: {
             description: 'Configura tus relays de mensajería NIP-17. Estos relays se usan para recibir tus mensajes cifrados. Para un mejor rendimiento, normalmente funcionan mejor 2–3 relays de mensajería.',

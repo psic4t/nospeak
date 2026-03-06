@@ -405,7 +405,12 @@ const hi = {
             lightningLabel: 'Lightning पता (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'बदलाव सहेजें',
-            savingButton: 'सहेज रहा है...'
+            savingButton: 'सहेज रहा है...',
+            savingStatus: 'प्रोफ़ाइल सहेज रहा है…',
+            saveStatusSuccess: '{count} रिले पर प्रोफ़ाइल सहेजी गई।',
+            saveStatusPartial: '{attempted} में से {succeeded} रिले पर प्रोफ़ाइल सहेजी गई।',
+            saveStatusNone: 'किसी भी रिले पर प्रोफ़ाइल नहीं सहेजी जा सकी।',
+            saveStatusError: 'प्रोफ़ाइल सहेजने में त्रुटि। आपकी सेटिंग्स पूरी तरह प्रसारित नहीं हो सकती हैं।'
         },
         messagingRelays: {
             description: 'अपनी NIP-17 मैसेजिंग रिले कॉन्फ़िगर करें। इन रिले का उपयोग आपके एन्क्रिप्टेड संदेश प्राप्त करने के लिए किया जाता है। सर्वोत्तम प्रदर्शन के लिए, 2 मैसेजिंग रिले सबसे अच्छा काम करती हैं।',

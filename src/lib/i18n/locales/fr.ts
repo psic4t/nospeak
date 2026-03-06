@@ -404,7 +404,12 @@ const fr = {
             lightningLabel: 'Adresse Lightning (LUD-16)',
             lightningPlaceholder: 'utilisateur@fournisseur.com',
             saveButton: 'Enregistrer les modifications',
-            savingButton: 'Enregistrement...'
+            savingButton: 'Enregistrement...',
+            savingStatus: 'Enregistrement du profil\u2026',
+            saveStatusSuccess: 'Profil enregistr\u00e9 sur {count} relays.',
+            saveStatusPartial: 'Profil enregistr\u00e9 sur {succeeded} relays sur {attempted}.',
+            saveStatusNone: 'Impossible d\u2019enregistrer le profil sur un relay.',
+            saveStatusError: 'Erreur lors de l\u2019enregistrement du profil. Vos param\u00e8tres peuvent ne pas \u00eatre enti\u00e8rement propag\u00e9s.'
         },
         messagingRelays: {
             description: 'Configurez vos relays de messagerie NIP-17. Ces relays sont utilisés pour recevoir vos messages chiffrés. Pour de meilleures performances, 2–3 relays de messagerie fonctionnent généralement le mieux.',

@@ -405,7 +405,12 @@ const vi = {
             lightningLabel: 'Địa chỉ Lightning (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'Lưu thay đổi',
-            savingButton: 'Đang lưu...'
+            savingButton: 'Đang lưu...',
+            savingStatus: 'Đang lưu hồ sơ…',
+            saveStatusSuccess: 'Đã lưu hồ sơ đến {count} relay.',
+            saveStatusPartial: 'Đã lưu hồ sơ đến {succeeded} trong số {attempted} relay.',
+            saveStatusNone: 'Không thể lưu hồ sơ đến bất kỳ relay nào.',
+            saveStatusError: 'Lỗi khi lưu hồ sơ. Cài đặt của bạn có thể chưa được phổ biến đầy đủ.'
         },
         messagingRelays: {
             description: 'Cấu hình các relay nhắn tin NIP-17 của bạn. Các relay này được sử dụng để nhận tin nhắn mã hóa. Để có hiệu suất tốt nhất, 2 relay nhắn tin thường là lý tưởng.',

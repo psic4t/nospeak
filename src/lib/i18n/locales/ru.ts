@@ -233,7 +233,12 @@ const ru = {
             nip05Label: 'NIP-05 (имя пользователя)', nip05Placeholder: 'имя@домен.com',
             websiteLabel: 'Веб-сайт', websitePlaceholder: 'https://example.com',
             lightningLabel: 'Адрес Lightning (LUD-16)', lightningPlaceholder: 'пользователь@провайдер.com',
-            saveButton: 'Сохранить изменения', savingButton: 'Сохранение...'
+            saveButton: 'Сохранить изменения', savingButton: 'Сохранение...',
+            savingStatus: 'Сохранение профиля…',
+            saveStatusSuccess: 'Профиль сохранён на {count} реле.',
+            saveStatusPartial: 'Профиль сохранён на {succeeded} из {attempted} реле.',
+            saveStatusNone: 'Не удалось сохранить профиль ни на одном реле.',
+            saveStatusError: 'Ошибка сохранения профиля. Ваши настройки могут быть не полностью распространены.'
         },
         messagingRelays: {
             description: 'Настройте реле сообщений NIP-17. Эти реле используются для получения ваших зашифрованных сообщений. Для лучшей производительности обычно достаточно 2 реле сообщений.',

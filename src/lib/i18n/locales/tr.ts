@@ -405,7 +405,12 @@ const tr = {
             lightningLabel: 'Lightning Adresi (LUD-16)',
             lightningPlaceholder: 'kullanici@saglayici.com',
             saveButton: 'Değişiklikleri Kaydet',
-            savingButton: 'Kaydediliyor...'
+            savingButton: 'Kaydediliyor...',
+            savingStatus: 'Profil kaydediliyor…',
+            saveStatusSuccess: 'Profil {count} röleye kaydedildi.',
+            saveStatusPartial: 'Profil {attempted} röleden {succeeded} tanesine kaydedildi.',
+            saveStatusNone: 'Profil hiçbir röleye kaydedilemedi.',
+            saveStatusError: 'Profil kaydedilirken hata oluştu. Ayarlarınız tam olarak yayılmamış olabilir.'
         },
         messagingRelays: {
             description: 'NIP-17 mesajlaşma rölelerinizi yapılandırın. Bu röleler şifreli mesajlarınızı almak için kullanılır. En iyi performans için genellikle 2 mesajlaşma rölesi yeterlidir.',

@@ -233,7 +233,12 @@ const pl = {
             nip05Label: 'NIP-05 (nazwa użytkownika)', nip05Placeholder: 'nazwa@domena.com',
             websiteLabel: 'Strona internetowa', websitePlaceholder: 'https://example.com',
             lightningLabel: 'Adres Lightning (LUD-16)', lightningPlaceholder: 'użytkownik@dostawca.com',
-            saveButton: 'Zapisz zmiany', savingButton: 'Zapisywanie...'
+            saveButton: 'Zapisz zmiany', savingButton: 'Zapisywanie...',
+            savingStatus: 'Zapisywanie profilu…',
+            saveStatusSuccess: 'Zapisano profil do {count} przekaźników.',
+            saveStatusPartial: 'Zapisano profil do {succeeded} z {attempted} przekaźników.',
+            saveStatusNone: 'Nie udało się zapisać profilu do żadnego przekaźnika.',
+            saveStatusError: 'Błąd podczas zapisywania profilu. Ustawienia mogą nie być w pełni rozpropagowane.'
         },
         messagingRelays: {
             description: 'Skonfiguruj przekaźniki wiadomości NIP-17. Te przekaźniki służą do odbierania zaszyfrowanych wiadomości. Dla najlepszej wydajności, 2 przekaźniki wiadomości zazwyczaj wystarczą.',

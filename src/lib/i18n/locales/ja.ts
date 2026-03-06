@@ -405,7 +405,12 @@ const ja = {
             lightningLabel: 'Lightningアドレス（LUD-16）',
             lightningPlaceholder: 'user@provider.com',
             saveButton: '変更を保存',
-            savingButton: '保存中...'
+            savingButton: '保存中...',
+            savingStatus: 'プロフィールを保存中…',
+            saveStatusSuccess: '{count}個のリレーにプロフィールを保存しました。',
+            saveStatusPartial: '{attempted}個中{succeeded}個のリレーにプロフィールを保存しました。',
+            saveStatusNone: 'どのリレーにもプロフィールを保存できませんでした。',
+            saveStatusError: 'プロフィールの保存中にエラーが発生しました。設定が完全に反映されていない可能性があります。'
         },
         messagingRelays: {
             description: 'NIP-17メッセージングリレーを設定します。これらのリレーは暗号化されたメッセージの受信に使用されます。最適なパフォーマンスのために、通常は2つのメッセージングリレーが最適です。',

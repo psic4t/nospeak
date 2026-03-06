@@ -405,7 +405,12 @@ const he = {
             lightningLabel: 'כתובת Lightning (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'שמור שינויים',
-            savingButton: 'שומר...'
+            savingButton: 'שומר...',
+            savingStatus: 'שומר פרופיל…',
+            saveStatusSuccess: 'הפרופיל נשמר ל-{count} ממסרים.',
+            saveStatusPartial: 'הפרופיל נשמר ל-{succeeded} מתוך {attempted} ממסרים.',
+            saveStatusNone: 'לא ניתן לשמור את הפרופיל לאף ממסר.',
+            saveStatusError: 'שגיאה בשמירת הפרופיל. ייתכן שההגדרות שלך לא הופצו במלואן.'
         },
         messagingRelays: {
             description: 'הגדר את ממסרי ההודעות NIP-17 שלך. ממסרים אלה משמשים לקבלת ההודעות המוצפנות שלך. לביצועים מיטביים, 2 ממסרי הודעות בדרך כלל עובדים הכי טוב.',

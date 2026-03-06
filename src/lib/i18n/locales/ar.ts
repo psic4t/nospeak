@@ -405,7 +405,12 @@ const ar = {
             lightningLabel: 'عنوان Lightning (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'حفظ التغييرات',
-            savingButton: 'جارٍ الحفظ...'
+            savingButton: 'جارٍ الحفظ...',
+            savingStatus: 'جارٍ حفظ الملف الشخصي…',
+            saveStatusSuccess: 'تم حفظ الملف الشخصي إلى {count} مُرحّلات.',
+            saveStatusPartial: 'تم حفظ الملف الشخصي إلى {succeeded} من {attempted} مُرحّلات.',
+            saveStatusNone: 'تعذر حفظ الملف الشخصي إلى أي مُرحّل.',
+            saveStatusError: 'خطأ في حفظ الملف الشخصي. قد لا يتم نشر إعداداتك بالكامل.'
         },
         messagingRelays: {
             description: 'قم بإعداد مُرحّلات المراسلة NIP-17 الخاصة بك. تُستخدم هذه المُرحّلات لاستقبال رسائلك المشفرة. للحصول على أفضل أداء، يُفضل استخدام مُرحّلَي مراسلة.',

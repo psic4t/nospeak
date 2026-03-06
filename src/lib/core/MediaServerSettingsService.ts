@@ -8,15 +8,10 @@ import { getBlasterRelayUrl, getDiscoveryRelays } from '$lib/core/runtimeConfig'
 
 import { connectionManager } from './connection/instance';
 import { normalizeBlossomServerUrl } from './BlossomServers';
-
-export interface MediaServerPublishResult {
-    attempted: number;
-    succeeded: number;
-    failed: number;
-}
+import type { PublishResult } from './PublishResult';
 
 export class MediaServerSettingsService {
-    public async updateSettings(mediaServers: string[]): Promise<MediaServerPublishResult> {
+    public async updateSettings(mediaServers: string[]): Promise<PublishResult> {
         const currentUserData = get(currentUser);
         if (currentUserData) {
             const profile = await profileRepo.getProfileIgnoreTTL(currentUserData.npub);
@@ -34,7 +29,7 @@ export class MediaServerSettingsService {
         return await this.publishServerList(mediaServers);
     }
 
-    private async publishServerList(mediaServers: string[]): Promise<MediaServerPublishResult> {
+    private async publishServerList(mediaServers: string[]): Promise<PublishResult> {
         const currentSigner = get(signer);
         const currentUserData = get(currentUser);
 

@@ -415,7 +415,12 @@ const de = {
             lightningLabel: 'Lightning-Adresse (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'Änderungen speichern',
-            savingButton: 'Speichere…'
+            savingButton: 'Speichere…',
+            savingStatus: 'Profil wird gespeichert\u2026',
+            saveStatusSuccess: 'Profil auf {count} Relays gespeichert.',
+            saveStatusPartial: 'Profil auf {succeeded} von {attempted} Relays gespeichert.',
+            saveStatusNone: 'Profil konnte auf keinem Relay gespeichert werden.',
+            saveStatusError: 'Fehler beim Speichern des Profils. Einstellungen sind m\u00f6glicherweise nicht vollst\u00e4ndig propagiert.'
         },
           messagingRelays: {
               description: 'Konfiguriere deine NIP-17-Messaging-Relays. Diese Relays werden verwendet, um deine verschlüsselten Nachrichten zu empfangen. Für die meisten Nutzer funktionieren 2–3 Messaging-Relays am zuverlässigsten.',

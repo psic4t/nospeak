@@ -405,7 +405,12 @@ const bn = {
             lightningLabel: 'Lightning ঠিকানা (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'পরিবর্তন সংরক্ষণ করুন',
-            savingButton: 'সংরক্ষণ হচ্ছে...'
+            savingButton: 'সংরক্ষণ হচ্ছে...',
+            savingStatus: 'প্রোফাইল সংরক্ষণ হচ্ছে…',
+            saveStatusSuccess: '{count}টি রিলেতে প্রোফাইল সংরক্ষিত হয়েছে।',
+            saveStatusPartial: '{attempted}টির মধ্যে {succeeded}টি রিলেতে প্রোফাইল সংরক্ষিত হয়েছে।',
+            saveStatusNone: 'কোনো রিলেতে প্রোফাইল সংরক্ষণ করা যায়নি।',
+            saveStatusError: 'প্রোফাইল সংরক্ষণে ত্রুটি। আপনার সেটিংস সম্পূর্ণরূপে প্রচারিত নাও হতে পারে।'
         },
         messagingRelays: {
             description: 'আপনার NIP-17 মেসেজিং রিলে কনফিগার করুন। এই রিলেগুলো আপনার এনক্রিপ্টেড বার্তা গ্রহণ করতে ব্যবহৃত হয়। সেরা কর্মক্ষমতার জন্য, সাধারণত ২টি মেসেজিং রিলে সবচেয়ে ভালো কাজ করে।',

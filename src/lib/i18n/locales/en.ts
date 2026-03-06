@@ -413,7 +413,12 @@ const en = {
             lightningLabel: 'Lightning Address (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'Save Changes',
-            savingButton: 'Saving...'
+            savingButton: 'Saving...',
+            savingStatus: 'Saving profile\u2026',
+            saveStatusSuccess: 'Saved profile to {count} relays.',
+            saveStatusPartial: 'Saved profile to {succeeded} of {attempted} relays.',
+            saveStatusNone: 'Could not save profile to any relays.',
+            saveStatusError: 'Error saving profile. Your settings may not be fully propagated.'
         },
           messagingRelays: {
               description: 'Configure your NIP-17 messaging relays. These relays are used to receive your encrypted messages. For best performance, 2 messaging relays usually work best.',

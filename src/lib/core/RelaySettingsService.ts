@@ -7,15 +7,10 @@ import { getBlasterRelayUrl, getDiscoveryRelays } from '$lib/core/runtimeConfig'
 import { connectionManager } from './connection/instance';
 import { ConnectionType } from './connection/ConnectionManager';
 import { profileRepo } from '$lib/db/ProfileRepository';
-
-export interface RelayPublishResult {
-    attempted: number;
-    succeeded: number;
-    failed: number;
-}
+import type { PublishResult } from './PublishResult';
 
 export class RelaySettingsService {
-    public async updateSettings(messagingRelays: string[]): Promise<RelayPublishResult> {
+    public async updateSettings(messagingRelays: string[]): Promise<PublishResult> {
         // 1. Update Profile Repo Cache
         const currentUserData = get(currentUser);
         if (currentUserData) {
@@ -39,7 +34,7 @@ export class RelaySettingsService {
         return publishResult;
     }
  
-    private async publishRelayList(messagingRelays: string[]): Promise<RelayPublishResult> {
+    private async publishRelayList(messagingRelays: string[]): Promise<PublishResult> {
         const currentSigner = get(signer);
         const currentUserData = get(currentUser);
         

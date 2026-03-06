@@ -413,7 +413,12 @@ const nl = {
             lightningLabel: 'Lightning-adres (LUD-16)',
             lightningPlaceholder: 'gebruiker@provider.com',
             saveButton: 'Wijzigingen opslaan',
-            savingButton: 'Opslaan...'
+            savingButton: 'Opslaan...',
+            savingStatus: 'Profiel opslaan\u2026',
+            saveStatusSuccess: 'Profiel opgeslagen naar {count} relays.',
+            saveStatusPartial: 'Profiel opgeslagen naar {succeeded} van {attempted} relays.',
+            saveStatusNone: 'Kon profiel niet opslaan naar relays.',
+            saveStatusError: 'Fout bij opslaan van profiel. Je instellingen zijn mogelijk niet volledig doorgevoerd.'
         },
           messagingRelays: {
               description: 'Configureer je NIP-17 berichtenrelays. Deze relays worden gebruikt om je versleutelde berichten te ontvangen. Voor de beste prestaties werken meestal 2 berichtenrelays het best.',

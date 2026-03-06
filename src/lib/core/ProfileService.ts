@@ -7,6 +7,7 @@ import { getBlasterRelayUrl, getDiscoveryRelays } from '$lib/core/runtimeConfig'
 import { connectionManager } from './connection/instance';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { verifyNip05 } from './Nip05Verifier';
+import type { PublishResult } from './PublishResult';
 
 export interface UserMetadata {
     name?: string;
@@ -21,7 +22,7 @@ export interface UserMetadata {
 }
 
 export class ProfileService {
-    public async updateProfile(metadata: UserMetadata): Promise<void> {
+    public async updateProfile(metadata: UserMetadata): Promise<PublishResult> {
         const currentUserData = get(currentUser);
         const currentSigner = get(signer);
 
@@ -91,15 +92,10 @@ export class ProfileService {
         ]);
 
 
-        console.log(`Publishing profile update to ${allRelays.size} relays...`);
+        const attempted = allRelays.size;
+        console.log(`Publishing profile update to ${attempted} relays...`);
 
-        // We execute publish in parallel but don't wait for all to finish successfully
-        // We just await the promises to ensure they are fired.
-        // Actually, we should probably wait for at least one success or just fire and forget?
-        // RelaySettingsService awaits them sequentially-ish (loop with await inside).
-        // Let's do parallel for speed, but wait for completion.
-        
-        const publishPromises = Array.from(allRelays).map(async (relayUrl) => {
+        const publishPromises = Array.from(allRelays).map(async (relayUrl): Promise<boolean> => {
             try {
                 // Reuse existing connection if available
                 let relay = connectionManager.getRelayHealth(relayUrl)?.relay;
@@ -111,7 +107,7 @@ export class ProfileService {
                         shouldClose = true;
                     } catch (e) {
                         console.warn(`Could not connect to ${relayUrl} to publish profile`);
-                        return;
+                        return false;
                     }
                 }
 
@@ -150,12 +146,22 @@ export class ProfileService {
                     }
                     relay.close();
                 }
+
+                return true;
             } catch (e) {
                 console.error(`Failed to publish profile to ${relayUrl}:`, e);
+                return false;
             }
         });
 
-        await Promise.all(publishPromises);
+        const results = await Promise.all(publishPromises);
+        const succeeded = results.filter(Boolean).length;
+
+        return {
+            attempted,
+            succeeded,
+            failed: attempted - succeeded
+        };
     }
 }
 

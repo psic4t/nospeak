@@ -405,7 +405,12 @@ const ur = {
             lightningLabel: 'Lightning ایڈریس (LUD-16)',
             lightningPlaceholder: 'user@provider.com',
             saveButton: 'تبدیلیاں محفوظ کریں',
-            savingButton: 'محفوظ ہو رہا ہے...'
+            savingButton: 'محفوظ ہو رہا ہے...',
+            savingStatus: 'پروفائل محفوظ ہو رہا ہے…',
+            saveStatusSuccess: 'پروفائل {count} ریلے کو محفوظ کیا گیا۔',
+            saveStatusPartial: 'پروفائل {attempted} میں سے {succeeded} ریلے کو محفوظ کیا گیا۔',
+            saveStatusNone: 'پروفائل کسی بھی ریلے کو محفوظ نہیں ہو سکا۔',
+            saveStatusError: 'پروفائل محفوظ کرنے میں خرابی۔ آپ کی ترتیبات مکمل طور پر پھیلائی نہیں جا سکیں۔'
         },
         messagingRelays: {
             description: 'اپنے NIP-17 پیغام رسانی ریلے ترتیب دیں۔ یہ ریلے آپ کے خفیہ پیغامات وصول کرنے کے لیے استعمال ہوتے ہیں۔ بہترین کارکردگی کے لیے عام طور پر 2 پیغام رسانی ریلے کافی ہیں۔',
