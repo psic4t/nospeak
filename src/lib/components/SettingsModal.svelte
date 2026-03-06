@@ -35,6 +35,7 @@
   import Input from '$lib/components/ui/Input.svelte';
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import Toggle from '$lib/components/ui/Toggle.svelte';
+  import Avatar from './Avatar.svelte';
   import { isPinEnabled, enablePin, disablePin } from '$lib/stores/pin';
   import { openPinSetupModal } from '$lib/stores/modals';
  
@@ -202,6 +203,8 @@
   let pendingProfileMediaServersHint = $state<string | null>(null);
   let isEnsuringProfileMediaServers = $state(false);
   let isUploadingProfileMedia = $state(false);
+  let pictureFileInput = $state<HTMLInputElement | null>(null);
+  let bannerFileInput = $state<HTMLInputElement | null>(null);
 
   function resetProfileMediaPreview() {
     showProfileMediaPreview = false;
@@ -1244,6 +1247,71 @@
             </div>
           {:else if activeCategory === "Profile"}
             <div class="space-y-6">
+              <!-- Visual Profile Header: Banner + Avatar -->
+              <div class="relative">
+                <!-- Banner -->
+                <div class="w-full h-32 bg-gray-200 dark:bg-slate-700 rounded-xl relative overflow-hidden">
+                  {#if profileBanner}
+                    <img src={profileBanner} alt="Banner" class="w-full h-full object-cover" />
+                  {/if}
+                  <!-- Banner upload button -->
+                  <button
+                    type="button"
+                    class="absolute bottom-2 end-2 bg-black/40 hover:bg-black/50 active:bg-black/60 rounded-full p-2 transition-colors cursor-pointer"
+                    aria-label={$t('settings.profile.bannerUrlLabel')}
+                    onclick={() => bannerFileInput?.click()}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <!-- Avatar overlapping banner -->
+                <div class="px-4 -mt-12 relative inline-block">
+                  <div class="relative">
+                    <div class="rounded-full p-1 bg-white dark:bg-slate-800 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                      <Avatar npub={$currentUser?.npub ?? ''} src={profilePicture} size="xl" class="rounded-full" />
+                    </div>
+                    <!-- Avatar upload button -->
+                    <button
+                      type="button"
+                      class="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 active:bg-black/50 rounded-full transition-colors cursor-pointer"
+                      aria-label={$t('settings.profile.pictureUrlLabel')}
+                      onclick={() => pictureFileInput?.click()}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <!-- Hidden file inputs for profile media -->
+              <input
+                bind:this={pictureFileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                class="hidden"
+                onchange={(e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handlePictureUpload(file, 'image');
+                  if (pictureFileInput) pictureFileInput.value = '';
+                }}
+              />
+              <input
+                bind:this={bannerFileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                class="hidden"
+                onchange={(e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleBannerUpload(file, 'image');
+                  if (bannerFileInput) bannerFileInput.value = '';
+                }}
+              />
+
               <div class="grid grid-cols-1 gap-6">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
@@ -1289,54 +1357,6 @@
                     autoGrow
                     placeholder={$t('settings.profile.aboutPlaceholder')}
                   />
-                </div>
-
-                <div>
-                  <label
-                    for="profile-picture"
-                    class="block text sm font-medium text-gray-900 dark:text-slate-300 mb-1"
-                  >
-                    {$t('settings.profile.pictureUrlLabel')}
-                  </label>
-                  <div class="flex gap-2">
-                    <MediaUploadButton
-                      onFileSelect={handlePictureUpload}
-                      variant="default"
-                      allowedTypes={["image"]}
-                    />
-
-                    <Input
-                      id="profile-picture"
-                      bind:value={profilePicture}
-                      type="url"
-                      dir="ltr"
-                      placeholder={$t('settings.profile.pictureUrlPlaceholder')}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    for="profile-banner"
-                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
-                  >
-                    {$t('settings.profile.bannerUrlLabel')}
-                  </label>
-                  <div class="flex gap-2">
-                    <MediaUploadButton
-                      onFileSelect={handleBannerUpload}
-                      variant="default"
-                      allowedTypes={["image"]}
-                    />
-
-                    <Input
-                      id="profile-banner"
-                      bind:value={profileBanner}
-                      type="url"
-                      dir="ltr"
-                      placeholder={$t('settings.profile.bannerUrlPlaceholder')}
-                    />
-                  </div>
                 </div>
 
                 <div>
