@@ -127,7 +127,7 @@ Create `.env` file for local development (restart the server to apply changes):
 ```env
 # Runtime-configurable defaults (embedded via SSR at page load)
 # Relays MUST use wss:// and servers MUST use https://
-NOSPEAK_DISCOVERY_RELAYS=wss://nostr.data.haus,wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net,wss://purplepag.es
+NOSPEAK_DISCOVERY_RELAYS=wss://nostr.data.haus,wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net,wss://purplepag.es,wss://user.kindpag.es,wss://profiles.nostr1.com,wss://directory.yabu.me
 NOSPEAK_DEFAULT_MESSAGING_RELAYS=wss://nostr.data.haus,wss://nos.lol,wss://relay.damus.io
 NOSPEAK_SEARCH_RELAY=wss://relay.nostr.band
 NOSPEAK_BLASTER_RELAY=wss://sendit.nosflare.com
@@ -144,7 +144,7 @@ services:
   nospeak:
     image: nospeak:latest
     environment:
-      NOSPEAK_DISCOVERY_RELAYS: "wss://nostr.data.haus,wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net,wss://purplepag.es"
+      NOSPEAK_DISCOVERY_RELAYS: "wss://nostr.data.haus,wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net,wss://purplepag.es,wss://user.kindpag.es,wss://profiles.nostr1.com,wss://directory.yabu.me"
       NOSPEAK_DEFAULT_MESSAGING_RELAYS: "wss://nostr.data.haus,wss://nos.lol,wss://relay.damus.io"
       NOSPEAK_SEARCH_RELAY: "wss://relay.nostr.band"
       NOSPEAK_BLASTER_RELAY: "wss://sendit.nosflare.com"

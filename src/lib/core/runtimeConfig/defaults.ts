@@ -6,7 +6,10 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
         'wss://relay.damus.io',
         'wss://nos.lol',
         'wss://relay.primal.net',
-        'wss://purplepag.es'
+        'wss://purplepag.es',
+        'wss://user.kindpag.es',
+        'wss://profiles.nostr1.com',
+        'wss://directory.yabu.me'
     ],
     defaultMessagingRelays: [
         'wss://nostr.data.haus',
