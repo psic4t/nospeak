@@ -486,8 +486,8 @@
          }
      });
 
-    // Generate a poster image from the first video frame for Android WebView,
-    // which does not display a static preview frame natively.
+    // Generate a poster image from the first video frame.
+    // Android WebView and Firefox do not reliably display a static preview frame.
     let videoPosterUrl = $state('');
 
     $effect(() => {

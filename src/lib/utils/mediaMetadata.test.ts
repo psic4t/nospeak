@@ -267,6 +267,7 @@ describe('generateVideoPoster', () => {
                     _src: '',
                     _currentTime: 0,
                     onloadeddata: null as (() => void) | null,
+                    onseeked: null as (() => void) | null,
                     onerror: null as (() => void) | null,
                     removeAttribute: vi.fn(),
                     load: vi.fn(),
@@ -274,16 +275,17 @@ describe('generateVideoPoster', () => {
                 Object.defineProperty(video, 'src', {
                     set(val: string) {
                         video._src = val;
-                    },
-                    get() { return video._src; },
-                });
-                Object.defineProperty(video, 'currentTime', {
-                    set(_val: number) {
                         if (triggerError) {
                             setTimeout(() => video.onerror?.(), 0);
                         } else {
                             setTimeout(() => video.onloadeddata?.(), 0);
                         }
+                    },
+                    get() { return video._src; },
+                });
+                Object.defineProperty(video, 'currentTime', {
+                    set(_val: number) {
+                        setTimeout(() => video.onseeked?.(), 0);
                     },
                     get() { return 0; },
                 });
@@ -343,12 +345,13 @@ describe('generateVideoPoster', () => {
                     videoHeight: 0,
                     _src: '',
                     onloadeddata: null,
+                    onseeked: null,
                     onerror: null,
                     removeAttribute: vi.fn(),
                     load: vi.fn(),
                 };
                 Object.defineProperty(video, 'src', {
-                    set(val: string) { video._src = val; },
+                    set(val: string) { video._src = val; /* never fires callback */ },
                     get() { return video._src; },
                 });
                 Object.defineProperty(video, 'currentTime', {

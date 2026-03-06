@@ -111,7 +111,7 @@ function extractFirstFrame(src: string): Promise<string> {
 
         video.onerror = () => { cleanup(); resolve(''); };
 
-        video.onloadeddata = () => {
+        video.onseeked = () => {
             try {
                 const w = video.videoWidth;
                 const h = video.videoHeight;
@@ -137,8 +137,11 @@ function extractFirstFrame(src: string): Promise<string> {
             }
         };
 
+        video.onloadeddata = () => {
+            video.currentTime = 0.001;
+        };
+
         video.src = src;
-        video.currentTime = 0.001;
     });
 }
 
