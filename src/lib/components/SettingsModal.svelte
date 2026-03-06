@@ -1273,6 +1273,7 @@
                     id="profile-about"
                     bind:value={profileAbout}
                     rows={3}
+                    autoGrow
                     placeholder={$t('settings.profile.aboutPlaceholder')}
                   />
                 </div>
