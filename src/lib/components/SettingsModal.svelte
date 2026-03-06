@@ -1232,32 +1232,34 @@
           {:else if activeCategory === "Profile"}
             <div class="space-y-6">
               <div class="grid grid-cols-1 gap-6">
-                <div>
-                  <label
-                    for="profile-name"
-                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
-                  >
-                    {$t('settings.profile.nameLabel')}
-                  </label>
-                  <Input
-                    id="profile-name"
-                    bind:value={profileName}
-                    placeholder={$t('settings.profile.namePlaceholder')}
-                  />
-                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <label
+                      for="profile-name"
+                      class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
+                    >
+                      {$t('settings.profile.nameLabel')}
+                    </label>
+                    <Input
+                      id="profile-name"
+                      bind:value={profileName}
+                      placeholder={$t('settings.profile.namePlaceholder')}
+                    />
+                  </div>
 
-                <div>
-                  <label
-                    for="profile-display-name"
-                    class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
-                  >
-                    {$t('settings.profile.displayNameLabel')}
-                  </label>
-                  <Input
-                    id="profile-display-name"
-                    bind:value={profileDisplayName}
-                    placeholder={$t('settings.profile.displayNamePlaceholder')}
-                  />
+                  <div>
+                    <label
+                      for="profile-display-name"
+                      class="block text-sm font-medium text-gray-900 dark:text-slate-300 mb-1"
+                    >
+                      {$t('settings.profile.displayNameLabel')}
+                    </label>
+                    <Input
+                      id="profile-display-name"
+                      bind:value={profileDisplayName}
+                      placeholder={$t('settings.profile.displayNamePlaceholder')}
+                    />
+                  </div>
                 </div>
 
                 <div>
