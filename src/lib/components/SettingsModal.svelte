@@ -36,6 +36,7 @@
   import Textarea from '$lib/components/ui/Textarea.svelte';
   import Toggle from '$lib/components/ui/Toggle.svelte';
   import Avatar from './Avatar.svelte';
+  import ProfileCropModal from './ProfileCropModal.svelte';
   import { isPinEnabled, enablePin, disablePin } from '$lib/stores/pin';
   import { openPinSetupModal } from '$lib/stores/modals';
  
@@ -205,6 +206,8 @@
   let isUploadingProfileMedia = $state(false);
   let pictureFileInput = $state<HTMLInputElement | null>(null);
   let bannerFileInput = $state<HTMLInputElement | null>(null);
+  let showProfileCropModal = $state(false);
+  let pendingCropFile = $state<File | null>(null);
 
   function resetProfileMediaPreview() {
     showProfileMediaPreview = false;
@@ -293,7 +296,19 @@
   }
 
   function handlePictureUpload(file: File, _type: "image" | "video" | "audio" | "file") {
-    openProfileMediaPreview('picture', file);
+    pendingCropFile = file;
+    showProfileCropModal = true;
+  }
+
+  function handleCroppedPicture(croppedFile: File) {
+    showProfileCropModal = false;
+    pendingCropFile = null;
+    openProfileMediaPreview('picture', croppedFile);
+  }
+
+  function handleCropCancel() {
+    showProfileCropModal = false;
+    pendingCropFile = null;
   }
 
   function handleBannerUpload(file: File, _type: "image" | "video" | "audio" | "file") {
@@ -708,6 +723,13 @@
 </script>
 
 {#if isOpen}
+  <ProfileCropModal
+    isOpen={showProfileCropModal}
+    file={pendingCropFile}
+    onConfirm={handleCroppedPicture}
+    onCancel={handleCropCancel}
+  />
+
   {#if showProfileMediaPreview && pendingProfileMediaFile}
     <AttachmentPreviewModal
       isOpen={showProfileMediaPreview}
@@ -1276,11 +1298,11 @@
                     <!-- Avatar upload button -->
                     <button
                       type="button"
-                      class="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 active:bg-black/50 rounded-full transition-colors cursor-pointer"
+                      class="absolute bottom-0 end-0 bg-black/40 hover:bg-black/50 active:bg-black/60 rounded-full p-1.5 transition-colors cursor-pointer"
                       aria-label={$t('settings.profile.pictureUrlLabel')}
                       onclick={() => pictureFileInput?.click()}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                         <circle cx="12" cy="13" r="4"></circle>
                       </svg>
