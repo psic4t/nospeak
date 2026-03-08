@@ -1247,6 +1247,7 @@
     inputText = ""; // Clear immediately for UX
     if (inputElement) {
       inputElement.style.height = "auto";
+      inputElement.focus(); // Keep keyboard open after sending
     }
     updateInputBarPadding();
 
