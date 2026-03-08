@@ -642,7 +642,34 @@
   const isAndroidShell = isAndroidCapacitorShell();
   const isMobileLayout = isAndroidShell || isMobileWeb();
   const useSmallAvatars = isMobileLayout;
- 
+
+  // On Android, scroll to bottom when the keyboard opens. The native
+  // bottomMargin resize removes the browser's automatic scroll-into-view
+  // behaviour, so we need to do it ourselves.
+  $effect(() => {
+      if (!isAndroidShell) return;
+
+      const vv = window.visualViewport;
+      if (!vv) return;
+
+      let previousHeight = vv.height;
+
+      function onViewportResize() {
+          if (!vv) return;
+          const currentHeight = vv.height;
+          if (currentHeight < previousHeight) {
+              scrollToBottom();
+          }
+          previousHeight = currentHeight;
+      }
+
+      vv.addEventListener('resize', onViewportResize);
+
+      return () => {
+          vv.removeEventListener('resize', onViewportResize);
+      };
+  });
+
   // Emoji picker state
   let showEmojiPicker = $state(false);
   let emojiSearch = $state("");

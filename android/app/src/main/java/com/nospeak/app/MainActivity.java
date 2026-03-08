@@ -84,6 +84,29 @@ public class MainActivity extends BridgeActivity {
                 }
                 return insets;
             });
+        } else {
+            // Android 15+: edge-to-edge is automatic and the SystemBars plugin
+            // handles CSS safe-area variables (it zeros safe-area-inset-bottom
+            // when the keyboard is visible). We resize the WebView itself when
+            // the keyboard opens so the web layout stays above it.
+            // NOTE: We listen on the WebView, not its parent, because the
+            // SystemBars plugin already has a listener on the parent.
+            WebView wv = getBridge().getWebView();
+            if (wv != null) {
+                ViewCompat.setOnApplyWindowInsetsListener(wv, (v, insets) -> {
+                    boolean keyboardVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+                    ViewGroup.MarginLayoutParams mlp =
+                        (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+                    if (keyboardVisible) {
+                        Insets imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime());
+                        mlp.bottomMargin = imeInsets.bottom;
+                    } else {
+                        mlp.bottomMargin = 0;
+                    }
+                    v.setLayoutParams(mlp);
+                    return insets;
+                });
+            }
         }
 
         // Configure WebView for native Android overscroll effect
