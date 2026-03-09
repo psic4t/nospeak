@@ -104,6 +104,9 @@ public class MainActivity extends BridgeActivity {
                         mlp.bottomMargin = 0;
                     }
                     v.setLayoutParams(mlp);
+                    // Dispatch to WebView's default handler so native
+                    // env(safe-area-inset-*) CSS functions keep working
+                    v.onApplyWindowInsets(insets.toWindowInsets());
                     return insets;
                 });
             }
