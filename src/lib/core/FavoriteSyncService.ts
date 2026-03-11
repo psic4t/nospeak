@@ -180,6 +180,10 @@ export class FavoriteSyncService {
             let remoteTags: string[][];
             try {
                 remoteTags = JSON.parse(decryptedContent);
+                if (!Array.isArray(remoteTags)) {
+                    console.error('[FavoriteSyncService] Decrypted favorites is not an array, got:', typeof remoteTags);
+                    return;
+                }
             } catch (e) {
                 console.error('[FavoriteSyncService] Failed to parse decrypted favorites:', e);
                 return;
@@ -187,7 +191,7 @@ export class FavoriteSyncService {
 
             // Extract eventIds and conversationIds from e tags
             const remoteFavorites = remoteTags
-                .filter(tag => tag[0] === 'e' && tag[1])
+                .filter(tag => Array.isArray(tag) && tag[0] === 'e' && tag[1])
                 .map(tag => ({ eventId: tag[1], conversationId: tag[2] || '' }));
 
             console.log(`[FavoriteSyncService] Found ${remoteFavorites.length} favorites on relay`);

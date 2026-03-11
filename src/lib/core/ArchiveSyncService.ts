@@ -191,6 +191,10 @@ export class ArchiveSyncService {
             let remoteTags: string[][];
             try {
                 remoteTags = JSON.parse(decryptedContent);
+                if (!Array.isArray(remoteTags)) {
+                    console.error('[ArchiveSyncService] Decrypted archives is not an array, got:', typeof remoteTags);
+                    return;
+                }
             } catch (e) {
                 console.error('[ArchiveSyncService] Failed to parse decrypted archives:', e);
                 return;
@@ -201,6 +205,7 @@ export class ArchiveSyncService {
             // - "e" tags contain group hashes (or legacy npub strings from older versions)
             const remoteArchives: string[] = [];
             for (const tag of remoteTags) {
+                if (!Array.isArray(tag) || tag.length < 2) continue;
                 if (tag[0] === 'p' && tag[1]) {
                     try {
                         const npub = nip19.npubEncode(tag[1]);

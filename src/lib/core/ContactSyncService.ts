@@ -186,6 +186,10 @@ export class ContactSyncService {
             let remoteTags: string[][];
             try {
                 remoteTags = JSON.parse(decryptedContent);
+                if (!Array.isArray(remoteTags)) {
+                    console.error('[ContactSyncService] Decrypted contacts is not an array, got:', typeof remoteTags);
+                    return;
+                }
             } catch (e) {
                 console.error('[ContactSyncService] Failed to parse decrypted contacts:', e);
                 return;
@@ -193,7 +197,7 @@ export class ContactSyncService {
 
             // Extract pubkeys from p tags
             const remotePubkeys = remoteTags
-                .filter(tag => tag[0] === 'p' && tag[1])
+                .filter(tag => Array.isArray(tag) && tag[0] === 'p' && tag[1])
                 .map(tag => tag[1]);
 
             console.log(`[ContactSyncService] Found ${remotePubkeys.length} contacts on relay`);
