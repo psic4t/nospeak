@@ -6,12 +6,12 @@ import { signer } from '$lib/stores/auth';
 const BLOSSOM_AUTH_KIND = 24242;
 const DEFAULT_EXPIRATION_SECONDS = 5 * 60;
 
-function toBase64(input: string): string {
+function toBase64url(input: string): string {
     if (typeof btoa === 'function') {
-        return btoa(input);
+        return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
 
-    return Buffer.from(input, 'utf8').toString('base64');
+    return Buffer.from(input, 'utf8').toString('base64url');
 }
 
 export async function buildBlossomUploadAuthHeader(params: {
@@ -40,7 +40,7 @@ export async function buildBlossomUploadAuthHeader(params: {
 
     const signed = await s.signEvent(event);
     const json = JSON.stringify(signed);
-    const token = toBase64(json);
+    const token = toBase64url(json);
 
     return `Nostr ${token}`;
 }
