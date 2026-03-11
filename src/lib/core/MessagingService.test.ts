@@ -821,6 +821,75 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect(result).toBeNull();
         });
 
+        it('handleGiftWrap returns early when event.content is empty', async () => {
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: '',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            await (messagingService as any).handleGiftWrap(giftWrapEvent);
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                '[NIP-17] Gift wrap event has no content to decrypt, id:',
+                expect.any(String)
+            );
+            expect(mockSigner.decrypt).not.toHaveBeenCalled();
+            consoleSpy.mockRestore();
+        });
+
+        it('handleGiftWrap logs error when decrypted seal is not valid JSON', async () => {
+            mockSigner.decrypt = vi.fn().mockResolvedValueOnce('not-valid-json');
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            await (messagingService as any).handleGiftWrap(giftWrapEvent);
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to unwrap/decrypt message:',
+                expect.any(Error)
+            );
+            consoleSpy.mockRestore();
+        });
+
+        it('handleGiftWrap logs error when decrypted seal has wrong structure', async () => {
+            mockSigner.decrypt = vi.fn().mockResolvedValueOnce(JSON.stringify({ foo: 'bar' }));
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            const giftWrapEvent = {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+
+            await (messagingService as any).handleGiftWrap(giftWrapEvent);
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to unwrap/decrypt message:',
+                expect.objectContaining({ message: expect.stringContaining('not a valid Nostr event') })
+            );
+            consoleSpy.mockRestore();
+        });
+
         it('processGiftWrapToMessage should reject mismatched seal/rumor pubkeys', async () => {
             const rumorWithDifferentPubkey = JSON.stringify({
                 kind: 14,

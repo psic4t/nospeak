@@ -28,6 +28,16 @@ import type { Conversation } from '$lib/db/db';
     private readonly HISTORY_FETCH_DEBOUNCE = 5000; // 5 seconds
 
     private liveSeenEventIds: Set<string> = new Set();
+
+    /** Validate that a parsed object has the minimum shape of a NostrEvent */
+    private isValidEventShape(obj: unknown): obj is NostrEvent {
+        return (
+            obj !== null &&
+            typeof obj === 'object' &&
+            typeof (obj as any).kind === 'number' &&
+            typeof (obj as any).pubkey === 'string'
+        );
+    }
  
     private activeSubscriptionUnsub: (() => void) | null = null;
     private activeSubscriptionPubkey: string | null = null;
@@ -139,8 +149,16 @@ import type { Conversation } from '$lib/db/db';
 
     try {
       // Step 1: Decrypt Gift Wrap
+      if (!event.content || typeof event.content !== 'string') {
+        console.warn('[NIP-17] Gift wrap event has no content to decrypt, id:', event.id?.substring(0, 8));
+        return;
+      }
       const decryptedGiftWrap = await s.decrypt(event.pubkey, event.content);
-      const seal = JSON.parse(decryptedGiftWrap) as NostrEvent;
+      const sealCandidate = JSON.parse(decryptedGiftWrap);
+      if (!this.isValidEventShape(sealCandidate)) {
+        throw new Error('Decrypted gift wrap is not a valid Nostr event');
+      }
+      const seal = sealCandidate as NostrEvent;
 
       if (seal.kind !== 13) throw new Error(`Expected Seal (Kind 13), got ${seal.kind}`);
 
@@ -158,7 +176,11 @@ import type { Conversation } from '$lib/db/db';
 
       // Step 2: Decrypt Seal
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
-      const rumor = JSON.parse(decryptedSeal) as NostrEvent;
+      const rumorCandidate = JSON.parse(decryptedSeal);
+      if (!this.isValidEventShape(rumorCandidate) || !Array.isArray(rumorCandidate.tags)) {
+        throw new Error('Decrypted rumor is not a valid Nostr event');
+      }
+      const rumor = rumorCandidate as NostrEvent;
 
       // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
       if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
@@ -174,7 +196,7 @@ import type { Conversation } from '$lib/db/db';
       // Validate p tags in rumor - for group messages, my pubkey must be in at least one p-tag
       // For self-sent messages, sender pubkey equals my pubkey
       const myPubkey = await s.getPublicKey();
-      const pTags = rumor.tags.filter(t => t[0] === 'p');
+      const pTags = rumor.tags.filter(t => Array.isArray(t) && t.length >= 2 && t[0] === 'p');
       const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
 
       if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
@@ -201,8 +223,16 @@ import type { Conversation } from '$lib/db/db';
 
     try {
       // Step 1: Decrypt Gift Wrap
+      if (!event.content || typeof event.content !== 'string') {
+        console.warn('[NIP-17] Gift wrap event has no content to decrypt, id:', event.id?.substring(0, 8));
+        return null;
+      }
       const decryptedGiftWrap = await s.decrypt(event.pubkey, event.content);
-      const seal = JSON.parse(decryptedGiftWrap) as NostrEvent;
+      const sealCandidate = JSON.parse(decryptedGiftWrap);
+      if (!this.isValidEventShape(sealCandidate)) {
+        throw new Error('Decrypted gift wrap is not a valid Nostr event');
+      }
+      const seal = sealCandidate as NostrEvent;
 
       if (seal.kind !== 13) throw new Error(`Expected Seal (Kind 13), got ${seal.kind}`);
 
@@ -220,7 +250,11 @@ import type { Conversation } from '$lib/db/db';
 
       // Step 2: Decrypt Seal
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
-      const rumor = JSON.parse(decryptedSeal) as NostrEvent;
+      const rumorCandidate = JSON.parse(decryptedSeal);
+      if (!this.isValidEventShape(rumorCandidate) || !Array.isArray(rumorCandidate.tags)) {
+        throw new Error('Decrypted rumor is not a valid Nostr event');
+      }
+      const rumor = rumorCandidate as NostrEvent;
 
       // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
       if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
@@ -236,7 +270,7 @@ import type { Conversation } from '$lib/db/db';
       // Validate p tags in rumor - for group messages, my pubkey must be in at least one p-tag
       // For self-sent messages, sender pubkey equals my pubkey
       const myPubkey = await s.getPublicKey();
-      const pTags = rumor.tags.filter(t => t[0] === 'p');
+      const pTags = rumor.tags.filter(t => Array.isArray(t) && t.length >= 2 && t[0] === 'p');
       const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
 
       if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
@@ -269,7 +303,7 @@ import type { Conversation } from '$lib/db/db';
       // NIP-17: "The set of pubkey + p tags defines a chat room."
       // Some clients (e.g. Amethyst) redundantly include the sender in p-tags,
       // so we must deduplicate before deciding if this is a group chat.
-      const pTags = rumor.tags.filter(t => t[0] === 'p');
+      const pTags = rumor.tags.filter(t => Array.isArray(t) && t.length >= 2 && t[0] === 'p');
       const pTagPubkeys = pTags.map(t => t[1]);
       const allParticipantPubkeys = [...new Set([...pTagPubkeys, rumor.pubkey])];
       const otherParticipants = allParticipantPubkeys.filter(p => p !== myPubkey);
@@ -310,16 +344,16 @@ import type { Conversation } from '$lib/db/db';
       const rumorId = getEventHash(rumor);
 
       if (rumor.kind === 15) {
-        const fileTypeTag = rumor.tags.find(t => t[0] === 'file-type');
-        const sizeTag = rumor.tags.find(t => t[0] === 'size');
-        const hashTag = rumor.tags.find(t => t[0] === 'x');
-        const plainHashTag = rumor.tags.find(t => t[0] === 'ox');
-        const encAlgTag = rumor.tags.find(t => t[0] === 'encryption-algorithm');
-        const keyTag = rumor.tags.find(t => t[0] === 'decryption-key');
-        const nonceTag = rumor.tags.find(t => t[0] === 'decryption-nonce');
-        const dimTag = rumor.tags.find(t => t[0] === 'dim');
-        const blurhashTag = rumor.tags.find(t => t[0] === 'blurhash');
-        const altTag = rumor.tags.find(t => t[0] === 'alt');
+        const fileTypeTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'file-type');
+        const sizeTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'size');
+        const hashTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'x');
+        const plainHashTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'ox');
+        const encAlgTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'encryption-algorithm');
+        const keyTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'decryption-key');
+        const nonceTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'decryption-nonce');
+        const dimTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'dim');
+        const blurhashTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'blurhash');
+        const altTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'alt');
 
         const fileType = fileTypeTag?.[1];
         const fileSize = sizeTag ? parseInt(sizeTag[1], 10) || undefined : undefined;
@@ -341,7 +375,7 @@ import type { Conversation } from '$lib/db/db';
         return {
           recipientNpub: partnerNpub,
           message: altTag?.[1] || '',
-          sentAt: rumor.created_at * 1000,
+          sentAt: typeof rumor.created_at === 'number' ? rumor.created_at * 1000 : Date.now(),
           eventId: originalEventId,
           rumorId,
           direction,
@@ -365,14 +399,14 @@ import type { Conversation } from '$lib/db/db';
       }
 
       // Default text (Kind 14) path
-      const parentTag = rumor.tags.find(t => t[0] === 'e');
+      const parentTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'e');
       const parentRumorId = parentTag?.[1];
       const location = this.parseLocationFromRumor(rumor);
 
       return {
         recipientNpub: partnerNpub,
-        message: rumor.content,
-        sentAt: rumor.created_at * 1000,
+        message: rumor.content ?? '',
+        sentAt: typeof rumor.created_at === 'number' ? rumor.created_at * 1000 : Date.now(),
         eventId: originalEventId,
         rumorId,
         direction,
@@ -400,7 +434,7 @@ import type { Conversation } from '$lib/db/db';
   ): Promise<void> {
     try {
       const existing = await conversationRepo.getConversation(conversationId);
-      const subjectTag = rumor.tags.find(t => t[0] === 'subject');
+      const subjectTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'subject');
       const subject = subjectTag?.[1];
       const hasSubjectTag = !!subjectTag;
       const rumorCreatedAtMs = (rumor.created_at || 0) * 1000;
@@ -434,7 +468,7 @@ import type { Conversation } from '$lib/db/db';
   }
 
   private parseLocationFromRumor(rumor: NostrEvent): { latitude: number; longitude: number } | undefined {
-    const locationTag = rumor.tags.find(t => t[0] === 'location' && !!t[1]);
+    const locationTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'location' && !!t[1]);
     const raw = locationTag?.[1] || (rumor.content?.startsWith('geo:') ? rumor.content.slice('geo:'.length) : undefined);
 
     if (!raw) {
@@ -508,12 +542,12 @@ import type { Conversation } from '$lib/db/db';
 
     try {
       const myPubkey = await s.getPublicKey();
-      const pTag = rumor.tags.find(t => t[0] === 'p');
+      const pTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'p');
       if (!pTag || (pTag[1] !== myPubkey && rumor.pubkey !== myPubkey)) {
         return;
       }
 
-      const eTag = rumor.tags.find(t => t[0] === 'e');
+      const eTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'e');
       if (!eTag || !eTag[1]) {
         return;
       }
