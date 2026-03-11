@@ -125,7 +125,7 @@ export class ProfileResolver {
             const cleanup = connectionManager.subscribe(filters, (event) => {
                 if (event.kind === 0 && !foundProfile) {
                     try {
-                        metadata = JSON.parse(event.content);
+                        metadata = JSON.parse(event.content || '{}');
                         foundProfile = true;
                     } catch (e) {
                         console.error('Failed to parse profile metadata', e);
@@ -231,7 +231,7 @@ export class ProfileResolver {
 
             if (event.kind === 0 && !data.foundProfile) {
                 try {
-                    data.metadata = JSON.parse(event.content);
+                    data.metadata = JSON.parse(event.content || '{}');
                     data.foundProfile = true;
                 } catch (e) {
                     console.error(`[ProfileResolver] Failed to parse profile metadata for ${npub}`, e);
@@ -285,6 +285,8 @@ export class ProfileResolver {
     }
 
     private parseMessagingRelayList(event: any): string[] {
+        if (!event?.tags || !Array.isArray(event.tags)) return [];
+
         const urls: string[] = [];
         const seen = new Set<string>();
  
@@ -302,6 +304,8 @@ export class ProfileResolver {
     }
  
     private parseNIP65RelayList(event: any): { read: string[], write: string[] } {
+        if (!event?.tags || !Array.isArray(event.tags)) return { read: [], write: [] };
+
         const read: string[] = [];
         const write: string[] = [];
         const seenRead = new Set<string>();

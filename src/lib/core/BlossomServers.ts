@@ -20,6 +20,8 @@ export function normalizeBlossomServerUrl(input: string): string | null {
 }
 
 export function parseBlossomServerListEvent(event: { tags: string[][] }): string[] {
+    if (!event?.tags || !Array.isArray(event.tags)) return [];
+
     const servers: string[] = [];
     const seen = new Set<string>();
 
