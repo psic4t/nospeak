@@ -67,43 +67,4 @@ describe('buildBlossomUploadAuthHeader', () => {
         const expirationTag = (eventArg.tags ?? []).find((t: string[]) => t[0] === 'expiration');
         expect(expirationTag).toBeDefined();
     });
-
-    it('produces a base64url-encoded token (no + / or = characters)', async () => {
-        const signEvent = vi.fn(async (event) => ({
-            id: 'a'.repeat(64),
-            // signature with bytes that produce + and / in standard base64
-            sig: 'fb' + 'ef'.repeat(31),
-            pubkey: 'ff'.repeat(32),
-            kind: event.kind!,
-            created_at: event.created_at!,
-            tags: event.tags ?? [],
-            content: event.content ?? ''
-        }));
-
-        const mockSigner: Signer = {
-            async getPublicKey() {
-                return 'ff'.repeat(32);
-            },
-            signEvent: signEvent as any,
-            async encrypt() {
-                return '';
-            },
-            async decrypt() {
-                return '';
-            }
-        };
-
-        (signer as any).set(mockSigner);
-
-        const header = await buildBlossomUploadAuthHeader({ sha256: 'deadbeef' });
-        expect(header).toMatch(/^Nostr /);
-
-        const token = header!.replace('Nostr ', '');
-        expect(token).not.toMatch(/[+/=]/);
-
-        // verify it decodes correctly as base64url
-        const decoded = JSON.parse(atob(token.replace(/-/g, '+').replace(/_/g, '/')));
-        expect(decoded.kind).toBe(24242);
-        expect(decoded.created_at).toBe(Math.floor(new Date('2025-01-01T00:00:00Z').getTime() / 1000));
-    });
 });
