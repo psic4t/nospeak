@@ -43,7 +43,13 @@ export async function enablePin(pin: string): Promise<void> {
     localStorage.setItem(PIN_HASH_KEY, hash);
 
     const saved = localStorage.getItem(SETTINGS_KEY);
-    const settings = saved ? JSON.parse(saved) : {};
+    let settings: any = {};
+    try {
+        settings = saved ? JSON.parse(saved) : {};
+    } catch {
+        console.warn('[PIN] Corrupted settings in localStorage, resetting');
+        settings = {};
+    }
     settings.pinEnabled = true;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 
@@ -57,7 +63,13 @@ export function disablePin(): void {
     localStorage.removeItem(PIN_HASH_KEY);
 
     const saved = localStorage.getItem(SETTINGS_KEY);
-    const settings = saved ? JSON.parse(saved) : {};
+    let settings: any = {};
+    try {
+        settings = saved ? JSON.parse(saved) : {};
+    } catch {
+        console.warn('[PIN] Corrupted settings in localStorage, resetting');
+        settings = {};
+    }
     settings.pinEnabled = false;
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 

@@ -100,7 +100,7 @@ export async function verifyNip05(nip05: string, pubkeyHex: string): Promise<Nip
     return result;
 }
 
-export async function resolveNip05ToNpub(nip05: string): Promise<string> {
+export async function resolveNip05ToNpub(nip05: string): Promise<string | null> {
     const trimmed = (nip05 || '').trim();
 
     const atIndex = trimmed.indexOf('@');
@@ -122,7 +122,12 @@ export async function resolveNip05ToNpub(nip05: string): Promise<string> {
         throw new Error(`http-${resp.status}`);
     }
 
-    const json = await resp.json();
+    let json: any;
+    try {
+        json = await resp.json();
+    } catch {
+        return null;
+    }
     const names = (json as any).names;
 
     if (!names || typeof names !== 'object') {

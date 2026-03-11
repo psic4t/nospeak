@@ -314,6 +314,9 @@ export function createContactsController() {
 
             try {
                 const hexPubkey = await resolveNip05ToNpub(query);
+                if (!hexPubkey) {
+                    throw new Error('invalid-response');
+                }
                 const npub = nip19.npubEncode(hexPubkey);
 
                 const existingContact = contacts.find(c => c.npub === npub);

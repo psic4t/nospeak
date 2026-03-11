@@ -74,7 +74,12 @@ export class Nip55Signer implements Signer {
             currentUserPubkeyHex: pubkeyHex
         });
 
-        const parsed = JSON.parse(signedEventJson) as NostrEvent;
+        let parsed: NostrEvent;
+        try {
+            parsed = JSON.parse(signedEventJson) as NostrEvent;
+        } catch {
+            throw new Error('NIP-55 Android signer returned invalid JSON for signed event');
+        }
         return parsed;
     }
 
