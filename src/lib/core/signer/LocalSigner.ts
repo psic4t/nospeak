@@ -36,8 +36,7 @@ export class LocalSigner implements Signer {
             try {
                 return await nip04.decrypt(this.privateKey, sender, ciphertext);
             } catch (e2) {
-                // If both fail
-                throw e;
+                throw new Error(`Decryption failed. NIP-44: ${(e as Error).message}; NIP-04 fallback: ${(e2 as Error).message}`);
             }
         }
     }
