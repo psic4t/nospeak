@@ -120,6 +120,7 @@ async function putUpload(params: {
         xhr.open('PUT', `${params.server}/upload`);
         xhr.setRequestHeader('Authorization', authHeader);
         xhr.setRequestHeader('Content-Type', params.mimeType);
+        xhr.setRequestHeader('X-SHA-256', params.sha256);
         xhr.send(params.body);
     });
 }
@@ -185,6 +186,7 @@ async function putMirror(params: {
         xhr.open('PUT', `${params.server}/mirror`);
         xhr.setRequestHeader('Authorization', authHeader);
         xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('X-SHA-256', params.sha256);
         xhr.send(JSON.stringify({ url: params.url }));
     });
 }

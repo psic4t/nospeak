@@ -162,7 +162,35 @@ describe('uploadToBlossomServers mirroring', () => {
         expect(MockXMLHttpRequest.requests[0].headers.Authorization).toBe('Nostr test');
         expect(MockXMLHttpRequest.requests[1].headers.Authorization).toBe('Nostr test');
 
+        expect(MockXMLHttpRequest.requests[0].headers['X-SHA-256']).toBe('deadbeef');
+        expect(MockXMLHttpRequest.requests[1].headers['X-SHA-256']).toBe('deadbeef');
+
         expect(MockXMLHttpRequest.requests[1].body).toBe(JSON.stringify({ url: 'https://a/file' }));
+    });
+
+    it('sends X-SHA-256 header on upload requests', async () => {
+        const sha = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+
+        MockXMLHttpRequest.respond({
+            method: 'PUT',
+            url: 'https://a/upload',
+            status: 200,
+            responseText: descriptorJson('https://a/file')
+        });
+
+        const blob = new Blob(['abc'], { type: 'text/plain' });
+
+        await uploadToBlossomServers({
+            servers: ['https://a'],
+            body: blob,
+            mimeType: 'text/plain',
+            sha256: sha
+        });
+
+        expect(MockXMLHttpRequest.requests).toHaveLength(1);
+        expect(MockXMLHttpRequest.requests[0].headers['X-SHA-256']).toBe(sha);
+        expect(MockXMLHttpRequest.requests[0].headers['Content-Type']).toBe('text/plain');
+        expect(MockXMLHttpRequest.requests[0].headers.Authorization).toBe('Nostr test');
     });
 
     it('falls back to PUT /upload when /mirror is unsupported', async () => {
