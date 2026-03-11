@@ -687,7 +687,7 @@ describe('MessagingService - Auto-add Contacts', () => {
             const validSeal = JSON.stringify({
                 kind: 13,
                 pubkey: senderPubkey,
-                content: 'encrypted-rumor',
+                content: 'A'.repeat(132), // Must be >= 132 chars to pass NIP-44 payload length validation
                 created_at: 1600000000,
                 tags: [],
                 sig: 'valid-signature',
@@ -743,7 +743,7 @@ describe('MessagingService - Auto-add Contacts', () => {
             const sealWithSenderPubkey = JSON.stringify({
                 kind: 13,
                 pubkey: senderPubkey, // Doesn't match rumor.pubkey
-                content: 'encrypted-rumor',
+                content: 'A'.repeat(132), // Must be >= 132 chars to pass NIP-44 payload length validation
                 created_at: 1600000000,
                 tags: [],
                 sig: 'valid-signature',
@@ -833,7 +833,7 @@ describe('MessagingService - Auto-add Contacts', () => {
             const sealWithSenderPubkey = JSON.stringify({
                 kind: 13,
                 pubkey: senderPubkey,
-                content: 'encrypted-rumor',
+                content: 'A'.repeat(132), // Must be >= 132 chars to pass NIP-44 payload length validation
                 created_at: 1600000000,
                 tags: [],
                 sig: 'valid-signature',

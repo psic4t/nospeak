@@ -150,6 +150,12 @@ import type { Conversation } from '$lib/db/db';
       }
       if (this.debug) console.log('[NIP-17] Seal signature verified successfully');
 
+      // NIP-44 ciphertext must be at least 132 base64 characters
+      if (!seal.content || seal.content.length < 132) {
+        console.warn(`[NIP-17] Skipping seal with invalid content (length: ${seal.content?.length}, pubkey: ${seal.pubkey})`);
+        return;
+      }
+
       // Step 2: Decrypt Seal
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
       const rumor = JSON.parse(decryptedSeal) as NostrEvent;
@@ -205,6 +211,12 @@ import type { Conversation } from '$lib/db/db';
         throw new Error('Invalid seal signature - possible forgery attempt');
       }
       if (this.debug) console.log('[NIP-17] Seal signature verified successfully (processGiftWrap)');
+
+      // NIP-44 ciphertext must be at least 132 base64 characters
+      if (!seal.content || seal.content.length < 132) {
+        console.warn(`[NIP-17] Skipping seal with invalid content (length: ${seal.content?.length}, pubkey: ${seal.pubkey})`);
+        return null;
+      }
 
       // Step 2: Decrypt Seal
       const decryptedSeal = await s.decrypt(seal.pubkey, seal.content);
