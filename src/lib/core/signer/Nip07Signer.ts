@@ -151,22 +151,25 @@ export class Nip07Signer implements Signer {
     }
 
     private async queueOperation<T>(operation: () => Promise<T>, minDelay: number = 200): Promise<T> {
-        // Add operation to queue to serialize them
-        Nip07Signer.operationQueue = Nip07Signer.operationQueue.then(async () => {
+        // Chain operation onto queue, but capture THIS operation's promise
+        // before reassigning the shared queue variable (otherwise all concurrent
+        // callers would await the last-queued operation's result instead of their own).
+        const myPromise = Nip07Signer.operationQueue.then(async () => {
             // Add delay between operations to give user time to accept prompts
             const now = Date.now();
             const timeSinceLastOp = now - Nip07Signer.lastOperationTime;
-            
+
             if (timeSinceLastOp < minDelay) {
                 const delay = minDelay - timeSinceLastOp;
-                    await new Promise(resolve => setTimeout(resolve, delay));
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
-            
+
             Nip07Signer.lastOperationTime = Date.now();
             return operation();
         });
-        
-        return Nip07Signer.operationQueue;
+        Nip07Signer.operationQueue = myPromise;
+
+        return myPromise;
     }
 
     private checkExtension() {
