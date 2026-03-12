@@ -1,6 +1,7 @@
 <script lang="ts">
     import Avatar from './Avatar.svelte';
     import { hapticSelection } from '$lib/utils/haptics';
+    import { tick } from 'svelte';
     import { fade } from 'svelte/transition';
     import { glassModal } from '$lib/utils/transitions';
     import { t } from '$lib/i18n';
@@ -205,9 +206,13 @@
                     <button
                         type="button"
                         class="flex items-center gap-3 text-start bg-transparent text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200 ease-out active:scale-[0.98]"
-                        onclick={() => {
+                        onclick={async () => {
                             hapticSelection();
                             ctrl.toggleSearchField();
+                            if (ctrl.showSearchField) {
+                                await tick();
+                                document.getElementById('contact-search-input')?.focus();
+                            }
                         }}
                     >
                         <div class="w-12 h-12 rounded-full bg-[rgb(var(--color-lavender-rgb))] flex items-center justify-center flex-shrink-0">
