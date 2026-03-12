@@ -87,8 +87,8 @@ function sortSearchResults(list: SearchResultWithStatus[]): SearchResultWithStat
             return nameA.localeCompare(nameB);
         }
 
-        const nipA = (a.nip05 || '').toLowerCase();
-        const nipB = (b.nip05 || '').toLowerCase();
+        const nipA = (typeof a.nip05 === 'string' ? a.nip05 : '').toLowerCase();
+        const nipB = (typeof b.nip05 === 'string' ? b.nip05 : '').toLowerCase();
         if (nipA !== nipB) {
             return nipA.localeCompare(nipB);
         }
@@ -172,8 +172,8 @@ export function createContactsController() {
             if (profile && profile.metadata) {
                 name = resolveDisplayName(profile.metadata, c.npub);
                 picture = profile.metadata.picture;
-                const rawName = profile.metadata.name?.trim();
-                const rawDisplay = profile.metadata.display_name?.trim();
+                const rawName = typeof profile.metadata.name === 'string' ? profile.metadata.name.trim() : undefined;
+                const rawDisplay = typeof profile.metadata.display_name === 'string' ? profile.metadata.display_name.trim() : undefined;
                 if (rawDisplay && rawName && rawDisplay !== rawName) {
                     username = rawName;
                 }
@@ -195,7 +195,7 @@ export function createContactsController() {
 
     async function startNip05Verification(initialResults: SearchResultWithStatus[]): Promise<void> {
         const currentToken = ++nip05VerifyToken;
-        const candidates = initialResults.filter(r => r.nip05).slice(0, 5);
+        const candidates = initialResults.filter(r => typeof r.nip05 === 'string' && r.nip05).slice(0, 5);
 
         for (const candidate of candidates) {
             try {

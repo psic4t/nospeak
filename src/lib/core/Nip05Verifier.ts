@@ -23,8 +23,13 @@ function buildCacheKey(nip05: string, pubkeyHex: string): string {
 }
 
 export async function verifyNip05(nip05: string, pubkeyHex: string): Promise<Nip05VerificationResult> {
-    const trimmed = (nip05 || '').trim();
     const now = Date.now();
+
+    if (typeof nip05 !== 'string') {
+        return { status: 'invalid', nip05: '', checkedAt: now, error: 'not-a-string' };
+    }
+
+    const trimmed = nip05.trim();
 
     if (!trimmed) {
         return { status: 'invalid', nip05: '', checkedAt: now, error: 'empty-nip05' };
@@ -54,8 +59,11 @@ export async function verifyNip05(nip05: string, pubkeyHex: string): Promise<Nip
     let matchedPubkey: string | undefined;
     let error: string | undefined;
 
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 8000);
+
     try {
-        const resp = await fetch(url);
+        const resp = await fetch(url, { signal: controller.signal });
 
         if (!resp.ok) {
             error = `http-${resp.status}`;
@@ -85,6 +93,8 @@ export async function verifyNip05(nip05: string, pubkeyHex: string): Promise<Nip
     } catch (e: any) {
         status = 'unknown';
         error = e?.message || 'network-error';
+    } finally {
+        clearTimeout(fetchTimeout);
     }
 
     const result: Nip05VerificationResult = {
@@ -101,7 +111,11 @@ export async function verifyNip05(nip05: string, pubkeyHex: string): Promise<Nip
 }
 
 export async function resolveNip05ToNpub(nip05: string): Promise<string | null> {
-    const trimmed = (nip05 || '').trim();
+    if (typeof nip05 !== 'string') {
+        throw new Error('invalid-format');
+    }
+
+    const trimmed = nip05.trim();
 
     const atIndex = trimmed.indexOf('@');
     if (atIndex <= 0 || atIndex === trimmed.length - 1) {
@@ -117,7 +131,15 @@ export async function resolveNip05ToNpub(nip05: string): Promise<string | null> 
 
     const url = `https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(localPart)}`;
 
-    const resp = await fetch(url);
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 8000);
+
+    let resp: Response;
+    try {
+        resp = await fetch(url, { signal: controller.signal });
+    } finally {
+        clearTimeout(fetchTimeout);
+    }
     if (!resp.ok) {
         throw new Error(`http-${resp.status}`);
     }

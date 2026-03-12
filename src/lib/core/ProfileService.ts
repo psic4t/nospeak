@@ -41,7 +41,7 @@ export class ProfileService {
             error?: string;
         } | undefined;
 
-        if (metadata.nip05) {
+        if (typeof metadata.nip05 === 'string' && metadata.nip05) {
             try {
                 const pubkeyForVerification = await currentSigner.getPublicKey();
                 const result = await verifyNip05(metadata.nip05, pubkeyForVerification);

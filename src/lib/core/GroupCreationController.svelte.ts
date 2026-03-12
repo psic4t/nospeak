@@ -65,8 +65,8 @@ export function createGroupCreationController() {
             if (profile && profile.metadata) {
                 name = resolveDisplayName(profile.metadata, c.npub);
                 picture = profile.metadata.picture;
-                const rawName = profile.metadata.name?.trim();
-                const rawDisplay = profile.metadata.display_name?.trim();
+                const rawName = typeof profile.metadata.name === 'string' ? profile.metadata.name.trim() : undefined;
+                const rawDisplay = typeof profile.metadata.display_name === 'string' ? profile.metadata.display_name.trim() : undefined;
                 if (rawDisplay && rawName && rawDisplay !== rawName) {
                     username = rawName;
                 }

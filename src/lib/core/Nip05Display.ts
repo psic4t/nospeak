@@ -1,5 +1,6 @@
 export function getDisplayedNip05(raw: string): string {
-    const value = (raw || '').trim();
+    if (typeof raw !== 'string') return '';
+    const value = raw.trim();
     if (!value) {
         return '';
     }

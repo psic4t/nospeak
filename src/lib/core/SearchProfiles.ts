@@ -29,7 +29,13 @@ export async function searchProfiles(query: string, limit: number = 20): Promise
     const seenPubkeys = new Set<string>();
 
     try {
-        relay = await Relay.connect(getSearchRelayUrl());
+        const CONNECT_TIMEOUT_MS = 5000;
+        relay = await Promise.race([
+            Relay.connect(getSearchRelayUrl()),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('relay-connect-timeout')), CONNECT_TIMEOUT_MS)
+            )
+        ]);
 
         const filters = [{
             kinds: [0],
@@ -77,7 +83,7 @@ export async function searchProfiles(query: string, limit: number = 20): Promise
                         npub,
                         name,
                         picture: metadata.picture,
-                        nip05: metadata.nip05,
+                        nip05: typeof metadata.nip05 === 'string' ? metadata.nip05 : undefined,
                         about: metadata.about
                     });
                 },

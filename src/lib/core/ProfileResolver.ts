@@ -52,7 +52,7 @@ export class ProfileResolver {
             pubkey?: string;
             error?: string;
         } | undefined> => {
-            if (!currentMetadata || !currentMetadata.nip05) {
+            if (!currentMetadata || typeof currentMetadata.nip05 !== 'string' || !currentMetadata.nip05) {
                 return undefined;
             }
 
