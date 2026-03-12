@@ -9,8 +9,9 @@
      import { page } from '$app/state';
      import { contactRepo } from '$lib/db/ContactRepository';
      import { conversationRepo, isGroupConversationId } from '$lib/db/ConversationRepository';
-     import { consumePendingAndroidMediaShare, consumePendingAndroidTextShare } from '$lib/stores/androidShare';
+     import { pendingAndroidMediaShare, pendingAndroidTextShare, setPendingAndroidMediaShare, setPendingAndroidTextShare } from '$lib/stores/androidShare';
      import { isAndroidNative } from '$lib/core/NativeDialogs';
+     import { get } from 'svelte/store';
      import { chatVisitRefreshService } from '$lib/core/ChatVisitRefreshService';
      
      const PAGE_SIZE = 50;
@@ -258,20 +259,60 @@
          initialLoadDone = true;
      });
 
-    // Consume any pending Android inbound share after contact selection
+    // --- Android inbound share consumption (two paths) ---
+    //
+    // 1) Reactive $effect — handles Direct Share with a known targetConversationId.
+    //    Only consumes when the target matches THIS chat. The old page (different
+    //    convId) correctly ignores the store, so the new page picks it up after
+    //    {#key} remounts.
+    //
+    // 2) onMount — handles the contact-selection flow (requiresContactSelection).
+    //    Runs once when this page freshly mounts (user navigated here from ChatList).
+    //    Uses imperative get() so it does NOT create a reactive dependency — the old
+    //    page's $effect never fires for untargeted shares.
+
+    // Path 1: Direct Share — reactive, guarded by targetConversationId
     $effect(() => {
         const convId = conversationId;
         if (!convId || !isAndroidNative()) {
             return;
         }
 
-        const media = consumePendingAndroidMediaShare();
-        const text = consumePendingAndroidTextShare();
+        // Read stores reactively — creates Svelte dependency so the effect
+        // re-runs whenever a new share is placed in either store.
+        const media = $pendingAndroidMediaShare;
+        const text = $pendingAndroidTextShare;
 
-        initialSharedMedia = media ? { file: media.file, mediaType: media.mediaType } : null;
-        initialSharedText = text ? text.text : null;
+        if (media?.targetConversationId === convId) {
+            initialSharedMedia = { file: media.file, mediaType: media.mediaType };
+            // Clear after consuming; use tick() to avoid mutating a dependency
+            // inside the same $effect synchronously (which would re-trigger it).
+            tick().then(() => setPendingAndroidMediaShare(null));
+        }
+
+        if (text?.targetConversationId === convId) {
+            initialSharedText = text.text;
+            tick().then(() => setPendingAndroidTextShare(null));
+        }
     });
 
+
+    // Path 2: Contact-selection flow — one-time on mount, imperative
+    onMount(() => {
+        if (!isAndroidNative()) return;
+
+        const media = get(pendingAndroidMediaShare);
+        const text = get(pendingAndroidTextShare);
+
+        if (media?.requiresContactSelection) {
+            initialSharedMedia = { file: media.file, mediaType: media.mediaType };
+            setPendingAndroidMediaShare(null);
+        }
+        if (text?.requiresContactSelection) {
+            initialSharedText = text.text;
+            setPendingAndroidTextShare(null);
+        }
+    });
 
     onMount(() => {
         const handleNewMessage = async (event: Event) => {

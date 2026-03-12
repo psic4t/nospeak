@@ -243,21 +243,13 @@
           });
       }
 
-      // If restored and on login page, go to chat (replace to keep login out of history)
-      if (restored && location.pathname === "/" && !routedFromNotification) {
-        await goto("/chat", { replaceState: true });
-      }
-
-      // Only set initialized after auth restore AND any navigation is complete
-      isInitialized = true;
- 
-     // Handle Android inbound shares after auth restore
-     if (isAndroidNative() && AndroidShareTarget) {
-       const handleSharePayload = async (payload: AndroidSharePayload): Promise<void> => {
+     // Handle Android inbound shares - define handler and process cold-start intent
+     // BEFORE isInitialized to prevent race with desktop auto-navigate in chat/+layout
+     const handleSharePayload = async (payload: AndroidSharePayload): Promise<void> => {
          if (!payload) {
              return;
          }
- 
+
          if (!$currentUser) {
              try {
                  await nativeDialogService.alert({
@@ -269,74 +261,91 @@
              }
              return;
          }
- 
-          // Handle error payloads from native layer (e.g. permission denied)
-          if (payload.kind === 'error') {
-              try {
-                  await nativeDialogService.alert({
-                      title: 'Share failed',
-                      message: payload.message
-                  });
-              } catch {
-                  // ignore
-              }
-              return;
-          }
 
-          // Check if this is a Direct Share with a target conversation
-           let targetConversationId = payload.targetConversationId;
-          
-          // If targetConversationId is a truncated npub (starts with npub1 but < 63 chars),
-          // find the full npub from contacts
-          if (targetConversationId && targetConversationId.startsWith('npub1') && targetConversationId.length < 63) {
-              const { contactRepo } = await import('$lib/db/ContactRepository');
-              const contacts = await contactRepo.getContacts();
-              const match = contacts.find(c => c.npub.startsWith(targetConversationId as string));
-              if (match) {
-                  targetConversationId = match.npub;
-              }
-          }
-          
-          const hasDirectTarget = !!targetConversationId;
-
-          if (payload.kind === 'media') {
-              const file = fileFromAndroidMediaPayload(payload);
-              setPendingAndroidMediaShare({
-                  file,
-                  mediaType: payload.mediaType,
-                  requiresContactSelection: !hasDirectTarget,
-                  targetConversationId
-              });
-              setPendingAndroidTextShare(null);
-          } else if (payload.kind === 'text') {
-              if (!payload.text || payload.text.trim().length === 0) {
-                  return;
-              }
-              setPendingAndroidTextShare({
-                  text: payload.text,
-                  requiresContactSelection: !hasDirectTarget,
-                  targetConversationId
-              });
-              setPendingAndroidMediaShare(null);
-          }
- 
-          // Navigate to target conversation directly if Direct Share, otherwise to contact list
-          if (hasDirectTarget && targetConversationId) {
-              await goto(`/chat/${encodeURIComponent(targetConversationId)}`);
-          } else if (location.pathname !== '/chat') {
-              await goto('/chat');
-          }
-       };
- 
-       try {
-         const initial = await AndroidShareTarget.getInitialShare();
-         if (initial) {
-             await handleSharePayload(initial);
+         // Handle error payloads from native layer (e.g. permission denied)
+         if (payload.kind === 'error') {
+             try {
+                 await nativeDialogService.alert({
+                     title: 'Share failed',
+                     message: payload.message
+                 });
+             } catch {
+                 // ignore
+             }
+             return;
          }
-       } catch (e) {
-         console.error('Failed to process initial Android share:', e);
-       }
- 
+
+         // Check if this is a Direct Share with a target conversation
+         let targetConversationId = payload.targetConversationId;
+
+         // If targetConversationId is a truncated npub (starts with npub1 but < 63 chars),
+         // find the full npub from contacts
+         if (targetConversationId && targetConversationId.startsWith('npub1') && targetConversationId.length < 63) {
+             const { contactRepo } = await import('$lib/db/ContactRepository');
+             const contacts = await contactRepo.getContacts();
+             const match = contacts.find(c => c.npub.startsWith(targetConversationId as string));
+             if (match) {
+                 targetConversationId = match.npub;
+             }
+         }
+
+         const hasDirectTarget = !!targetConversationId;
+
+         if (payload.kind === 'media') {
+             const file = fileFromAndroidMediaPayload(payload);
+             setPendingAndroidMediaShare({
+                 file,
+                 mediaType: payload.mediaType,
+                 requiresContactSelection: !hasDirectTarget,
+                 targetConversationId
+             });
+             setPendingAndroidTextShare(null);
+         } else if (payload.kind === 'text') {
+             if (!payload.text || payload.text.trim().length === 0) {
+                 return;
+             }
+             setPendingAndroidTextShare({
+                 text: payload.text,
+                 requiresContactSelection: !hasDirectTarget,
+                 targetConversationId
+             });
+             setPendingAndroidMediaShare(null);
+         }
+
+         // Navigate to target conversation directly if Direct Share, otherwise to contact list
+         if (hasDirectTarget && targetConversationId) {
+             await goto(`/chat/${encodeURIComponent(targetConversationId)}`);
+         } else if (location.pathname !== '/chat') {
+             await goto('/chat');
+         }
+     };
+
+     // Cold start: fetch initial share intent BEFORE isInitialized to ensure
+     // the store is populated before child routes mount and their $effects run
+     let hadInitialShare = false;
+     if (isAndroidNative() && AndroidShareTarget) {
+         try {
+             const initial = await AndroidShareTarget.getInitialShare();
+             if (initial) {
+                 await handleSharePayload(initial);
+                 hadInitialShare = true;
+             }
+         } catch (e) {
+             console.error('Failed to process initial Android share:', e);
+         }
+     }
+
+      // If restored and on login page, go to chat (replace to keep login out of history)
+      // Skip if we already navigated from a share intent
+      if (restored && location.pathname === "/" && !routedFromNotification && !hadInitialShare) {
+        await goto("/chat", { replaceState: true });
+      }
+
+      // Only set initialized after auth restore AND any navigation is complete
+      isInitialized = true;
+
+     // Hot path: register listener for shares arriving while the app is already running
+     if (isAndroidNative() && AndroidShareTarget) {
        void AndroidShareTarget.addListener('shareReceived', (payload) => {
          void handleSharePayload(payload);
        });
