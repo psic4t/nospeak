@@ -100,7 +100,7 @@
     aria-valuemax={seekable ? 100 : undefined}
     aria-valuenow={seekable ? Math.round(clampedProgress * 100) : undefined}
     aria-label={seekable ? 'Audio seek bar' : undefined}
-    class={`flex items-center justify-between gap-[2px] w-full ${seekable ? 'cursor-pointer touch-none select-none' : ''}`}
+    class={`flex items-center justify-between gap-[2px] w-full overflow-hidden ${seekable ? 'cursor-pointer touch-none select-none' : ''}`}
     style={`height: ${heightPx}px`}
     onpointerdown={handlePointerDown}
     onpointermove={handlePointerMove}
