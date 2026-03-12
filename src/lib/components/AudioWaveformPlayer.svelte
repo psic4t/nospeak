@@ -10,6 +10,34 @@
     const durationCache = new Map<string, number>();
     const waveformPromises = new Map<string, Promise<number[]>>();
 
+    // Concurrency limiter for waveform decoding – at most 2 simultaneous
+    // decodeAudioData() calls to avoid CPU spikes when many voice messages
+    // become visible at once.
+    const MAX_CONCURRENT_DECODES = 2;
+    let activeDecodes = 0;
+    let decodeQueue: Array<() => void> = [];
+
+    function acquireDecodeSlot(): Promise<void> {
+        if (activeDecodes < MAX_CONCURRENT_DECODES) {
+            activeDecodes++;
+            return Promise.resolve();
+        }
+        return new Promise<void>((resolve) => {
+            decodeQueue.push(() => {
+                activeDecodes++;
+                resolve();
+            });
+        });
+    }
+
+    function releaseDecodeSlot(): void {
+        activeDecodes--;
+        const next = decodeQueue.shift();
+        if (next) {
+            next();
+        }
+    }
+
     const SPEEDS = [1, 1.5, 2] as const;
 
     let audioElement: HTMLAudioElement | null = null;
@@ -42,26 +70,35 @@
                 }
 
                 const arrayBuffer = await response.arrayBuffer();
-                const AudioContextCtor =
-                    (window as any).AudioContext || (window as any).webkitAudioContext;
 
-                if (!AudioContextCtor) {
-                    throw new Error('AudioContext not available');
+                // Use OfflineAudioContext instead of AudioContext so that
+                // waveform computation never initialises the audio output
+                // hardware.  On Android WebView, creating multiple real
+                // AudioContext instances simultaneously causes audible
+                // speaker crackling as the audio subsystem is repeatedly
+                // acquired / released.
+                const OfflineCtx =
+                    (window as any).OfflineAudioContext ||
+                    (window as any).webkitOfflineAudioContext;
+
+                if (!OfflineCtx) {
+                    throw new Error('OfflineAudioContext not available');
                 }
 
-                const context = new AudioContextCtor() as AudioContext;
+                // Wait for a decode slot before creating the context to
+                // limit concurrent CPU-heavy decodeAudioData() calls.
+                await acquireDecodeSlot();
                 try {
+                    // Minimal context – we only need decodeAudioData(), not
+                    // startRendering().  1 channel, 1 sample, 44100 Hz.
+                    const context = new OfflineCtx(1, 1, 44100) as OfflineAudioContext;
                     const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
                     const computed = computePeaksFromAudioBuffer(decoded, BAR_COUNT);
                     waveformCache.set(targetUrl, computed);
                     durationCache.set(targetUrl, decoded.duration);
                     return computed;
                 } finally {
-                    try {
-                        await context.close();
-                    } catch {
-                        // ignore
-                    }
+                    releaseDecodeSlot();
                 }
             } catch {
                 const fallback = buildFallbackPeaks(targetUrl, BAR_COUNT);
