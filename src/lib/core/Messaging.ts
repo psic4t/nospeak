@@ -182,9 +182,9 @@ import type { Conversation } from '$lib/db/db';
       }
       const rumor = rumorCandidate as NostrEvent;
 
-      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
-      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
-        throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
+      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions and kind 5 deletions
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== 5) {
+        throw new Error(`Expected Rumor (Kind 14, 15, 7, or 5), got ${rumor.kind}`);
       }
 
       // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
@@ -205,6 +205,11 @@ import type { Conversation } from '$lib/db/db';
 
       if (rumor.kind === 7) {
         await this.processReactionRumor(rumor, event.id);
+        return;
+      }
+
+      if (rumor.kind === 5) {
+        await this.processDeletionRumor(rumor, event.id);
         return;
       }
 
@@ -256,9 +261,9 @@ import type { Conversation } from '$lib/db/db';
       }
       const rumor = rumorCandidate as NostrEvent;
 
-      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
-      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
-        throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
+      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions and kind 5 deletions
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== 5) {
+        throw new Error(`Expected Rumor (Kind 14, 15, 7, or 5), got ${rumor.kind}`);
       }
 
       // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
@@ -279,6 +284,11 @@ import type { Conversation } from '$lib/db/db';
 
       if (rumor.kind === 7) {
         await this.processReactionRumor(rumor, event.id);
+        return null;
+      }
+
+      if (rumor.kind === 5) {
+        await this.processDeletionRumor(rumor, event.id);
         return null;
       }
 
@@ -640,6 +650,216 @@ import type { Conversation } from '$lib/db/db';
     }
   }
 
+
+  /**
+   * Process a deletion rumor (kind 5) wrapped in a gift wrap.
+   * Validates that the deletion comes from the original message sender
+   * and marks the message as deleted in the local database.
+   */
+  private async processDeletionRumor(rumor: NostrEvent, originalEventId: string): Promise<void> {
+    const s = get(signer);
+    if (!s) return;
+
+    try {
+      const myPubkey = await s.getPublicKey();
+
+      // Verify p-tags include my pubkey (already validated in handleGiftWrap, but double-check)
+      const pTags = rumor.tags.filter(t => Array.isArray(t) && t.length >= 2 && t[0] === 'p');
+      const myPubkeyInPTags = pTags.some(t => t[1] === myPubkey);
+
+      if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
+        console.warn('Deletion rumor does not include my public key in p-tags, ignoring');
+        return;
+      }
+
+      // Extract e-tags (rumorIds to delete)
+      const eTags = rumor.tags.filter(t => Array.isArray(t) && t.length >= 2 && t[0] === 'e');
+      if (eTags.length === 0) {
+        console.warn('Deletion rumor has no e-tags, ignoring');
+        return;
+      }
+
+      for (const eTag of eTags) {
+        const targetRumorId = eTag[1];
+
+        // Look up message by rumorId (stable ID across all recipients)
+        const message = await messageRepo.getMessageByRumorId(targetRumorId);
+        
+        if (!message) {
+          console.warn('Deletion for unknown rumor:', targetRumorId.substring(0, 16));
+          continue;
+        }
+
+        // CRITICAL: Validate deletion comes from the original message sender
+        const senderPubkey = this.getMessageSenderPubkey(message, myPubkey);
+        if (rumor.pubkey !== senderPubkey) {
+          console.warn('Deletion from non-author, ignoring:', {
+            deletionFrom: rumor.pubkey.substring(0, 8),
+            messageSender: senderPubkey.substring(0, 8),
+            rumorId: targetRumorId.substring(0, 16)
+          });
+          continue;
+        }
+
+        // Mark as deleted
+        if (!message.id) {
+          console.warn('Message has no database ID, cannot mark as deleted');
+          continue;
+        }
+
+        await messageRepo.markMessageDeleted(
+          message.id,
+          rumor.created_at * 1000
+        );
+
+        // Emit UI update event
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nospeak:message-deleted', {
+            detail: { 
+              messageId: message.id,
+              conversationId: message.conversationId,
+              rumorId: targetRumorId
+            }
+          }));
+        }
+
+        if (this.debug) {
+          console.log('Message deleted successfully:', {
+            messageId: message.id,
+            rumorId: targetRumorId,
+            deletedBy: rumor.pubkey.substring(0, 8),
+            reason: rumor.content || '(no reason)'
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to process deletion rumor:', e);
+    }
+  }
+
+  /**
+   * Get the sender pubkey for a message (used for deletion validation).
+   * For sent messages, returns the current user's pubkey.
+   * For received messages, extracts from senderNpub or recipientNpub.
+   */
+  private getMessageSenderPubkey(message: Message, myPubkey: string): string {
+    if (message.direction === 'sent') {
+      return myPubkey;
+    } else if (message.senderNpub) {
+      // Group message: extract from senderNpub
+      return nip19.decode(message.senderNpub).data as string;
+    } else {
+      // 1-on-1 received message: sender is the conversation partner
+      return nip19.decode(message.recipientNpub).data as string;
+    }
+  }
+
+  /**
+   * Check if a message can be deleted by the current user.
+   * Only sent messages can be deleted (you can't delete messages you received).
+   */
+  public canDeleteMessage(message: Message): boolean {
+    return message.direction === 'sent' && !message.deletedAt;
+  }
+
+  /**
+   * Send a deletion request for a message.
+   * Creates a kind 5 rumor and sends it gift-wrapped to all participants.
+   * 
+   * @param message - The message to delete
+   */
+  public async sendDeletionRequest(message: Message): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    // Validate: only sent messages can be deleted
+    if (!this.canDeleteMessage(message)) {
+      throw new Error('Cannot delete this message (only sent messages can be deleted)');
+    }
+
+    if (!message.rumorId) {
+      throw new Error('Message has no rumorId, cannot delete');
+    }
+
+    const myPubkey = await s.getPublicKey();
+    const myNpub = nip19.npubEncode(myPubkey);
+
+    // Determine recipients
+    let recipientNpubs: string[];
+    if (message.participants && message.participants.length > 1) {
+      // Group message: send to all participants except self
+      recipientNpubs = message.participants.filter(npub => npub !== myNpub);
+    } else {
+      // 1-on-1 message: send to the recipient
+      recipientNpubs = [message.recipientNpub];
+    }
+
+    // Include self for cross-device sync
+    const allRecipients = [...recipientNpubs, myNpub];
+
+    // Build deletion rumor
+    const deletionRumor: Partial<NostrEvent> = {
+      kind: 5,
+      pubkey: myPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['e', message.rumorId], // Reference the rumor ID (stable across recipients)
+        ['k', String(message.rumorKind || 14)] // Kind being deleted
+      ],
+      content: ''
+    };
+
+    // Add p-tags for all recipients (NIP-17 compliance)
+    for (const npub of allRecipients) {
+      const pubkey = nip19.decode(npub).data as string;
+      deletionRumor.tags!.push(['p', pubkey]);
+    }
+
+    if (this.debug) {
+      console.log('Sending deletion request:', {
+        rumorId: message.rumorId.substring(0, 16),
+        recipients: allRecipients.length
+      });
+    }
+
+    // Send gift-wrapped deletion to all recipients (including self)
+    try {
+      await this.sendEnvelope({
+        recipients: allRecipients,
+        rumor: deletionRumor,
+        conversationId: message.conversationId,
+        skipDbSave: true // Don't save deletion as a message
+      });
+
+      // Mark deleted locally immediately
+      if (message.id) {
+        await messageRepo.markMessageDeleted(message.id, Date.now());
+        
+        // Emit UI update event
+        if (typeof window !== 'undefined') {
+          // Use setTimeout to ensure event fires after current call stack
+          setTimeout(() => {
+            // For 1-on-1 chats, conversationId should be recipientNpub
+            // For group chats, conversationId is the group hash
+            const conversationId = message.conversationId || message.recipientNpub;
+            
+            window.dispatchEvent(new CustomEvent('nospeak:message-deleted', {
+              detail: { 
+                messageId: message.id,
+                conversationId: conversationId,
+                rumorId: message.rumorId
+              }
+            }));
+          }, 0);
+        }
+      }
+
+      console.log('Deletion request sent successfully');
+    } catch (e) {
+      console.error('Failed to send deletion request:', e);
+      throw new Error('Failed to send deletion request to relays');
+    }
+  }
 
   // Check if this is a first-time sync (empty message cache)
   private async isFirstTimeSync(): Promise<boolean> {

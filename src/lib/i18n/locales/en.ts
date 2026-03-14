@@ -305,8 +305,18 @@ const en = {
             copy: 'Copy',
             sentAt: 'Sent',
             favorite: 'Favorite',
-            unfavorite: 'Remove favorite'
+            unfavorite: 'Remove favorite',
+            delete: 'Delete'
         },
+        delete: {
+            confirmTitle: 'Delete Message?',
+            privacyNotice: 'This will request that all participants in this conversation hide your message, but copies may remain on relays and in apps.',
+            cancel: 'Cancel',
+            confirm: 'Delete',
+            failedTitle: 'Delete Failed',
+            failedMessagePrefix: 'Failed to delete message: '
+        },
+        messageDeleted: 'This message was deleted',
         reactions: {
             cannotReactTitle: 'Cannot React',
             cannotReactMessage: 'This message is too old to support reactions.',
