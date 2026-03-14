@@ -221,6 +221,67 @@ export class MessageRepository {
 
         return items[0];
     }
+
+    /**
+     * Mark a message as deleted (NIP-09).
+     * Updates the message with deletion metadata.
+     * 
+     * @param messageId - The database ID of the message to delete
+     * @param deletedAt - Timestamp when the message was deleted
+     */
+    public async markMessageDeleted(messageId: number, deletedAt: number): Promise<void> {
+        const message = await db.messages.get(messageId);
+        if (!message) {
+            console.warn('Cannot mark message as deleted: message not found', messageId);
+            return;
+        }
+
+        // Check if already deleted (idempotent operation)
+        if (message.deletedAt) {
+            console.log('Message already deleted, skipping', messageId);
+            return;
+        }
+
+        await db.messages.update(messageId, {
+            deletedAt
+        });
+
+        console.log('Message marked as deleted:', {
+            messageId,
+            eventId: message.eventId,
+            rumorId: message.rumorId,
+            deletedAt: new Date(deletedAt).toISOString()
+        });
+    }
+
+    /**
+     * Unmark a message as deleted (rollback deletion).
+     * Removes the deletedAt timestamp.
+     * 
+     * @param messageId - The database ID of the message to restore
+     */
+    public async unmarkMessageDeleted(messageId: number): Promise<void> {
+        const message = await db.messages.get(messageId);
+        if (!message) {
+            console.warn('Cannot unmark message as deleted: message not found', messageId);
+            return;
+        }
+
+        if (!message.deletedAt) {
+            console.log('Message is not marked as deleted, skipping', messageId);
+            return;
+        }
+
+        await db.messages.update(messageId, {
+            deletedAt: undefined
+        });
+
+        console.log('Message unmarked as deleted:', {
+            messageId,
+            eventId: message.eventId,
+            rumorId: message.rumorId
+        });
+    }
 }
 
 export const messageRepo = new MessageRepository();

@@ -408,15 +408,62 @@
             }
         };
 
+        // Listen for message deletion events
+        const handleMessageDeleted = async (event: Event) => {
+            const custom = event as CustomEvent<{ messageId?: number; conversationId?: string; rumorId?: string }>;
+            const convId = conversationId;
+            if (!convId) return;
+
+            const { messageId, conversationId: msgConvId } = custom.detail || {};
+
+            // For ALL view, do full refresh
+            if (convId === 'ALL') {
+                refreshMessagesForCurrentConversation();
+                return;
+            }
+
+            // Check if deletion is for current conversation
+            const matchesConversation = msgConvId === convId;
+            if (!matchesConversation) {
+                return;
+            }
+
+            // Find and update the message in the local array
+            if (messageId) {
+                const messageIndex = messages.findIndex(m => m.id === messageId);
+                if (messageIndex !== -1) {
+                    // Fetch the updated message from DB with a small delay to ensure write is complete
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    const updatedMessage = await messageRepo.getMessageByEventId(messages[messageIndex].eventId);
+                    if (updatedMessage) {
+                        // Update the message in place to trigger reactivity
+                        messages = [
+                            ...messages.slice(0, messageIndex),
+                            updatedMessage,
+                            ...messages.slice(messageIndex + 1)
+                        ];
+                    }
+                } else {
+                    // Message not in current view, might need refresh
+                    refreshMessagesForCurrentConversation();
+                }
+            } else {
+                // Fallback to full refresh
+                refreshMessagesForCurrentConversation();
+            }
+        };
+
         if (typeof window !== 'undefined') {
             window.addEventListener('nospeak:new-message', handleNewMessage);
             window.addEventListener('nospeak:conversation-updated', handleConversationUpdated);
+            window.addEventListener('nospeak:message-deleted', handleMessageDeleted);
         }
 
         return () => {
             if (typeof window !== 'undefined') {
                 window.removeEventListener('nospeak:new-message', handleNewMessage);
                 window.removeEventListener('nospeak:conversation-updated', handleConversationUpdated);
+                window.removeEventListener('nospeak:message-deleted', handleMessageDeleted);
             }
         };
     });

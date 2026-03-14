@@ -31,6 +31,8 @@ export interface Message {
     conversationId?: string; // npub for 1-on-1, hash for groups
     participants?: string[]; // null/undefined for 1-on-1, array of npubs for groups
     senderNpub?: string; // sender's npub for group messages (to show attribution)
+    // Message deletion (NIP-09)
+    deletedAt?: number; // timestamp when message was deleted
 }
 
 export interface Conversation {
@@ -203,6 +205,13 @@ export class NospeakDB extends Dexie {
         // Version 12: Add archives table for chat archiving
         this.version(12).stores({
             archives: 'conversationId, archivedAt'
+        });
+
+        // Version 13: Add deletion support (NIP-09)
+        // No schema changes needed - deletedAt is an optional field
+        // that can be added to existing records without migration
+        this.version(13).stores({
+            messages: '++id, [recipientNpub+sentAt], &eventId, sentAt, rumorId, [conversationId+sentAt]'
         });
     }
 

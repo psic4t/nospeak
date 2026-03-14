@@ -37,7 +37,8 @@
         forceEagerLoad = false,
         fileWidth = undefined,
         fileHeight = undefined,
-        fileBlurhash = undefined
+        fileBlurhash = undefined,
+        deletedAt = undefined
     } = $props<{
         content: string;
         highlight?: string;
@@ -56,6 +57,7 @@
         fileWidth?: number;
         fileHeight?: number;
         fileBlurhash?: string;
+        deletedAt?: number;
     }>();
 
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -817,7 +819,16 @@
  <!-- svelte-ignore a11y_no_static_element_interactions -->
  <div bind:this={container} onclick={handleNpubInteraction} onkeydown={handleNpubInteraction} class={`whitespace-pre-wrap break-anywhere leading-relaxed ${isSingleEmoji ? 'text-4xl' : ''}`}>
 
-    {#if location}
+    {#if deletedAt}
+        <!-- Deleted message placeholder -->
+        <div class="flex items-center gap-2 text-gray-400 dark:text-gray-600 italic text-sm py-1">
+            <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            <span>{$t('chat.messageDeleted')}</span>
+        </div>
+    {:else if location}
         <div class="my-1">
             <div class="flex items-center gap-2 typ-meta text-xs font-semibold text-gray-600 dark:text-slate-300 leading-none">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

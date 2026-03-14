@@ -1698,6 +1698,69 @@
     }
   }
 
+  // Delete confirmation state
+  let showDeleteConfirm = $state(false);
+  let messageToDelete = $state<Message | null>(null);
+  let isDeleting = $state(false);
+
+  function deleteMessage() {
+    if (!contextMenu.message) return;
+    messageToDelete = contextMenu.message;
+    showDeleteConfirm = true;
+  }
+
+  function cancelDelete() {
+    showDeleteConfirm = false;
+    messageToDelete = null;
+  }
+
+  async function confirmDelete() {
+    if (!messageToDelete || isDeleting) return;
+
+    isDeleting = true;
+    hapticLightImpact();
+    
+    // Close dialog immediately for better UX
+    const messageToDeleteCopy = messageToDelete;
+    showDeleteConfirm = false;
+    messageToDelete = null;
+    isDeleting = false;
+
+    // Send deletion in background
+    try {
+      await messagingService.sendDeletionRequest(messageToDeleteCopy);
+    } catch (e) {
+      console.error('Failed to delete message:', e);
+      
+      // Rollback: unmark the message as deleted so user can retry
+      if (messageToDeleteCopy.id) {
+        try {
+          await messageRepo.unmarkMessageDeleted(messageToDeleteCopy.id);
+          
+          // Emit event to refresh UI and show message again
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('nospeak:message-deleted', {
+              detail: { 
+                messageId: messageToDeleteCopy.id,
+                conversationId: messageToDeleteCopy.conversationId || messageToDeleteCopy.recipientNpub,
+                rumorId: messageToDeleteCopy.rumorId
+              }
+            }));
+          }
+        } catch (rollbackError) {
+          console.error('Failed to rollback deletion:', rollbackError);
+        }
+      }
+      
+      await nativeDialogService.alert({
+        title: translate('chat.delete.failedTitle'),
+        message: translate('chat.delete.failedMessagePrefix') + (e as Error).message
+      });
+    }
+  }
+
+
+
   async function handleFileSelect(file: File, type: 'image' | 'video' | 'audio' | 'file') {
     // For 1-on-1 chats, need partnerNpub; for groups, need groupConversation
     if (!isGroup && !partnerNpub) return;
@@ -2221,6 +2284,7 @@
                 fileWidth={msg.fileWidth}
                 fileHeight={msg.fileHeight}
                 fileBlurhash={msg.fileBlurhash}
+                deletedAt={msg.deletedAt}
               />
               {#if msg.eventId?.startsWith('optimistic:') && msg.rumorKind === 15}
                 <UploadProgressOverlay eventId={msg.eventId} />
@@ -2427,6 +2491,60 @@
     </div>
   </div>
   {/if}
+
+  <!-- Delete Confirmation Dialog -->
+  {#if showDeleteConfirm && messageToDelete}
+    <div
+      class="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+      onclick={(e) => { if (e.target === e.currentTarget) cancelDelete(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-dialog-title"
+    >
+      <!-- Backdrop -->
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+      
+      <!-- Dialog -->
+      <div class="relative bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl p-6 max-w-md w-full">
+        <h3 
+          id="delete-dialog-title"
+          class="text-lg font-bold text-gray-900 dark:text-white mb-4"
+        >
+          {$t('chat.delete.confirmTitle')}
+        </h3>
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-6">
+          <p class="text-xs text-amber-800 dark:text-amber-300">
+            {$t('chat.delete.privacyNotice')}
+          </p>
+        </div>
+
+        <div class="flex gap-3 justify-end">
+          <button
+            type="button"
+            onclick={cancelDelete}
+            disabled={isDeleting}
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {$t('chat.delete.cancel')}
+          </button>
+          <button
+            type="button"
+            onclick={confirmDelete}
+            disabled={isDeleting}
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {#if isDeleting}
+              <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            {/if}
+            {$t('chat.delete.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 {#if isGroup && groupConversation}
@@ -2453,6 +2571,8 @@
   onReact={reactToMessage}
   onCopy={copyMessage}
   onFavorite={handleFavorite}
+  onDelete={deleteMessage}
   isFavorited={contextMenu.message?.eventId ? $favoriteEventIds.has(contextMenu.message.eventId) : false}
+  canDelete={contextMenu.message ? messagingService.canDeleteMessage(contextMenu.message) : false}
   message={contextMenu.message}
 />
