@@ -25,6 +25,8 @@ import android.graphics.Paint;
 import android.graphics.Shader;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
@@ -172,8 +174,10 @@ public class NativeBackgroundMessagingService extends Service {
     private boolean isCharging = false;
 
     private BroadcastReceiver deviceStateReceiver;
+    private ConnectivityManager.NetworkCallback networkCallback;
     private Runnable lockGraceRunnable;
  
+    private final Set<String> connectingRelays = new HashSet<>();
     private final Map<String, WebSocket> activeSockets = new HashMap<>();
     private final Map<String, Integer> retryAttempts = new HashMap<>();
     private Handler handler;
@@ -300,6 +304,28 @@ public class NativeBackgroundMessagingService extends Service {
             refreshActiveConversationNotifications();
         }
     }
+
+    private void reconnectDisconnectedRelays(String reason) {
+        if (!serviceRunning || currentPubkeyHex == null || configuredRelays == null) {
+            return;
+        }
+
+        if (isDebugBuild()) {
+            Log.d(LOG_TAG, "Reconnecting disconnected relays (reason=" + reason + ")");
+        }
+
+        synchronized (activeSockets) {
+            for (String relayUrl : configuredRelays) {
+                if (relayUrl == null || relayUrl.isEmpty()) {
+                    continue;
+                }
+                if (!activeSockets.containsKey(relayUrl) && !connectingRelays.contains(relayUrl)) {
+                    retryAttempts.put(relayUrl, 0);
+                    connectRelay(relayUrl, currentPubkeyHex);
+                }
+            }
+        }
+    }
   
     @Override
     public void onCreate() {
@@ -372,6 +398,24 @@ public class NativeBackgroundMessagingService extends Service {
         intentFilter.addAction(Intent.ACTION_POWER_CONNECTED);
         intentFilter.addAction(Intent.ACTION_POWER_DISCONNECTED);
         registerReceiver(deviceStateReceiver, intentFilter);
+
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm != null) {
+            networkCallback = new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(Network network) {
+                    if (!serviceRunning || currentPubkeyHex == null) {
+                        return;
+                    }
+                    if (handler == null) {
+                        return;
+                    }
+                    handler.post(() -> reconnectDisconnectedRelays("default_network_changed"));
+                }
+            };
+
+            cm.registerDefaultNetworkCallback(networkCallback);
+        }
 
         if (screenOffAtMs > 0L) {
             scheduleLockGraceTimer();
@@ -503,6 +547,17 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        if (serviceRunning) {
+            Log.d(LOG_TAG, "onTaskRemoved: ignoring, service is active");
+        } else {
+            Log.d(LOG_TAG, "onTaskRemoved: service not running, stopping");
+            stopSelf();
+        }
+    }
+
+    @Override
     public void onDestroy() {
         serviceRunning = false;
         sInstance = null;
@@ -517,6 +572,18 @@ public class NativeBackgroundMessagingService extends Service {
                 // ignore
             }
             deviceStateReceiver = null;
+        }
+
+        if (networkCallback != null) {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                try {
+                    cm.unregisterNetworkCallback(networkCallback);
+                } catch (IllegalArgumentException ignored) {
+                    // ignore
+                }
+            }
+            networkCallback = null;
         }
 
         super.onDestroy();
@@ -542,6 +609,7 @@ public class NativeBackgroundMessagingService extends Service {
         avatarFetchInFlight.clear();
         conversationShortcutsPublished.clear();
         conversationShortcutAvatarKeys.clear();
+        connectingRelays.clear();
         retryAttempts.clear();
     }
  
@@ -602,6 +670,7 @@ public class NativeBackgroundMessagingService extends Service {
             activeSockets.clear();
         }
         sockets.clear();
+        connectingRelays.clear();
         retryAttempts.clear();
  
         if (relays == null) {
@@ -623,6 +692,8 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
  
+        connectingRelays.add(relayUrl);
+
         Request request = new Request.Builder()
                 .url(relayUrl)
                 .build();
@@ -630,6 +701,7 @@ public class NativeBackgroundMessagingService extends Service {
         WebSocket socket = client.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(WebSocket webSocket, Response response) {
+                connectingRelays.remove(relayUrl);
                 synchronized (activeSockets) {
                     activeSockets.put(relayUrl, webSocket);
                 }
@@ -697,6 +769,7 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     private void onSocketClosedOrFailed(final String relayUrl, WebSocket socket, @Nullable String detail) {
+        connectingRelays.remove(relayUrl);
         synchronized (activeSockets) {
             WebSocket current = activeSockets.get(relayUrl);
             if (current == socket) {

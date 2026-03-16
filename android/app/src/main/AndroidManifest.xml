@@ -28,6 +28,8 @@
     <!-- Required for specialUse + systemExempted foreground service on Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <!-- Required for ConnectivityManager.NetworkCallback (network change reconnect) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Keep the app alive during background messaging work -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Restart background messaging after reboot/update -->
