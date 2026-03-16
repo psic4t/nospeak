@@ -25,8 +25,9 @@
       <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
 
-    <!-- Required for dataSync foreground service on Android 14+ / targetSdk 35 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Required for specialUse + systemExempted foreground service on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <!-- Keep the app alive during background messaging work -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Restart background messaging after reboot/update -->
@@ -97,11 +98,15 @@
      </receiver>
 
          <!-- Native foreground service for Android background messaging -->
-         <service
-             android:name=".NativeBackgroundMessagingService"
-             android:enabled="true"
-             android:exported="false"
-             android:foregroundServiceType="dataSync" />
+          <service
+              android:name=".NativeBackgroundMessagingService"
+              android:enabled="true"
+              android:exported="false"
+              android:foregroundServiceType="specialUse|systemExempted">
+              <property
+                  android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                  android:value="nostr-dm" />
+          </service>
     </application>
  
 </manifest>

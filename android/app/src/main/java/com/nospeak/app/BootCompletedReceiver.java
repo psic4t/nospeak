@@ -24,6 +24,11 @@ public class BootCompletedReceiver extends BroadcastReceiver {
             return;
         }
 
-        ContextCompat.startForegroundService(context, serviceIntent);
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent);
+        } catch (Exception e) {
+            // System may block foreground service start on boot for certain service types.
+            // Fail silently; service will start when user opens the app.
+        }
     }
 }

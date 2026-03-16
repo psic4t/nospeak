@@ -64,7 +64,12 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_READ_RELAYS, relays);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_NOTIFICATIONS_ENABLED, notificationsEnabled);
 
-        ContextCompat.startForegroundService(getContext(), intent);
+        try {
+            ContextCompat.startForegroundService(getContext(), intent);
+        } catch (Exception e) {
+            call.reject("Failed to start foreground service: " + e.getMessage());
+            return;
+        }
         call.resolve();
     }
 
@@ -81,7 +86,12 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         intent.setAction(NativeBackgroundMessagingService.ACTION_UPDATE);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_SUMMARY, summary);
-        ContextCompat.startForegroundService(getContext(), intent);
+        try {
+            ContextCompat.startForegroundService(getContext(), intent);
+        } catch (Exception e) {
+            call.reject("Failed to update foreground service: " + e.getMessage());
+            return;
+        }
         call.resolve();
     }
 
@@ -227,7 +237,12 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         intent.setAction(NativeBackgroundMessagingService.ACTION_SET_ACTIVE_CONVERSATION);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_ACTIVE_CONVERSATION_PUBKEY, pubkeyHex);
-        ContextCompat.startForegroundService(getContext(), intent);
+        try {
+            ContextCompat.startForegroundService(getContext(), intent);
+        } catch (Exception e) {
+            call.reject("Failed to set active conversation: " + e.getMessage());
+            return;
+        }
         call.resolve();
     }
 

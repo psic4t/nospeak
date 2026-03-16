@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ServiceInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -422,7 +423,24 @@ public class NativeBackgroundMessagingService extends Service {
             notificationCutoffSeconds = Math.max(persistedBaselineSeconds, maxBacklogCutoffSeconds);
 
             Notification notification = buildNotification(currentSummary);
-            startForeground(NOTIFICATION_ID, notification);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    final int foregroundServiceType;
+                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm != null && pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                        foregroundServiceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED;
+                    } else {
+                        foregroundServiceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+                    }
+                    startForeground(NOTIFICATION_ID, notification, foregroundServiceType);
+                } else {
+                    startForeground(NOTIFICATION_ID, notification);
+                }
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "startForeground failed, stopping service", e);
+                stopSelf();
+                return START_NOT_STICKY;
+            }
 
             if ("nsec".equalsIgnoreCase(currentMode)) {
                 String secretKeyHex = AndroidLocalSecretStore.getSecretKeyHex(getApplicationContext());
@@ -476,6 +494,12 @@ public class NativeBackgroundMessagingService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        Log.w(LOG_TAG, "onTimeout called by system, fgsType=" + fgsType + "; stopping service");
+        stopSelf();
     }
 
     @Override
