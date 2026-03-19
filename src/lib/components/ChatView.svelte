@@ -258,11 +258,10 @@
     searchResults = [];
   }
 
-  function openSearch() {
+  async function openSearch() {
     isSearchOpen = true;
-    setTimeout(() => {
-      searchInputElement?.focus();
-    }, 0);
+    await tick();
+    searchInputElement?.focus();
   }
 
   function toggleSearch() {
@@ -1977,22 +1976,18 @@
 
       {#if (partnerNpub && partnerNpub !== 'ALL') || isGroup}
         <!-- Mobile overlay search input (covers username area) -->
-        <div
-          class={`md:hidden absolute bottom-2 h-11 start-24 end-16 z-30 transition-[opacity,transform] duration-200 ease-out ${
-            isSearchOpen
-              ? 'opacity-100 translate-x-0 pointer-events-auto'
-              : 'opacity-0 translate-x-2 pointer-events-none'
-          }`}
-        >
-          <input
-            bind:value={searchQuery}
-            bind:this={searchInputElement}
-            placeholder={$t('chat.searchPlaceholder')}
-            class="w-full h-full px-4 border border-gray-200 dark:border-slate-700 rounded-full bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
-            aria-label={$t('chat.searchAriaLabel')}
-            onkeydown={handleSearchKeydown}
-          />
-        </div>
+        {#if isSearchOpen}
+          <div class="md:hidden absolute bottom-2 h-11 start-24 end-16 z-30">
+            <input
+              bind:value={searchQuery}
+              bind:this={searchInputElement}
+              placeholder={$t('chat.searchPlaceholder')}
+              class="w-full h-full px-4 border border-gray-200 dark:border-slate-700 rounded-full bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              aria-label={$t('chat.searchAriaLabel')}
+              onkeydown={handleSearchKeydown}
+            />
+          </div>
+        {/if}
 
         <div class="flex items-center gap-2 flex-shrink-0">
           <!-- Desktop/tablet inline slide-out -->
