@@ -1,6 +1,5 @@
 <script lang="ts">
     import { t } from '$lib/i18n';
-    import { isAndroidNative } from '$lib/core/NativeDialogs';
 
     let { x = 0, y = 0, isOpen = false, onClose, onExport, onArchive, isArchived = false } = $props<{
         x: number;
@@ -11,8 +10,6 @@
         onArchive: () => void;
         isArchived?: boolean;
     }>();
-
-    const isAndroid = isAndroidNative();
 
     // Close on outside press (pointerdown) so one tap closes,
     // while long-press open doesn't immediately self-dismiss on release.
@@ -90,7 +87,7 @@
         use:reposition={{x, y}}
         class="chat-context-menu fixed bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl py-1 z-[9999] min-w-[160px] outline-none"
     >
-        {#if !isAndroid && onExport}
+        {#if onExport}
             <button
                 class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"
                 onclick={() => { onExport(); onClose(); }}
