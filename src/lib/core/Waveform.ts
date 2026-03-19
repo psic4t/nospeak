@@ -18,6 +18,21 @@ export function downsamplePeaks(peaks: number[], targetCount: number): number[] 
         return peaks.map(clamp01);
     }
 
+    // When there are fewer peaks than bars, use nearest-neighbour interpolation
+    // so every bar gets a real value instead of zero.
+    if (peaks.length < targetCount) {
+        const result: number[] = [];
+        for (let i = 0; i < targetCount; i++) {
+            const srcIndex = Math.min(
+                peaks.length - 1,
+                Math.round((i * (peaks.length - 1)) / (targetCount - 1))
+            );
+            result.push(clamp01(peaks[srcIndex] ?? 0));
+        }
+        return result;
+    }
+
+    // Downsample: take max per bucket.
     const bucketSize = peaks.length / targetCount;
     const result: number[] = [];
 
@@ -45,35 +60,37 @@ export function computePeaksFromAudioBuffer(buffer: AudioBuffer, targetCount: nu
     }
 
     const samplesPerBar = Math.max(1, Math.floor(totalSamples / targetCount));
-    const rawRms: number[] = [];
+    const rawPeaks: number[] = [];
 
-    // First pass: compute RMS (root mean square) per bucket.
-    // RMS represents average energy which varies much more than peak amplitude
-    // across speech segments, giving visually distinct bar heights.
+    // First pass: compute max absolute amplitude per bucket.
+    // This matches the recording-time algorithm (samplePeakFromAnalyser /
+    // NativeAudioRecorder) so the sent-message waveform looks the same as
+    // the waveform the user saw while recording.
     for (let i = 0; i < targetCount; i++) {
         const start = i * samplesPerBar;
         const end = Math.min(totalSamples, start + samplesPerBar);
-        const count = (end - start) * channelCount;
 
-        let sumSq = 0;
+        let maxAbs = 0;
         for (let c = 0; c < channelCount; c++) {
             const data = buffer.getChannelData(c);
             for (let s = start; s < end; s++) {
-                const v = data[s] ?? 0;
-                sumSq += v * v;
+                const v = Math.abs(data[s] ?? 0);
+                if (v > maxAbs) {
+                    maxAbs = v;
+                }
             }
         }
 
-        rawRms.push(count > 0 ? Math.sqrt(sumSq / count) : 0);
+        rawPeaks.push(maxAbs);
     }
 
     // Second pass: normalize against global max so loud recordings
     // still show visual contrast between quieter and louder moments.
-    const globalMax = Math.max(...rawRms);
+    const globalMax = Math.max(...rawPeaks);
     const peaks: number[] = [];
 
     for (let i = 0; i < targetCount; i++) {
-        const normalized = globalMax > 0 ? (rawRms[i] ?? 0) / globalMax : 0;
+        const normalized = globalMax > 0 ? (rawPeaks[i] ?? 0) / globalMax : 0;
         // Floor of 0.08 ensures silence still renders visible bars.
         const lifted = 0.08 + normalized * 0.92;
         peaks.push(clamp01(lifted));
