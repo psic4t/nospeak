@@ -45,7 +45,9 @@ const es = {
         unarchive: 'Desarchivar',
         archived: 'Archivados',
         emptyArchive: 'No hay chats archivados',
-        chatArchived: 'Chat archivado'
+        chatArchived: 'Chat archivado',
+        exportSavedToDownloads: 'Guardado en Descargas',
+        exportFailed: 'Error al exportar'
     },
     contacts: {
         title: 'Contactos',

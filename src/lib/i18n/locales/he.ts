@@ -49,7 +49,9 @@ const he = {
         unarchive: 'הוצאה מארכיון',
         archived: 'בארכיון',
         emptyArchive: 'אין צ\'אטים בארכיון',
-        chatArchived: 'הצ\'אט הועבר לארכיון'
+        chatArchived: 'הצ\'אט הועבר לארכיון',
+        exportSavedToDownloads: 'נשמר בהורדות',
+        exportFailed: 'הייצוא נכשל'
     },
     contacts: {
         title: 'אנשי קשר',

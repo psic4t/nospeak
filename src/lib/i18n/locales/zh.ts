@@ -49,7 +49,9 @@ const zh = {
         unarchive: '取消归档',
         archived: '已归档',
         emptyArchive: '没有已归档的聊天',
-        chatArchived: '聊天已归档'
+        chatArchived: '聊天已归档',
+        exportSavedToDownloads: '已保存到下载',
+        exportFailed: '导出失败'
     },
     contacts: {
         title: '联系人',

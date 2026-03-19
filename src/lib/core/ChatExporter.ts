@@ -4,6 +4,10 @@ import { profileRepo } from '$lib/db/ProfileRepository';
 import { get } from 'svelte/store';
 import { currentUser } from '$lib/stores/auth';
 import type { Message } from '$lib/db/db';
+import { isAndroidNative } from './NativeDialogs';
+import { saveToDownloads } from './AndroidDownloads';
+import { showToast } from '$lib/stores/toast';
+import { t } from '$lib/i18n';
 
 /**
  * Resolve a display name for an npub.
@@ -140,6 +144,10 @@ function sanitizeFilename(name: string): string {
     return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
 }
 
+function stringToBase64(str: string): string {
+    return btoa(unescape(encodeURIComponent(str)));
+}
+
 /**
  * Export a conversation to an HTML file and trigger browser download.
  */
@@ -192,15 +200,31 @@ export async function exportChatToHtml(conversationId: string): Promise<void> {
     // Build HTML
     const html = buildHtml(title, messages, nameMap, user.npub);
 
-    // Trigger download
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    // Generate filename
     const safeName = sanitizeFilename(isGroup ? (title) : (nameMap.get(conversationId) ?? 'chat'));
-    a.download = `nospeak-${safeName}-${formatDateShort(Date.now())}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `nospeak-${safeName}-${formatDateShort(Date.now())}.html`;
+
+    if (isAndroidNative()) {
+        // Android: save to Downloads via native plugin
+        const base64Data = stringToBase64(html);
+        const success = await saveToDownloads(filename, base64Data, 'text/html');
+
+        const $t = get(t);
+        if (success) {
+            showToast($t('chats.exportSavedToDownloads'), 'success');
+        } else {
+            showToast($t('chats.exportFailed'), 'error');
+        }
+    } else {
+        // Web: trigger browser download
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 }

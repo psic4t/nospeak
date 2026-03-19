@@ -6,14 +6,14 @@
 
 **Architecture:** Native Java plugin uses MediaStore.Downloads (Android 10+) or legacy Downloads directory (Android 9-). TypeScript wrapper follows existing AndroidMediaCache pattern. ChatExporter detects Android and uses the plugin instead of web blob download.
 
-**Tech Stack:** Java, TypeScript, Capacitor plugin API, MediaStore API, vitest
+**Tech Stack:** Kotlin, TypeScript, Capacitor plugin API, MediaStore API, vitest
 
 ---
 
-### Task 1: Create AndroidDownloadsPlugin.java
+### Task 1: Create AndroidDownloadsPlugin.kt
 
 **Files:**
-- Create: `android/app/src/main/java/com/nospeak/app/AndroidDownloadsPlugin.java`
+- Create: `android/app/src/main/java/com/nospeak/app/AndroidDownloadsPlugin.kt`
 
 Native plugin with `saveToDownloads(filename, data, mimeType)` method. Uses MediaStore.Downloads on API 29+, legacy Downloads directory on older Android. Returns `{ success: boolean, error?: string }`.
 

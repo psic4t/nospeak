@@ -49,7 +49,9 @@ const ar = {
         unarchive: 'إلغاء الأرشفة',
         archived: 'المؤرشفة',
         emptyArchive: 'لا توجد محادثات مؤرشفة',
-        chatArchived: 'تمت أرشفة المحادثة'
+        chatArchived: 'تمت أرشفة المحادثة',
+        exportSavedToDownloads: 'تم الحفظ في التنزيلات',
+        exportFailed: 'فشل التصدير'
     },
     contacts: {
         title: 'جهات الاتصال',

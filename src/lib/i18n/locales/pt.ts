@@ -45,7 +45,9 @@ const pt = {
         unarchive: 'Desarquivar',
         archived: 'Arquivados',
         emptyArchive: 'Nenhuma conversa arquivada',
-        chatArchived: 'Conversa arquivada'
+        chatArchived: 'Conversa arquivada',
+        exportSavedToDownloads: 'Guardado em Downloads',
+        exportFailed: 'Falha ao exportar'
     },
     contacts: {
         title: 'Contactos',

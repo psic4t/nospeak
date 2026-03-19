@@ -49,7 +49,9 @@ const tr = {
         unarchive: 'Arşivden Çıkar',
         archived: 'Arşivlendi',
         emptyArchive: 'Arşivlenmiş sohbet yok',
-        chatArchived: 'Sohbet arşivlendi'
+        chatArchived: 'Sohbet arşivlendi',
+        exportSavedToDownloads: 'İndirilenlere kaydedildi',
+        exportFailed: 'Dışa aktarma başarısız'
     },
     contacts: {
         title: 'Kişiler',

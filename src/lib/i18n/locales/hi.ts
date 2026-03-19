@@ -49,7 +49,9 @@ const hi = {
         unarchive: 'असंग्रहित करें',
         archived: 'संग्रहित',
         emptyArchive: 'कोई संग्रहित चैट नहीं',
-        chatArchived: 'चैट संग्रहित हो गई'
+        chatArchived: 'चैट संग्रहित हो गई',
+        exportSavedToDownloads: 'डाउनलोड में सहेजा गया',
+        exportFailed: 'निर्यात विफल'
     },
     contacts: {
         title: 'संपर्क',

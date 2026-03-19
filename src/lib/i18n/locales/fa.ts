@@ -49,7 +49,9 @@ const fa = {
         unarchive: 'خارج کردن از بایگانی',
         archived: 'بایگانی‌شده',
         emptyArchive: 'گفتگوی بایگانی‌شده‌ای نیست',
-        chatArchived: 'گفتگو بایگانی شد'
+        chatArchived: 'گفتگو بایگانی شد',
+        exportSavedToDownloads: 'در دانلودها ذخیره شد',
+        exportFailed: 'خروجی ناموفق'
     },
     contacts: {
         title: 'مخاطبین',

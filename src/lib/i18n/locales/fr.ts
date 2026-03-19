@@ -45,7 +45,9 @@ const fr = {
         unarchive: 'Désarchiver',
         archived: 'Archivés',
         emptyArchive: 'Aucune discussion archivée',
-        chatArchived: 'Discussion archivée'
+        chatArchived: 'Discussion archivée',
+        exportSavedToDownloads: 'Enregistré dans Téléchargements',
+        exportFailed: 'Échec de l\'export'
     },
     contacts: {
         title: 'Contacts',

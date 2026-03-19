@@ -49,7 +49,9 @@ const bn = {
         unarchive: 'আর্কাইভ মুক্ত করুন',
         archived: 'আর্কাইভ করা',
         emptyArchive: 'কোনো আর্কাইভ করা চ্যাট নেই',
-        chatArchived: 'চ্যাট আর্কাইভ হয়েছে'
+        chatArchived: 'চ্যাট আর্কাইভ হয়েছে',
+        exportSavedToDownloads: 'ডাউনলোডে সংরক্ষিত',
+        exportFailed: 'রপ্তানি ব্যর্থ'
     },
     contacts: {
         title: 'পরিচিতি',

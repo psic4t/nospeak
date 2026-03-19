@@ -49,7 +49,9 @@ const ur = {
         unarchive: 'آرکائیو سے نکالیں',
         archived: 'آرکائیو شدہ',
         emptyArchive: 'کوئی آرکائیو شدہ چیٹ نہیں',
-        chatArchived: 'چیٹ آرکائیو ہو گئی'
+        chatArchived: 'چیٹ آرکائیو ہو گئی',
+        exportSavedToDownloads: 'ڈاؤن لوڈز میں محفوظ ہو گیا',
+        exportFailed: 'برآمد ناکام'
     },
     contacts: {
         title: 'رابطے',

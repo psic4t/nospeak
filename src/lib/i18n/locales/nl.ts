@@ -49,7 +49,9 @@ const nl = {
         unarchive: 'Dearchiveren',
         archived: 'Gearchiveerd',
         emptyArchive: 'Geen gearchiveerde chats',
-        chatArchived: 'Chat gearchiveerd'
+        chatArchived: 'Chat gearchiveerd',
+        exportSavedToDownloads: 'Opgeslagen in Downloads',
+        exportFailed: 'Exporteren mislukt'
     },
     contacts: {
         title: 'Contacten',

@@ -49,7 +49,9 @@ const pl = {
         unarchive: 'Przywróć z archiwum',
         archived: 'Zarchiwizowane',
         emptyArchive: 'Brak zarchiwizowanych czatów',
-        chatArchived: 'Czat zarchiwizowany'
+        chatArchived: 'Czat zarchiwizowany',
+        exportSavedToDownloads: 'Zapisano w Pobranych',
+        exportFailed: 'Eksport nie powiódł się'
     },
     contacts: {
         title: 'Kontakty',

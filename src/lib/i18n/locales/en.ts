@@ -49,7 +49,9 @@ const en = {
         unarchive: 'Unarchive',
         archived: 'Archived',
         emptyArchive: 'No archived chats',
-        chatArchived: 'Chat archived'
+        chatArchived: 'Chat archived',
+        exportSavedToDownloads: 'Saved to Downloads',
+        exportFailed: 'Failed to save export'
     },
     contacts: {
         title: 'Contacts',

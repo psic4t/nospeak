@@ -49,7 +49,9 @@ const ru = {
         unarchive: 'Разархивировать',
         archived: 'Архив',
         emptyArchive: 'Нет архивных чатов',
-        chatArchived: 'Чат архивирован'
+        chatArchived: 'Чат архивирован',
+        exportSavedToDownloads: 'Сохранено в Загрузки',
+        exportFailed: 'Ошибка экспорта'
     },
     contacts: {
         title: 'Контакты',

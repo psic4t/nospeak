@@ -49,7 +49,9 @@ const ja = {
         unarchive: 'アーカイブ解除',
         archived: 'アーカイブ済み',
         emptyArchive: 'アーカイブされたチャットはありません',
-        chatArchived: 'チャットをアーカイブしました'
+        chatArchived: 'チャットをアーカイブしました',
+        exportSavedToDownloads: 'ダウンロードに保存しました',
+        exportFailed: 'エクスポートに失敗しました'
     },
     contacts: {
         title: '連絡先',

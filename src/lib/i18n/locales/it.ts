@@ -45,7 +45,9 @@ const it = {
         unarchive: 'Ripristina',
         archived: 'Archiviati',
         emptyArchive: 'Nessuna chat archiviata',
-        chatArchived: 'Chat archiviata'
+        chatArchived: 'Chat archiviata',
+        exportSavedToDownloads: 'Salvato in Download',
+        exportFailed: 'Esportazione fallita'
     },
     contacts: {
         title: 'Contatti',

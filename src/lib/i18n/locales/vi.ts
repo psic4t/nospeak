@@ -49,7 +49,9 @@ const vi = {
         unarchive: 'Bỏ lưu trữ',
         archived: 'Đã lưu trữ',
         emptyArchive: 'Không có cuộc trò chuyện đã lưu trữ',
-        chatArchived: 'Cuộc trò chuyện đã được lưu trữ'
+        chatArchived: 'Cuộc trò chuyện đã được lưu trữ',
+        exportSavedToDownloads: 'Đã lưu vào Tải xuống',
+        exportFailed: 'Xuất thất bại'
     },
     contacts: {
         title: 'Danh bạ',
