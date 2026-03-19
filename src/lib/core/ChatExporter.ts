@@ -167,9 +167,9 @@ export async function exportChatToHtml(conversationId: string): Promise<void> {
 
     // Resolve names for all participants
     const nameMap = new Map<string, string>();
+    const conversation = isGroup ? await conversationRepo.getConversation(conversationId) : null;
 
     if (isGroup) {
-        const conversation = await conversationRepo.getConversation(conversationId);
         const participants = conversation?.participants ?? [];
         for (const npub of participants) {
             if (npub !== user.npub) {
@@ -191,7 +191,6 @@ export async function exportChatToHtml(conversationId: string): Promise<void> {
     // Build title
     let title: string;
     if (isGroup) {
-        const conversation = await conversationRepo.getConversation(conversationId);
         title = conversation?.subject || 'Group Chat';
     } else {
         title = 'Chat with ' + (nameMap.get(conversationId) ?? conversationId.slice(0, 12) + '...');

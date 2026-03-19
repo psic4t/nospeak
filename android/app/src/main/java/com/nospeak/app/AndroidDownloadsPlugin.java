@@ -90,12 +90,15 @@ public class AndroidDownloadsPlugin extends Plugin {
 
         try {
             java.io.OutputStream outputStream = resolver.openOutputStream(uri);
-            if (outputStream != null) {
-                try {
-                    outputStream.write(data);
-                } finally {
-                    outputStream.close();
-                }
+            if (outputStream == null) {
+                Log.e(TAG, "Failed to open output stream for MediaStore entry");
+                resolver.delete(uri, null, null);
+                return false;
+            }
+            try {
+                outputStream.write(data);
+            } finally {
+                outputStream.close();
             }
 
             ContentValues updateValues = new ContentValues();
