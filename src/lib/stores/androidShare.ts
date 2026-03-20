@@ -1,4 +1,4 @@
-import { get, writable } from 'svelte/store';
+import { writable } from 'svelte/store';
 import type { AndroidShareMediaType } from '$lib/core/AndroidShareTarget';
 
 export interface PendingAndroidMediaShare {
@@ -32,14 +32,3 @@ export function setPendingAndroidTextShare(value: PendingAndroidTextShare | null
     textStore.set(value);
 }
 
-export function consumePendingAndroidMediaShare(): PendingAndroidMediaShare | null {
-    const value = get(mediaStore);
-    mediaStore.set(null);
-    return value;
-}
-
-export function consumePendingAndroidTextShare(): PendingAndroidTextShare | null {
-    const value = get(textStore);
-    textStore.set(null);
-    return value;
-}

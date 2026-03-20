@@ -7,14 +7,8 @@ export interface LocationPoint {
     longitude: number;
 }
 
-/** Bounding box padding in degrees (~1.1km at equator) */
-export const MAP_BBOX_PADDING = 0.01;
-
 /** Default zoom level for external map links */
 export const MAP_ZOOM = 15;
-
-/** OSM tile layer name */
-export const MAP_LAYER = 'mapnik';
 
 /** Tile server URL template for Leaflet */
 export const MAP_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';

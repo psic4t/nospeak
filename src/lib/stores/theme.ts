@@ -176,13 +176,6 @@ export const cypherTheme: ThemeColors = {
 	crust: '#000000'
 };
 
-export const themeNames: Record<Theme, string> = {
-	latte: 'Catppuccin Latte',
-	frappe: 'Catppuccin Frappé',
-	macchiato: 'Catppuccin Macchiato',
-	mocha: 'Catppuccin Mocha'
-};
-
 function hexToRgb(hex: string): string | null {
 	const normalized = hex.replace('#', '');
 
