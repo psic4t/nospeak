@@ -40,6 +40,10 @@ const es = {
         filterGroups: 'Grupos',
         emptyUnread: 'Sin chats no leídos',
         emptyGroups: 'Sin grupos',
+        favorites: 'Favoritos',
+        favoriteMessage: 'mensaje',
+        favoriteMessages: 'mensajes',
+        emptyFavorites: 'Aún no hay mensajes favoritos',
         export: 'Exportar',
         archive: 'Archivar',
         unarchive: 'Desarchivar',
@@ -411,7 +415,9 @@ const es = {
             saveStatusSuccess: 'Perfil guardado en {count} relays.',
             saveStatusPartial: 'Perfil guardado en {succeeded} de {attempted} relays.',
             saveStatusNone: 'No se pudo guardar el perfil en ning\u00fan relay.',
-            saveStatusError: 'Error al guardar el perfil. Es posible que tus ajustes no se propaguen completamente.'
+            saveStatusError: 'Error al guardar el perfil. Es posible que tus ajustes no se propaguen completamente.',
+            cropTitle: 'Recortar foto de perfil',
+            cropConfirm: 'Recortar'
         },
         messagingRelays: {
             description: 'Configura tus relays de mensajería NIP-17. Estos relays se usan para recibir tus mensajes cifrados. Para un mejor rendimiento, normalmente funcionan mejor 2–3 relays de mensajería.',

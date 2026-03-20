@@ -412,7 +412,9 @@ const zh = {
             saveStatusSuccess: '已将个人资料保存到{count}个中继。',
             saveStatusPartial: '已将个人资料保存到{attempted}个中继中的{succeeded}个。',
             saveStatusNone: '无法将个人资料保存到任何中继。',
-            saveStatusError: '保存个人资料时出错。您的设置可能未完全同步。'
+            saveStatusError: '保存个人资料时出错。您的设置可能未完全同步。',
+            cropTitle: '裁剪头像',
+            cropConfirm: '裁剪'
         },
         messagingRelays: {
             description: '配置您的NIP-17消息中继。这些中继用于接收加密消息。为获得最佳性能，通常建议使用2个消息中继。',

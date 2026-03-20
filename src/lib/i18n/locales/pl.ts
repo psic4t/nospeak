@@ -240,7 +240,9 @@ const pl = {
             saveStatusSuccess: 'Zapisano profil do {count} przekaźników.',
             saveStatusPartial: 'Zapisano profil do {succeeded} z {attempted} przekaźników.',
             saveStatusNone: 'Nie udało się zapisać profilu do żadnego przekaźnika.',
-            saveStatusError: 'Błąd podczas zapisywania profilu. Ustawienia mogą nie być w pełni rozpropagowane.'
+            saveStatusError: 'Błąd podczas zapisywania profilu. Ustawienia mogą nie być w pełni rozpropagowane.',
+            cropTitle: 'Przytnij zdjęcie profilowe',
+            cropConfirm: 'Przytnij'
         },
         messagingRelays: {
             description: 'Skonfiguruj przekaźniki wiadomości NIP-17. Te przekaźniki służą do odbierania zaszyfrowanych wiadomości. Dla najlepszej wydajności, 2 przekaźniki wiadomości zazwyczaj wystarczą.',

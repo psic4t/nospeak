@@ -420,7 +420,9 @@ const ko = {
             saveStatusSuccess: '{count}개의 릴레이에 프로필을 저장했습니다.',
             saveStatusPartial: '{attempted}개 중 {succeeded}개의 릴레이에 프로필을 저장했습니다.',
             saveStatusNone: '어떤 릴레이에도 프로필을 저장할 수 없습니다.',
-            saveStatusError: '프로필 저장 중 오류가 발생했습니다. 설정이 완전히 전파되지 않았을 수 있습니다.'
+            saveStatusError: '프로필 저장 중 오류가 발생했습니다. 설정이 완전히 전파되지 않았을 수 있습니다.',
+            cropTitle: '프로필 사진 자르기',
+            cropConfirm: '자르기'
         },
           messagingRelays: {
               description: 'NIP-17 메시징 릴레이를 설정합니다. 이 릴레이는 암호화된 메시지를 수신하는 데 사용됩니다. 최적의 성능을 위해 일반적으로 2개의 메시징 릴레이가 가장 적합합니다.',

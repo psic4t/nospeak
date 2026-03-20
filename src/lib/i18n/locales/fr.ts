@@ -40,6 +40,10 @@ const fr = {
         filterGroups: 'Groupes',
         emptyUnread: 'Aucun chat non lu',
         emptyGroups: 'Aucun groupe',
+        favorites: 'Favoris',
+        favoriteMessage: 'message',
+        favoriteMessages: 'messages',
+        emptyFavorites: 'Aucun message favori pour le moment',
         export: 'Exporter',
         archive: 'Archiver',
         unarchive: 'Désarchiver',
@@ -411,7 +415,9 @@ const fr = {
             saveStatusSuccess: 'Profil enregistr\u00e9 sur {count} relays.',
             saveStatusPartial: 'Profil enregistr\u00e9 sur {succeeded} relays sur {attempted}.',
             saveStatusNone: 'Impossible d\u2019enregistrer le profil sur un relay.',
-            saveStatusError: 'Erreur lors de l\u2019enregistrement du profil. Vos param\u00e8tres peuvent ne pas \u00eatre enti\u00e8rement propag\u00e9s.'
+            saveStatusError: 'Erreur lors de l\u2019enregistrement du profil. Vos param\u00e8tres peuvent ne pas \u00eatre enti\u00e8rement propag\u00e9s.',
+            cropTitle: 'Recadrer la photo de profil',
+            cropConfirm: 'Recadrer'
         },
         messagingRelays: {
             description: 'Configurez vos relays de messagerie NIP-17. Ces relays sont utilisés pour recevoir vos messages chiffrés. Pour de meilleures performances, 2–3 relays de messagerie fonctionnent généralement le mieux.',

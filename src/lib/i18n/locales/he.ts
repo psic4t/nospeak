@@ -412,7 +412,9 @@ const he = {
             saveStatusSuccess: 'הפרופיל נשמר ל-{count} ממסרים.',
             saveStatusPartial: 'הפרופיל נשמר ל-{succeeded} מתוך {attempted} ממסרים.',
             saveStatusNone: 'לא ניתן לשמור את הפרופיל לאף ממסר.',
-            saveStatusError: 'שגיאה בשמירת הפרופיל. ייתכן שההגדרות שלך לא הופצו במלואן.'
+            saveStatusError: 'שגיאה בשמירת הפרופיל. ייתכן שההגדרות שלך לא הופצו במלואן.',
+            cropTitle: 'חיתוך תמונת פרופיל',
+            cropConfirm: 'חיתוך'
         },
         messagingRelays: {
             description: 'הגדר את ממסרי ההודעות NIP-17 שלך. ממסרים אלה משמשים לקבלת ההודעות המוצפנות שלך. לביצועים מיטביים, 2 ממסרי הודעות בדרך כלל עובדים הכי טוב.',

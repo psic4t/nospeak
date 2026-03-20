@@ -420,7 +420,9 @@ const nl = {
             saveStatusSuccess: 'Profiel opgeslagen naar {count} relays.',
             saveStatusPartial: 'Profiel opgeslagen naar {succeeded} van {attempted} relays.',
             saveStatusNone: 'Kon profiel niet opslaan naar relays.',
-            saveStatusError: 'Fout bij opslaan van profiel. Je instellingen zijn mogelijk niet volledig doorgevoerd.'
+            saveStatusError: 'Fout bij opslaan van profiel. Je instellingen zijn mogelijk niet volledig doorgevoerd.',
+            cropTitle: 'Profielfoto bijsnijden',
+            cropConfirm: 'Bijsnijden'
         },
           messagingRelays: {
               description: 'Configureer je NIP-17 berichtenrelays. Deze relays worden gebruikt om je versleutelde berichten te ontvangen. Voor de beste prestaties werken meestal 2 berichtenrelays het best.',
