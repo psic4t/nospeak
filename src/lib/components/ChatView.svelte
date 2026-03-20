@@ -234,7 +234,8 @@
   // Chat history search
   let isSearchOpen = $state(false);
   let searchQuery = $state("");
-  let searchInputElement = $state<HTMLInputElement | null>(null);
+  let mobileSearchInput = $state<HTMLInputElement | null>(null);
+  let desktopSearchInput = $state<HTMLInputElement | null>(null);
   let searchResults = $state<Message[]>([]);
   let isSearchingHistory = $state(false);
   let searchDebounceId: ReturnType<typeof setTimeout> | null = null;
@@ -261,7 +262,12 @@
   async function openSearch() {
     isSearchOpen = true;
     await tick();
-    searchInputElement?.focus();
+    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    if (isMobile) {
+      mobileSearchInput?.focus();
+    } else {
+      desktopSearchInput?.focus();
+    }
   }
 
   function toggleSearch() {
@@ -1980,7 +1986,7 @@
           <div class="md:hidden absolute bottom-2 h-11 start-24 end-16 z-30">
             <input
               bind:value={searchQuery}
-              bind:this={searchInputElement}
+              bind:this={mobileSearchInput}
               placeholder={$t('chat.searchPlaceholder')}
               class="w-full h-full px-4 border border-gray-200 dark:border-slate-700 rounded-full bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
               aria-label={$t('chat.searchAriaLabel')}
@@ -2000,7 +2006,7 @@
           >
             <input
               bind:value={searchQuery}
-              bind:this={searchInputElement}
+              bind:this={desktopSearchInput}
               placeholder={$t('chat.searchPlaceholder')}
               class="w-full px-4 h-11 border border-gray-200 dark:border-slate-700 rounded-full bg-white/90 dark:bg-slate-800/90 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
               aria-label={$t('chat.searchAriaLabel')}
