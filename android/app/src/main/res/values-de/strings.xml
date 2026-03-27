@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak Hintergrund-Messaging</string>
+    <string name="bg_channel_description">Hält nospeak im Hintergrund mit Lese-Relays verbunden</string>
+    <string name="bg_messages_channel_name">nospeak Hintergrund-Nachrichten</string>
+    <string name="bg_messages_channel_description">Benachrichtigungen für neue verschlüsselte Nachrichten, die im Hintergrund empfangen wurden</string>
+    <string name="bg_status_connecting">Verbinde…</string>
+    <string name="bg_status_no_relays">Keine Lese-Relays konfiguriert</string>
+    <string name="bg_status_connected_relays">Verbundene Relays: %d</string>
+    <string name="bg_status_not_connected">Nicht mit Relays verbunden</string>
+    <string name="bg_status_disabled_relogin">Deaktiviert: Erneute Anmeldung erforderlich</string>
+    <string name="bg_notif_new_activity">Neue Aktivität</string>
+    <string name="bg_notif_new_message">Neue Nachricht</string>
+    <string name="bg_notif_location">📍 Standort</string>
+    <string name="bg_notif_new_encrypted_message">Neue verschlüsselte Nachricht</string>
+    <string name="bg_notif_open_to_read">Du hast eine neue Nachricht erhalten. Öffne nospeak, um sie zu lesen.</string>
+</resources>

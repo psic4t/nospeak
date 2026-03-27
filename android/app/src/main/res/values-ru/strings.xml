@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak: фоновые сообщения</string>
+    <string name="bg_channel_description">Поддерживает подключение nospeak к реле для чтения в фоновом режиме</string>
+    <string name="bg_messages_channel_name">nospeak: фоновые уведомления</string>
+    <string name="bg_messages_channel_description">Уведомления о новых зашифрованных сообщениях, полученных в фоновом режиме</string>
+    <string name="bg_status_connecting">Подключение\u2026</string>
+    <string name="bg_status_no_relays">Реле для чтения не настроены</string>
+    <string name="bg_status_connected_relays">Подключённые реле: %d</string>
+    <string name="bg_status_not_connected">Нет подключения к реле</string>
+    <string name="bg_status_disabled_relogin">Отключено: требуется повторный вход</string>
+    <string name="bg_notif_new_activity">Новая активность</string>
+    <string name="bg_notif_new_message">Новое сообщение</string>
+    <string name="bg_notif_location">\uD83D\uDCCD Местоположение</string>
+    <string name="bg_notif_new_encrypted_message">Новое зашифрованное сообщение</string>
+    <string name="bg_notif_open_to_read">Вы получили новое сообщение. Откройте nospeak, чтобы прочитать его.</string>
+</resources>

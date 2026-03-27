@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak बैकग्राउंड मैसेजिंग</string>
+    <string name="bg_channel_description">nospeak को बैकग्राउंड में रीड रिले से कनेक्टेड रखता है</string>
+    <string name="bg_messages_channel_name">nospeak बैकग्राउंड संदेश</string>
+    <string name="bg_messages_channel_description">बैकग्राउंड में प्राप्त नए एन्क्रिप्टेड संदेशों की सूचनाएँ</string>
+    <string name="bg_status_connecting">कनेक्ट हो रहा है…</string>
+    <string name="bg_status_no_relays">कोई रीड रिले कॉन्फ़िगर नहीं है</string>
+    <string name="bg_status_connected_relays">कनेक्टेड रिले: %d</string>
+    <string name="bg_status_not_connected">रिले से कनेक्ट नहीं है</string>
+    <string name="bg_status_disabled_relogin">अक्षम: पुनः लॉगिन आवश्यक</string>
+    <string name="bg_notif_new_activity">नई गतिविधि</string>
+    <string name="bg_notif_new_message">नया संदेश</string>
+    <string name="bg_notif_location">📍 स्थान</string>
+    <string name="bg_notif_new_encrypted_message">नया एन्क्रिप्टेड संदेश</string>
+    <string name="bg_notif_open_to_read">आपको एक नया संदेश मिला है। इसे पढ़ने के लिए nospeak खोलें।</string>
+</resources>

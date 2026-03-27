@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak 백그라운드 메시징</string>
+    <string name="bg_channel_description">nospeak를 백그라운드에서 읽기 릴레이에 연결 상태로 유지합니다</string>
+    <string name="bg_messages_channel_name">nospeak 백그라운드 메시지</string>
+    <string name="bg_messages_channel_description">백그라운드에서 수신된 새 암호화 메시지 알림</string>
+    <string name="bg_status_connecting">연결 중…</string>
+    <string name="bg_status_no_relays">읽기 릴레이가 구성되지 않았습니다</string>
+    <string name="bg_status_connected_relays">연결된 릴레이: %d</string>
+    <string name="bg_status_not_connected">릴레이에 연결되지 않았습니다</string>
+    <string name="bg_status_disabled_relogin">비활성화됨: 다시 로그인 필요</string>
+    <string name="bg_notif_new_activity">새 활동</string>
+    <string name="bg_notif_new_message">새 메시지</string>
+    <string name="bg_notif_location">📍 위치</string>
+    <string name="bg_notif_new_encrypted_message">새 암호화 메시지</string>
+    <string name="bg_notif_open_to_read">새 메시지를 받았습니다. nospeak를 열어서 읽어보세요.</string>
+</resources>

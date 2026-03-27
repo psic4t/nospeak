@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">پیام‌رسانی پس‌زمینه nospeak</string>
+    <string name="bg_channel_description">nospeak را در پس‌زمینه به رله‌های خواندن متصل نگه می‌دارد</string>
+    <string name="bg_messages_channel_name">پیام‌های پس‌زمینه nospeak</string>
+    <string name="bg_messages_channel_description">اعلان‌ها برای پیام‌های رمزنگاری‌شده جدید دریافت‌شده در پس‌زمینه</string>
+    <string name="bg_status_connecting">در حال اتصال…</string>
+    <string name="bg_status_no_relays">هیچ رله خواندنی پیکربندی نشده است</string>
+    <string name="bg_status_connected_relays">رله‌های متصل: %d</string>
+    <string name="bg_status_not_connected">به رله‌ها متصل نیست</string>
+    <string name="bg_status_disabled_relogin">غیرفعال: ورود مجدد لازم است</string>
+    <string name="bg_notif_new_activity">فعالیت جدید</string>
+    <string name="bg_notif_new_message">پیام جدید</string>
+    <string name="bg_notif_location">📍 موقعیت مکانی</string>
+    <string name="bg_notif_new_encrypted_message">پیام رمزنگاری‌شده جدید</string>
+    <string name="bg_notif_open_to_read">شما یک پیام جدید دریافت کردید. nospeak را باز کنید تا آن را بخوانید.</string>
+</resources>

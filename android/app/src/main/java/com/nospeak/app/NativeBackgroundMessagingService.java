@@ -458,7 +458,7 @@ public class NativeBackgroundMessagingService extends Service {
             long maxBacklogCutoffSeconds = Math.max(0L, nowSeconds - MAX_NOTIFICATION_BACKLOG_SECONDS);
             notificationCutoffSeconds = Math.max(persistedBaselineSeconds, maxBacklogCutoffSeconds);
 
-            Notification notification = buildNotification("Connecting...");
+            Notification notification = buildNotification(getString(R.string.bg_status_connecting));
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     final int foregroundServiceType;
@@ -617,10 +617,10 @@ public class NativeBackgroundMessagingService extends Service {
             if (manager.getNotificationChannel(CHANNEL_ID) == null) {
                 NotificationChannel channel = new NotificationChannel(
                         CHANNEL_ID,
-                        "nospeak background messaging",
+                        getString(R.string.bg_channel_name),
                         NotificationManager.IMPORTANCE_MIN
                 );
-                channel.setDescription("Keeps nospeak connected to read relays in the background");
+                channel.setDescription(getString(R.string.bg_channel_description));
                 // Do not show app icon badge for the persistent foreground-service notification.
                 channel.setShowBadge(false);
                 manager.createNotificationChannel(channel);
@@ -629,10 +629,10 @@ public class NativeBackgroundMessagingService extends Service {
             if (manager.getNotificationChannel(CHANNEL_MESSAGES_ID) == null) {
                 NotificationChannel messagesChannel = new NotificationChannel(
                         CHANNEL_MESSAGES_ID,
-                        "nospeak background messages",
+                        getString(R.string.bg_messages_channel_name),
                         NotificationManager.IMPORTANCE_HIGH
                 );
-                messagesChannel.setDescription("Notifications for new encrypted messages received in background");
+                messagesChannel.setDescription(getString(R.string.bg_messages_channel_description));
                 // Allow app icon badges for actual message notifications.
                 messagesChannel.setShowBadge(true);
 
@@ -991,7 +991,7 @@ public class NativeBackgroundMessagingService extends Service {
         AndroidProfileCachePrefs.Identity identity = AndroidProfileCachePrefs.get(getApplicationContext(), senderPubkeyHex);
         String title = identity != null && identity.username != null && !identity.username.trim().isEmpty()
                 ? identity.username.trim()
-                : "New activity";
+                : getString(R.string.bg_notif_new_activity);
         String pictureUrl = identity != null ? identity.pictureUrl : null;
 
         Bitmap avatar = resolveCachedAvatarBitmap(senderPubkeyHex, pictureUrl);
@@ -1143,7 +1143,7 @@ public class NativeBackgroundMessagingService extends Service {
     ) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_MESSAGES_ID)
                 .setContentTitle(title)
-                .setContentText("New message")
+                .setContentText(getString(R.string.bg_notif_new_message))
                 .setSmallIcon(R.drawable.ic_stat_nospeak)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
@@ -1226,7 +1226,7 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         if (preview == null || preview.trim().isEmpty()) {
-            return "New message";
+            return getString(R.string.bg_notif_new_message);
         }
 
         return preview;
@@ -1294,7 +1294,7 @@ public class NativeBackgroundMessagingService extends Service {
         AndroidProfileCachePrefs.Identity identity = AndroidProfileCachePrefs.get(getApplicationContext(), partnerPubkeyHex);
         String title = identity != null && identity.username != null && !identity.username.trim().isEmpty()
                 ? identity.username.trim()
-                : "New activity";
+                : getString(R.string.bg_notif_new_activity);
         String pictureUrl = identity != null ? identity.pictureUrl : null;
 
         Bitmap avatar = resolveCachedAvatarBitmap(partnerPubkeyHex, pictureUrl);
@@ -1723,10 +1723,10 @@ public class NativeBackgroundMessagingService extends Service {
             String locationTag = getTagValue(rumor.tags, "location");
             String content = rumor.content != null ? rumor.content.trim() : "";
             if (locationTag != null || content.startsWith("geo:")) {
-                return "\uD83D\uDCCD Location";
+                return getString(R.string.bg_notif_location);
             }
             if (content.isEmpty()) {
-                return "New message";
+                return getString(R.string.bg_notif_new_message);
             }
             return truncatePreview(content);
         }
@@ -1965,7 +1965,7 @@ public class NativeBackgroundMessagingService extends Service {
 
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
-            manager.notify(NOTIFICATION_ID, buildNotification("Disabled: re-login required"));
+            manager.notify(NOTIFICATION_ID, buildNotification(getString(R.string.bg_status_disabled_relogin)));
         }
 
         try {
@@ -2762,8 +2762,8 @@ public class NativeBackgroundMessagingService extends Service {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
  
-        String title = "New encrypted message";
-        String body = "You received a new message. Open nospeak to read it.";
+        String title = getString(R.string.bg_notif_new_encrypted_message);
+        String body = getString(R.string.bg_notif_open_to_read);
  
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_MESSAGES_ID)
                 .setContentTitle(title)
@@ -2859,11 +2859,11 @@ public class NativeBackgroundMessagingService extends Service {
  
         String text;
         if (configuredRelaysCount == 0) {
-            text = "No read relays configured";
+            text = getString(R.string.bg_status_no_relays);
         } else if (connectedCount > 0) {
-            text = "Connected relays: " + connectedCount;
+            text = getString(R.string.bg_status_connected_relays, connectedCount);
         } else {
-            text = "Not connected to relays";
+            text = getString(R.string.bg_status_not_connected);
         }
  
         Notification notification = buildNotification(text);
@@ -2881,7 +2881,7 @@ public class NativeBackgroundMessagingService extends Service {
         );
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("nospeak background messaging")
+                .setContentTitle(getString(R.string.bg_channel_name))
                 .setContentText(summary)
                 .setSmallIcon(R.drawable.ic_stat_nospeak)
                 .setContentIntent(pendingIntent)

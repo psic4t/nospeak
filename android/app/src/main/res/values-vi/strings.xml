@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak nhắn tin nền</string>
+    <string name="bg_channel_description">Duy trì kết nối nospeak với các relay đọc ở chế độ nền</string>
+    <string name="bg_messages_channel_name">nospeak tin nhắn nền</string>
+    <string name="bg_messages_channel_description">Thông báo cho tin nhắn mã hóa mới nhận được ở chế độ nền</string>
+    <string name="bg_status_connecting">Đang kết nối\u2026</string>
+    <string name="bg_status_no_relays">Chưa cấu hình relay đọc</string>
+    <string name="bg_status_connected_relays">Relay đã kết nối: %d</string>
+    <string name="bg_status_not_connected">Chưa kết nối với relay</string>
+    <string name="bg_status_disabled_relogin">Đã tắt: cần đăng nhập lại</string>
+    <string name="bg_notif_new_activity">Hoạt động mới</string>
+    <string name="bg_notif_new_message">Tin nhắn mới</string>
+    <string name="bg_notif_location">\uD83D\uDCCD Vị trí</string>
+    <string name="bg_notif_new_encrypted_message">Tin nhắn mã hóa mới</string>
+    <string name="bg_notif_open_to_read">Bạn đã nhận được tin nhắn mới. Mở nospeak để đọc.</string>
+</resources>

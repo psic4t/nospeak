@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak wiadomości w tle</string>
+    <string name="bg_channel_description">Utrzymuje nospeak połączony z przekaźnikami odczytu w tle</string>
+    <string name="bg_messages_channel_name">nospeak wiadomości w tle</string>
+    <string name="bg_messages_channel_description">Powiadomienia o nowych zaszyfrowanych wiadomościach odebranych w tle</string>
+    <string name="bg_status_connecting">Łączenie…</string>
+    <string name="bg_status_no_relays">Brak skonfigurowanych przekaźników odczytu</string>
+    <string name="bg_status_connected_relays">Połączone przekaźniki: %d</string>
+    <string name="bg_status_not_connected">Nie połączono z przekaźnikami</string>
+    <string name="bg_status_disabled_relogin">Wyłączone: wymagane ponowne zalogowanie</string>
+    <string name="bg_notif_new_activity">Nowa aktywność</string>
+    <string name="bg_notif_new_message">Nowa wiadomość</string>
+    <string name="bg_notif_location">📍 Lokalizacja</string>
+    <string name="bg_notif_new_encrypted_message">Nowa zaszyfrowana wiadomość</string>
+    <string name="bg_notif_open_to_read">Otrzymałeś nową wiadomość. Otwórz nospeak, aby ją przeczytać.</string>
+</resources>

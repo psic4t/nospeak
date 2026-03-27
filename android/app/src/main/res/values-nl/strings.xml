@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">nospeak achtergrondberichten</string>
+    <string name="bg_channel_description">Houdt nospeak op de achtergrond verbonden met leesrelays</string>
+    <string name="bg_messages_channel_name">nospeak achtergrondberichten</string>
+    <string name="bg_messages_channel_description">Meldingen voor nieuwe versleutelde berichten ontvangen op de achtergrond</string>
+    <string name="bg_status_connecting">Verbinden…</string>
+    <string name="bg_status_no_relays">Geen leesrelays geconfigureerd</string>
+    <string name="bg_status_connected_relays">Verbonden relays: %d</string>
+    <string name="bg_status_not_connected">Niet verbonden met relays</string>
+    <string name="bg_status_disabled_relogin">Uitgeschakeld: opnieuw inloggen vereist</string>
+    <string name="bg_notif_new_activity">Nieuwe activiteit</string>
+    <string name="bg_notif_new_message">Nieuw bericht</string>
+    <string name="bg_notif_location">📍 Locatie</string>
+    <string name="bg_notif_new_encrypted_message">Nieuw versleuteld bericht</string>
+    <string name="bg_notif_open_to_read">Je hebt een nieuw bericht ontvangen. Open nospeak om het te lezen.</string>
+</resources>

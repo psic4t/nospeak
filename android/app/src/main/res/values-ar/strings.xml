@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">رسائل nospeak في الخلفية</string>
+    <string name="bg_channel_description">يبقي nospeak متصلاً بمرحّلات القراءة في الخلفية</string>
+    <string name="bg_messages_channel_name">رسائل nospeak في الخلفية</string>
+    <string name="bg_messages_channel_description">إشعارات بالرسائل المشفرة الجديدة المستلمة في الخلفية</string>
+    <string name="bg_status_connecting">جارٍ الاتصال…</string>
+    <string name="bg_status_no_relays">لم يتم تهيئة مرحّلات قراءة</string>
+    <string name="bg_status_connected_relays">المرحّلات المتصلة: %d</string>
+    <string name="bg_status_not_connected">غير متصل بالمرحّلات</string>
+    <string name="bg_status_disabled_relogin">معطّل: يلزم إعادة تسجيل الدخول</string>
+    <string name="bg_notif_new_activity">نشاط جديد</string>
+    <string name="bg_notif_new_message">رسالة جديدة</string>
+    <string name="bg_notif_location">📍 الموقع</string>
+    <string name="bg_notif_new_encrypted_message">رسالة مشفرة جديدة</string>
+    <string name="bg_notif_open_to_read">لقد تلقيت رسالة جديدة. افتح nospeak لقراءتها.</string>
+</resources>

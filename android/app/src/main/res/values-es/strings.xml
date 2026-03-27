@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="bg_channel_name">mensajería en segundo plano de nospeak</string>
+    <string name="bg_channel_description">Mantiene nospeak conectado a los relays de lectura en segundo plano</string>
+    <string name="bg_messages_channel_name">mensajes en segundo plano de nospeak</string>
+    <string name="bg_messages_channel_description">Notificaciones de nuevos mensajes cifrados recibidos en segundo plano</string>
+    <string name="bg_status_connecting">Conectando…</string>
+    <string name="bg_status_no_relays">No hay relays de lectura configurados</string>
+    <string name="bg_status_connected_relays">Relays conectados: %d</string>
+    <string name="bg_status_not_connected">No conectado a los relays</string>
+    <string name="bg_status_disabled_relogin">Desactivado: se requiere volver a iniciar sesión</string>
+    <string name="bg_notif_new_activity">Nueva actividad</string>
+    <string name="bg_notif_new_message">Nuevo mensaje</string>
+    <string name="bg_notif_location">📍 Ubicación</string>
+    <string name="bg_notif_new_encrypted_message">Nuevo mensaje cifrado</string>
+    <string name="bg_notif_open_to_read">Has recibido un nuevo mensaje. Abre nospeak para leerlo.</string>
+</resources>
