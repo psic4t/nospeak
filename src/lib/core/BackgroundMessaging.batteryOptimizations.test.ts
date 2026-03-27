@@ -6,7 +6,8 @@ const pluginMock = {
     openAppBatterySettings: vi.fn(),
     start: vi.fn(),
     update: vi.fn(),
-    stop: vi.fn()
+    stop: vi.fn(),
+    drainQueuedEvents: vi.fn().mockResolvedValue({ events: '[]' })
 };
 
 vi.mock('@capacitor/core', () => ({
@@ -23,6 +24,12 @@ vi.mock('./NativeDialogs', () => ({
 vi.mock('./connection/instance', () => ({
     connectionManager: {
         setBackgroundModeEnabled: vi.fn()
+    }
+}));
+
+vi.mock('./Messaging', () => ({
+    messagingService: {
+        processGiftWrapFromNativeQueue: vi.fn()
     }
 }));
 

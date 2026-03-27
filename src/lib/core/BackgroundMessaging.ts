@@ -1,12 +1,13 @@
 import { get } from 'svelte/store';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { nip19 } from 'nostr-tools';
+import { nip19, type NostrEvent } from 'nostr-tools';
 import { currentUser, signer } from '$lib/stores/auth';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { connectionManager } from './connection/instance';
 import { ConnectionType, type RelayHealth } from './connection/ConnectionManager';
 import { relayHealths } from '$lib/stores/connection';
 import { isAndroidNative } from './NativeDialogs';
+import { messagingService } from './Messaging';
 
 
 interface NospeakSettings {
@@ -40,34 +41,22 @@ export function isBackgroundMessagingPreferenceEnabled(): boolean {
     return notificationsEnabled && backgroundMessagingEnabled;
 }
 
-function buildRelaySummary(relays: string[]): string {
-    if (!relays || relays.length === 0) {
-        return 'No read relays configured';
-    }
- 
-    const uniqueRelays = Array.from(new Set(relays));
-    const limited = uniqueRelays.slice(0, 4);
-    const list = limited.join(', ');
- 
-    return `Connected to read relays: ${list}`;
-}
- 
 function buildConnectedRelaySummary(healths: RelayHealth[]): string {
     const connectedUrls = healths
         .filter((h) => h.isConnected && h.type === ConnectionType.Persistent)
         .map((h) => h.url);
- 
+
     if (connectedUrls.length === 0) {
         return 'No read relays connected';
     }
- 
+
     const uniqueRelays = Array.from(new Set(connectedUrls));
     const limited = uniqueRelays.slice(0, 4);
     const list = limited.join(', ');
- 
+
     return `Connected read relays: ${list}`;
 }
- 
+
 let relayHealthUnsubscribe: (() => void) | null = null;
 let lastNotificationSummary: string | null = null;
 
@@ -75,13 +64,13 @@ interface AndroidBackgroundMessagingPlugin {
     start(options: {
         mode: 'nsec' | 'amber';
         pubkeyHex: string;
-        readRelays: string[]; // keeps native interface name but will carry messaging relays
-        summary: string;
+        readRelays: string[];
         notificationsEnabled: boolean;
     }): Promise<void>;
-    update(options: { summary: string }): Promise<void>;
+    update(): Promise<void>;
     stop(): Promise<void>;
     setActiveConversation(options: { pubkeyHex: string | null }): Promise<void>;
+    drainQueuedEvents(): Promise<{ events: string }>;
 
     getBatteryOptimizationStatus(): Promise<{ isIgnoringBatteryOptimizations: boolean }>;
     requestIgnoreBatteryOptimizations(): Promise<{ started: boolean; reason?: string }>;
@@ -171,11 +160,11 @@ export async function openAndroidAppBatterySettings(): Promise<void> {
     }
 }
 
-async function startNativeForegroundService(summary: string, readRelays: string[]): Promise<void> {
+async function startNativeForegroundService(readRelays: string[]): Promise<void> {
      if (Capacitor.getPlatform() !== 'android') {
          return;
      }
- 
+
      const s = get(signer);
      const user = get(currentUser);
      if (!user) {
@@ -223,7 +212,7 @@ async function startNativeForegroundService(summary: string, readRelays: string[
              throw e;
          }
      }
- 
+
       const settings = loadSettings();
       const notificationsEnabled = settings.notificationsEnabled !== false;
 
@@ -231,19 +220,18 @@ async function startNativeForegroundService(summary: string, readRelays: string[
           mode,
           pubkeyHex,
           readRelays,
-          summary,
           notificationsEnabled
       });
  }
 
 
-async function updateNativeForegroundService(summary: string): Promise<void> {
+async function updateNativeForegroundService(): Promise<void> {
     if (Capacitor.getPlatform() !== 'android') {
         return;
     }
 
     try {
-        await AndroidBackgroundMessaging.update({ summary });
+        await AndroidBackgroundMessaging.update();
     } catch (e) {
         console.error('Failed to update Android background messaging service:', e);
     }
@@ -265,28 +253,27 @@ function ensureRelayHealthSubscription(): void {
     if (relayHealthUnsubscribe || typeof window === 'undefined') {
         return;
     }
- 
+
     relayHealthUnsubscribe = relayHealths.subscribe((healths: RelayHealth[]) => {
         const summary = buildConnectedRelaySummary(healths);
         if (summary === lastNotificationSummary) {
             return;
         }
- 
+
         lastNotificationSummary = summary;
-        void updateNativeForegroundService(summary);
+        void updateNativeForegroundService();
     });
 }
-
 
 
 export async function enableAndroidBackgroundMessaging(): Promise<void> {
     if (!isAndroidNative()) {
         return;
     }
- 
+
     const user = get(currentUser);
     let readRelays: string[] = [];
- 
+
     try {
         if (user?.npub) {
             const profile = await profileRepo.getProfileIgnoreTTL(user.npub);
@@ -297,21 +284,18 @@ export async function enableAndroidBackgroundMessaging(): Promise<void> {
     } catch (e) {
         console.error('Failed to load profile for Android background messaging:', e);
     }
- 
-    const summary = buildRelaySummary(readRelays);
 
- 
     // Apply more conservative reconnection behavior while background messaging is enabled
     connectionManager.setBackgroundModeEnabled(true);
- 
-     // Track the current summary and start the foreground service
-     lastNotificationSummary = summary;
+
      try {
-         await startNativeForegroundService(summary, readRelays);
+         await startNativeForegroundService(readRelays);
 
          await maybeRequestAndroidIgnoreBatteryOptimizationsForBackgroundMessaging();
 
-         // Keep the notification in sync with connected relays
+         // Subscribe to relay health changes — each change triggers a
+         // startForegroundService() heartbeat that keeps the service at
+         // full foreground priority on Android.
          ensureRelayHealthSubscription();
      } catch (e) {
          console.error('Failed to start native foreground service for Android background messaging:', e);
@@ -329,9 +313,9 @@ export async function enableAndroidBackgroundMessaging(): Promise<void> {
 
      // Restore default reconnection behavior
     connectionManager.setBackgroundModeEnabled(false);
- 
+
     await stopNativeForegroundService();
- 
+
     // Tear down relay health subscription
     if (relayHealthUnsubscribe) {
         relayHealthUnsubscribe();
@@ -340,19 +324,19 @@ export async function enableAndroidBackgroundMessaging(): Promise<void> {
     lastNotificationSummary = null;
 }
 
- 
+
  export async function applyAndroidBackgroundMessaging(enabled: boolean): Promise<void> {
      if (!isAndroidNative()) {
          return;
      }
- 
+
      if (enabled) {
          await enableAndroidBackgroundMessaging();
      } else {
          await disableAndroidBackgroundMessaging();
      }
  }
- 
+
  export async function syncAndroidBackgroundMessagingFromPreference(): Promise<void> {
      await applyAndroidBackgroundMessaging(isBackgroundMessagingPreferenceEnabled());
  }
@@ -366,5 +350,41 @@ export async function syncActiveConversationToNative(pubkeyHex: string | null): 
         await AndroidBackgroundMessaging.setActiveConversation({ pubkeyHex });
     } catch (e) {
         console.warn('Failed to sync active conversation to native:', e);
+    }
+}
+
+/**
+ * Drain queued gift-wrap events from the native background service and process
+ * them through the JS decryption/storage pipeline. Called when the app foregrounds.
+ */
+export async function processQueuedNativeEvents(): Promise<void> {
+    if (!isAndroidNative()) {
+        return;
+    }
+
+    try {
+        const result = await AndroidBackgroundMessaging.drainQueuedEvents();
+        if (!result.events || result.events === '[]') {
+            return;
+        }
+
+        const rawEvents: string[] = JSON.parse(result.events);
+        if (!Array.isArray(rawEvents) || rawEvents.length === 0) {
+            return;
+        }
+
+        for (const rawJson of rawEvents) {
+            try {
+                const event = JSON.parse(rawJson) as NostrEvent;
+                if (!event.id || event.kind !== 1059) {
+                    continue;
+                }
+                await messagingService.processGiftWrapFromNativeQueue(event);
+            } catch (e) {
+                console.warn('Failed to process queued native event:', e);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to drain queued native events:', e);
     }
 }

@@ -26,7 +26,6 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
         String mode = call.getString("mode", "amber");
         String pubkeyHex = call.getString("pubkeyHex");
         JSArray relaysArray = call.getArray("readRelays");
-        String summary = call.getString("summary", "Connected to read relays");
         Boolean notificationsEnabledValue = call.getBoolean("notificationsEnabled", false);
         boolean notificationsEnabled = notificationsEnabledValue != null && notificationsEnabledValue;
 
@@ -54,13 +53,12 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
         long baselineSeconds = Math.max(0L, nowSeconds - 60L);
         AndroidBackgroundMessagingPrefs.saveNotificationBaselineSeconds(getContext(), baselineSeconds);
 
-        AndroidBackgroundMessagingPrefs.saveStartConfig(getContext(), mode, pubkeyHex, relays, summary, notificationsEnabled);
+        AndroidBackgroundMessagingPrefs.saveStartConfig(getContext(), mode, pubkeyHex, relays, notificationsEnabled);
 
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         intent.setAction(NativeBackgroundMessagingService.ACTION_START);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_MODE, mode);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_PUBKEY_HEX, pubkeyHex);
-        intent.putExtra(NativeBackgroundMessagingService.EXTRA_SUMMARY, summary);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_READ_RELAYS, relays);
         intent.putExtra(NativeBackgroundMessagingService.EXTRA_NOTIFICATIONS_ENABLED, notificationsEnabled);
 
@@ -75,17 +73,8 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
 
     @PluginMethod
     public void update(PluginCall call) {
-        String summary = call.getString("summary", null);
-        if (summary == null) {
-            call.reject("summary is required");
-            return;
-        }
-
-        AndroidBackgroundMessagingPrefs.saveSummary(getContext(), summary);
-
         Intent intent = new Intent(getContext(), NativeBackgroundMessagingService.class);
         intent.setAction(NativeBackgroundMessagingService.ACTION_UPDATE);
-        intent.putExtra(NativeBackgroundMessagingService.EXTRA_SUMMARY, summary);
         try {
             ContextCompat.startForegroundService(getContext(), intent);
         } catch (Exception e) {
@@ -93,6 +82,24 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
             return;
         }
         call.resolve();
+    }
+
+    @PluginMethod
+    public void drainQueuedEvents(PluginCall call) {
+        String eventsJson;
+        NativeBackgroundMessagingService service = NativeBackgroundMessagingService.getInstance();
+        if (service != null) {
+            eventsJson = service.drainQueuedEvents();
+        } else {
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences(
+                "nospeak_background_event_queue", Context.MODE_PRIVATE);
+            eventsJson = prefs.getString("queuedEventsJson", "[]");
+            prefs.edit().putString("queuedEventsJson", "[]").apply();
+        }
+
+        JSObject result = new JSObject();
+        result.put("events", eventsJson);
+        call.resolve(result);
     }
 
     @PluginMethod

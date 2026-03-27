@@ -15,7 +15,6 @@ public final class AndroidBackgroundMessagingPrefs {
     private static final String KEY_MODE = "mode";
     private static final String KEY_PUBKEY_HEX = "pubkeyHex";
     private static final String KEY_READ_RELAYS_JSON = "readRelaysJson";
-    private static final String KEY_SUMMARY = "summary";
     private static final String KEY_NOTIFICATIONS_ENABLED = "notificationsEnabled";
     private static final String KEY_NOTIFICATION_BASELINE_SECONDS = "notificationBaselineSeconds";
 
@@ -28,7 +27,6 @@ public final class AndroidBackgroundMessagingPrefs {
         public final String mode;
         public final String pubkeyHex;
         public final String[] readRelays;
-        public final String summary;
         public final boolean notificationsEnabled;
 
         public Config(
@@ -36,14 +34,12 @@ public final class AndroidBackgroundMessagingPrefs {
                 String mode,
                 String pubkeyHex,
                 String[] readRelays,
-                String summary,
                 boolean notificationsEnabled
         ) {
             this.enabled = enabled;
             this.mode = mode;
             this.pubkeyHex = pubkeyHex;
             this.readRelays = readRelays;
-            this.summary = summary;
             this.notificationsEnabled = notificationsEnabled;
         }
     }
@@ -52,19 +48,11 @@ public final class AndroidBackgroundMessagingPrefs {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
-    private static String defaultSummary(String[] readRelays) {
-        if (readRelays == null || readRelays.length == 0) {
-            return "No read relays configured";
-        }
-        return "Connected to read relays";
-    }
-
     public static void saveStartConfig(
             Context context,
             String mode,
             String pubkeyHex,
             String[] readRelays,
-            String summary,
             boolean notificationsEnabled
     ) {
         JSONArray relaysJson = new JSONArray();
@@ -79,17 +67,7 @@ public final class AndroidBackgroundMessagingPrefs {
         editor.putString(KEY_MODE, mode != null ? mode : "amber");
         editor.putString(KEY_PUBKEY_HEX, pubkeyHex);
         editor.putString(KEY_READ_RELAYS_JSON, relaysJson.toString());
-        editor.putString(KEY_SUMMARY, summary != null ? summary : defaultSummary(readRelays));
         editor.putBoolean(KEY_NOTIFICATIONS_ENABLED, notificationsEnabled);
-        editor.apply();
-    }
-
-    public static void saveSummary(Context context, String summary) {
-        if (summary == null) {
-            return;
-        }
-        SharedPreferences.Editor editor = getPrefs(context).edit();
-        editor.putString(KEY_SUMMARY, summary);
         editor.apply();
     }
 
@@ -115,7 +93,6 @@ public final class AndroidBackgroundMessagingPrefs {
         boolean enabled = prefs.getBoolean(KEY_ENABLED, false);
         String mode = prefs.getString(KEY_MODE, "amber");
         String pubkeyHex = prefs.getString(KEY_PUBKEY_HEX, null);
-        String summary = prefs.getString(KEY_SUMMARY, null);
         boolean notificationsEnabled = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, false);
 
         String[] readRelays = new String[0];
@@ -134,11 +111,7 @@ public final class AndroidBackgroundMessagingPrefs {
             }
         }
 
-        if (summary == null || summary.isEmpty()) {
-            summary = defaultSummary(readRelays);
-        }
-
-        return new Config(enabled, mode, pubkeyHex, readRelays, summary, notificationsEnabled);
+        return new Config(enabled, mode, pubkeyHex, readRelays, notificationsEnabled);
     }
 
     public static Intent buildStartServiceIntent(Context context) {
@@ -163,7 +136,6 @@ public final class AndroidBackgroundMessagingPrefs {
             serviceIntent.putExtra(NativeBackgroundMessagingService.EXTRA_PUBKEY_HEX, config.pubkeyHex);
         }
         serviceIntent.putExtra(NativeBackgroundMessagingService.EXTRA_READ_RELAYS, config.readRelays != null ? config.readRelays : new String[0]);
-        serviceIntent.putExtra(NativeBackgroundMessagingService.EXTRA_SUMMARY, config.summary);
         serviceIntent.putExtra(NativeBackgroundMessagingService.EXTRA_NOTIFICATIONS_ENABLED, config.notificationsEnabled);
         return serviceIntent;
     }

@@ -88,7 +88,24 @@ import type { Conversation } from '$lib/db/db';
       return unsub;
     }
 
- 
+    /**
+     * Process a raw gift-wrap event that was queued by the native background service.
+     * Runs the same dedup + decrypt + store pipeline as the live subscription handler.
+     */
+    public async processGiftWrapFromNativeQueue(event: NostrEvent): Promise<void> {
+        if (this.liveSeenEventIds.has(event.id)) {
+            return;
+        }
+        this.liveSeenEventIds.add(event.id);
+
+        if (await messageRepo.hasMessage(event.id)) {
+            return;
+        }
+
+        await this.handleGiftWrap(event);
+    }
+
+
    public async startSubscriptionsForCurrentUser(): Promise<void> {
      const s = get(signer);
      const user = get(currentUser);

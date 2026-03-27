@@ -108,7 +108,6 @@ public class NativeBackgroundMessagingService extends Service {
     public static final String EXTRA_PUBKEY_HEX = "pubkeyHex";
     public static final String EXTRA_NSEC_HEX = "nsecHex";
     public static final String EXTRA_READ_RELAYS = "readRelays";
-    public static final String EXTRA_SUMMARY = "summary";
     public static final String EXTRA_NOTIFICATIONS_ENABLED = "notificationsEnabled";
 
     public static final String ACTION_SET_ACTIVE_CONVERSATION = "com.nospeak.app.SET_ACTIVE_CONVERSATION";
@@ -128,13 +127,15 @@ public class NativeBackgroundMessagingService extends Service {
     private static final String DEDUPE_PREFS_KEY_IDS = "seenEventIdsJson";
     private static final int MAX_PERSISTED_EVENT_IDS = 500;
 
+    private static final String EVENT_QUEUE_PREFS_NAME = "nospeak_background_event_queue";
+    private static final String EVENT_QUEUE_KEY = "queuedEventsJson";
+    private static final int MAX_QUEUED_EVENTS = 200;
+
     private static final long MAX_NOTIFICATION_BACKLOG_SECONDS = 15L * 60L;
 
     private static final int ACTIVE_PING_SECONDS = 120;
     private static final int LOCKED_PING_SECONDS = 300;
     private static final long LOCK_GRACE_MS = 60_000L;
-
-    private String currentSummary = "Connected to read relays";
 
     private OkHttpClient client;
     private final Set<WebSocket> sockets = new HashSet<>();
@@ -436,20 +437,11 @@ public class NativeBackgroundMessagingService extends Service {
 
         String action = intent.getAction();
         if (ACTION_UPDATE.equals(action)) {
-            String summary = intent.getStringExtra(EXTRA_SUMMARY);
-            if (summary != null) {
-                currentSummary = summary;
-                updateServiceNotificationForHealth();
-            }
+            updateServiceNotificationForHealth();
             return START_STICKY;
         }
 
         if (ACTION_START.equals(action) || action == null) {
-            String summary = intent.getStringExtra(EXTRA_SUMMARY);
-            if (summary != null) {
-                currentSummary = summary;
-            }
-
             currentMode = intent.getStringExtra(EXTRA_MODE);
             if (currentMode == null) {
                 currentMode = "amber";
@@ -466,7 +458,7 @@ public class NativeBackgroundMessagingService extends Service {
             long maxBacklogCutoffSeconds = Math.max(0L, nowSeconds - MAX_NOTIFICATION_BACKLOG_SECONDS);
             notificationCutoffSeconds = Math.max(persistedBaselineSeconds, maxBacklogCutoffSeconds);
 
-            Notification notification = buildNotification(currentSummary);
+            Notification notification = buildNotification("Connecting...");
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     final int foregroundServiceType;
@@ -559,6 +551,8 @@ public class NativeBackgroundMessagingService extends Service {
 
     @Override
     public void onDestroy() {
+        persistEventQueue();
+
         serviceRunning = false;
         sInstance = null;
 
@@ -874,7 +868,12 @@ public class NativeBackgroundMessagingService extends Service {
                     return;
                 }
             }
- 
+
+            try {
+                queueEventForJs(event);
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "Failed to queue event for JS layer", e);
+            }
             handleLiveGiftWrapEvent(event, id);
 
 
@@ -1963,7 +1962,6 @@ public class NativeBackgroundMessagingService extends Service {
         Log.w(LOG_TAG, "Disabling background messaging: missing local secret key (re-login required)");
 
         AndroidBackgroundMessagingPrefs.setEnabled(getApplicationContext(), false);
-        AndroidBackgroundMessagingPrefs.saveSummary(getApplicationContext(), "Disabled: re-login required");
 
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
@@ -2779,6 +2777,74 @@ public class NativeBackgroundMessagingService extends Service {
         manager.notify(id, builder.build());
     }
 
+
+    private final ArrayDeque<String> pendingEventQueue = new ArrayDeque<>();
+
+    /**
+     * Queue a raw gift-wrap event for the JS layer to process when the app foregrounds.
+     * Only queues when the app is not visible (when visible, JS handles events live).
+     * Uses in-memory queue to avoid blocking the WebSocket callback thread.
+     */
+    private void queueEventForJs(JSONObject event) {
+        if (MainActivity.isAppVisible()) {
+            return;
+        }
+
+        synchronized (pendingEventQueue) {
+            pendingEventQueue.addLast(event.toString());
+            while (pendingEventQueue.size() > MAX_QUEUED_EVENTS) {
+                pendingEventQueue.removeFirst();
+            }
+        }
+    }
+
+    /**
+     * Atomically reads and clears all queued gift-wrap events.
+     * Called by the plugin when the JS layer foregrounds.
+     * Also loads any events persisted to disk (from a previous service lifecycle).
+     */
+    public String drainQueuedEvents() {
+        JSONArray result = new JSONArray();
+
+        // First, load any events persisted from a previous service lifecycle
+        SharedPreferences prefs = getSharedPreferences(EVENT_QUEUE_PREFS_NAME, MODE_PRIVATE);
+        String persisted = prefs.getString(EVENT_QUEUE_KEY, "[]");
+        if (persisted != null && !persisted.equals("[]")) {
+            try {
+                JSONArray persistedArr = new JSONArray(persisted);
+                for (int i = 0; i < persistedArr.length(); i++) {
+                    result.put(persistedArr.getString(i));
+                }
+            } catch (JSONException ignored) {}
+            prefs.edit().putString(EVENT_QUEUE_KEY, "[]").apply();
+        }
+
+        // Then drain the in-memory queue
+        synchronized (pendingEventQueue) {
+            for (String eventJson : pendingEventQueue) {
+                result.put(eventJson);
+            }
+            pendingEventQueue.clear();
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Persist the in-memory event queue to disk so events survive service restarts.
+     */
+    private void persistEventQueue() {
+        JSONArray arr = new JSONArray();
+        synchronized (pendingEventQueue) {
+            for (String eventJson : pendingEventQueue) {
+                arr.put(eventJson);
+            }
+        }
+        if (arr.length() > 0) {
+            SharedPreferences prefs = getSharedPreferences(EVENT_QUEUE_PREFS_NAME, MODE_PRIVATE);
+            prefs.edit().putString(EVENT_QUEUE_KEY, arr.toString()).apply();
+        }
+    }
 
     private void updateServiceNotificationForHealth() {
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);

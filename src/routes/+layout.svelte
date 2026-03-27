@@ -38,6 +38,7 @@
    import { isRtlLanguage } from "$lib/i18n";
    import { isAndroidNative, nativeDialogService } from "$lib/core/NativeDialogs";
    import { initAndroidBackNavigation } from "$lib/core/AndroidBackHandler";
+   import { processQueuedNativeEvents } from "$lib/core/BackgroundMessaging";
      import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
      import Toast from "$lib/components/Toast.svelte";
      import PinLockScreen from "$lib/components/PinLockScreen.svelte";
@@ -144,6 +145,20 @@
       document.addEventListener('visibilitychange', handlePinLock);
       return () => {
           document.removeEventListener('visibilitychange', handlePinLock);
+      };
+  });
+
+  // Process queued native background events when app foregrounds (Android only)
+  onMount(() => {
+      const handleDrainNativeQueue = () => {
+          if (document.visibilityState === 'visible' && $currentUser) {
+              void processQueuedNativeEvents();
+          }
+      };
+
+      document.addEventListener('visibilitychange', handleDrainNativeQueue);
+      return () => {
+          document.removeEventListener('visibilitychange', handleDrainNativeQueue);
       };
   });
 
