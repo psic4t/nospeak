@@ -6,6 +6,7 @@
     import { resolveDisplayName } from '$lib/core/nameUtils';
     import { onDestroy } from 'svelte';
     import { t } from '$lib/i18n';
+    import { startIncomingRingtone, stopRingtone } from '$lib/core/voiceCall/ringtone';
 
     let profileName = $state('');
     let profilePicture = $state('');
@@ -14,8 +15,8 @@
     $effect(() => {
         if ($voiceCallState.status === 'incoming-ringing' && $voiceCallState.peerNpub) {
             loadProfile($voiceCallState.peerNpub);
-            // Don't send reject on timeout — let caller's own timeout fire.
-            // Just dismiss the UI locally.
+            startIncomingRingtone();
+
             dismissTimeout = setTimeout(() => {
                 voiceCallService.hangup();
             }, CALL_OFFER_TIMEOUT_MS);
@@ -24,6 +25,7 @@
                 navigator.vibrate([200, 100, 200, 100, 200]);
             }
         } else {
+            stopRingtone();
             if (dismissTimeout) {
                 clearTimeout(dismissTimeout);
                 dismissTimeout = null;
@@ -50,6 +52,7 @@
     }
 
     onDestroy(() => {
+        stopRingtone();
         if (dismissTimeout) clearTimeout(dismissTimeout);
     });
 </script>

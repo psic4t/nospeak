@@ -6,6 +6,7 @@
     import { resolveDisplayName } from '$lib/core/nameUtils';
     import { onDestroy } from 'svelte';
     import { t } from '$lib/i18n';
+    import { startOutgoingRingback, stopRingtone } from '$lib/core/voiceCall/ringtone';
 
     let profileName = $state('');
     let profilePicture = $state('');
@@ -54,6 +55,14 @@
     });
 
     $effect(() => {
+        if ($voiceCallState.status === 'outgoing-ringing') {
+            startOutgoingRingback();
+        } else {
+            stopRingtone();
+        }
+    });
+
+    $effect(() => {
         if ($voiceCallState.status === 'active' && audioEl) {
             const stream = voiceCallService.getRemoteStream();
             if (stream) {
@@ -89,6 +98,7 @@
     }
 
     onDestroy(() => {
+        stopRingtone();
         if (endResetTimeout) clearTimeout(endResetTimeout);
     });
 </script>
