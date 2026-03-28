@@ -40,7 +40,8 @@ function isRuntimeConfig(value: unknown): value is RuntimeConfig {
         Array.isArray(candidate.defaultBlossomServers) &&
         isNonEmptyString(candidate.searchRelayUrl) &&
         isNonEmptyString(candidate.blasterRelayUrl) &&
-        isNonEmptyString(candidate.webAppBaseUrl)
+        isNonEmptyString(candidate.webAppBaseUrl) &&
+        Array.isArray(candidate.iceServers)
     );
 }
 
@@ -113,6 +114,10 @@ export function getDefaultBlossomServers(): string[] {
 
 export function getWebAppBaseUrl(): string {
     return getRuntimeConfigSnapshot().webAppBaseUrl;
+}
+
+export function getIceServers(): RTCIceServer[] {
+    return getRuntimeConfigSnapshot().iceServers;
 }
 
 export { runtimeConfig };

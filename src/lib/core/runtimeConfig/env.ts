@@ -150,12 +150,28 @@ export function getRuntimeConfigFromEnv(env: Record<string, string | undefined>)
         'NOSPEAK_WEB_APP_BASE_URL'
     );
 
+    let iceServers: RTCIceServer[] = DEFAULT_RUNTIME_CONFIG.iceServers;
+    const iceServersRaw = env.NOSPEAK_ICE_SERVERS;
+    if (iceServersRaw && iceServersRaw.trim().length > 0) {
+        try {
+            const parsed = JSON.parse(iceServersRaw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                iceServers = parsed;
+            } else {
+                console.warn('Ignoring NOSPEAK_ICE_SERVERS override; invalid array');
+            }
+        } catch {
+            console.warn('Ignoring NOSPEAK_ICE_SERVERS override; invalid JSON');
+        }
+    }
+
     return {
         discoveryRelays,
         defaultMessagingRelays,
         searchRelayUrl,
         blasterRelayUrl,
         defaultBlossomServers,
-        webAppBaseUrl
+        webAppBaseUrl,
+        iceServers
     };
 }

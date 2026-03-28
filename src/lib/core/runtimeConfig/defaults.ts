@@ -22,5 +22,14 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
         'https://blossom.data.haus',
         'https://blossom.primal.net'
     ],
-    webAppBaseUrl: 'https://nospeak.chat'
+    webAppBaseUrl: 'https://nospeak.chat',
+    iceServers: [
+        { urls: 'stun:turn.data.haus:3478' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        {
+            urls: 'turn:turn.data.haus:3478',
+            username: 'free',
+            credential: 'free'
+        }
+    ]
 };
