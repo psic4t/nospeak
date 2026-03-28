@@ -1901,17 +1901,27 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
     const rumorId = getEventHash(rumor as NostrEvent);
     rumor.id = rumorId;
 
-    // Add temporary relay connections
-    for (const url of recipientRelays) {
-      connectionManager.addTemporaryRelay(url);
+    // Publish to already-connected relays only — don't add temporary relays
+    // for voice signals, as that triggers subscription replay and message floods.
+    // Filter to relays that are already connected.
+    const connectedRelays = recipientRelays.filter(url => {
+      const health = connectionManager.getRelayHealth(url);
+      return health?.isConnected && health.relay;
+    });
+
+    if (connectedRelays.length === 0) {
+      console.warn('[VoiceCall] No connected relays for recipient, signal may not be delivered');
+      // Fall back to all relays — publishWithDeadline will wait for connection
     }
+
+    const publishRelays = connectedRelays.length > 0 ? connectedRelays : recipientRelays;
 
     // Create gift-wrap and publish directly (skip self-wrap, relay discovery, status tracking)
     const giftWrap = await this.createGiftWrap(rumor, recipientPubkey, s);
     await publishWithDeadline({
       connectionManager,
       event: giftWrap,
-      relayUrls: recipientRelays,
+      relayUrls: publishRelays,
       deadlineMs: 5000,
     });
   }

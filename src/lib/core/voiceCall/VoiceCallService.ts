@@ -103,7 +103,7 @@ export class VoiceCallService {
                 }
             }, CALL_OFFER_TIMEOUT_MS);
         } catch (err) {
-            console.error('[VoiceCall] Failed to initiate call:', err instanceof Error ? err.message : err, err);
+            console.error('[VoiceCall] Failed to initiate call:', err);
             this.cleanup();
             endCall('error');
         }
@@ -320,13 +320,13 @@ export class VoiceCallService {
 
     private async sendSignal(recipientNpub: string, signal: VoiceCallSignal): Promise<void> {
         if (!this.sendSignalFn) {
-            console.error('[VoiceCall] Signal sender not registered — was listenForMessages() called?');
+            console.error('[VoiceCall] Signal sender not registered');
             return;
         }
         try {
             await this.sendSignalFn(recipientNpub, JSON.stringify(signal));
         } catch (err) {
-            console.error('[VoiceCall] Failed to send signal:', signal.action, err instanceof Error ? err.message : err);
+            console.error('[VoiceCall] Failed to send signal:', err);
         }
     }
 
