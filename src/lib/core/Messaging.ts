@@ -52,6 +52,10 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
     // When true, autoAddContact skips publishing to Kind 30000 (used during bulk sync)
     private _deferContactPublish: boolean = false;
+
+    // Short-lived relay cache for voice call signals (avoids repeated DB lookups per ICE candidate)
+    private voiceCallRelayCache = new Map<string, { relays: string[], cachedAt: number }>();
+    private readonly VOICE_RELAY_CACHE_TTL = 60_000; // 60 seconds
  
     // Listen for incoming messages
     public listenForMessages(publicKey: string): () => void {
@@ -1010,7 +1014,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
     skipSelfWrap?: boolean;
     expirationSeconds?: number;
   }): Promise<{ rumorId: string; selfGiftWrapId: string }> {
-    const { recipients, rumor, conversationId, conversation, messageDbFields, skipDbSave, expirationSeconds } = params;
+    const { recipients, rumor, conversationId, conversation, messageDbFields, skipDbSave, skipSelfWrap, expirationSeconds } = params;
 
     const expiresAt = typeof expirationSeconds === 'number'
       ? Math.floor(Date.now() / 1000) + expirationSeconds
@@ -1109,21 +1113,25 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       connectionManager.cleanupTemporaryConnections();
     }, 15000);
 
-    // Create self-wrap first (used for relay status tracking ID and DB eventId)
-    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s, expiresAt);
+    // Create self-wrap (used for relay status tracking ID and DB eventId)
+    // Skip for ephemeral signals (voice call, read receipts) that don't need self-delivery
+    let selfGiftWrap: NostrEvent | null = null;
+    if (!skipSelfWrap) {
+      selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s, expiresAt);
 
-    // Calculate total desired relays for status tracking
-    let totalDesiredRelays = params.skipSelfWrap ? 0 : senderRelays.length;
-    for (const relays of recipientRelaysMap.values()) {
-      totalDesiredRelays += relays.length;
-    }
+      // Calculate total desired relays for status tracking
+      let totalDesiredRelays = senderRelays.length;
+      for (const relays of recipientRelaysMap.values()) {
+        totalDesiredRelays += relays.length;
+      }
 
-    // Initialize relay send status for UI
-    if (isGroup) {
-      initRelaySendStatus(selfGiftWrap.id, totalDesiredRelays, undefined, conversationId);
-    } else {
-      const recipientNpub = recipients[0];
-      initRelaySendStatus(selfGiftWrap.id, totalDesiredRelays, recipientNpub);
+      // Initialize relay send status for UI
+      if (isGroup) {
+        initRelaySendStatus(selfGiftWrap.id, totalDesiredRelays, undefined, conversationId);
+      } else {
+        const recipientNpub = recipients[0];
+        initRelaySendStatus(selfGiftWrap.id, totalDesiredRelays, recipientNpub);
+      }
     }
 
     let totalSuccessfulRelays = 0;
@@ -1138,7 +1146,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
         event: giftWrap,
         relayUrls: relays,
         deadlineMs: 5000,
-        onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap.id, url),
+        onRelaySuccess: selfGiftWrap ? (url) => registerRelaySuccess(selfGiftWrap!.id, url) : undefined,
       });
 
       if (this.debug) {
@@ -1160,14 +1168,14 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       }
     }
 
-    // Send self-wrap to sender's relays (skip for read receipts)
-    if (!params.skipSelfWrap) {
+    // Send self-wrap to sender's relays (skip for ephemeral signals like voice-call / read receipts)
+    if (!skipSelfWrap && selfGiftWrap) {
       const selfPublishResult = await publishWithDeadline({
         connectionManager,
         event: selfGiftWrap,
         relayUrls: senderRelays,
         deadlineMs: 5000,
-        onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap.id, url),
+        onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap!.id, url),
       });
 
       totalSuccessfulRelays += selfPublishResult.successfulRelays.length;
@@ -1184,7 +1192,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
     if (totalSuccessfulRelays === 0) {
       console.warn('Send failed to reach any relays', {
         conversationId,
-        selfGiftWrapId: selfGiftWrap.id,
+        selfGiftWrapId: selfGiftWrap?.id,
         recipientCount: recipientRelaysMap.size,
       });
       throw new Error('Failed to send message to any relay');
@@ -1200,7 +1208,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
         recipientNpub,
         message: rumor.content || '',
         sentAt: (rumor.created_at || 0) * 1000,
-        eventId: selfGiftWrap.id,
+        eventId: selfGiftWrap?.id || rumorId,
         rumorId,
         direction: 'sent',
         createdAt: Date.now(),
@@ -1224,7 +1232,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       await this.autoAddContact(recipients[0]);
     }
 
-    return { rumorId, selfGiftWrapId: selfGiftWrap.id };
+    return { rumorId, selfGiftWrapId: selfGiftWrap?.id || rumorId };
   }
 
   // ─── Public Send Methods (thin rumor-builder wrappers) ─────────────────
@@ -1849,28 +1857,62 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
    * Send a voice call signal (offer, answer, ICE, hangup, etc.)
    * as a gift-wrapped Kind 14 event that is NOT saved to the message DB.
    */
+  private async getVoiceCallRelays(npub: string): Promise<string[]> {
+    const now = Date.now();
+    const cached = this.voiceCallRelayCache.get(npub);
+    if (cached && (now - cached.cachedAt) < this.VOICE_RELAY_CACHE_TTL) {
+      return cached.relays;
+    }
+    const relays = await this.getMessagingRelays(npub);
+    this.voiceCallRelayCache.set(npub, { relays, cachedAt: now });
+    return relays;
+  }
+
+  public clearVoiceCallRelayCache(): void {
+    this.voiceCallRelayCache.clear();
+  }
+
   public async sendVoiceCallSignal(recipientNpub: string, signalContent: string): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
 
     const pubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(pubkey);
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    // Use cached relay lookups for voice signals
+    const recipientRelays = await this.getVoiceCallRelays(recipientNpub);
+    if (recipientRelays.length === 0) {
+      throw new Error('Contact has no messaging relays configured');
+    }
 
     const rumor: Partial<NostrEvent> = {
         kind: 14,
         created_at: Math.floor(Date.now() / 1000),
         content: signalContent,
         tags: [
-            ['p', recipientPubkey],
+            ['p', recipientPubkey, recipientRelays[0]],
             ['type', 'voice-call']
         ],
         pubkey
     };
 
-    await this.sendEnvelope({
-        recipients: [recipientNpub],
-        rumor,
-        skipDbSave: true
+    // Compute stable rumor ID
+    const rumorId = getEventHash(rumor as NostrEvent);
+    rumor.id = rumorId;
+
+    // Add temporary relay connections
+    for (const url of recipientRelays) {
+      connectionManager.addTemporaryRelay(url);
+    }
+
+    // Create gift-wrap and publish directly (skip self-wrap, relay discovery, status tracking)
+    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey, s);
+    await publishWithDeadline({
+      connectionManager,
+      event: giftWrap,
+      relayUrls: recipientRelays,
+      deadlineMs: 5000,
     });
   }
 

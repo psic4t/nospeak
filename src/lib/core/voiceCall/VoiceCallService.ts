@@ -205,9 +205,10 @@ export class VoiceCallService {
         const iceServers = getIceServers();
         this.peerConnection = new RTCPeerConnection({ iceServers });
 
-        this.peerConnection.onicecandidate = async (event) => {
+        this.peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
-                await this.sendSignal(peerNpub, {
+                // Fire-and-forget: don't await so candidates publish concurrently
+                this.sendSignal(peerNpub, {
                     type: CALL_SIGNAL_TYPE,
                     action: 'ice-candidate',
                     callId,
