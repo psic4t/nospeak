@@ -31,6 +31,10 @@ export interface Message {
     conversationId?: string; // npub for 1-on-1, hash for groups
     participants?: string[]; // null/undefined for 1-on-1, array of npubs for groups
     senderNpub?: string; // sender's npub for group messages (to show attribution)
+    // Call event fields
+    callEventType?: 'missed' | 'outgoing' | 'incoming' | 'ended';
+    callDuration?: number; // in seconds
+    callInitiatorNpub?: string;
 }
 
 export interface Conversation {
