@@ -492,6 +492,24 @@ const en = {
         actualAccount: 'Signer active account',
         instructions: 'Please switch to the correct account in your signer extension and reload this page.'
     }
+},
+    voiceCall: {
+        calling: 'Calling...',
+        connecting: 'Connecting...',
+        incomingCall: 'Incoming voice call',
+        accept: 'Accept',
+        decline: 'Decline',
+        hangup: 'Hang up',
+        mute: 'Mute',
+        unmute: 'Unmute',
+        speaker: 'Speaker',
+        endReasonHangup: 'Call ended',
+        endReasonRejected: 'Call declined',
+        endReasonBusy: 'User busy',
+        endReasonTimeout: 'No answer',
+        endReasonIceFailed: 'Connection failed',
+        endReasonError: 'Call failed'
+    }
 };
 
 export default en;
