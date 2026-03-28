@@ -24,9 +24,14 @@ export class VoiceCallService {
     private iceTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private durationIntervalId: ReturnType<typeof setInterval> | null = null;
     private sendSignalFn: SignalSender | null = null;
+    private createCallEventFn: ((recipientNpub: string, type: string, duration?: number) => Promise<void>) | null = null;
 
     public registerSignalSender(fn: SignalSender): void {
         this.sendSignalFn = fn;
+    }
+
+    public registerCallEventCreator(fn: (recipientNpub: string, type: string, duration?: number) => Promise<void>): void {
+        this.createCallEventFn = fn;
     }
 
     public isVoiceCallSignal(content: string): boolean {
@@ -84,9 +89,10 @@ export class VoiceCallService {
                 sdp: offer.sdp
             });
 
-            this.offerTimeoutId = setTimeout(() => {
+            this.offerTimeoutId = setTimeout(async () => {
                 const current = get(voiceCallState);
                 if (current.status === 'outgoing-ringing' && current.callId === callId) {
+                    await this.createCallEvent('outgoing');
                     this.cleanup();
                     endCall('timeout');
                 }
@@ -168,6 +174,10 @@ export class VoiceCallService {
     public async hangup(): Promise<void> {
         const state = get(voiceCallState);
         if (!state.peerNpub || !state.callId) return;
+
+        if (state.status === 'active') {
+            await this.createCallEvent('ended', state.duration);
+        }
 
         await this.sendSignal(state.peerNpub, {
             type: CALL_SIGNAL_TYPE,
@@ -276,9 +286,14 @@ export class VoiceCallService {
         }
     }
 
-    private handleHangup(signal: VoiceCallSignal): void {
+    private async handleHangup(signal: VoiceCallSignal): Promise<void> {
         const state = get(voiceCallState);
         if (state.callId !== signal.callId) return;
+        if (state.status === 'active') {
+            await this.createCallEvent('ended', state.duration);
+        } else if (state.status === 'incoming-ringing') {
+            await this.createCallEvent('missed');
+        }
         this.cleanup();
         endCall('hangup');
     }
@@ -323,6 +338,16 @@ export class VoiceCallService {
         if (this.iceTimeoutId) {
             clearTimeout(this.iceTimeoutId);
             this.iceTimeoutId = null;
+        }
+    }
+
+    private async createCallEvent(type: 'missed' | 'outgoing' | 'ended', duration?: number): Promise<void> {
+        const state = get(voiceCallState);
+        if (!state.peerNpub || !this.createCallEventFn) return;
+        try {
+            await this.createCallEventFn(state.peerNpub, type, duration);
+        } catch (err) {
+            console.error('[VoiceCall] Failed to create call event:', err);
         }
     }
 

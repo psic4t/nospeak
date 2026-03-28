@@ -89,11 +89,15 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
        await this.handleGiftWrap(event);
      });
  
-      // Register voice call signal sender (lazy import to avoid circular dependency)
+      // Register voice call callbacks (lazy import to avoid circular dependency)
      import('$lib/core/voiceCall/VoiceCallService').then(({ voiceCallService }) => {
          voiceCallService.registerSignalSender(
              (recipientNpub: string, signalContent: string) =>
                  this.sendVoiceCallSignal(recipientNpub, signalContent)
+         );
+         voiceCallService.registerCallEventCreator(
+             (recipientNpub: string, type: string, duration?: number) =>
+                 this.createCallEventMessage(recipientNpub, type as any, duration)
          );
      });
 
@@ -443,6 +447,30 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
           fileWidth,
           fileHeight,
           fileBlurhash: blurhashTag?.[1],
+          conversationId,
+          participants,
+          senderNpub
+        };
+      }
+
+      // Kind 16: call event messages
+      if (rumor.kind === 16) {
+        const callEventTypeTag = rumor.tags?.find((t: string[]) => t[0] === 'call-event-type');
+        const callDurationTag = rumor.tags?.find((t: string[]) => t[0] === 'call-duration');
+        const callInitiatorTag = rumor.tags?.find((t: string[]) => t[0] === 'call-initiator');
+
+        return {
+          recipientNpub: partnerNpub,
+          message: '',
+          sentAt: typeof rumor.created_at === 'number' ? rumor.created_at * 1000 : Date.now(),
+          eventId: originalEventId,
+          rumorId,
+          direction,
+          createdAt: Date.now(),
+          rumorKind: rumor.kind,
+          callEventType: callEventTypeTag?.[1],
+          callDuration: callDurationTag ? parseInt(callDurationTag[1]) : undefined,
+          callInitiatorNpub: callInitiatorTag ? nip19.npubEncode(callInitiatorTag[1]) : undefined,
           conversationId,
           participants,
           senderNpub
@@ -1773,6 +1801,48 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
     console.log('[ReadReceipt] sent successfully');
     localStorage.setItem(storageKey, lastReadMessage.rumorId);
+  }
+
+  /**
+   * Create a call event message (missed, ended, etc.) as a Kind 16 rumor.
+   * Saved to DB and synced via Nostr for both parties.
+   */
+  public async createCallEventMessage(
+    recipientNpub: string,
+    callEventType: 'missed' | 'outgoing' | 'incoming' | 'ended',
+    duration?: number
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const pubkey = await s.getPublicKey();
+    const senderNpub = nip19.npubEncode(pubkey);
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const tags: string[][] = [
+        ['p', recipientPubkey],
+        ['type', 'call-event'],
+        ['call-event-type', callEventType],
+        ['call-initiator', pubkey]
+    ];
+
+    if (duration !== undefined) {
+        tags.push(['call-duration', String(duration)]);
+    }
+
+    const rumor: Partial<NostrEvent> = {
+        kind: 16,
+        created_at: Math.floor(Date.now() / 1000),
+        content: '',
+        tags,
+        pubkey
+    };
+
+    await this.sendEnvelope({
+        recipients: [recipientNpub],
+        rumor,
+        messageDbFields: { callEventType, callDuration: duration, callInitiatorNpub: senderNpub }
+    });
   }
 
   /**
