@@ -491,8 +491,7 @@ const en = {
         expectedAccount: 'Logged in as',
         actualAccount: 'Signer active account',
         instructions: 'Please switch to the correct account in your signer extension and reload this page.'
-    }
-},
+    },
     voiceCall: {
         calling: 'Calling...',
         connecting: 'Connecting...',
