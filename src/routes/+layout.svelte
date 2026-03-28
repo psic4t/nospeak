@@ -41,6 +41,8 @@
    import { processQueuedNativeEvents } from "$lib/core/BackgroundMessaging";
      import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
      import Toast from "$lib/components/Toast.svelte";
+     import IncomingCallOverlay from "$lib/components/IncomingCallOverlay.svelte";
+     import ActiveCallOverlay from "$lib/components/ActiveCallOverlay.svelte";
      import PinLockScreen from "$lib/components/PinLockScreen.svelte";
      import PinSetupModal from "$lib/components/PinSetupModal.svelte";
      import { isPinLocked, initPinState, lockApp, clearPinData } from "$lib/stores/pin";
@@ -605,6 +607,9 @@
  
       <ImageViewerOverlay />
       <Toast />
+
+      <IncomingCallOverlay />
+      <ActiveCallOverlay />
 
       <!-- PIN Setup Modal - above all other modals -->
       <PinSetupModal
