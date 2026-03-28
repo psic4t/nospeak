@@ -89,7 +89,15 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
        await this.handleGiftWrap(event);
      });
  
-      return unsub;
+      // Register voice call signal sender (lazy import to avoid circular dependency)
+     import('$lib/core/voiceCall/VoiceCallService').then(({ voiceCallService }) => {
+         voiceCallService.registerSignalSender(
+             (recipientNpub: string, signalContent: string) =>
+                 this.sendVoiceCallSignal(recipientNpub, signalContent)
+         );
+     });
+
+     return unsub;
     }
 
     /**
@@ -209,9 +217,9 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       }
       const rumor = rumorCandidate as NostrEvent;
 
-      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
-      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
-        throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
+      // Support Kind 14 (text), 15 (files), 7 (reactions), and 16 (call events)
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== 16) {
+        throw new Error(`Expected Rumor (Kind 14, 15, 7, or 16), got ${rumor.kind}`);
       }
 
       // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
@@ -232,6 +240,22 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
       if (rumor.kind === 7) {
         await this.processReactionRumor(rumor, event.id);
+        return;
+      }
+
+      // Route voice-call signals to VoiceCallService (don't save to DB)
+      const voiceCallTag = rumor.tags?.find((t: string[]) => t[0] === 'type' && t[1] === 'voice-call');
+      if (voiceCallTag) {
+        try {
+            const { voiceCallService } = await import('$lib/core/voiceCall/VoiceCallService');
+            const signal = voiceCallService.parseSignal(rumor.content);
+            if (signal) {
+                const senderNpub = nip19.npubEncode(rumor.pubkey);
+                await voiceCallService.handleSignal(signal, senderNpub);
+            }
+        } catch (err) {
+            console.error('[Messaging] Failed to handle voice call signal:', err);
+        }
         return;
       }
 
@@ -283,9 +307,9 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       }
       const rumor = rumorCandidate as NostrEvent;
 
-      // Support both legacy Kind 15 and current Kind 14 rumors, plus kind 7 reactions
-      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7) {
-        throw new Error(`Expected Rumor (Kind 14, 15, or 7), got ${rumor.kind}`);
+      // Support Kind 14 (text), 15 (files), 7 (reactions), and 16 (call events)
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== 16) {
+        throw new Error(`Expected Rumor (Kind 14, 15, 7, or 16), got ${rumor.kind}`);
       }
 
       // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
@@ -1749,6 +1773,35 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
     console.log('[ReadReceipt] sent successfully');
     localStorage.setItem(storageKey, lastReadMessage.rumorId);
+  }
+
+  /**
+   * Send a voice call signal (offer, answer, ICE, hangup, etc.)
+   * as a gift-wrapped Kind 14 event that is NOT saved to the message DB.
+   */
+  public async sendVoiceCallSignal(recipientNpub: string, signalContent: string): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const pubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const rumor: Partial<NostrEvent> = {
+        kind: 14,
+        created_at: Math.floor(Date.now() / 1000),
+        content: signalContent,
+        tags: [
+            ['p', recipientPubkey],
+            ['type', 'voice-call']
+        ],
+        pubkey
+    };
+
+    await this.sendEnvelope({
+        recipients: [recipientNpub],
+        rumor,
+        skipDbSave: true
+    });
   }
 
    private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any, expiresAt?: number): Promise<NostrEvent> {
