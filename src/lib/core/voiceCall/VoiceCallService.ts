@@ -72,22 +72,27 @@ export class VoiceCallService {
         setOutgoingRinging(recipientNpub, callId);
 
         try {
+            console.log('[VoiceCall] Requesting microphone access...');
             this.localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
+            console.log('[VoiceCall] Microphone acquired, creating peer connection...');
             this.createPeerConnection(recipientNpub, callId);
 
             this.localStream.getTracks().forEach(track => {
                 this.peerConnection!.addTrack(track, this.localStream!);
             });
 
+            console.log('[VoiceCall] Creating SDP offer...');
             const offer = await this.peerConnection!.createOffer();
             await this.peerConnection!.setLocalDescription(offer);
 
+            console.log('[VoiceCall] Sending offer signal...');
             await this.sendSignal(recipientNpub, {
                 type: CALL_SIGNAL_TYPE,
                 action: 'offer',
                 callId,
                 sdp: offer.sdp
             });
+            console.log('[VoiceCall] Offer sent, waiting for answer...');
 
             this.offerTimeoutId = setTimeout(async () => {
                 const current = get(voiceCallState);
@@ -98,7 +103,7 @@ export class VoiceCallService {
                 }
             }, CALL_OFFER_TIMEOUT_MS);
         } catch (err) {
-            console.error('[VoiceCall] Failed to initiate call:', err);
+            console.error('[VoiceCall] Failed to initiate call:', err instanceof Error ? err.message : err, err);
             this.cleanup();
             endCall('error');
         }
@@ -315,13 +320,13 @@ export class VoiceCallService {
 
     private async sendSignal(recipientNpub: string, signal: VoiceCallSignal): Promise<void> {
         if (!this.sendSignalFn) {
-            console.error('[VoiceCall] Signal sender not registered');
+            console.error('[VoiceCall] Signal sender not registered — was listenForMessages() called?');
             return;
         }
         try {
             await this.sendSignalFn(recipientNpub, JSON.stringify(signal));
         } catch (err) {
-            console.error('[VoiceCall] Failed to send signal:', err);
+            console.error('[VoiceCall] Failed to send signal:', signal.action, err instanceof Error ? err.message : err);
         }
     }
 
