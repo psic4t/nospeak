@@ -803,6 +803,9 @@ public class NativeBackgroundMessagingService extends Service {
                 if (!serviceRunning || currentPubkeyHex == null) {
                     return;
                 }
+                if (!Arrays.asList(configuredRelays).contains(relayUrl)) {
+                    return;
+                }
                 connectRelay(relayUrl, currentPubkeyHex);
             }
         }, delaySeconds * 1000L);
