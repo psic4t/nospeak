@@ -2269,31 +2269,27 @@
                </svg>
              </button>
            </div>
-          {#if msg.direction === "sent" && i === getLastSentIndex(displayMessages) && (partnerNpub || isGroup)}
-            {#if $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id)}
-               <div class="typ-meta mt-0.5 text-end text-blue-100">
-                {#if $lastRelaySendStatus.successfulRelays === 0}
-                  {$t('chat.relayStatus.sending')}
-                {:else}
-                  {get(t)('chat.relayStatus.sentToRelays', { values: { successful: $lastRelaySendStatus.successfulRelays, desired: $lastRelaySendStatus.desiredRelays } })}
-                {/if}
-              </div>
-            {:else if msg.eventId && msg.eventId.startsWith('optimistic:')}
-               <div class="typ-meta mt-0.5 text-end text-blue-100">
+          {#if msg.direction === "sent" && (partnerNpub || isGroup)}
+            {@const isLastSent = i === getLastSentIndex(displayMessages)}
+            {@const receipt = !isGroup && partnerNpub ? $readReceiptsStore[partnerNpub] : undefined}
+            {@const isRead = receipt && msg.sentAt <= receipt.targetSentAt}
+            {@const showRelayStatus = isLastSent && $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id)}
+            {#if msg.eventId?.startsWith('optimistic:')}
+              <div class="typ-meta mt-0.5 text-end text-blue-100">
                 {$t('chat.relayStatus.sending')}
               </div>
+            {:else}
+              <div class="typ-meta mt-0.5 text-end text-blue-100 flex items-center justify-end gap-1">
+                {#if isRead}
+                  <span class="text-green-400">✓✓</span>
+                {:else}
+                  <span>✓</span>
+                {/if}
+                {#if showRelayStatus && $lastRelaySendStatus.successfulRelays > 0}
+                  <span>{$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays</span>
+                {/if}
+              </div>
             {/if}
-          {/if}
-          {#if msg.direction === "sent" && !isGroup && partnerNpub && !msg.eventId?.startsWith('optimistic:')}
-            {@const receipt = $readReceiptsStore[partnerNpub]}
-            {@const isRead = receipt && msg.sentAt <= receipt.targetSentAt}
-            <div class="typ-meta mt-0.5 text-end">
-              {#if isRead}
-                <span class="text-green-400">✓✓</span>
-              {:else}
-                <span class="text-blue-100">✓</span>
-              {/if}
-            </div>
           {/if}
          </div>
         </div>
