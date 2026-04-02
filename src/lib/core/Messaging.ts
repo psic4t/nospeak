@@ -14,6 +14,7 @@ import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
 import { reactionsStore } from '$lib/stores/reactions';
+import { updateReadReceipt } from '$lib/stores/readReceipts';
 import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
 import { uploadToBlossomServers } from './BlossomUpload';
 import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaPreview';
@@ -607,48 +608,60 @@ import type { Conversation } from '$lib/db/db';
         // Look up the target message to determine the conversation context
         // targetEventId is the rumorId of the message being reacted to
         const targetMessage = await messageRepo.getMessageByRumorId(targetEventId);
-        
+
+        // Update read receipt store if this is a ✓ reaction on a sent message
+        if (content === '✓') {
+          console.log('[ReadReceipt] received ✓ reaction', { targetEventId, from: reactionAuthorNpub, targetFound: !!targetMessage, direction: targetMessage?.direction });
+          if (targetMessage && targetMessage.direction === 'sent') {
+            updateReadReceipt(reactionAuthorNpub, targetEventId, targetMessage.sentAt);
+            console.log('[ReadReceipt] store updated', { conversationId: reactionAuthorNpub, sentAt: targetMessage.sentAt });
+          }
+        }
+
         // For group messages, use conversationId; for 1-on-1, use recipientNpub (the reaction author)
         // If we can't find the target message, fall back to reaction author (1-on-1 behavior)
-        const isGroupReaction = targetMessage?.conversationId && 
+        const isGroupReaction = targetMessage?.conversationId &&
           targetMessage.conversationId !== targetMessage.recipientNpub;
         const conversationKey = isGroupReaction 
           ? targetMessage!.conversationId! 
           : reactionAuthorNpub;
 
-        // Don't mark reactions as unread during history fetch - only live reactions
-        if (!this.isFetchingHistory) {
-          const shouldPersistUnread = !isActivelyViewingConversation(conversationKey);
-          if (shouldPersistUnread) {
-            addUnreadReaction(user.npub, conversationKey, originalEventId);
+        // Read receipt reactions (✓) should not trigger unread markers or notifications
+        if (content !== '✓') {
+          // Don't mark reactions as unread during history fetch - only live reactions
+          if (!this.isFetchingHistory) {
+            const shouldPersistUnread = !isActivelyViewingConversation(conversationKey);
+            if (shouldPersistUnread) {
+              addUnreadReaction(user.npub, conversationKey, originalEventId);
 
-            try {
-              if (isGroupReaction) {
-                // For group reactions, mark conversation activity
-                await conversationRepo.markActivity(targetMessage!.conversationId!);
-                // Dispatch event to trigger ChatList refresh
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('nospeak:conversation-updated', {
-                    detail: { conversationId: targetMessage!.conversationId }
-                  }));
+              try {
+                if (isGroupReaction) {
+                  // For group reactions, mark conversation activity
+                  await conversationRepo.markActivity(targetMessage!.conversationId!);
+                  // Dispatch event to trigger ChatList refresh
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nospeak:conversation-updated', {
+                      detail: { conversationId: targetMessage!.conversationId }
+                    }));
+                  }
+                } else {
+                  // For 1-on-1, mark contact activity
+                  await contactRepo.markActivity(reactionAuthorNpub, rumor.created_at * 1000);
                 }
-              } else {
-                // For 1-on-1, mark contact activity
-                await contactRepo.markActivity(reactionAuthorNpub, rumor.created_at * 1000);
+              } catch (activityError) {
+                console.error('Failed to mark activity for reaction:', activityError);
               }
-            } catch (activityError) {
-              console.error('Failed to mark activity for reaction:', activityError);
             }
           }
-        }
 
-        // Don't show notifications for reactions during history sync
-        // or for reactions sent before the current session started
-        if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
-          try {
-            await notificationService.showReactionNotification(reactionAuthorNpub, content);
-          } catch (notifyError) {
-            console.error('Failed to show reaction notification:', notifyError);
+          // Don't show notifications for reactions during history sync
+          // or for reactions sent before the current session started
+          if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
+            try {
+              await notificationService.showReactionNotification(reactionAuthorNpub, content);
+            } catch (notifyError) {
+              console.error('Failed to show reaction notification:', notifyError);
+            }
           }
         }
       }
@@ -924,6 +937,7 @@ import type { Conversation } from '$lib/db/db';
     conversation?: Conversation;
     messageDbFields?: Record<string, unknown>;
     skipDbSave?: boolean;
+    skipSelfWrap?: boolean;
   }): Promise<{ rumorId: string; selfGiftWrapId: string }> {
     const { recipients, rumor, conversationId, conversation, messageDbFields, skipDbSave } = params;
 
@@ -1021,7 +1035,7 @@ import type { Conversation } from '$lib/db/db';
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
 
     // Calculate total desired relays for status tracking
-    let totalDesiredRelays = senderRelays.length;
+    let totalDesiredRelays = params.skipSelfWrap ? 0 : senderRelays.length;
     for (const relays of recipientRelaysMap.values()) {
       totalDesiredRelays += relays.length;
     }
@@ -1068,21 +1082,23 @@ import type { Conversation } from '$lib/db/db';
       }
     }
 
-    // Send self-wrap to sender's relays
-    const selfPublishResult = await publishWithDeadline({
-      connectionManager,
-      event: selfGiftWrap,
-      relayUrls: senderRelays,
-      deadlineMs: 5000,
-      onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap.id, url),
-    });
+    // Send self-wrap to sender's relays (skip for read receipts)
+    if (!params.skipSelfWrap) {
+      const selfPublishResult = await publishWithDeadline({
+        connectionManager,
+        event: selfGiftWrap,
+        relayUrls: senderRelays,
+        deadlineMs: 5000,
+        onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap.id, url),
+      });
 
-    totalSuccessfulRelays += selfPublishResult.successfulRelays.length;
+      totalSuccessfulRelays += selfPublishResult.successfulRelays.length;
 
-    const selfSuccessfulRelaySet = new Set(selfPublishResult.successfulRelays);
-    for (const url of senderRelays) {
-      if (!selfSuccessfulRelaySet.has(url)) {
-        await retryQueue.enqueue(selfGiftWrap, url);
+      const selfSuccessfulRelaySet = new Set(selfPublishResult.successfulRelays);
+      for (const url of senderRelays) {
+        if (!selfSuccessfulRelaySet.has(url)) {
+          await retryQueue.enqueue(selfGiftWrap, url);
+        }
       }
     }
 
@@ -1550,7 +1566,7 @@ import type { Conversation } from '$lib/db/db';
   public async sendReaction(
     recipientNpub: string,
     targetMessage: { recipientNpub: string; eventId: string; rumorId?: string; direction: 'sent' | 'received' },
-    emoji: '👍' | '❤️' | '😂' | '🙏'
+    emoji: '👍' | '❤️' | '😂' | '🙏' | '✓'
   ): Promise<void> {
     if (!targetMessage.rumorId) {
       console.warn('Cannot react to message without rumorId (likely old message)');
@@ -1603,7 +1619,7 @@ import type { Conversation } from '$lib/db/db';
   public async sendGroupReaction(
     conversationId: string,
     targetMessage: { eventId: string; rumorId?: string; direction: 'sent' | 'received'; senderNpub?: string },
-    emoji: '👍' | '❤️' | '😂' | '🙏'
+    emoji: '👍' | '❤️' | '😂' | '🙏' | '✓'
   ): Promise<void> {
     if (!targetMessage.rumorId) {
       console.warn('Cannot react to message without rumorId (likely old message)');
@@ -1660,7 +1676,54 @@ import type { Conversation } from '$lib/db/db';
     await reactionRepo.upsertReaction(reaction);
     reactionsStore.applyReactionUpdate(reaction);
   }
- 
+
+  public async sendReadReceipt(
+    recipientNpub: string,
+    lastReadMessage: { rumorId: string; sentAt: number }
+  ): Promise<void> {
+    console.log('[ReadReceipt] sendReadReceipt called', { recipientNpub, rumorId: lastReadMessage.rumorId });
+    const settings = localStorage.getItem('nospeak-settings');
+    const parsed = settings ? JSON.parse(settings) : {};
+    if (!parsed.readReceiptsEnabled) {
+      console.log('[ReadReceipt] setting disabled, skipping');
+      return;
+    }
+
+    const storageKey = `nospeak:last-sent-receipt:${recipientNpub}`;
+    const lastSent = localStorage.getItem(storageKey);
+    if (lastSent === lastReadMessage.rumorId) {
+      console.log('[ReadReceipt] duplicate, skipping');
+      return;
+    }
+
+    console.log('[ReadReceipt] sending ✓ reaction');
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const { data: recipientPubkey } = nip19.decode(recipientNpub);
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 7,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: '✓',
+      tags: [
+        ['p', recipientPubkey as string],
+        ['e', lastReadMessage.rumorId, '', recipientPubkey as string]
+      ]
+    };
+
+    await this.sendEnvelope({
+      recipients: [recipientNpub],
+      rumor,
+      skipDbSave: true,
+      skipSelfWrap: true,
+    });
+
+    console.log('[ReadReceipt] sent successfully');
+    localStorage.setItem(storageKey, lastReadMessage.rumorId);
+  }
+
    private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any): Promise<NostrEvent> {
     // 1. Encrypt Rumor -> Seal
     const rumorJson = JSON.stringify(rumor);

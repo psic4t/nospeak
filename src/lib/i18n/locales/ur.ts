@@ -389,6 +389,10 @@ const ur = {
             label: 'URL پیش نظارے',
             description: 'پیغامات میں غیر میڈیا لنکس کے لیے پیش نظارہ کارڈ دکھائیں۔'
         },
+        readReceipts: {
+            label: 'پڑھنے کی رسیدیں',
+            description: 'رابطوں کو بتائیں کہ آپ نے ان کے پیغامات پڑھ لیے ہیں۔'
+        },
         profile: {
             nameLabel: 'نام',
             namePlaceholder: 'آپ کا نام',

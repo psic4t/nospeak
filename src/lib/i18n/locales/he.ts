@@ -389,6 +389,10 @@ const he = {
             label: 'תצוגות מקדימות של URL',
             description: 'הצג כרטיסי תצוגה מקדימה עבור קישורים שאינם מדיה בהודעות.'
         },
+        readReceipts: {
+            label: 'אישורי קריאה',
+            description: 'הודע לאנשי הקשר שלך כשקראת את ההודעות שלהם.'
+        },
         profile: {
             nameLabel: 'שם',
             namePlaceholder: 'השם שלך',

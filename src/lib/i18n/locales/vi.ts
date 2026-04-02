@@ -389,6 +389,10 @@ const vi = {
             label: 'Xem trước URL',
             description: 'Hiển thị thẻ xem trước cho các liên kết không phải media trong tin nhắn.'
         },
+        readReceipts: {
+            label: 'Xác nhận đã đọc',
+            description: 'Cho phép liên hệ biết khi bạn đã đọc tin nhắn của họ.'
+        },
         profile: {
             nameLabel: 'Tên',
             namePlaceholder: 'Tên của bạn',

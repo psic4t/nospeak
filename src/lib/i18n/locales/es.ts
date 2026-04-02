@@ -392,6 +392,10 @@ const es = {
             label: 'Vistas previas de URL',
             description: 'Mostrar tarjetas de vista previa para enlaces no multimedia en los mensajes.'
         },
+        readReceipts: {
+            label: 'Confirmaciones de lectura',
+            description: 'Informa a los contactos cuando hayas leído sus mensajes.'
+        },
         profile: {
             nameLabel: 'Nombre',
             namePlaceholder: 'Tu nombre',

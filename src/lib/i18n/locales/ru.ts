@@ -227,6 +227,7 @@ const ru = {
             openBatterySettings: 'Открыть настройки батареи'
         },
         urlPreviews: { label: 'Предпросмотр URL', description: 'Показывать карточки предпросмотра для немедийных ссылок в сообщениях.' },
+        readReceipts: { label: 'Уведомления о прочтении', description: 'Сообщайте контактам, когда вы прочитали их сообщения.' },
         profile: {
             nameLabel: 'Имя', namePlaceholder: 'Ваше имя', displayNameLabel: 'Отображаемое имя',
             displayNamePlaceholder: 'Отображаемое имя', aboutLabel: 'О себе', aboutPlaceholder: 'Расскажите о себе',

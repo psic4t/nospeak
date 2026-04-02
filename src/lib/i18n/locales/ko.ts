@@ -397,6 +397,10 @@ const ko = {
             description:
                 '메시지의 비미디어 링크에 대해 미리보기 카드를 표시합니다.'
         },
+        readReceipts: {
+            label: '읽음 확인',
+            description: '메시지를 읽었을 때 연락처에 알립니다.'
+        },
         profile: {
             nameLabel: '이름',
             namePlaceholder: '이름',

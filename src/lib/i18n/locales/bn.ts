@@ -389,6 +389,10 @@ const bn = {
             label: 'URL পূর্বরূপ',
             description: 'বার্তায় নন-মিডিয়া লিঙ্কের জন্য পূর্বরূপ কার্ড দেখান।'
         },
+        readReceipts: {
+            label: 'পঠন রসিদ',
+            description: 'আপনার বার্তা পড়া হলে পরিচিতিদের জানান।'
+        },
         profile: {
             nameLabel: 'নাম',
             namePlaceholder: 'আপনার নাম',

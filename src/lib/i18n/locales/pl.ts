@@ -227,6 +227,7 @@ const pl = {
             openBatterySettings: 'Otwórz ustawienia baterii'
         },
         urlPreviews: { label: 'Podglądy URL', description: 'Pokazuj karty podglądu dla linków niebędących multimediami w wiadomościach.' },
+        readReceipts: { label: 'Potwierdzenia odczytu', description: 'Informuj kontakty, gdy przeczytasz ich wiadomości.' },
         profile: {
             nameLabel: 'Nazwa', namePlaceholder: 'Twoja nazwa', displayNameLabel: 'Wyświetlana nazwa',
             displayNamePlaceholder: 'Wyświetlana nazwa', aboutLabel: 'O mnie', aboutPlaceholder: 'Opowiedz o sobie',

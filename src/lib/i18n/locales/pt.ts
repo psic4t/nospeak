@@ -392,6 +392,10 @@ const pt = {
             label: 'Pré-visualizações de URL',
             description: 'Mostrar cartões de pré-visualização para links não media nas mensagens.'
         },
+        readReceipts: {
+            label: 'Confirmações de leitura',
+            description: 'Informe os contactos quando tiver lido as suas mensagens.'
+        },
         profile: {
             nameLabel: 'Nome',
             namePlaceholder: 'O seu nome',

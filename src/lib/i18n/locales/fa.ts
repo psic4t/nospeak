@@ -397,6 +397,10 @@ const fa = {
             description:
                 'نمایش کارت‌های پیش‌نمایش برای لینک‌های غیررسانه‌ای در پیام‌ها.'
         },
+        readReceipts: {
+            label: 'رسید خوانده شدن',
+            description: 'به مخاطبین اطلاع دهید که پیام‌هایشان را خوانده‌اید.'
+        },
         profile: {
             nameLabel: 'نام',
             namePlaceholder: 'نام شما',

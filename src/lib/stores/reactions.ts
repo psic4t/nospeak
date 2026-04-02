@@ -17,8 +17,9 @@ const { subscribe, update } = writable<InternalState>({});
 
 function buildSummaries(reactions: Reaction[], currentUserNpub: string | null): ReactionSummary[] {
     const grouped = new Map<string, { count: number; byCurrentUser: boolean }>();
+    const filtered = reactions.filter(r => r.emoji !== '✓');
 
-    for (const reaction of reactions) {
+    for (const reaction of filtered) {
         const key = reaction.emoji;
         const existing = grouped.get(key) || { count: 0, byCurrentUser: false };
         existing.count += 1;
@@ -53,6 +54,7 @@ function createReactionsStore() {
     }
 
     function applyReactionUpdate(reaction: Reaction): void {
+        if (reaction.emoji === '✓') return;
         let currentUserNpub: string | null = null;
         const value = get(currentUser);
         if (value && value.npub) {

@@ -397,6 +397,10 @@ const nl = {
             description:
                 'Toon voorbeeldkaarten voor niet-medialinks in berichten.'
         },
+        readReceipts: {
+            label: 'Leesbevestigingen',
+            description: 'Laat contacten weten wanneer je hun berichten hebt gelezen.'
+        },
         profile: {
             nameLabel: 'Naam',
             namePlaceholder: 'Je naam',

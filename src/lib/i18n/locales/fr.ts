@@ -392,9 +392,13 @@ const fr = {
             label: "Aperçus d’URL",
             description: 'Afficher des cartes d’aperçu pour les liens non-médias dans les messages.'
         },
+        readReceipts: {
+            label: ‘Accusés de lecture’,
+            description: ‘Informez vos contacts lorsque vous avez lu leurs messages.’
+        },
         profile: {
-            nameLabel: 'Nom',
-            namePlaceholder: 'Votre nom',
+            nameLabel: ‘Nom’,
+            namePlaceholder: ‘Votre nom’,
             displayNameLabel: "Nom d’affichage",
             displayNamePlaceholder: "Nom d’affichage",
             aboutLabel: 'À propos',
