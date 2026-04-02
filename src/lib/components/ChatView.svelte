@@ -2303,13 +2303,13 @@
               </div>
             {:else}
               <div class="typ-meta mt-0.5 text-end text-blue-100 flex items-center justify-end gap-1">
+                {#if showRelayStatus}
+                  <span>{$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays</span>
+                {/if}
                 {#if isRead}
                   <span class="text-green-400">✓✓</span>
-                {:else}
+                {:else if !showRelayStatus || $lastRelaySendStatus.successfulRelays > 0}
                   <span>✓</span>
-                {/if}
-                {#if showRelayStatus && $lastRelaySendStatus.successfulRelays > 0}
-                  <span>{$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays</span>
                 {/if}
               </div>
             {/if}
