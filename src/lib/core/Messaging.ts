@@ -609,9 +609,13 @@ import type { Conversation } from '$lib/db/db';
         const targetMessage = await messageRepo.getMessageByRumorId(targetEventId);
 
         // Update read receipt store if this is a ✓ reaction on a sent message
-        if (content === '✓' && targetMessage && targetMessage.direction === 'sent') {
-          const { updateReadReceipt } = await import('$lib/stores/readReceipts');
-          updateReadReceipt(reactionAuthorNpub, targetEventId, targetMessage.sentAt);
+        if (content === '✓') {
+          console.log('[ReadReceipt] received ✓ reaction', { targetEventId, from: reactionAuthorNpub, targetFound: !!targetMessage, direction: targetMessage?.direction });
+          if (targetMessage && targetMessage.direction === 'sent') {
+            const { updateReadReceipt } = await import('$lib/stores/readReceipts');
+            updateReadReceipt(reactionAuthorNpub, targetEventId, targetMessage.sentAt);
+            console.log('[ReadReceipt] store updated', { conversationId: reactionAuthorNpub, sentAt: targetMessage.sentAt });
+          }
         }
 
         // For group messages, use conversationId; for 1-on-1, use recipientNpub (the reaction author)
@@ -1674,14 +1678,22 @@ import type { Conversation } from '$lib/db/db';
     recipientNpub: string,
     lastReadMessage: { rumorId: string; sentAt: number }
   ): Promise<void> {
+    console.log('[ReadReceipt] sendReadReceipt called', { recipientNpub, rumorId: lastReadMessage.rumorId });
     const settings = localStorage.getItem('nospeak-settings');
     const parsed = settings ? JSON.parse(settings) : {};
-    if (!parsed.readReceiptsEnabled) return;
+    if (!parsed.readReceiptsEnabled) {
+      console.log('[ReadReceipt] setting disabled, skipping');
+      return;
+    }
 
     const storageKey = `nospeak:last-sent-receipt:${recipientNpub}`;
     const lastSent = localStorage.getItem(storageKey);
-    if (lastSent === lastReadMessage.rumorId) return;
+    if (lastSent === lastReadMessage.rumorId) {
+      console.log('[ReadReceipt] duplicate, skipping');
+      return;
+    }
 
+    console.log('[ReadReceipt] sending ✓ reaction');
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
     const senderPubkey = await s.getPublicKey();
@@ -1705,6 +1717,7 @@ import type { Conversation } from '$lib/db/db';
       skipSelfWrap: true,
     });
 
+    console.log('[ReadReceipt] sent successfully');
     localStorage.setItem(storageKey, lastReadMessage.rumorId);
   }
 

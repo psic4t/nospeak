@@ -552,10 +552,12 @@
       if (!partner || isGroup) return;
 
       reactionRepo.getReadReceiptForAuthor(partner).then(async (reaction) => {
+        console.log('[ReadReceipt] hydration for', partner, 'result:', reaction);
         if (!reaction) return;
         const targetMsg = await messageRepo.getMessageByRumorId(reaction.targetEventId);
         if (targetMsg && targetMsg.direction === 'sent') {
           updateReadReceipt(partner, reaction.targetEventId, targetMsg.sentAt);
+          console.log('[ReadReceipt] hydrated from DB', { sentAt: targetMsg.sentAt });
         }
       });
     });
@@ -2267,17 +2269,27 @@
                </svg>
              </button>
            </div>
-          {#if msg.direction === "sent" && (partnerNpub || isGroup)}
-            {@const isLastSent = i === getLastSentIndex(displayMessages)}
-            {@const receipt = !isGroup && partnerNpub ? $readReceiptsStore[partnerNpub] : undefined}
+          {#if msg.direction === "sent" && i === getLastSentIndex(displayMessages) && (partnerNpub || isGroup)}
+            {#if $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id)}
+               <div class="typ-meta mt-0.5 text-end text-blue-100">
+                {#if $lastRelaySendStatus.successfulRelays === 0}
+                  {$t('chat.relayStatus.sending')}
+                {:else}
+                  {get(t)('chat.relayStatus.sentToRelays', { values: { successful: $lastRelaySendStatus.successfulRelays, desired: $lastRelaySendStatus.desiredRelays } })}
+                {/if}
+              </div>
+            {:else if msg.eventId && msg.eventId.startsWith('optimistic:')}
+               <div class="typ-meta mt-0.5 text-end text-blue-100">
+                {$t('chat.relayStatus.sending')}
+              </div>
+            {/if}
+          {/if}
+          {#if msg.direction === "sent" && !isGroup && partnerNpub && !msg.eventId?.startsWith('optimistic:')}
+            {@const receipt = $readReceiptsStore[partnerNpub]}
             {@const isRead = receipt && msg.sentAt <= receipt.targetSentAt}
             <div class="typ-meta mt-0.5 text-end">
-              {#if msg.eventId?.startsWith('optimistic:')}
-                <!-- still sending, no checkmark -->
-              {:else if isRead}
+              {#if isRead}
                 <span class="text-blue-400">✓✓</span>
-              {:else if isLastSent && $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id) && $lastRelaySendStatus.successfulRelays === 0}
-                <!-- sending to relays, no checkmark yet -->
               {:else}
                 <span class="text-blue-100">✓</span>
               {/if}
