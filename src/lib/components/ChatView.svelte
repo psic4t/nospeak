@@ -854,10 +854,33 @@
       }
     }
 
-    // Send on Ctrl+Enter or Cmd+Enter (desktop)
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      send();
+    if (e.key === "Enter") {
+      if (isMobileLayout) {
+        // Mobile: Ctrl+Enter sends, plain Enter inserts newline (default)
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          send();
+        }
+      } else {
+        // Desktop: Enter sends, Ctrl+Enter inserts newline
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const start = inputElement?.selectionStart ?? inputText.length;
+          const end = inputElement?.selectionEnd ?? inputText.length;
+          inputText = inputText.slice(0, start) + "\n" + inputText.slice(end);
+          tick().then(() => {
+            if (inputElement) {
+              inputElement.selectionStart = inputElement.selectionEnd = start + 1;
+              inputElement.style.height = "auto";
+              inputElement.style.height = Math.min(inputElement.scrollHeight, 150) + "px";
+              updateInputBarPadding();
+            }
+          });
+          return;
+        }
+        e.preventDefault();
+        send();
+      }
     }
   }
 
