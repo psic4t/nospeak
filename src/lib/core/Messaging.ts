@@ -626,39 +626,42 @@ import type { Conversation } from '$lib/db/db';
           ? targetMessage!.conversationId! 
           : reactionAuthorNpub;
 
-        // Don't mark reactions as unread during history fetch - only live reactions
-        if (!this.isFetchingHistory) {
-          const shouldPersistUnread = !isActivelyViewingConversation(conversationKey);
-          if (shouldPersistUnread) {
-            addUnreadReaction(user.npub, conversationKey, originalEventId);
+        // Read receipt reactions (✓) should not trigger unread markers or notifications
+        if (content !== '✓') {
+          // Don't mark reactions as unread during history fetch - only live reactions
+          if (!this.isFetchingHistory) {
+            const shouldPersistUnread = !isActivelyViewingConversation(conversationKey);
+            if (shouldPersistUnread) {
+              addUnreadReaction(user.npub, conversationKey, originalEventId);
 
-            try {
-              if (isGroupReaction) {
-                // For group reactions, mark conversation activity
-                await conversationRepo.markActivity(targetMessage!.conversationId!);
-                // Dispatch event to trigger ChatList refresh
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('nospeak:conversation-updated', {
-                    detail: { conversationId: targetMessage!.conversationId }
-                  }));
+              try {
+                if (isGroupReaction) {
+                  // For group reactions, mark conversation activity
+                  await conversationRepo.markActivity(targetMessage!.conversationId!);
+                  // Dispatch event to trigger ChatList refresh
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('nospeak:conversation-updated', {
+                      detail: { conversationId: targetMessage!.conversationId }
+                    }));
+                  }
+                } else {
+                  // For 1-on-1, mark contact activity
+                  await contactRepo.markActivity(reactionAuthorNpub, rumor.created_at * 1000);
                 }
-              } else {
-                // For 1-on-1, mark contact activity
-                await contactRepo.markActivity(reactionAuthorNpub, rumor.created_at * 1000);
+              } catch (activityError) {
+                console.error('Failed to mark activity for reaction:', activityError);
               }
-            } catch (activityError) {
-              console.error('Failed to mark activity for reaction:', activityError);
             }
           }
-        }
 
-        // Don't show notifications for reactions during history sync
-        // or for reactions sent before the current session started
-        if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
-          try {
-            await notificationService.showReactionNotification(reactionAuthorNpub, content);
-          } catch (notifyError) {
-            console.error('Failed to show reaction notification:', notifyError);
+          // Don't show notifications for reactions during history sync
+          // or for reactions sent before the current session started
+          if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
+            try {
+              await notificationService.showReactionNotification(reactionAuthorNpub, content);
+            } catch (notifyError) {
+              console.error('Failed to show reaction notification:', notifyError);
+            }
           }
         }
       }
