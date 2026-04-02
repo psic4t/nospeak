@@ -52,6 +52,7 @@
 
   let notificationsEnabled = $state(true);
   let urlPreviewsEnabled = $state(true);
+  let readReceiptsEnabled = $state(false);
   let backgroundMessagingEnabled = $state(isAndroidApp);
   let mediaCacheEnabled = $state(false);
   let isSupported = $state(false);
@@ -581,6 +582,7 @@
         const settings = JSON.parse(saved) as {
           notificationsEnabled?: boolean;
           urlPreviewsEnabled?: boolean;
+          readReceiptsEnabled?: boolean;
           backgroundMessagingEnabled?: boolean;
           mediaCacheEnabled?: boolean;
         };
@@ -589,6 +591,7 @@
           typeof settings.urlPreviewsEnabled === "boolean"
             ? settings.urlPreviewsEnabled
             : true;
+        readReceiptsEnabled = settings.readReceiptsEnabled === true;
         backgroundMessagingEnabled = isAndroidApp ? settings.backgroundMessagingEnabled !== false : false;
         mediaCacheEnabled = isAndroidApp ? settings.mediaCacheEnabled === true : false;
       } else {
@@ -612,6 +615,7 @@
         ...existingSettings,
         notificationsEnabled,
         urlPreviewsEnabled,
+        readReceiptsEnabled,
         backgroundMessagingEnabled,
         mediaCacheEnabled
       };
@@ -1265,6 +1269,28 @@
                    }
                    class="ms-4"
                  />
+              </div>
+
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                  <label
+                    for="read-receipts-toggle"
+                    class="font-medium text-gray-900 dark:text-white"
+                  >
+                    {$t("settings.readReceipts.label")}
+                  </label>
+                  <p class="text-sm text-gray-600 dark:text-slate-400">
+                    {$t("settings.readReceipts.description")}
+                  </p>
+                </div>
+                <Toggle
+                  id="read-receipts-toggle"
+                  bind:checked={readReceiptsEnabled}
+                  aria-label={
+                    readReceiptsEnabled ? "Disable read receipts" : "Enable read receipts"
+                  }
+                  class="ms-4"
+                />
               </div>
             </div>
           {:else if activeCategory === "Profile"}

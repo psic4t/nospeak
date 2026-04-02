@@ -389,6 +389,10 @@ const tr = {
             label: 'URL Önizlemeleri',
             description: 'Mesajlardaki medya dışı bağlantılar için önizleme kartları gösterin.'
         },
+        readReceipts: {
+            label: 'Okundu Bilgisi',
+            description: 'Mesajlarını okuduğunuzda kişilere bildirin.'
+        },
         profile: {
             nameLabel: 'Ad',
             namePlaceholder: 'Adınız',

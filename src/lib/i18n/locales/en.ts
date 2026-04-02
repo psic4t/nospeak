@@ -397,6 +397,10 @@ const en = {
             description:
                 'Show preview cards for non-media links in messages.'
         },
+        readReceipts: {
+            label: 'Read Receipts',
+            description: 'Let contacts know when you have read their messages.'
+        },
         profile: {
             nameLabel: 'Name',
             namePlaceholder: 'Your name',

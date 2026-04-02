@@ -389,6 +389,10 @@ const zh = {
             label: 'URL预览',
             description: '显示消息中非媒体链接的预览卡片。'
         },
+        readReceipts: {
+            label: '已读回执',
+            description: '让联系人知道您已阅读他们的消息。'
+        },
         profile: {
             nameLabel: '名称',
             namePlaceholder: '你的名字',

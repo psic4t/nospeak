@@ -392,6 +392,10 @@ const it = {
             label: 'Anteprime URL',
             description: 'Mostra schede di anteprima per link non multimediali nei messaggi.'
         },
+        readReceipts: {
+            label: 'Conferme di lettura',
+            description: 'Fai sapere ai contatti quando hai letto i loro messaggi.'
+        },
         profile: {
             nameLabel: 'Nome',
             namePlaceholder: 'Il tuo nome',

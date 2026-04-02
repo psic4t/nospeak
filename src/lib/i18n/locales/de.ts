@@ -399,6 +399,10 @@ const de = {
             description:
                 'Zeige Vorschauboxen für Nicht-Medien-Links in Nachrichten an.'
         },
+        readReceipts: {
+            label: 'Lesebestätigungen',
+            description: 'Lass Kontakte wissen, wenn du ihre Nachrichten gelesen hast.'
+        },
         profile: {
             nameLabel: 'Name',
             namePlaceholder: 'Dein Name',

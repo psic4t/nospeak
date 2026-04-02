@@ -389,6 +389,10 @@ const ja = {
             label: 'URLプレビュー',
             description: 'メッセージ内のメディア以外のリンクにプレビューカードを表示します。'
         },
+        readReceipts: {
+            label: '既読確認',
+            description: 'メッセージを読んだことを連絡先に知らせます。'
+        },
         profile: {
             nameLabel: '名前',
             namePlaceholder: 'あなたの名前',

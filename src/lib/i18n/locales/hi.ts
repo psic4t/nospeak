@@ -389,6 +389,10 @@ const hi = {
             label: 'URL पूर्वावलोकन',
             description: 'संदेशों में गैर-मीडिया लिंक के लिए पूर्वावलोकन कार्ड दिखाएँ।'
         },
+        readReceipts: {
+            label: 'पठन रसीदें',
+            description: 'संपर्कों को बताएं कि आपने उनके संदेश पढ़ लिए हैं।'
+        },
         profile: {
             nameLabel: 'नाम',
             namePlaceholder: 'आपका नाम',

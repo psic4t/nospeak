@@ -389,6 +389,10 @@ const ar = {
             label: 'معاينات URL',
             description: 'عرض بطاقات معاينة للروابط غير الوسائطية في الرسائل.'
         },
+        readReceipts: {
+            label: 'إيصالات القراءة',
+            description: 'أخبر جهات الاتصال عندما تقرأ رسائلهم.'
+        },
         profile: {
             nameLabel: 'الاسم',
             namePlaceholder: 'اسمك',
