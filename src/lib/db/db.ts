@@ -204,6 +204,11 @@ export class NospeakDB extends Dexie {
         this.version(12).stores({
             archives: 'conversationId, archivedAt'
         });
+
+        // Version 13: Add emoji index to reactions for read receipt queries
+        this.version(13).stores({
+            reactions: '++id, targetEventId, reactionEventId, [targetEventId+authorNpub+emoji], emoji'
+        });
     }
 
     public async clearAll(): Promise<void> {

@@ -39,6 +39,14 @@ export class ReactionRepository {
             .count();
         return count > 0;
     }
+
+    public async getReadReceiptForAuthor(authorNpub: string): Promise<Reaction | undefined> {
+        return db.reactions
+            .where('emoji')
+            .equals('✓')
+            .filter(r => r.authorNpub === authorNpub)
+            .last();
+    }
 }
 
 export const reactionRepo = new ReactionRepository();
