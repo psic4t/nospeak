@@ -924,6 +924,7 @@ import type { Conversation } from '$lib/db/db';
     conversation?: Conversation;
     messageDbFields?: Record<string, unknown>;
     skipDbSave?: boolean;
+    skipSelfWrap?: boolean;
   }): Promise<{ rumorId: string; selfGiftWrapId: string }> {
     const { recipients, rumor, conversationId, conversation, messageDbFields, skipDbSave } = params;
 
@@ -1021,7 +1022,7 @@ import type { Conversation } from '$lib/db/db';
     const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
 
     // Calculate total desired relays for status tracking
-    let totalDesiredRelays = senderRelays.length;
+    let totalDesiredRelays = params.skipSelfWrap ? 0 : senderRelays.length;
     for (const relays of recipientRelaysMap.values()) {
       totalDesiredRelays += relays.length;
     }
@@ -1068,21 +1069,23 @@ import type { Conversation } from '$lib/db/db';
       }
     }
 
-    // Send self-wrap to sender's relays
-    const selfPublishResult = await publishWithDeadline({
-      connectionManager,
-      event: selfGiftWrap,
-      relayUrls: senderRelays,
-      deadlineMs: 5000,
-      onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap.id, url),
-    });
+    // Send self-wrap to sender's relays (skip for read receipts)
+    if (!params.skipSelfWrap) {
+      const selfPublishResult = await publishWithDeadline({
+        connectionManager,
+        event: selfGiftWrap,
+        relayUrls: senderRelays,
+        deadlineMs: 5000,
+        onRelaySuccess: (url) => registerRelaySuccess(selfGiftWrap.id, url),
+      });
 
-    totalSuccessfulRelays += selfPublishResult.successfulRelays.length;
+      totalSuccessfulRelays += selfPublishResult.successfulRelays.length;
 
-    const selfSuccessfulRelaySet = new Set(selfPublishResult.successfulRelays);
-    for (const url of senderRelays) {
-      if (!selfSuccessfulRelaySet.has(url)) {
-        await retryQueue.enqueue(selfGiftWrap, url);
+      const selfSuccessfulRelaySet = new Set(selfPublishResult.successfulRelays);
+      for (const url of senderRelays) {
+        if (!selfSuccessfulRelaySet.has(url)) {
+          await retryQueue.enqueue(selfGiftWrap, url);
+        }
       }
     }
 
@@ -1550,7 +1553,7 @@ import type { Conversation } from '$lib/db/db';
   public async sendReaction(
     recipientNpub: string,
     targetMessage: { recipientNpub: string; eventId: string; rumorId?: string; direction: 'sent' | 'received' },
-    emoji: '👍' | '❤️' | '😂' | '🙏'
+    emoji: '👍' | '❤️' | '😂' | '🙏' | '✓'
   ): Promise<void> {
     if (!targetMessage.rumorId) {
       console.warn('Cannot react to message without rumorId (likely old message)');
@@ -1603,7 +1606,7 @@ import type { Conversation } from '$lib/db/db';
   public async sendGroupReaction(
     conversationId: string,
     targetMessage: { eventId: string; rumorId?: string; direction: 'sent' | 'received'; senderNpub?: string },
-    emoji: '👍' | '❤️' | '😂' | '🙏'
+    emoji: '👍' | '❤️' | '😂' | '🙏' | '✓'
   ): Promise<void> {
     if (!targetMessage.rumorId) {
       console.warn('Cannot react to message without rumorId (likely old message)');
@@ -1660,7 +1663,45 @@ import type { Conversation } from '$lib/db/db';
     await reactionRepo.upsertReaction(reaction);
     reactionsStore.applyReactionUpdate(reaction);
   }
- 
+
+  public async sendReadReceipt(
+    recipientNpub: string,
+    lastReadMessage: { rumorId: string; sentAt: number }
+  ): Promise<void> {
+    const settings = localStorage.getItem('nospeak-settings');
+    const parsed = settings ? JSON.parse(settings) : {};
+    if (!parsed.readReceiptsEnabled) return;
+
+    const storageKey = `nospeak:last-sent-receipt:${recipientNpub}`;
+    const lastSent = localStorage.getItem(storageKey);
+    if (lastSent === lastReadMessage.rumorId) return;
+
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const { data: recipientPubkey } = nip19.decode(recipientNpub);
+
+    const rumor: Partial<NostrEvent> = {
+      kind: 7,
+      pubkey: senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: '✓',
+      tags: [
+        ['p', recipientPubkey as string],
+        ['e', lastReadMessage.rumorId, '', recipientPubkey as string]
+      ]
+    };
+
+    await this.sendEnvelope({
+      recipients: [recipientNpub],
+      rumor,
+      skipDbSave: true,
+      skipSelfWrap: true,
+    });
+
+    localStorage.setItem(storageKey, lastReadMessage.rumorId);
+  }
+
    private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any): Promise<NostrEvent> {
     // 1. Encrypt Rumor -> Seal
     const rumorJson = JSON.stringify(rumor);
