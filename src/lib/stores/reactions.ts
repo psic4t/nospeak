@@ -54,6 +54,7 @@ function createReactionsStore() {
     }
 
     function applyReactionUpdate(reaction: Reaction): void {
+        if (reaction.emoji === '✓') return;
         let currentUserNpub: string | null = null;
         const value = get(currentUser);
         if (value && value.npub) {

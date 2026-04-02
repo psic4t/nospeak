@@ -14,6 +14,7 @@ import { profileResolver } from './ProfileResolver';
 import { startSync, updateSyncProgress, endSync } from '$lib/stores/sync';
 import { reactionRepo, type Reaction } from '$lib/db/ReactionRepository';
 import { reactionsStore } from '$lib/stores/reactions';
+import { updateReadReceipt } from '$lib/stores/readReceipts';
 import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
 import { uploadToBlossomServers } from './BlossomUpload';
 import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaPreview';
@@ -612,7 +613,6 @@ import type { Conversation } from '$lib/db/db';
         if (content === '✓') {
           console.log('[ReadReceipt] received ✓ reaction', { targetEventId, from: reactionAuthorNpub, targetFound: !!targetMessage, direction: targetMessage?.direction });
           if (targetMessage && targetMessage.direction === 'sent') {
-            const { updateReadReceipt } = await import('$lib/stores/readReceipts');
             updateReadReceipt(reactionAuthorNpub, targetEventId, targetMessage.sentAt);
             console.log('[ReadReceipt] store updated', { conversationId: reactionAuthorNpub, sentAt: targetMessage.sentAt });
           }
