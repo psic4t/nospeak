@@ -7,14 +7,12 @@ interface ReadReceiptState {
     };
 }
 
-const { subscribe, update } = writable<ReadReceiptState>({});
+export const readReceiptsStore = writable<ReadReceiptState>({});
 
 export function updateReadReceipt(conversationId: string, targetRumorId: string, targetSentAt: number): void {
-    update(state => {
+    readReceiptsStore.update(state => {
         const existing = state[conversationId];
         if (existing && existing.targetSentAt >= targetSentAt) return state;
         return { ...state, [conversationId]: { targetRumorId, targetSentAt } };
     });
 }
-
-export const readReceiptsStore = { subscribe };
