@@ -2289,7 +2289,7 @@
             {@const isRead = receipt && msg.sentAt <= receipt.targetSentAt}
             <div class="typ-meta mt-0.5 text-end">
               {#if isRead}
-                <span class="text-blue-400">✓✓</span>
+                <span class="text-green-400">✓✓</span>
               {:else}
                 <span class="text-blue-100">✓</span>
               {/if}
