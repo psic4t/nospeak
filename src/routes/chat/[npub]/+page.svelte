@@ -16,6 +16,30 @@
      
      const PAGE_SIZE = 50;
 
+     let readReceiptTimer: ReturnType<typeof setTimeout> | null = null;
+
+     function scheduleReadReceipt(convId: string, msgs: Message[]) {
+         if (isGroup) return;
+
+         // Find latest received message with a rumorId
+         let latest: Message | null = null;
+         for (let i = msgs.length - 1; i >= 0; i--) {
+             if (msgs[i].direction === 'received' && msgs[i].rumorId) {
+                 latest = msgs[i];
+                 break;
+             }
+         }
+         if (!latest || !latest.rumorId) return;
+
+         if (readReceiptTimer) clearTimeout(readReceiptTimer);
+         const msg = latest;
+         readReceiptTimer = setTimeout(() => {
+             messagingService.sendReadReceipt(convId, {
+                 rumorId: msg.rumorId!,
+                 sentAt: msg.sentAt
+             }).catch(console.error);
+         }, 2000);
+     }
 
      let messages = $state<Message[]>([]);
       // The URL param is called 'npub' but can also be a group conversationId
@@ -239,6 +263,7 @@
                 conversationRepo.markAsRead(convId).catch(console.error);
             } else {
                 contactRepo.markAsRead(convId).catch(console.error);
+                scheduleReadReceipt(convId, messages);
             }
         }
      }
@@ -389,6 +414,7 @@
                     conversationRepo.markAsRead(convId).catch(console.error);
                 } else {
                     contactRepo.markAsRead(convId).catch(console.error);
+                    scheduleReadReceipt(convId, messages);
                 }
             }
         };
@@ -414,6 +440,7 @@
         }
 
         return () => {
+            if (readReceiptTimer) clearTimeout(readReceiptTimer);
             if (typeof window !== 'undefined') {
                 window.removeEventListener('nospeak:new-message', handleNewMessage);
                 window.removeEventListener('nospeak:conversation-updated', handleConversationUpdated);
