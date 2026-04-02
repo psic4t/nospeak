@@ -607,10 +607,16 @@ import type { Conversation } from '$lib/db/db';
         // Look up the target message to determine the conversation context
         // targetEventId is the rumorId of the message being reacted to
         const targetMessage = await messageRepo.getMessageByRumorId(targetEventId);
-        
+
+        // Update read receipt store if this is a ✓ reaction on a sent message
+        if (content === '✓' && targetMessage && targetMessage.direction === 'sent') {
+          const { updateReadReceipt } = await import('$lib/stores/readReceipts');
+          updateReadReceipt(reactionAuthorNpub, targetEventId, targetMessage.sentAt);
+        }
+
         // For group messages, use conversationId; for 1-on-1, use recipientNpub (the reaction author)
         // If we can't find the target message, fall back to reaction author (1-on-1 behavior)
-        const isGroupReaction = targetMessage?.conversationId && 
+        const isGroupReaction = targetMessage?.conversationId &&
           targetMessage.conversationId !== targetMessage.recipientNpub;
         const conversationKey = isGroupReaction 
           ? targetMessage!.conversationId! 
