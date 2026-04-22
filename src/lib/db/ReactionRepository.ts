@@ -47,6 +47,26 @@ export class ReactionRepository {
             .filter(r => r.authorNpub === authorNpub)
             .last();
     }
+
+    public async deleteReaction(
+        targetEventId: string,
+        authorNpub: string,
+        emoji: string
+    ): Promise<number> {
+        return db.reactions
+            .where('[targetEventId+authorNpub+emoji]')
+            .equals([targetEventId, authorNpub, emoji])
+            .delete();
+    }
+
+    public async deleteExpiredReadReceipts(olderThanMs: number): Promise<number> {
+        const cutoff = Date.now() - olderThanMs;
+        return db.reactions
+            .where('emoji')
+            .equals('✓')
+            .filter(r => r.createdAt < cutoff)
+            .delete();
+    }
 }
 
 export const reactionRepo = new ReactionRepository();

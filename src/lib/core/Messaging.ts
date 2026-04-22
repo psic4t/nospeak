@@ -21,7 +21,10 @@ import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaP
 import { contactSyncService } from './ContactSyncService';
 import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import type { Conversation } from '$lib/db/db';
- 
+
+const READ_RECEIPT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60;
+const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
+
  export class MessagingService {
     private debug: boolean = false;
     private isFetchingHistory: boolean = false;
@@ -137,6 +140,12 @@ import type { Conversation } from '$lib/db/db';
  
      // Capture session start time to suppress notifications for old messages
      this.sessionStartedAt = Math.floor(Date.now() / 1000);
+
+     reactionRepo.deleteExpiredReadReceipts(READ_RECEIPT_EXPIRATION_MS)
+       .then(removed => {
+         if (removed > 0) console.log(`[ReadReceipt] startup sweep removed ${removed} expired ✓ receipt(s)`);
+       })
+       .catch(err => console.error('[ReadReceipt] startup sweep failed:', err));
 
      const unsub = this.listenForMessages(pubkey);
      this.activeSubscriptionUnsub = unsub;
@@ -590,6 +599,15 @@ import type { Conversation } from '$lib/db/db';
         return;
       }
 
+      if (content === '✓') {
+        const expTag = rumor.tags.find(t => Array.isArray(t) && t.length >= 2 && t[0] === 'expiration');
+        if (expTag && Number(expTag[1]) * 1000 < Date.now()) {
+          const removed = await reactionRepo.deleteReaction(targetEventId, authorNpub, '✓');
+          console.log('[ReadReceipt] received expired ✓, evicted', { targetEventId, authorNpub, removed });
+          return;
+        }
+      }
+
       const reaction: Omit<Reaction, 'id'> = {
         targetEventId,
         reactionEventId: originalEventId,
@@ -938,8 +956,16 @@ import type { Conversation } from '$lib/db/db';
     messageDbFields?: Record<string, unknown>;
     skipDbSave?: boolean;
     skipSelfWrap?: boolean;
+    expirationSeconds?: number;
   }): Promise<{ rumorId: string; selfGiftWrapId: string }> {
-    const { recipients, rumor, conversationId, conversation, messageDbFields, skipDbSave } = params;
+    const { recipients, rumor, conversationId, conversation, messageDbFields, skipDbSave, expirationSeconds } = params;
+
+    const expiresAt = typeof expirationSeconds === 'number'
+      ? Math.floor(Date.now() / 1000) + expirationSeconds
+      : undefined;
+    if (expiresAt !== undefined) {
+      rumor.tags = [...(rumor.tags ?? []), ['expiration', String(expiresAt)]];
+    }
 
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -1032,7 +1058,7 @@ import type { Conversation } from '$lib/db/db';
     }, 15000);
 
     // Create self-wrap first (used for relay status tracking ID and DB eventId)
-    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s);
+    const selfGiftWrap = await this.createGiftWrap(rumor, senderPubkey, s, expiresAt);
 
     // Calculate total desired relays for status tracking
     let totalDesiredRelays = params.skipSelfWrap ? 0 : senderRelays.length;
@@ -1053,7 +1079,7 @@ import type { Conversation } from '$lib/db/db';
     // Send gift-wrap to each recipient using publishWithDeadline
     for (const [npub, relays] of recipientRelaysMap) {
       const { data: recipientPubkey } = nip19.decode(npub);
-      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s);
+      const giftWrap = await this.createGiftWrap(rumor, recipientPubkey as string, s, expiresAt);
 
       const publishResult = await publishWithDeadline({
         connectionManager,
@@ -1718,13 +1744,14 @@ import type { Conversation } from '$lib/db/db';
       rumor,
       skipDbSave: true,
       skipSelfWrap: true,
+      expirationSeconds: READ_RECEIPT_EXPIRATION_SECONDS,
     });
 
     console.log('[ReadReceipt] sent successfully');
     localStorage.setItem(storageKey, lastReadMessage.rumorId);
   }
 
-   private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any): Promise<NostrEvent> {
+   private async createGiftWrap(rumor: Partial<NostrEvent>, recipientPubkey: string, s: any, expiresAt?: number): Promise<NostrEvent> {
     // 1. Encrypt Rumor -> Seal
     const rumorJson = JSON.stringify(rumor);
     if (this.debug) {
@@ -1777,12 +1804,16 @@ import type { Conversation } from '$lib/db/db';
       });
     }
 
+    const giftWrapTags: string[][] = [['p', recipientPubkey]];
+    if (expiresAt !== undefined) {
+      giftWrapTags.push(['expiration', String(expiresAt)]);
+    }
     const giftWrap: Partial<NostrEvent> = {
       kind: 1059,
       pubkey: ephemeralPubkey,
       created_at: Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 172800), // Randomize up to 2 days in past
       content: encryptedSeal,
-      tags: [['p', recipientPubkey]]
+      tags: giftWrapTags
     };
 
     return finalizeEvent(giftWrap as any, ephemeralPrivKey);
