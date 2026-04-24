@@ -86,6 +86,7 @@ vi.mock('$lib/db/ReactionRepository', () => ({
         getReactionsForTarget: vi.fn().mockResolvedValue([]),
         hasReaction: vi.fn().mockResolvedValue(false),
         hasReactionByContent: vi.fn().mockResolvedValue(false),
+        deleteExpiredReadReceipts: vi.fn().mockResolvedValue(0),
     },
 }));
 
