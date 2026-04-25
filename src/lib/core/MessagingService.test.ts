@@ -1331,5 +1331,23 @@ describe('MessagingService - Auto-add Contacts', () => {
             // Result should be a message-shaped object (not null) when not dropped.
             expect(result).not.toBeNull();
         });
+
+        it('handleGiftWrap dispatches a Kind 7 read-receipt rumor with 7-day-future expiration', async () => {
+            // Spec scenario: read receipts continue to function under generic expiration check.
+            const sevenDaysFromNow = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 7,
+                    tags: [['p', myPubkey], ['e', 'target-event-id'], ['expiration', String(sevenDaysFromNow)]]
+                }));
+
+            const processReactionRumorSpy = vi.spyOn(messaging as any, 'processReactionRumor')
+                .mockResolvedValue(undefined);
+
+            await (messaging as any).handleGiftWrap(giftWrap());
+
+            expect(processReactionRumorSpy).toHaveBeenCalledTimes(1);
+        });
     });
 });
