@@ -1173,4 +1173,163 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect(sealPartial.tags.find((t: string[]) => t[0] === 'expiration')).toBeUndefined();
         });
     });
+
+    describe('NIP-40 receive-side expiration drop', () => {
+        let messaging: MessagingService;
+        let mockSigner: any;
+        const myPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+        const senderPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+        function makeRumorJson(opts: {
+            kind: number;
+            tags: string[][];
+        }): string {
+            return JSON.stringify({
+                kind: opts.kind,
+                pubkey: senderPubkey,
+                content: 'x',
+                created_at: 1600000000,
+                tags: opts.tags,
+            });
+        }
+
+        function makeSealJson(): string {
+            return JSON.stringify({
+                kind: 13,
+                pubkey: senderPubkey,
+                content: 'A'.repeat(132),
+                created_at: 1600000000,
+                tags: [],
+                sig: 'valid-signature',
+            });
+        }
+
+        function giftWrap() {
+            return {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+        }
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            messaging = new MessagingService();
+            mockSigner = {
+                getPublicKey: vi.fn().mockResolvedValue(myPubkey),
+                decrypt: vi.fn(),
+                encrypt: vi.fn(),
+                signEvent: vi.fn(),
+            };
+            vi.mocked(get).mockReturnValue(mockSigner);
+            mockVerifyEvent.mockReturnValue(true);
+        });
+
+        it('handleGiftWrap drops a rumor whose expiration is in the past', async () => {
+            const pastExpiration = Math.floor(Date.now() / 1000) - 10;
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 14,
+                    tags: [['p', myPubkey], ['expiration', String(pastExpiration)]]
+                }));
+
+            const processRumorSpy = vi.spyOn(messaging as any, 'processRumor').mockResolvedValue(undefined);
+
+            await (messaging as any).handleGiftWrap(giftWrap());
+
+            expect(processRumorSpy).not.toHaveBeenCalled();
+        });
+
+        it('handleGiftWrap dispatches a rumor whose expiration is in the future', async () => {
+            const futureExpiration = Math.floor(Date.now() / 1000) + 60;
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 14,
+                    tags: [['p', myPubkey], ['expiration', String(futureExpiration)]]
+                }));
+
+            const processRumorSpy = vi.spyOn(messaging as any, 'processRumor').mockResolvedValue(undefined);
+
+            await (messaging as any).handleGiftWrap(giftWrap());
+
+            expect(processRumorSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('handleGiftWrap dispatches a rumor with no expiration tag', async () => {
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 14,
+                    tags: [['p', myPubkey]]
+                }));
+
+            const processRumorSpy = vi.spyOn(messaging as any, 'processRumor').mockResolvedValue(undefined);
+
+            await (messaging as any).handleGiftWrap(giftWrap());
+
+            expect(processRumorSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('handleGiftWrap dispatches a rumor with non-numeric expiration tag', async () => {
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 14,
+                    tags: [['p', myPubkey], ['expiration', 'not-a-number']]
+                }));
+
+            const processRumorSpy = vi.spyOn(messaging as any, 'processRumor').mockResolvedValue(undefined);
+
+            await (messaging as any).handleGiftWrap(giftWrap());
+
+            expect(processRumorSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('processGiftWrapToMessage drops a rumor whose expiration is in the past', async () => {
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            const pastExpiration = Math.floor(Date.now() / 1000) - 10;
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 14,
+                    tags: [['p', myPubkey], ['expiration', String(pastExpiration)]]
+                }));
+
+            const result = await (messaging as any).processGiftWrapToMessage(giftWrap());
+
+            expect(result).toBeNull();
+        });
+
+        it('processGiftWrapToMessage processes a rumor whose expiration is in the future', async () => {
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            const futureExpiration = Math.floor(Date.now() / 1000) + 60;
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson({
+                    kind: 14,
+                    tags: [['p', myPubkey], ['expiration', String(futureExpiration)]]
+                }));
+
+            const result = await (messaging as any).processGiftWrapToMessage(giftWrap());
+
+            // Result should be a message-shaped object (not null) when not dropped.
+            expect(result).not.toBeNull();
+        });
+    });
 });
