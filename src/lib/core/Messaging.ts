@@ -21,6 +21,7 @@ import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaP
 import { contactSyncService } from './ContactSyncService';
 import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import type { Conversation } from '$lib/db/db';
+import { CALL_SIGNAL_EXPIRATION_SECONDS } from '$lib/core/voiceCall/constants';
 
 const READ_RECEIPT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60;
 const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
@@ -1886,13 +1887,17 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       throw new Error('Contact has no messaging relays configured');
     }
 
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expiresAt = nowSec + CALL_SIGNAL_EXPIRATION_SECONDS;
+
     const rumor: Partial<NostrEvent> = {
         kind: 14,
-        created_at: Math.floor(Date.now() / 1000),
+        created_at: nowSec,
         content: signalContent,
         tags: [
             ['p', recipientPubkey, recipientRelays[0]],
-            ['type', 'voice-call']
+            ['type', 'voice-call'],
+            ['expiration', String(expiresAt)]
         ],
         pubkey
     };
@@ -1916,8 +1921,9 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
     const publishRelays = connectedRelays.length > 0 ? connectedRelays : recipientRelays;
 
-    // Create gift-wrap and publish directly (skip self-wrap, relay discovery, status tracking)
-    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey, s);
+    // NIP-40: gift wrap, seal, and rumor all carry the expiration so cooperating
+    // relays drop the gift wrap and any leaked seal/rumor are also marked expired.
+    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey, s, expiresAt);
     await publishWithDeadline({
       connectionManager,
       event: giftWrap,
