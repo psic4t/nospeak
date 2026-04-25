@@ -1010,4 +1010,77 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect(pTag[2]).toBe(discoveredRelay);
         });
     });
+
+    describe('voice-call signal expiration (NIP-40 send-side)', () => {
+        let messaging: MessagingService;
+        let mockSigner: any;
+        const myPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+        const recipientNpub = 'npub1recipient';
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            messaging = new MessagingService();
+
+            mockSigner = {
+                getPublicKey: vi.fn().mockResolvedValue(myPubkey),
+                encrypt: vi.fn().mockResolvedValue('A'.repeat(200)),
+                signEvent: vi.fn().mockImplementation(async (e: any) => ({
+                    ...e,
+                    id: 'sealid',
+                    sig: 'sealsig',
+                })),
+                decrypt: vi.fn(),
+            };
+
+            vi.mocked(get).mockReturnValue(mockSigner);
+
+            // Stub relay lookup — bypass profile resolver / discovery.
+            vi.spyOn(messaging as any, 'getVoiceCallRelays')
+                .mockResolvedValue(['wss://relay.example']);
+
+            // Stub connection health so all relays are treated "connected".
+            (connectionManager as any).getRelayHealth = vi.fn().mockReturnValue({
+                relay: {} as any,
+                isConnected: true,
+            });
+        });
+
+        it('adds expiration tag to the inner rumor with value now + 60', async () => {
+            const captured: any[] = [];
+            vi.spyOn(messaging as any, 'createGiftWrap')
+                .mockImplementation(async (rumor: any, _pk: any, _s: any, expiresAt?: any) => {
+                    captured.push({ rumor, expiresAt });
+                    return { id: 'wrapid', kind: 1059, sig: 'sig', tags: [], content: '' };
+                });
+
+            const before = Math.floor(Date.now() / 1000);
+            await messaging.sendVoiceCallSignal(recipientNpub, '{"type":"voice-call","action":"offer","callId":"x"}');
+            const after = Math.floor(Date.now() / 1000);
+
+            expect(captured.length).toBe(1);
+            const expirationTag = captured[0].rumor.tags.find((t: string[]) => t[0] === 'expiration');
+            expect(expirationTag).toBeDefined();
+            const expVal = parseInt(expirationTag[1], 10);
+            expect(expVal).toBeGreaterThanOrEqual(before + 60);
+            expect(expVal).toBeLessThanOrEqual(after + 60);
+        });
+
+        it('passes expiresAt to createGiftWrap matching the rumor expiration', async () => {
+            const captured: any[] = [];
+            vi.spyOn(messaging as any, 'createGiftWrap')
+                .mockImplementation(async (rumor: any, _pk: any, _s: any, expiresAt?: any) => {
+                    captured.push({ rumor, expiresAt });
+                    return { id: 'wrapid', kind: 1059, sig: 'sig', tags: [], content: '' };
+                });
+
+            await messaging.sendVoiceCallSignal(recipientNpub, '{"type":"voice-call","action":"offer","callId":"x"}');
+
+            expect(captured[0].expiresAt).toBeDefined();
+            const tagVal = parseInt(
+                captured[0].rumor.tags.find((t: string[]) => t[0] === 'expiration')[1],
+                10
+            );
+            expect(captured[0].expiresAt).toBe(tagVal);
+        });
+    });
 });
