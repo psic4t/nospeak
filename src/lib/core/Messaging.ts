@@ -247,6 +247,20 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
         throw new Error('Received rumor does not include my public key in p-tags');
       }
 
+      // NIP-40: drop rumors whose expiration has passed. Generic — applies to any
+      // rumor kind (voice-call signals, read receipts, etc.). Tolerates missing
+      // or non-numeric expiration tag.
+      const expirationTag = rumor.tags?.find((t: string[]) => t[0] === 'expiration');
+      if (expirationTag) {
+        const expiresAt = parseInt(expirationTag[1], 10);
+        if (!Number.isNaN(expiresAt) && expiresAt < Math.floor(Date.now() / 1000)) {
+          if (this.debug) {
+            console.log('[NIP-40] Dropping expired rumor', { kind: rumor.kind, expiresAt });
+          }
+          return;
+        }
+      }
+
       if (rumor.kind === 7) {
         await this.processReactionRumor(rumor, event.id);
         return;
@@ -335,6 +349,18 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
       if (!myPubkeyInPTags && rumor.pubkey !== myPubkey) {
         throw new Error('Received rumor does not include my public key in p-tags');
+      }
+
+      // NIP-40: drop rumors whose expiration has passed. See handleGiftWrap.
+      const expirationTag = rumor.tags?.find((t: string[]) => t[0] === 'expiration');
+      if (expirationTag) {
+        const expiresAt = parseInt(expirationTag[1], 10);
+        if (!Number.isNaN(expiresAt) && expiresAt < Math.floor(Date.now() / 1000)) {
+          if (this.debug) {
+            console.log('[NIP-40] Dropping expired rumor (native queue)', { kind: rumor.kind, expiresAt });
+          }
+          return null;
+        }
       }
 
       if (rumor.kind === 7) {
