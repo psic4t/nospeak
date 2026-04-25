@@ -1949,12 +1949,17 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
     }
 
     const sealPubkey = await s.getPublicKey();
+    const sealTags: string[][] = [];
+    if (expiresAt !== undefined) {
+      // NIP-17: include expiration on the seal as well, in case the seal leaks.
+      sealTags.push(['expiration', String(expiresAt)]);
+    }
     const seal: Partial<NostrEvent> = {
       kind: 13,
       pubkey: sealPubkey,
       created_at: Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 172800), // Randomize up to 2 days in past per NIP-17
       content: encryptedRumor,
-      tags: []
+      tags: sealTags
     };
 
     if (this.debug) {
