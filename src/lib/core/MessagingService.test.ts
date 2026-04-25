@@ -5,6 +5,9 @@ import { messageRepo } from '$lib/db/MessageRepository';
 import { signer, currentUser } from '$lib/stores/auth';
 import { get } from 'svelte/store';
 import { connectionManager } from './connection/instance';
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { nip44 } from 'nostr-tools';
+import * as nostrTools from 'nostr-tools';
 
 const { mockVerifyEvent } = vi.hoisted(() => {
     return { mockVerifyEvent: vi.fn().mockReturnValue(true) };
@@ -1081,6 +1084,93 @@ describe('MessagingService - Auto-add Contacts', () => {
                 10
             );
             expect(captured[0].expiresAt).toBe(tagVal);
+        });
+    });
+
+    describe('createGiftWrap expiration propagation (NIP-17 SHOULD)', () => {
+        let messaging: MessagingService;
+        let mockSigner: any;
+        let senderPubkey: string;
+        let recipientPubkey: string;
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            messaging = new MessagingService();
+
+            const senderSk = generateSecretKey();
+            senderPubkey = getPublicKey(senderSk);
+            const recipientSk = generateSecretKey();
+            recipientPubkey = getPublicKey(recipientSk);
+
+            mockSigner = {
+                getPublicKey: vi.fn().mockResolvedValue(senderPubkey),
+                encrypt: vi.fn().mockResolvedValue('A'.repeat(200)),
+                // Echo back the seal as the "signed seal" so we can inspect tags.
+                signEvent: vi.fn().mockImplementation(async (e: any) => ({
+                    ...e,
+                    id: 'sealid',
+                    sig: 'sealsig',
+                })),
+                decrypt: vi.fn(),
+            };
+
+            vi.mocked(get).mockReturnValue(mockSigner);
+
+            // Stub the outer gift-wrap nip44 crypto and finalizeEvent. We're not
+            // testing crypto here; we're testing tag propagation. jsdom's Uint8Array
+            // realm mismatch with bundled @noble/hashes makes the real calls throw.
+            // The stubbed finalizeEvent preserves the partial event's tags so the
+            // outer-wrap tag assertion can inspect them on the returned object.
+            vi.spyOn(nip44.v2.utils, 'getConversationKey').mockReturnValue(new Uint8Array(32));
+            vi.spyOn(nip44.v2, 'encrypt').mockReturnValue('encrypted-seal-stub');
+            vi.spyOn(nostrTools, 'finalizeEvent').mockImplementation((evt: any) => ({
+                ...evt,
+                id: 'wrapid',
+                sig: 'wrapsig',
+            }));
+        });
+
+        it('adds expiration tag to BOTH seal and gift wrap when expiresAt is provided', async () => {
+            const expiresAt = 9999999999;
+            const rumor = {
+                kind: 14,
+                pubkey: senderPubkey,
+                created_at: 1700000000,
+                content: 'x',
+                tags: [['p', recipientPubkey]],
+            };
+
+            const wrap = await (messaging as any).createGiftWrap(rumor, recipientPubkey, mockSigner, expiresAt);
+
+            // Outer wrap tag check
+            const wrapExp = wrap.tags.find((t: string[]) => t[0] === 'expiration');
+            expect(wrapExp).toBeDefined();
+            expect(wrapExp[1]).toBe(String(expiresAt));
+
+            // Seal tag check — the mocked signEvent received the seal partial.
+            const sealCalls = mockSigner.signEvent.mock.calls;
+            expect(sealCalls.length).toBe(1);
+            const sealPartial = sealCalls[0][0];
+            const sealExp = sealPartial.tags.find((t: string[]) => t[0] === 'expiration');
+            expect(sealExp).toBeDefined();
+            expect(sealExp[1]).toBe(String(expiresAt));
+        });
+
+        it('does NOT add expiration tag when expiresAt is undefined', async () => {
+            const rumor = {
+                kind: 14,
+                pubkey: senderPubkey,
+                created_at: 1700000000,
+                content: 'x',
+                tags: [['p', recipientPubkey]],
+            };
+
+            const wrap = await (messaging as any).createGiftWrap(rumor, recipientPubkey, mockSigner);
+
+            expect(wrap.tags.find((t: string[]) => t[0] === 'expiration')).toBeUndefined();
+
+            const sealPartial = mockSigner.signEvent.mock.calls[0][0];
+            expect(sealPartial.tags.find((t: string[]) => t[0] === 'expiration')).toBeUndefined();
         });
     });
 });
