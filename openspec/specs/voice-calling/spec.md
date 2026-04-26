@@ -233,3 +233,131 @@ The system SHALL render an active-call overlay providing mute toggle, speaker to
 - **THEN** the system SHALL request microphone access
 - **AND** an `answer` signal SHALL be sent to the caller
 - **AND** the local status SHALL transition to `connecting`
+
+### Requirement: Android Voice-Call Foreground Service Lifecycle
+On Android, the system SHALL run a foreground service of type `phoneCall` for the entire duration of any call, starting when the local status enters `outgoing-ringing` or `incoming-ringing` and stopping when the status enters `ended`. The service SHALL acquire a `PARTIAL_WAKE_LOCK` while running and SHALL release it when stopped. The service SHALL NOT auto-restart if killed by the system (`START_NOT_STICKY`); a system-killed call is unrecoverable and the user will see the call drop.
+
+#### Scenario: Outgoing call starts the foreground service
+- **GIVEN** the user initiates a call on Android
+- **WHEN** the local status transitions to `outgoing-ringing`
+- **THEN** the JS layer SHALL invoke the Android voice-call plugin's `startCallSession` method with the callId, peer npub, peer display name, and role `outgoing`
+- **AND** the native `VoiceCallForegroundService` SHALL start with foreground service type `phoneCall`
+- **AND** the service SHALL acquire a partial wake lock named `nospeak:voice-call`
+
+#### Scenario: Incoming call accept starts the foreground service
+- **GIVEN** the user accepts an incoming call on Android (whether from the in-app overlay or the lockscreen full-screen-intent)
+- **WHEN** the local status transitions to `connecting`
+- **THEN** the JS layer SHALL invoke `startCallSession` with role `incoming`
+
+#### Scenario: Call end stops the foreground service
+- **GIVEN** an Android voice call is active
+- **WHEN** the local status transitions to `ended`
+- **THEN** the JS layer SHALL invoke the plugin's `endCallSession` method
+- **AND** the native service SHALL release the wake lock and call `stopForeground` and `stopSelf`
+
+### Requirement: Android Voice-Call Audio Mode
+On Android, the voice-call foreground service SHALL set the system audio mode to `AudioManager.MODE_IN_COMMUNICATION` on start and SHALL restore the previous mode on stop. This engages the OS-level voice acoustic-echo-cancellation pipeline.
+
+#### Scenario: Audio mode set on call start
+- **GIVEN** the `VoiceCallForegroundService` `onStartCommand` is invoked
+- **WHEN** the service finishes calling `startForeground`
+- **THEN** the service SHALL read and remember the current `AudioManager.getMode()` value
+- **AND** the service SHALL call `AudioManager.setMode(MODE_IN_COMMUNICATION)`
+
+#### Scenario: Audio mode restored on call end
+- **GIVEN** the `VoiceCallForegroundService` had previously applied `MODE_IN_COMMUNICATION`
+- **WHEN** the service `onDestroy` runs
+- **THEN** the service SHALL call `AudioManager.setMode(...)` with the previously remembered mode value
+
+### Requirement: Lock-Screen Incoming Call Notification
+On Android, when the existing background messaging service decrypts a NIP-17 gift-wrapped rumor whose `tags` include `['type', 'voice-call']` and whose parsed signal `action` is `offer` and whose NIP-40 `expiration` is in the future, the service SHALL persist the offer to SharedPreferences and post a high-priority notification on a dedicated channel `nospeak_voice_call_incoming`. The notification SHALL include a full-screen intent targeting `MainActivity` with extras `accept_pending_call=true`, `call_id=<callId>`, and `nospeak_route_kind=voice-call-accept`. The notification SHALL include Accept and Decline action buttons. For voice-call rumors with any other `action` (`answer`, `ice-candidate`, `hangup`, `reject`, `busy`) received while the app is closed, the service SHALL discard the rumor without posting any notification.
+
+#### Scenario: Voice-call offer triggers full-screen-intent notification
+- **GIVEN** the background messaging service is running and connected to relays
+- **WHEN** a kind 1059 gift wrap arrives whose decrypted rumor has `['type','voice-call']` and content with `action: 'offer'` and a future `expiration`
+- **THEN** the service SHALL write the parsed signal, sender npub, sender pubkey hex, callId, receivedAt timestamp, and expiresAt to SharedPreferences `nospeak_pending_incoming_call`
+- **AND** the service SHALL post a notification on channel `nospeak_voice_call_incoming` with `setFullScreenIntent` set to a `MainActivity` PendingIntent carrying the route extras
+- **AND** the service SHALL NOT post a chat-message notification for this rumor
+
+#### Scenario: Foreground app suppresses native ringtone
+- **GIVEN** the background messaging service detects an incoming voice-call offer
+- **WHEN** `MainActivity.isAppVisible()` returns `true`
+- **THEN** the posted notification SHALL be built with `setSilent(true)` so the system ringtone does not play
+- **AND** the JS layer's existing in-app ringtone path SHALL handle the audible ring
+
+#### Scenario: Stale voice-call signal is dropped
+- **GIVEN** an incoming voice-call rumor whose `expiration` tag value is less than the current Unix time
+- **WHEN** the background messaging service decrypts and inspects the rumor
+- **THEN** the service SHALL discard the rumor without persisting state and without posting any notification
+
+#### Scenario: Non-offer voice-call signals are discarded while app is closed
+- **GIVEN** an incoming voice-call rumor whose `action` is `answer`, `ice-candidate`, `hangup`, `reject`, or `busy`
+- **WHEN** the background messaging service inspects the parsed signal
+- **THEN** the service SHALL discard the rumor without persisting state and without posting any notification
+
+### Requirement: Pending Incoming Call Handoff
+On Android, when the activity launches via the Accept full-screen intent, the JS layer SHALL read the persisted incoming-call signal via the plugin's `getPendingIncomingCall` method, clear it via `clearPendingIncomingCall`, dispatch the parsed signal to `voiceCallService.handleSignal`, and immediately invoke `voiceCallService.acceptCall` without showing the in-app `IncomingCallOverlay`. If the persisted signal is missing or expired, the JS layer SHALL surface a "missed call" toast and SHALL NOT enter `incoming-ringing`. A duplicate offer arriving via the live subscription for a call already in `incoming-ringing` for the same `callId` and same `peerNpub` SHALL be ignored rather than producing a `busy` response.
+
+#### Scenario: Activity launch via Accept consumes pending offer
+- **GIVEN** the user tapped Accept on the lockscreen full-screen-intent notification
+- **WHEN** `MainActivity` launches with intent extra `accept_pending_call=true`
+- **THEN** the activity SHALL call `setShowWhenLocked(true)` and `setTurnScreenOn(true)`
+- **AND** the activity SHALL call `KeyguardManager.requestDismissKeyguard`
+- **AND** the notification router SHALL emit a `routeReceived` event with `kind: 'voice-call-accept'`
+- **AND** the JS handler SHALL call `getPendingIncomingCall`, then `clearPendingIncomingCall`, then `voiceCallService.handleSignal`, then `voiceCallService.acceptCall`
+
+#### Scenario: Missing pending offer surfaces missed-call toast
+- **GIVEN** the activity launches with `accept_pending_call=true`
+- **WHEN** the JS handler calls `getPendingIncomingCall` and receives `{ pending: null }`
+- **THEN** the handler SHALL display a missed-call toast
+- **AND** the handler SHALL NOT invoke `voiceCallService.handleSignal`
+
+#### Scenario: Duplicate offer for active call is ignored
+- **GIVEN** the local status is `incoming-ringing` for a call with `callId=X` and `peerNpub=Y`
+- **WHEN** a second `offer` signal arrives with the same `callId=X` from the same `peerNpub=Y`
+- **THEN** the system SHALL ignore the duplicate
+- **AND** the system SHALL NOT send a `busy` reply
+
+### Requirement: Full-Screen Intent Permission UX
+On Android 14+, the system SHALL detect via `NotificationManager.canUseFullScreenIntent()` whether the user has granted full-screen-intent permission. The first time the user initiates or accepts a call, if the permission is not granted, the system SHALL show an explanation modal offering to open the system settings page. If the user skips, the system SHALL record that fact in client storage and SHALL NOT prompt again automatically. Calls SHALL still function via heads-up notifications when the permission is denied; only the lockscreen full-screen ringing UI is degraded.
+
+#### Scenario: First call attempt prompts when permission missing
+- **GIVEN** the user initiates a call for the first time on Android 14+
+- **AND** `canUseFullScreenIntent()` returns `false`
+- **AND** localStorage has no record of a previous skip
+- **WHEN** the call is initiated
+- **THEN** the system SHALL display a modal explaining full-screen-intent permission with Open-Settings and Skip buttons
+
+#### Scenario: Skip is remembered
+- **GIVEN** the user has previously tapped Skip on the full-screen-intent permission modal
+- **WHEN** the user initiates another call
+- **THEN** the modal SHALL NOT be shown again
+
+#### Scenario: Permission denied falls back to heads-up
+- **GIVEN** `canUseFullScreenIntent()` returns `false`
+- **WHEN** an incoming voice-call offer is received
+- **THEN** the notification SHALL still post on channel `nospeak_voice_call_incoming` at IMPORTANCE_HIGH
+- **AND** the notification SHALL display as a heads-up banner
+- **AND** tapping Accept SHALL still open the activity (after manual unlock if the device is locked)
+
+### Requirement: Decline Action Best-Effort Reject Signal
+On Android, when the user taps the Decline action button on the incoming-call notification, the system SHALL clear the pending-call SharedPreferences, cancel the notification, and attempt to send a `reject` voice-call signal to the caller through the messaging service's already-connected WebSocket relays. If no relays are connected or the messaging service is not running, the reject SHALL be dropped silently and the caller will eventually see a `timeout` end reason.
+
+#### Scenario: Decline clears pending state and dismisses notification
+- **GIVEN** an incoming-call notification is showing
+- **WHEN** the user taps the Decline action button
+- **THEN** the SharedPreferences `nospeak_pending_incoming_call` SHALL be cleared
+- **AND** the notification SHALL be cancelled
+
+#### Scenario: Decline attempts best-effort reject
+- **GIVEN** the user has tapped Decline
+- **AND** the messaging service has at least one connected relay
+- **WHEN** the receiver processes the Decline action
+- **THEN** the receiver SHALL construct a `reject` voice-call rumor, gift-wrap it, and publish it to the connected relays
+
+#### Scenario: Decline tolerates offline messaging service
+- **GIVEN** the user has tapped Decline
+- **AND** the messaging service is not running OR has no connected relays
+- **WHEN** the receiver attempts to send the reject
+- **THEN** the receiver SHALL log the failure and SHALL NOT throw or crash
+- **AND** the pending state SHALL still be cleared and the notification SHALL still be cancelled
