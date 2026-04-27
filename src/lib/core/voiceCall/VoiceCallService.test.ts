@@ -12,7 +12,7 @@ vi.mock('$lib/core/runtimeConfig/store', () => ({
 }));
 
 import { VoiceCallService } from './VoiceCallService';
-import { resetCall } from '$lib/stores/voiceCall';
+import { resetCall, setIncomingRinging } from '$lib/stores/voiceCall';
 import type { VoiceCallSignal } from './types';
 
 describe('VoiceCallService', () => {
@@ -79,6 +79,74 @@ describe('VoiceCallService', () => {
             const id1 = service.generateCallId();
             const id2 = service.generateCallId();
             expect(id1).not.toBe(id2);
+        });
+    });
+
+    describe('handleOffer dedup', () => {
+        it('ignores a duplicate offer for the same callId and same peerNpub', async () => {
+            const senderNpub = 'npub1xyz';
+            const callId = 'abc123';
+
+            // Pre-seed the store directly, bypassing the first-offer flow
+            // (which would require a full RTCPeerConnection mock).
+            setIncomingRinging(senderNpub, callId);
+
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            // Duplicate offer with same callId/sender should NOT trigger a busy reply
+            // AND must short-circuit before createPeerConnection (which is undefined in jsdom).
+            const signal: VoiceCallSignal = {
+                type: 'voice-call',
+                action: 'offer',
+                callId,
+                sdp: 'v=0\r\no=- 1 1 IN IP4 0\r\n...'
+            };
+
+            // If the dedup check works, this resolves cleanly with no signal sent
+            // and no RTCPeerConnection call. If it doesn't, this throws ReferenceError
+            // (the busy-reply path doesn't touch RTCPeerConnection, but the
+            // not-idle-and-different-call path does — so we expect a clean resolve).
+            await expect(service.handleSignal(signal, senderNpub)).resolves.toBeUndefined();
+
+            const busyCall = sendSignalSpy.mock.calls.find(call => {
+                try {
+                    const parsed = JSON.parse(call[1]);
+                    return parsed.action === 'busy';
+                } catch { return false; }
+            });
+            expect(busyCall).toBeUndefined();
+        });
+
+        it('still sends busy when a different callId arrives during incoming-ringing', async () => {
+            const senderA = 'npub1aaa';
+
+            setIncomingRinging(senderA, 'aaa');
+
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            const offerB: VoiceCallSignal = {
+                type: 'voice-call', action: 'offer', callId: 'bbb', sdp: 'sdpB'
+            };
+
+            // The busy-reply path in current code returns early after sendSignal,
+            // BEFORE createPeerConnection — so this should NOT throw ReferenceError
+            // even in jsdom. (Verify by reading VoiceCallService.ts handleOffer.)
+            await service.handleSignal(offerB, senderA);
+            // Note: senderA is intentional. Even though offerB has callId='bbb',
+            // handleSignal dispatches based on the senderNpub argument provided.
+            // Same caller (senderA) sending a different callId is the realistic
+            // scenario for "busy".
+
+            const busyCall = sendSignalSpy.mock.calls.find(call => {
+                try {
+                    const parsed = JSON.parse(call[1]);
+                    return parsed.action === 'busy';
+                } catch { return false; }
+            });
+            expect(busyCall).toBeDefined();
+            expect(busyCall![0]).toBe(senderA);
         });
     });
 });
