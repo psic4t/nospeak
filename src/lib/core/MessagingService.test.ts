@@ -1349,5 +1349,43 @@ describe('MessagingService - Auto-add Contacts', () => {
 
             expect(processReactionRumorSpy).toHaveBeenCalledTimes(1);
         });
+
+        it('processGiftWrapToMessage drops a voice-call signaling rumor (does not persist as chat)', async () => {
+            // Spec: voice-call signaling rumors must never be persisted to the message DB.
+            // Mirror the handleGiftWrap voice-call filter on the history-fetch path so old
+            // voice signals from previous calls don't accumulate as garbage chat entries.
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+
+            const futureExpiration = Math.floor(Date.now() / 1000) + 60;
+            const signalContent = JSON.stringify({
+                type: 'voice-call',
+                action: 'ice-candidate',
+                callId: 'abc123',
+                candidate: { candidate: 'candidate:foo', sdpMid: '0', sdpMLineIndex: 0 }
+            });
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(JSON.stringify({
+                    kind: 14,
+                    pubkey: senderPubkey,
+                    content: signalContent,
+                    created_at: 1600000000,
+                    tags: [
+                        ['p', myPubkey],
+                        ['type', 'voice-call'],
+                        ['expiration', String(futureExpiration)]
+                    ]
+                }));
+
+            const result = await (messaging as any).processGiftWrapToMessage(giftWrap());
+
+            // Voice-call rumor must NOT be returned as a message-shaped object.
+            // Returning null means the history-fetch pipeline skips the save.
+            expect(result).toBeNull();
+        });
     });
 });

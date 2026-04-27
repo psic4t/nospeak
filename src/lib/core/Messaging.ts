@@ -368,6 +368,18 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
         return null;
       }
 
+      // Skip voice-call signaling rumors — they are ephemeral signals, not chat
+      // messages, and must never be persisted to the message DB. Mirror the live-
+      // subscription handling in handleGiftWrap. We do NOT dispatch to
+      // voiceCallService from this path: the history-fetch / native-queue contexts
+      // are not appropriate places to wake up a call. Live signals are handled by
+      // handleGiftWrap; this filter prevents stale signals from old calls being
+      // resurrected as chat-history entries.
+      const voiceCallTag = rumor.tags?.find((t: string[]) => t[0] === 'type' && t[1] === 'voice-call');
+      if (voiceCallTag) {
+        return null;
+      }
+
       return await this.createMessageFromRumor(rumor, event.id);
 
 
