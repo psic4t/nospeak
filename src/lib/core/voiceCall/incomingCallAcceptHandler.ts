@@ -24,8 +24,15 @@ export async function handleVoiceCallAcceptRoute(): Promise<void> {
 
     if (!pending) {
         // No pending call (or it was stale and the plugin already cleared it).
-        // The chat history will show a missed-call event from the standard flow.
+        // Surface a toast so the user knows the lockscreen Accept tap landed too late.
         console.log('[VoiceCall] voice-call-accept route fired but no pending call found');
+        try {
+            const { showToast } = await import('$lib/stores/toast');
+            showToast('Missed call', 'info');
+        } catch (err) {
+            // Toast is best-effort; never throw from the route handler.
+            console.warn('[VoiceCall] could not surface missed-call toast', err);
+        }
         return;
     }
 

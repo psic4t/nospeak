@@ -341,7 +341,7 @@ On Android 14+, the system SHALL detect via `NotificationManager.canUseFullScree
 - **AND** tapping Accept SHALL still open the activity (after manual unlock if the device is locked)
 
 ### Requirement: Decline Action Best-Effort Reject Signal
-On Android, when the user taps the Decline action button on the incoming-call notification, the system SHALL clear the pending-call SharedPreferences, cancel the notification, and attempt to send a `reject` voice-call signal to the caller through the messaging service's already-connected WebSocket relays. If no relays are connected or the messaging service is not running, the reject SHALL be dropped silently and the caller will eventually see a `timeout` end reason.
+On Android, when the user taps the Decline action button on the incoming-call notification, the system SHALL clear the pending-call SharedPreferences and cancel the notification. The system MAY additionally attempt to send a `reject` voice-call signal to the caller through the messaging service's already-connected WebSocket relays; this is best-effort. If no reject is sent, or sending fails, the caller will eventually see a `timeout` end reason. The Phase A implementation accepts the timeout fallback in lieu of a Java-side NIP-59 gift-wrap helper; a future phase MAY implement the actual reject send.
 
 #### Scenario: Decline clears pending state and dismisses notification
 - **GIVEN** an incoming-call notification is showing
@@ -349,15 +349,10 @@ On Android, when the user taps the Decline action button on the incoming-call no
 - **THEN** the SharedPreferences `nospeak_pending_incoming_call` SHALL be cleared
 - **AND** the notification SHALL be cancelled
 
-#### Scenario: Decline attempts best-effort reject
+#### Scenario: Decline tolerates offline or absent messaging service
 - **GIVEN** the user has tapped Decline
-- **AND** the messaging service has at least one connected relay
+- **AND** the messaging service is not running OR has no connected relays OR the reject helper is a no-op
 - **WHEN** the receiver processes the Decline action
-- **THEN** the receiver SHALL construct a `reject` voice-call rumor, gift-wrap it, and publish it to the connected relays
-
-#### Scenario: Decline tolerates offline messaging service
-- **GIVEN** the user has tapped Decline
-- **AND** the messaging service is not running OR has no connected relays
-- **WHEN** the receiver attempts to send the reject
-- **THEN** the receiver SHALL log the failure and SHALL NOT throw or crash
+- **THEN** the receiver SHALL NOT throw or crash
 - **AND** the pending state SHALL still be cleared and the notification SHALL still be cancelled
+- **AND** the caller SHALL eventually see a `timeout` end reason for the call
