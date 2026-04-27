@@ -35,6 +35,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidMicrophonePlugin.class);
         registerPlugin(AndroidMediaCachePlugin.class);
         registerPlugin(AndroidDownloadsPlugin.class);
+        registerPlugin(AndroidVoiceCallPlugin.class);
   
         super.onCreate(savedInstanceState);
 
