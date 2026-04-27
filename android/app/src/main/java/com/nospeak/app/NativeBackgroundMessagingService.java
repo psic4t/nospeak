@@ -927,6 +927,14 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        // Voice-call rumors are kind 14 with a ['type', 'voice-call'] tag.
+        // Route to the incoming-call flow instead of the chat-notification path.
+        String rumorType = getTagValue(rumor.tags, "type");
+        if ("voice-call".equals(rumorType)) {
+            handleVoiceCallRumor(rumor);
+            return;
+        }
+
         // Only notify for decrypted DMs (kinds 14 and 15). Reactions (kind 7) and other rumor kinds
         // are treated as background activity but do not produce OS notifications.
         if (rumor.kind != 14 && rumor.kind != 15) {
@@ -2648,6 +2656,106 @@ public class NativeBackgroundMessagingService extends Service {
         String content;
         JSONArray tags;
         long createdAtSeconds;
+    }
+
+    /**
+     * Handle a decrypted voice-call signaling rumor. Only `offer` actions produce
+     * a user-visible incoming-call notification; other actions (answer, ice-candidate,
+     * hangup, reject, busy) arriving while the app is closed are useless without an
+     * active in-JS call session and are silently discarded.
+     */
+    private void handleVoiceCallRumor(DecryptedRumor rumor) {
+        if (rumor == null || rumor.pubkeyHex == null) return;
+
+        org.json.JSONObject signal;
+        try {
+            signal = new org.json.JSONObject(rumor.content);
+        } catch (org.json.JSONException e) {
+            Log.w(LOG_TAG, "[VoiceCall] Malformed signal content; dropping");
+            return;
+        }
+        if (!"voice-call".equals(signal.optString("type"))) return;
+        String action = signal.optString("action");
+        String callId = signal.optString("callId");
+        if (callId == null || callId.isEmpty()) return;
+
+        // NIP-40 expiration check (defense in depth — JS will check too).
+        String expirationStr = getTagValue(rumor.tags, "expiration");
+        long nowSec = System.currentTimeMillis() / 1000L;
+        long expiresAt = 0L;
+        if (expirationStr != null) {
+            try { expiresAt = Long.parseLong(expirationStr); } catch (NumberFormatException ignored) {}
+            if (expiresAt > 0 && expiresAt < nowSec) {
+                Log.d(LOG_TAG, "[VoiceCall] Dropping expired signal");
+                return;
+            }
+        }
+
+        // Only 'offer' actions while the app is closed produce notifications.
+        if (!"offer".equals(action)) {
+            Log.d(LOG_TAG, "[VoiceCall] Discarding action='" + action + "' while app closed");
+            return;
+        }
+
+        String senderPubkeyHex = rumor.pubkeyHex;
+        String senderNpub;
+        try {
+            senderNpub = Bech32.pubkeyHexToNpub(senderPubkeyHex);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[VoiceCall] Failed to encode sender npub", e);
+            return;
+        }
+
+        // Persist the offer for JS cold-start handoff.
+        SharedPreferences prefs = getSharedPreferences(
+            "nospeak_pending_incoming_call", MODE_PRIVATE);
+        prefs.edit()
+            .putString("signalJson", signal.toString())
+            .putString("senderNpub", senderNpub)
+            .putString("senderPubkeyHex", senderPubkeyHex)
+            .putString("callId", callId)
+            .putLong("receivedAt", nowSec)
+            .putLong("expiresAt", expiresAt)
+            .apply();
+
+        // Look up display name from existing profile cache.
+        String peerName;
+        AndroidProfileCachePrefs.Identity identity =
+            AndroidProfileCachePrefs.get(this, senderPubkeyHex);
+        if (identity != null && identity.username != null && !identity.username.isEmpty()) {
+            peerName = identity.username;
+        } else {
+            peerName = senderNpub.length() > 16 ? senderNpub.substring(0, 16) + "…" : senderNpub;
+        }
+
+        // Post the incoming-call notification (full-screen-intent or heads-up depending on permission).
+        IncomingCallNotification.post(this, callId, peerName, senderNpub, senderPubkeyHex,
+            MainActivity.isAppVisible());
+
+        // If app is foreground, push an event so JS can pick the offer up immediately
+        // (rather than waiting for the user to tap the notification).
+        if (MainActivity.isAppVisible()) {
+            AndroidVoiceCallPlugin.emitPendingCallAvailable(callId);
+        }
+    }
+
+    /**
+     * Best-effort send of a `reject` voice-call signal back to the caller.
+     *
+     * Phase A: not implemented. Sending a reject requires constructing a NIP-17
+     * gift wrap (rumor → seal → wrap with NIP-44 v2 + Schnorr), which is a
+     * non-trivial Java port of the JS pipeline. The full extraction deserves its
+     * own design pass; for Phase A the design accepts that the caller will see a
+     * `timeout` end reason after 60 seconds when the user declines while the
+     * app is closed.
+     *
+     * The Decline action still clears local pending state and dismisses the
+     * notification; the caller-side experience just isn't optimal.
+     */
+    public void sendVoiceCallReject(String recipientPubkeyHex, String callId) {
+        Log.d(LOG_TAG, "[VoiceCall] Reject signal not implemented in Phase A; "
+            + "caller will time out after 60s. recipient=" + recipientPubkeyHex
+            + " callId=" + callId);
     }
 
     /**
