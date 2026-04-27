@@ -2765,6 +2765,13 @@ public class NativeBackgroundMessagingService extends Service {
             }
         }
 
+        // Hangup-while-ringing: if the caller cancels before the user answers,
+        // dismiss the ringing screen and the incoming-call notification.
+        if ("hangup".equals(action) || "reject".equals(action) || "busy".equals(action)) {
+            handleRemoteCallCancellation(callId);
+            return;
+        }
+
         // Only 'offer' actions while the app is closed produce notifications.
         if (!"offer".equals(action)) {
             Log.d(LOG_TAG, "[VoiceCall] Discarding action='" + action + "' while app closed");
@@ -2811,6 +2818,43 @@ public class NativeBackgroundMessagingService extends Service {
         if (MainActivity.isAppVisible()) {
             AndroidVoiceCallPlugin.emitPendingCallAvailable(callId);
         }
+    }
+
+    /**
+     * Cleans up after a remote hangup/reject/busy received while the local user
+     * has a pending incoming-call ringing (i.e., the offer is in SharedPrefs and
+     * the IncomingCallActivity / notification may be showing).
+     *
+     * Only acts if the rumor's callId matches the persisted pending offer's
+     * callId — this avoids stale broadcasts from unrelated calls.
+     */
+    private void handleRemoteCallCancellation(String callId) {
+        if (callId == null || callId.isEmpty()) return;
+
+        SharedPreferences prefs = getSharedPreferences(
+            "nospeak_pending_incoming_call", MODE_PRIVATE);
+        String pendingCallId = prefs.getString("callId", null);
+        if (pendingCallId == null || !pendingCallId.equals(callId)) {
+            Log.d(LOG_TAG, "[VoiceCall] Remote cancel for non-pending callId; ignoring. "
+                + "incoming=" + callId + " pending=" + pendingCallId);
+            return;
+        }
+
+        Log.d(LOG_TAG, "[VoiceCall] Remote cancel for pending callId=" + callId
+            + " — clearing prefs, dismissing notification, broadcasting cancel");
+
+        // Clear the pending-offer SharedPrefs so a later cold-start tap doesn't
+        // try to accept a dead call.
+        prefs.edit().clear().apply();
+
+        // Dismiss the incoming-call notification.
+        IncomingCallNotification.cancel(this);
+
+        // Tell the ringing activity to finish (no-op if not running).
+        Intent broadcast = new Intent(IncomingCallActivity.ACTION_CALL_CANCELLED)
+            .setPackage(getPackageName())
+            .putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId);
+        sendBroadcast(broadcast);
     }
 
     /**
