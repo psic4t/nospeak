@@ -40,6 +40,34 @@ public final class IncomingCallNotification {
     ) {
         createChannelIfNeeded(context);
 
+        // Resolve cached avatar (best-effort) for the lockscreen ringing screen.
+        String avatarPath = null;
+        try {
+            AndroidProfileCachePrefs.Identity identity =
+                AndroidProfileCachePrefs.get(context, senderPubkeyHex);
+            String pictureUrl = identity != null ? identity.pictureUrl : null;
+            avatarPath = NativeBackgroundMessagingService.resolveCachedAvatarFilePath(
+                context, pictureUrl);
+        } catch (Throwable t) {
+            // Best-effort — fall back to placeholder.
+        }
+
+        // Full-screen intent → IncomingCallActivity (the lockscreen ringing screen).
+        // This is what gets triggered when the screen is locked. The activity shows
+        // Accept/Decline over the keyguard WITHOUT dismissing it.
+        Intent ringingIntent = new Intent(context, IncomingCallActivity.class)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+            .putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId)
+            .putExtra(IncomingCallActivity.EXTRA_PEER_NAME, peerName)
+            .putExtra(IncomingCallActivity.EXTRA_SENDER_NPUB, senderNpub)
+            .putExtra(IncomingCallActivity.EXTRA_SENDER_PUBKEY_HEX, senderPubkeyHex);
+        if (avatarPath != null) {
+            ringingIntent.putExtra(IncomingCallActivity.EXTRA_AVATAR_PATH, avatarPath);
+        }
+        PendingIntent ringingPi = PendingIntent.getActivity(
+            context, 2, ringingIntent,
+            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
         // Accept tap → MainActivity with accept_pending_call=true and the
         // voice-call-accept route extras.
         Intent acceptIntent = new Intent(context, MainActivity.class)
@@ -72,7 +100,7 @@ public final class IncomingCallNotification {
             .setOngoing(true)
             .setAutoCancel(false)
             .setTimeoutAfter(60_000L)
-            .setFullScreenIntent(acceptPi, true)
+            .setFullScreenIntent(ringingPi, true)
             .setContentIntent(acceptPi)
             .addAction(R.drawable.ic_stat_call, "Accept", acceptPi)
             .addAction(R.drawable.ic_call_end, "Decline", declinePi);
