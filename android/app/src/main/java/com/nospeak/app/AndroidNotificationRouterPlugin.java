@@ -14,6 +14,7 @@ public class AndroidNotificationRouterPlugin extends Plugin {
 
     private static final String EXTRA_ROUTE_KIND = "nospeak_route_kind";
     private static final String EXTRA_ROUTE_CONVERSATION_ID = "nospeak_conversation_id";
+    private static final String EXTRA_ROUTE_CALL_ID = "call_id";
 
     @PluginMethod
     public void getInitialRoute(PluginCall call) {
@@ -46,6 +47,7 @@ public class AndroidNotificationRouterPlugin extends Plugin {
         // Primary path: read from intent extras (notification taps via PendingIntent)
         String kind = intent.getStringExtra(EXTRA_ROUTE_KIND);
         String conversationId = intent.getStringExtra(EXTRA_ROUTE_CONVERSATION_ID);
+        String callId = intent.getStringExtra(EXTRA_ROUTE_CALL_ID);
 
         // Fallback: parse from data URI (launcher shortcuts may strip extras).
         // Only when MIME type is absent — a non-null type means a real share-sheet
@@ -65,7 +67,20 @@ public class AndroidNotificationRouterPlugin extends Plugin {
             }
         }
 
-        if (kind == null || kind.isEmpty() || conversationId == null || conversationId.isEmpty()) {
+        if (kind == null || kind.isEmpty()) {
+            return null;
+        }
+
+        // Voice-call routes carry callId, not conversationId. Allow them through
+        // even when conversationId is absent.
+        if ("voice-call-accept".equals(kind) || "voice-call-active".equals(kind)) {
+            JSObject payload = new JSObject();
+            payload.put("kind", kind);
+            payload.put("callId", callId != null ? callId : "");
+            return payload;
+        }
+
+        if (conversationId == null || conversationId.isEmpty()) {
             return null;
         }
 
