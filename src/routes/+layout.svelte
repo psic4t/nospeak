@@ -281,6 +281,21 @@
           void AndroidNotificationRouter.addListener('routeReceived', (payload) => {
               void handleNotificationRoute(payload);
           });
+
+          // Listen for hang-up taps on the active-call notification action button.
+          // The native VoiceCallActionReceiver emits 'hangupRequested' which we
+          // forward into the JS state machine via voiceCallService.hangup().
+          try {
+              const { AndroidVoiceCall } = await import('$lib/core/voiceCall/androidVoiceCallPlugin');
+              const { voiceCallService } = await import('$lib/core/voiceCall/VoiceCallService');
+              void AndroidVoiceCall.addListener('hangupRequested', () => {
+                  voiceCallService.hangup().catch((err) =>
+                      console.warn('[VoiceCall] hangup from notification failed', err)
+                  );
+              });
+          } catch (e) {
+              console.error('Failed to wire hangupRequested listener:', e);
+          }
       }
 
      // Handle Android inbound shares - define handler and process cold-start intent
