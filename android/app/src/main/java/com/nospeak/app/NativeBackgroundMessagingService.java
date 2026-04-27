@@ -931,6 +931,16 @@ public class NativeBackgroundMessagingService extends Service {
         // Route to the incoming-call flow instead of the chat-notification path.
         String rumorType = getTagValue(rumor.tags, "type");
         if ("voice-call".equals(rumorType)) {
+            // Dedup by gift-wrap event ID to suppress duplicates delivered by
+            // multiple relays (or after a relay reconnect). Without this, the
+            // ringing screen would re-appear after the user declines, because
+            // the same offer event is re-delivered from another relay.
+            if (!markEventIdSeen(eventId)) {
+                if (isDebugBuild()) {
+                    Log.d(LOG_TAG, "[VoiceCall] Skip duplicate gift wrap " + eventId);
+                }
+                return;
+            }
             handleVoiceCallRumor(rumor);
             return;
         }
