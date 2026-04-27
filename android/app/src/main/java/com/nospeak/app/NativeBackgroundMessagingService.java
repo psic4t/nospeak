@@ -1634,6 +1634,53 @@ public class NativeBackgroundMessagingService extends Service {
         }
     }
 
+    /**
+     * Static accessor for the cached avatar PNG file path, usable without a
+     * running service instance. Returns the absolute path if the file exists,
+     * otherwise null.
+     *
+     * Used by {@link IncomingCallNotification} to pass an avatar to the
+     * lockscreen ringing screen ({@link IncomingCallActivity}) via Intent extra
+     * (cache-file path is safer than embedding a Bitmap in extras).
+     */
+    public static String resolveCachedAvatarFilePath(Context ctx, String pictureUrl) {
+        if (ctx == null || pictureUrl == null || pictureUrl.isEmpty()) {
+            return null;
+        }
+        String key = computeAvatarKeyStatic(pictureUrl);
+        if (key == null) {
+            return null;
+        }
+        File dir = new File(ctx.getCacheDir(), "nospeak_avatar_cache");
+        File file = new File(dir, key + ".png");
+        if (!file.exists()) {
+            return null;
+        }
+        return file.getAbsolutePath();
+    }
+
+    /**
+     * Static mirror of {@link #computeAvatarKey(String)} for use without a
+     * service instance. MUST stay byte-identical in output to the instance
+     * version so the same cached file resolves under either call site.
+     */
+    private static String computeAvatarKeyStatic(String url) {
+        if (url == null) return null;
+        String trimmed = url.trim();
+        if (trimmed.isEmpty()) return null;
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(trimmed.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return null;
+        }
+    }
+
     private Bitmap normalizeAvatarBitmap(Bitmap bitmap, int targetPx) {
         if (bitmap == null) {
             return null;
