@@ -1,4 +1,5 @@
 import { get } from 'svelte/store';
+import { Capacitor } from '@capacitor/core';
 import {
     setOutgoingRinging,
     setIncomingRinging,
@@ -11,6 +12,7 @@ import {
     incrementDuration
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
+import { AndroidVoiceCall } from '$lib/core/voiceCall/androidVoiceCallPlugin';
 import { CALL_OFFER_TIMEOUT_MS, ICE_CONNECTION_TIMEOUT_MS, CALL_SIGNAL_TYPE, AUDIO_CONSTRAINTS } from './constants';
 import type { VoiceCallSignal } from './types';
 
@@ -70,6 +72,7 @@ export class VoiceCallService {
 
         const callId = this.generateCallId();
         setOutgoingRinging(recipientNpub, callId);
+        await this.startAndroidSession(callId, recipientNpub, 'outgoing');
 
         try {
             console.log('[VoiceCall] Requesting microphone access...');
@@ -141,6 +144,7 @@ export class VoiceCallService {
 
         try {
             setConnecting();
+            await this.startAndroidSession(state.callId, state.peerNpub, 'incoming');
             this.localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
 
             this.localStream.getTracks().forEach(track => {
@@ -388,6 +392,36 @@ export class VoiceCallService {
         if (this.peerConnection) {
             this.peerConnection.close();
             this.peerConnection = null;
+        }
+
+        // End the Android foreground service / notification if one is active.
+        // Fire-and-forget: cleanup is sync and we don't want to block on the
+        // bridge round-trip.
+        const stateAtCleanup = get(voiceCallState);
+        if (stateAtCleanup.status !== 'idle' && stateAtCleanup.status !== 'ended') {
+            void this.endAndroidSession();
+        }
+    }
+
+    private async startAndroidSession(callId: string, peerNpub: string, role: 'incoming' | 'outgoing'): Promise<void> {
+        if (Capacitor.getPlatform() !== 'android') return;
+        try {
+            await AndroidVoiceCall.startCallSession({
+                callId,
+                peerNpub,
+                role
+            });
+        } catch (err) {
+            console.warn('[VoiceCall] startCallSession failed', err);
+        }
+    }
+
+    private async endAndroidSession(): Promise<void> {
+        if (Capacitor.getPlatform() !== 'android') return;
+        try {
+            await AndroidVoiceCall.endCallSession();
+        } catch (err) {
+            console.warn('[VoiceCall] endCallSession failed', err);
         }
     }
 }
