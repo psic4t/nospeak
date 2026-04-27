@@ -215,7 +215,30 @@
       let routedFromNotification = false;
 
       const handleNotificationRoute = async (payload: AndroidNotificationRoutePayload): Promise<void> => {
-          if (!payload || payload.kind !== 'chat') {
+          if (!payload) return;
+
+          if (payload.kind === 'voice-call-accept') {
+              if (!$currentUser) return;
+              try {
+                  const { handleVoiceCallAcceptRoute } = await import(
+                      '$lib/core/voiceCall/incomingCallAcceptHandler'
+                  );
+                  await handleVoiceCallAcceptRoute();
+                  routedFromNotification = true;
+              } catch (e) {
+                  console.error('Failed to handle voice-call-accept route:', e);
+              }
+              return;
+          }
+
+          if (payload.kind === 'voice-call-active') {
+              // The ActiveCallOverlay is already mounted in the root layout.
+              // No navigation needed — just mark routed-from-notification.
+              routedFromNotification = true;
+              return;
+          }
+
+          if (payload.kind !== 'chat') {
               return;
           }
 

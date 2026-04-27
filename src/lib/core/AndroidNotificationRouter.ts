@@ -1,11 +1,26 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-export type AndroidNotificationRouteKind = 'chat';
+export type AndroidNotificationRouteKind = 'chat' | 'voice-call-accept' | 'voice-call-active';
 
-export interface AndroidNotificationRoutePayload {
-    kind: AndroidNotificationRouteKind;
-    conversationId: string; // pubkey hex for 1-on-1, 16-char hash for groups
+export interface AndroidNotificationChatRoutePayload {
+    kind: 'chat';
+    conversationId: string;
 }
+
+export interface AndroidNotificationVoiceCallAcceptPayload {
+    kind: 'voice-call-accept';
+    callId: string;
+}
+
+export interface AndroidNotificationVoiceCallActivePayload {
+    kind: 'voice-call-active';
+    callId: string;
+}
+
+export type AndroidNotificationRoutePayload =
+    | AndroidNotificationChatRoutePayload
+    | AndroidNotificationVoiceCallAcceptPayload
+    | AndroidNotificationVoiceCallActivePayload;
 
 export interface AndroidNotificationRouterPlugin {
     getInitialRoute(): Promise<AndroidNotificationRoutePayload | null>;
