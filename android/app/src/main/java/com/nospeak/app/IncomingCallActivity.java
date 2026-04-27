@@ -77,6 +77,8 @@ public class IncomingCallActivity extends Activity {
 
     private BroadcastReceiver cancelReceiver;
 
+    private boolean acceptInProgress = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -220,7 +222,17 @@ public class IncomingCallActivity extends Activity {
     // --- Action handlers -------------------------------------------------
 
     private void onAcceptClicked() {
-        Log.d(TAG, "Accept tapped for callId=" + callId);
+        if (acceptInProgress) {
+            Log.d(TAG, "Accept already in progress — ignoring duplicate tap");
+            return;
+        }
+        acceptInProgress = true;
+        setButtonsEnabled(false);
+
+        // Snapshot callId so a replacement offer arriving via onNewIntent during
+        // the keyguard dismiss in-flight can't mutate what we accept.
+        final String acceptedCallId = callId;
+        Log.d(TAG, "Accept tapped for callId=" + acceptedCallId);
         timeoutHandler.removeCallbacks(timeoutRunnable);
 
         final Runnable launchMain = new Runnable() {
@@ -232,7 +244,7 @@ public class IncomingCallActivity extends Activity {
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra("accept_pending_call", true)
-                    .putExtra("call_id", callId)
+                    .putExtra("call_id", acceptedCallId)
                     .putExtra("nospeak_route_kind", "voice-call-accept");
                 startActivity(i);
                 finishAndRemoveTask();
@@ -252,6 +264,15 @@ public class IncomingCallActivity extends Activity {
                 @Override
                 public void onDismissCancelled() {
                     Log.d(TAG, "Keyguard dismiss cancelled by user — staying on ringing screen");
+                    acceptInProgress = false;
+                    setButtonsEnabled(true);
+                    // Re-validate the pending offer before re-arming: it may have
+                    // expired while the user was at the PIN prompt.
+                    if (!hasValidPendingOffer()) {
+                        Log.d(TAG, "Pending offer expired during PIN cancel — finishing");
+                        finishAndRemoveTask();
+                        return;
+                    }
                     // Re-arm the timeout (we cleared it above).
                     timeoutHandler.postDelayed(timeoutRunnable, RINGING_TIMEOUT_MS);
                 }
@@ -265,6 +286,13 @@ public class IncomingCallActivity extends Activity {
         } else {
             launchMain.run();
         }
+    }
+
+    private void setButtonsEnabled(boolean enabled) {
+        ImageButton accept = findViewById(R.id.incoming_call_accept);
+        if (accept != null) accept.setEnabled(enabled);
+        ImageButton decline = findViewById(R.id.incoming_call_decline);
+        if (decline != null) decline.setEnabled(enabled);
     }
 
     private void onDeclineClicked() {
