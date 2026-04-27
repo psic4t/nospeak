@@ -1664,10 +1664,18 @@ public class NativeBackgroundMessagingService extends Service {
      * Static helper that derives the cache filename key for a profile-picture URL,
      * usable without a service instance.
      *
-     * <p>Trims the URL and returns SHA-256 hex (lowercase) of its UTF-8 bytes. All
-     * cache-write paths in this class pre-trim before calling {@link #computeAvatarKey},
-     * so this static helper resolves to the same on-disk file even though it differs
-     * superficially from the instance method (which expects callers to trim).
+     * <p>Trims the URL and returns SHA-256 hex (lowercase) of its UTF-8 bytes. The
+     * instance {@link #computeAvatarKey} does NOT trim — it expects callers to trim
+     * first. Every cache-WRITE path in this class pre-trims before calling the
+     * instance method (see lines around 1036, 1046, 1340, 1517 where the call is
+     * {@code computeAvatarKey(pictureUrl.trim())} or equivalent), so cache files
+     * are always keyed by the trimmed URL. This static helper therefore resolves
+     * the same on-disk file as the cache-write paths even when the caller passes
+     * an un-trimmed URL.
+     *
+     * <p>Some existing instance-method READ paths (e.g. {@code resolveCachedAvatarBitmap}
+     * at line 1376) do not trim and would miss the cache for whitespace-padded
+     * URLs. That is a pre-existing inconsistency, not affected by this static helper.
      *
      * <p>Returns null on null/empty input or if SHA-256 is unavailable on this device
      * (effectively never, but handled defensively).
