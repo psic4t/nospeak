@@ -10,12 +10,16 @@ import android.util.Log;
 /**
  * Broadcast receiver for the "Decline" action on the incoming-call notification.
  *
- * On receive:
+ * On receive (UI thread):
  * 1. Clears the {@code nospeak_pending_incoming_call} SharedPreferences so a later
  *    cold-start does not auto-accept the declined call.
  * 2. Cancels the incoming-call notification.
- * 3. Best-effort sends a {@code reject} voice-call signal back to the caller through
- *    the messaging service's already-connected WebSocket relays.
+ * 3. Off the UI thread (via {@link #goAsync()}): sends a NIP-17 gift-wrapped
+ *    {@code reject} voice-call signal to the caller through the messaging service's
+ *    already-connected WebSocket relays.
+ *
+ * Step 3 is async because it can take up to a few seconds (Amber NIP-55
+ * ContentResolver round-trip + relay publish) and must never block the main thread.
  */
 public class IncomingCallActionReceiver extends BroadcastReceiver {
 
@@ -32,32 +36,41 @@ public class IncomingCallActionReceiver extends BroadcastReceiver {
         if (intent == null) return;
         if (!ACTION_DECLINE.equals(intent.getAction())) return;
 
-        String callId = intent.getStringExtra(EXTRA_CALL_ID);
-        String senderNpub = intent.getStringExtra(EXTRA_SENDER_NPUB);
-        String senderPubkeyHex = intent.getStringExtra(EXTRA_SENDER_PUBKEY_HEX);
+        final String callId = intent.getStringExtra(EXTRA_CALL_ID);
+        final String senderPubkeyHex = intent.getStringExtra(EXTRA_SENDER_PUBKEY_HEX);
         Log.d(TAG, "Decline received for callId=" + callId);
 
-        // 1. Clear pending-call SharedPrefs.
+        // Synchronous, fast: clear local state and dismiss the UI cue.
         SharedPreferences prefs = context.getSharedPreferences(
             "nospeak_pending_incoming_call", Context.MODE_PRIVATE);
         prefs.edit().clear().apply();
 
-        // 2. Cancel the incoming-call notification.
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) {
             nm.cancel(IncomingCallNotification.NOTIFICATION_ID);
         }
 
-        // 3. Best-effort reject signal via the messaging service.
-        NativeBackgroundMessagingService svc = NativeBackgroundMessagingService.getInstance();
-        if (svc != null && callId != null && senderPubkeyHex != null) {
-            try {
-                svc.sendVoiceCallReject(senderPubkeyHex, callId);
-            } catch (Exception e) {
-                Log.w(TAG, "sendVoiceCallReject failed (best-effort, ignoring)", e);
-            }
-        } else {
+        // Asynchronous: send the reject signal off the main thread. goAsync()
+        // keeps the receiver alive for up to ~10s while the background work runs.
+        final NativeBackgroundMessagingService svc =
+            NativeBackgroundMessagingService.getInstance();
+        if (svc == null || callId == null || senderPubkeyHex == null) {
             Log.d(TAG, "Messaging service not running or missing args; skipping reject");
+            return;
         }
+
+        final PendingResult pendingResult = goAsync();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    svc.sendVoiceCallReject(senderPubkeyHex, callId);
+                } catch (Exception e) {
+                    Log.w(TAG, "sendVoiceCallReject failed (best-effort, ignoring)", e);
+                } finally {
+                    pendingResult.finish();
+                }
+            }
+        }, "nospeak-reject-send").start();
     }
 }

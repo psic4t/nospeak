@@ -56,7 +56,10 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -2122,6 +2125,45 @@ public class NativeBackgroundMessagingService extends Service {
         }
     }
 
+    /**
+     * NIP-44 encrypt to {@code recipientPubkeyHex} using the current user's key.
+     * Dispatches to local Schnorr-derived ECDH or Amber NIP44_ENCRYPT URI based on
+     * the current signer mode. Returns null on failure.
+     */
+    private String encryptNip44(String plaintext, String recipientPubkeyHex) {
+        if (plaintext == null || recipientPubkeyHex == null) {
+            return null;
+        }
+
+        if ("amber".equalsIgnoreCase(currentMode)) {
+            return amberNip44Encrypt(plaintext, recipientPubkeyHex);
+        }
+
+        if ("nsec".equalsIgnoreCase(currentMode)) {
+            return localNip44Encrypt(plaintext, recipientPubkeyHex);
+        }
+
+        return null;
+    }
+
+    private String localNip44Encrypt(String plaintext, String recipientPubkeyHex) {
+        if (localSecretKey == null || localSecretKey.length != 32) {
+            return null;
+        }
+
+        if (plaintext == null || recipientPubkeyHex == null) {
+            return null;
+        }
+
+        try {
+            byte[] conversationKey = getConversationKey(localSecretKey, recipientPubkeyHex);
+            return nip44V2EncryptPayload(plaintext, conversationKey);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "localNip44Encrypt failed", e);
+            return null;
+        }
+    }
+
     private static byte[] getConversationKey(byte[] privateKey, String peerPubkeyHex) throws Exception {
         if (privateKey == null || privateKey.length != 32) {
             throw new IllegalArgumentException("invalid private key");
@@ -2235,6 +2277,64 @@ public class NativeBackgroundMessagingService extends Service {
 
         byte[] paddedPlaintext = chacha20Decrypt(chachaKey, chachaNonce, ciphertext);
         return unpadNip44(paddedPlaintext);
+    }
+
+    /**
+     * NIP-44 v2 encrypt: pad → ChaCha20 encrypt → HMAC-SHA256 → base64.
+     * Returns the base64-encoded ciphertext payload, or null on failure.
+     * Mirror of {@link #nip44V2DecryptPayload}.
+     */
+    private static String nip44V2EncryptPayload(String plaintext, byte[] conversationKey) throws Exception {
+        if (plaintext == null) return null;
+
+        byte[] paddedPlaintext = padNip44(plaintext.getBytes(StandardCharsets.UTF_8));
+        if (paddedPlaintext == null) return null;
+
+        byte[] nonce = new byte[32];
+        new SecureRandom().nextBytes(nonce);
+
+        byte[] keys = hkdfExpand(conversationKey, nonce, 76);
+        byte[] chachaKey = Arrays.copyOfRange(keys, 0, 32);
+        byte[] chachaNonce = Arrays.copyOfRange(keys, 32, 44);
+        byte[] hmacKey = Arrays.copyOfRange(keys, 44, 76);
+
+        byte[] ciphertext = chacha20Encrypt(chachaKey, chachaNonce, paddedPlaintext);
+        byte[] mac = hmacSha256(hmacKey, concat(nonce, ciphertext));
+
+        // Layout: version(1) | nonce(32) | ciphertext | mac(32)
+        byte[] data = new byte[1 + nonce.length + ciphertext.length + mac.length];
+        data[0] = 0x02; // version 2
+        System.arraycopy(nonce, 0, data, 1, nonce.length);
+        System.arraycopy(ciphertext, 0, data, 1 + nonce.length, ciphertext.length);
+        System.arraycopy(mac, 0, data, 1 + nonce.length + ciphertext.length, mac.length);
+
+        return Base64.encodeToString(data, Base64.NO_WRAP);
+    }
+
+    /**
+     * NIP-44 v2 padding: 2-byte big-endian length prefix + plaintext + zero padding.
+     */
+    private static byte[] padNip44(byte[] plaintext) {
+        if (plaintext == null) return null;
+        int unpaddedLen = plaintext.length;
+        if (unpaddedLen <= 0 || unpaddedLen > 65535) return null;
+
+        int paddedLen = calcPaddedLen(unpaddedLen);
+        byte[] padded = new byte[2 + paddedLen];
+        padded[0] = (byte) ((unpaddedLen >> 8) & 0xFF);
+        padded[1] = (byte) (unpaddedLen & 0xFF);
+        System.arraycopy(plaintext, 0, padded, 2, unpaddedLen);
+        // remaining bytes are zero by default
+        return padded;
+    }
+
+    private static byte[] chacha20Encrypt(byte[] key, byte[] nonce, byte[] plaintext) {
+        ChaCha7539Engine engine = new ChaCha7539Engine();
+        engine.init(true, new ParametersWithIV(new KeyParameter(key), nonce));
+
+        byte[] out = new byte[plaintext.length];
+        engine.processBytes(plaintext, 0, plaintext.length, out, 0);
+        return out;
     }
 
     private static byte[] chacha20Decrypt(byte[] key, byte[] nonce, byte[] ciphertext) {
@@ -2442,11 +2542,23 @@ public class NativeBackgroundMessagingService extends Service {
         if (localSecretKey == null || localSecretKey.length != 32) {
             return null;
         }
+        return localSignEventWithKey(unsignedEventJson, localSecretKey);
+    }
+
+    /**
+     * Sign an unsigned event with an explicit private key (used for the gift-wrap
+     * outer layer, which is signed by an ephemeral keypair, not the user's nsec).
+     * Returns the signed event JSON or null on failure.
+     */
+    private static String localSignEventWithKey(String unsignedEventJson, byte[] privateKey) {
+        if (unsignedEventJson == null || privateKey == null || privateKey.length != 32) {
+            return null;
+        }
 
         try {
             JSONObject event = new JSONObject(unsignedEventJson);
 
-            // Compute event ID (SHA-256 of serialized event)
+            // Compute event ID (SHA-256 of NIP-01 serialized event)
             String serialized = serializeEventForId(event);
             byte[] idBytes = sha256Bytes(serialized.getBytes(StandardCharsets.UTF_8));
             if (idBytes == null) {
@@ -2455,17 +2567,52 @@ public class NativeBackgroundMessagingService extends Service {
             String id = bytesToHex(idBytes);
 
             // Sign with Schnorr (BIP-340)
-            byte[] sig = schnorrSign(idBytes, localSecretKey);
+            byte[] sig = schnorrSign(idBytes, privateKey);
             if (sig == null) {
                 return null;
             }
             String sigHex = bytesToHex(sig);
 
-            // Add id and sig to event
             event.put("id", id);
             event.put("sig", sigHex);
 
             return event.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Generate a random 32-byte secp256k1 private key. The probability of being
+     * outside the valid scalar range is negligible (~2^-128); not checked, matching
+     * the behavior of nostr-tools' generateSecretKey.
+     */
+    private static byte[] generateRandomSecretKey() {
+        byte[] sk = new byte[32];
+        new SecureRandom().nextBytes(sk);
+        return sk;
+    }
+
+    /**
+     * Derive the x-only (BIP-340) public key for a secp256k1 private key.
+     * Returns 32-byte hex (lowercase).
+     */
+    private static String derivePublicKeyHex(byte[] privateKey) {
+        try {
+            X9ECParameters params = SECNamedCurves.getByName("secp256k1");
+            if (params == null) return null;
+            ECPoint G = params.getG();
+            BigInteger d = new BigInteger(1, privateKey);
+            ECPoint P = G.multiply(d).normalize();
+            byte[] xCoord = P.getAffineXCoord().getEncoded();
+            // x-only pubkey is exactly 32 bytes; pad-left if needed.
+            if (xCoord.length == 32) return bytesToHex(xCoord);
+            byte[] padded = new byte[32];
+            int srcStart = Math.max(0, xCoord.length - 32);
+            int dstStart = Math.max(0, 32 - xCoord.length);
+            int len = Math.min(32, xCoord.length);
+            System.arraycopy(xCoord, srcStart, padded, dstStart, len);
+            return bytesToHex(padded);
         } catch (Exception e) {
             return null;
         }
@@ -2752,6 +2899,49 @@ public class NativeBackgroundMessagingService extends Service {
         }
     }
 
+    /**
+     * NIP-44 encrypt via Amber's ContentResolver URI. Synchronous; safe to call
+     * from a background thread. Returns null on rejection or failure.
+     */
+    private String amberNip44Encrypt(String plaintext, String recipientPubkeyHex) {
+        try {
+            ContentResolver resolver = getContentResolver();
+            Uri uri = Uri.parse("content://com.greenart7c3.nostrsigner.NIP44_ENCRYPT");
+            String[] projection = new String[]{plaintext, recipientPubkeyHex, currentPubkeyHex};
+            Cursor cursor = resolver.query(uri, projection, null, null, null);
+            if (cursor == null) {
+                return null;
+            }
+            try {
+                int rejectedIndex = cursor.getColumnIndex("rejected");
+                if (rejectedIndex >= 0) {
+                    return null;
+                }
+
+                if (!cursor.moveToFirst()) {
+                    return null;
+                }
+
+                int resultIndex = cursor.getColumnIndex("result");
+                if (resultIndex < 0) {
+                    return null;
+                }
+
+                String ciphertext = cursor.getString(resultIndex);
+                if (ciphertext == null || ciphertext.isEmpty()) {
+                    return null;
+                }
+
+                return ciphertext;
+            } finally {
+                cursor.close();
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "amberNip44Encrypt failed", e);
+            return null;
+        }
+    }
+
     private static final class DecryptedRumor {
         int kind;
         String pubkeyHex;
@@ -2885,22 +3075,185 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * Best-effort send of a `reject` voice-call signal back to the caller.
+     * Send a NIP-17 gift-wrapped {@code reject} voice-call signal back to the caller.
      *
-     * Phase A: not implemented. Sending a reject requires constructing a NIP-17
-     * gift wrap (rumor → seal → wrap with NIP-44 v2 + Schnorr), which is a
-     * non-trivial Java port of the JS pipeline. The full extraction deserves its
-     * own design pass; for Phase A the design accepts that the caller will see a
-     * `timeout` end reason after 60 seconds when the user declines while the
-     * app is closed.
+     * Constructs the rumor → seal → gift-wrap pipeline natively (Java + BouncyCastle),
+     * mirroring the JS path in {@code Messaging.sendVoiceCallSignal}. Supports both
+     * nsec mode (pure Java) and amber mode (Amber NIP-55 ContentResolver for sign +
+     * NIP44 encrypt of the inner rumor; the outer gift-wrap layer always uses an
+     * ephemeral key signed locally).
      *
-     * The Decline action still clears local pending state and dismisses the
-     * notification; the caller-side experience just isn't optimal.
+     * Best-effort: failure to encrypt, sign, or publish results in a log warning
+     * and a silent return. The caller still hits their 60s offer-timeout in that
+     * case, which matches the previous Phase A behavior.
+     *
+     * Must be called from a background thread — Amber's ContentResolver query is
+     * synchronous and the WebSocket sends should not happen on the UI thread.
      */
     public void sendVoiceCallReject(String recipientPubkeyHex, String callId) {
-        Log.d(LOG_TAG, "[VoiceCall] Reject signal not implemented in Phase A; "
-            + "caller will time out after 60s. recipient=" + recipientPubkeyHex
-            + " callId=" + callId);
+        if (recipientPubkeyHex == null || recipientPubkeyHex.isEmpty()
+            || callId == null || callId.isEmpty()
+            || currentPubkeyHex == null || currentPubkeyHex.isEmpty()) {
+            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallReject: missing args; aborting");
+            return;
+        }
+
+        try {
+            long nowSec = System.currentTimeMillis() / 1000L;
+            long expiresAt = nowSec + 60L;
+
+            // 1. Build the voice-call signal payload.
+            JSONObject signal = new JSONObject();
+            signal.put("type", "voice-call");
+            signal.put("action", "reject");
+            signal.put("callId", callId);
+            String signalContent = signal.toString();
+
+            // 2. Build the unsigned rumor (kind 14). NIP-17 rumors carry an id but
+            // are NOT signed — only the seal and gift-wrap are signed.
+            JSONObject rumor = new JSONObject();
+            rumor.put("kind", 14);
+            rumor.put("created_at", nowSec);
+            rumor.put("content", signalContent);
+            rumor.put("pubkey", currentPubkeyHex);
+            JSONArray rumorTags = new JSONArray();
+            JSONArray pTag = new JSONArray();
+            pTag.put("p");
+            pTag.put(recipientPubkeyHex);
+            rumorTags.put(pTag);
+            JSONArray typeTag = new JSONArray();
+            typeTag.put("type");
+            typeTag.put("voice-call");
+            rumorTags.put(typeTag);
+            JSONArray expTag = new JSONArray();
+            expTag.put("expiration");
+            expTag.put(String.valueOf(expiresAt));
+            rumorTags.put(expTag);
+            rumor.put("tags", rumorTags);
+
+            String rumorSerialized = serializeEventForId(rumor);
+            byte[] rumorIdBytes = sha256Bytes(rumorSerialized.getBytes(StandardCharsets.UTF_8));
+            if (rumorIdBytes == null) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: rumor id hash failed");
+                return;
+            }
+            rumor.put("id", bytesToHex(rumorIdBytes));
+
+            // 3. Encrypt rumor → seal content using the user's key.
+            String sealContent = encryptNip44(rumor.toString(), recipientPubkeyHex);
+            if (sealContent == null) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: encrypt rumor failed (sealContent null)");
+                return;
+            }
+
+            // 4. Build seal (kind 13), sign with user key (local Schnorr or Amber).
+            JSONObject seal = new JSONObject();
+            seal.put("kind", 13);
+            seal.put("pubkey", currentPubkeyHex);
+            seal.put("created_at", randomizedPastTimestamp(nowSec));
+            seal.put("content", sealContent);
+            JSONArray sealTags = new JSONArray();
+            JSONArray sealExpTag = new JSONArray();
+            sealExpTag.put("expiration");
+            sealExpTag.put(String.valueOf(expiresAt));
+            sealTags.put(sealExpTag);
+            seal.put("tags", sealTags);
+
+            String signedSealJson = signEvent(seal.toString());
+            if (signedSealJson == null) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: sign seal failed");
+                return;
+            }
+
+            // 5. Generate ephemeral keypair, encrypt seal → gift-wrap content.
+            byte[] ephPrivKey = generateRandomSecretKey();
+            String ephPubkeyHex = derivePublicKeyHex(ephPrivKey);
+            if (ephPubkeyHex == null) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: ephemeral pubkey derivation failed");
+                return;
+            }
+
+            byte[] giftWrapConvKey;
+            try {
+                giftWrapConvKey = getConversationKey(ephPrivKey, recipientPubkeyHex);
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: gift-wrap conversation key failed", e);
+                return;
+            }
+            String giftWrapContent = nip44V2EncryptPayload(signedSealJson, giftWrapConvKey);
+            if (giftWrapContent == null) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: encrypt seal failed");
+                return;
+            }
+
+            // 6. Build gift wrap (kind 1059), sign locally with the ephemeral key.
+            JSONObject giftWrap = new JSONObject();
+            giftWrap.put("kind", 1059);
+            giftWrap.put("pubkey", ephPubkeyHex);
+            giftWrap.put("created_at", randomizedPastTimestamp(nowSec));
+            giftWrap.put("content", giftWrapContent);
+            JSONArray gwTags = new JSONArray();
+            JSONArray gwPTag = new JSONArray();
+            gwPTag.put("p");
+            gwPTag.put(recipientPubkeyHex);
+            gwTags.put(gwPTag);
+            JSONArray gwExpTag = new JSONArray();
+            gwExpTag.put("expiration");
+            gwExpTag.put(String.valueOf(expiresAt));
+            gwTags.put(gwExpTag);
+            giftWrap.put("tags", gwTags);
+
+            String signedGiftWrapJson = localSignEventWithKey(giftWrap.toString(), ephPrivKey);
+            if (signedGiftWrapJson == null) {
+                Log.w(LOG_TAG, "[VoiceCall] reject: sign gift wrap failed");
+                return;
+            }
+
+            // 7. Publish to all currently-connected relays.
+            int sent = publishEventToConnectedRelays(signedGiftWrapJson);
+            Log.d(LOG_TAG, "[VoiceCall] reject sent for callId=" + callId
+                + " to " + sent + " relays");
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallReject failed", e);
+        }
+    }
+
+    /**
+     * Per NIP-17: randomize seal/gift-wrap created_at up to 2 days in the past.
+     */
+    private static long randomizedPastTimestamp(long nowSec) {
+        return nowSec - (long) (Math.random() * 172800.0);
+    }
+
+    /**
+     * Send an EVENT command containing the signed event JSON to every currently-
+     * connected relay. Returns the number of sockets we attempted to send on.
+     */
+    private int publishEventToConnectedRelays(String signedEventJson) {
+        JSONArray frame = new JSONArray();
+        frame.put("EVENT");
+        try {
+            frame.put(new JSONObject(signedEventJson));
+        } catch (JSONException e) {
+            return 0;
+        }
+        String message = frame.toString();
+
+        List<WebSocket> snapshot;
+        synchronized (activeSockets) {
+            snapshot = new ArrayList<>(activeSockets.values());
+        }
+
+        int sent = 0;
+        for (WebSocket ws : snapshot) {
+            try {
+                ws.send(message);
+                sent++;
+            } catch (Exception e) {
+                // Continue to other relays — best-effort.
+            }
+        }
+        return sent;
     }
 
     /**
