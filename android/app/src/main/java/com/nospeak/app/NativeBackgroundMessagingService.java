@@ -1637,7 +1637,7 @@ public class NativeBackgroundMessagingService extends Service {
     /**
      * Static accessor for the cached avatar PNG file path, usable without a
      * running service instance. Returns the absolute path if the file exists,
-     * otherwise null.
+     * otherwise null. Cache misses are logged at DEBUG level for diagnostics.
      *
      * Used by {@link IncomingCallNotification} to pass an avatar to the
      * lockscreen ringing screen ({@link IncomingCallActivity}) via Intent extra
@@ -1654,15 +1654,23 @@ public class NativeBackgroundMessagingService extends Service {
         File dir = new File(ctx.getCacheDir(), "nospeak_avatar_cache");
         File file = new File(dir, key + ".png");
         if (!file.exists()) {
+            Log.d(LOG_TAG, "resolveCachedAvatarFilePath: cache miss for url=" + shortUrlFingerprint(pictureUrl));
             return null;
         }
         return file.getAbsolutePath();
     }
 
     /**
-     * Static mirror of {@link #computeAvatarKey(String)} for use without a
-     * service instance. MUST stay byte-identical in output to the instance
-     * version so the same cached file resolves under either call site.
+     * Static helper that derives the cache filename key for a profile-picture URL,
+     * usable without a service instance.
+     *
+     * <p>Trims the URL and returns SHA-256 hex (lowercase) of its UTF-8 bytes. All
+     * cache-write paths in this class pre-trim before calling {@link #computeAvatarKey},
+     * so this static helper resolves to the same on-disk file even though it differs
+     * superficially from the instance method (which expects callers to trim).
+     *
+     * <p>Returns null on null/empty input or if SHA-256 is unavailable on this device
+     * (effectively never, but handled defensively).
      */
     private static String computeAvatarKeyStatic(String url) {
         if (url == null) return null;
@@ -1677,8 +1685,19 @@ public class NativeBackgroundMessagingService extends Service {
             }
             return sb.toString();
         } catch (NoSuchAlgorithmException e) {
+            Log.w(LOG_TAG, "computeAvatarKeyStatic: SHA-256 unavailable", e);
             return null;
         }
+    }
+
+    /**
+     * Returns a short, privacy-preserving fingerprint of a URL for log output.
+     * Avoids logging full URLs that may contain query parameters or tokens.
+     */
+    private static String shortUrlFingerprint(String url) {
+        if (url == null) return "null";
+        int n = url.length();
+        return n <= 16 ? url : "..." + url.substring(n - 16);
     }
 
     private Bitmap normalizeAvatarBitmap(Bitmap bitmap, int targetPx) {
