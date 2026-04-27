@@ -133,6 +133,20 @@
             android:name=".IncomingCallActionReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- Lockscreen ringing screen for incoming voice calls.
+             Targeted by IncomingCallNotification's full-screen intent. -->
+        <activity
+            android:name=".IncomingCallActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.IncomingCall"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode|navigation|density" />
     </application>
  
 </manifest>
