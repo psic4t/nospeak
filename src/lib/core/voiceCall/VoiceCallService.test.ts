@@ -11,6 +11,32 @@ vi.mock('$lib/core/runtimeConfig/store', () => ({
     ])
 }));
 
+const startCallSessionSpy = vi.fn().mockResolvedValue(undefined);
+const endCallSessionSpy = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('$lib/core/voiceCall/androidVoiceCallPlugin', () => ({
+    AndroidVoiceCall: {
+        startCallSession: (opts: any) => startCallSessionSpy(opts),
+        endCallSession: () => endCallSessionSpy(),
+        getPendingIncomingCall: vi.fn().mockResolvedValue({ pending: null }),
+        clearPendingIncomingCall: vi.fn().mockResolvedValue(undefined),
+        canUseFullScreenIntent: vi.fn().mockResolvedValue({ granted: true }),
+        requestFullScreenIntentPermission: vi.fn().mockResolvedValue(undefined),
+        addListener: vi.fn().mockResolvedValue({ remove: () => {} })
+    }
+}));
+
+vi.mock('@capacitor/core', async (importOriginal) => {
+    const actual = await importOriginal() as any;
+    return {
+        ...actual,
+        Capacitor: {
+            ...actual.Capacitor,
+            getPlatform: vi.fn().mockReturnValue('android')
+        }
+    };
+});
+
 import { VoiceCallService } from './VoiceCallService';
 import { resetCall, setIncomingRinging } from '$lib/stores/voiceCall';
 import type { VoiceCallSignal } from './types';
@@ -147,6 +173,103 @@ describe('VoiceCallService', () => {
             });
             expect(busyCall).toBeDefined();
             expect(busyCall![0]).toBe(senderA);
+        });
+    });
+
+    describe('Android session lifecycle', () => {
+        beforeEach(() => {
+            startCallSessionSpy.mockClear();
+            endCallSessionSpy.mockClear();
+
+            // Minimal RTCPeerConnection stub for jsdom (must be a real
+            // constructor — vi.fn().mockImplementation isn't `new`-able).
+            (globalThis as any).RTCPeerConnection = function () {
+                this.onicecandidate = null;
+                this.ontrack = null;
+                this.oniceconnectionstatechange = null;
+                this.addTrack = vi.fn();
+                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
+                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
+                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
+                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
+                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
+                this.close = vi.fn();
+                this.iceConnectionState = 'new';
+            };
+            (globalThis as any).RTCSessionDescription = function (init: any) {
+                Object.assign(this, init);
+            };
+            (globalThis as any).RTCIceCandidate = function (init: any) {
+                Object.assign(this, init);
+            };
+
+            // Stub getUserMedia so initiateCall/acceptCall can proceed.
+            const fakeStream = {
+                getTracks: () => [{ stop: vi.fn(), enabled: true }],
+                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
+            };
+            (globalThis as any).navigator = {
+                ...((globalThis as any).navigator ?? {}),
+                mediaDevices: {
+                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
+                }
+            };
+        });
+
+        it('calls startCallSession with role=outgoing when initiateCall enters outgoing-ringing', async () => {
+            const recipientNpub = 'npub1recipient';
+
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            await service.initiateCall(recipientNpub);
+
+            expect(startCallSessionSpy).toHaveBeenCalledTimes(1);
+            const args = startCallSessionSpy.mock.calls[0][0];
+            expect(args.role).toBe('outgoing');
+            expect(args.peerNpub).toBe(recipientNpub);
+            expect(args.callId).toBeTruthy();
+        });
+
+        it('calls startCallSession with role=incoming when acceptCall enters connecting', async () => {
+            const senderNpub = 'npub1sender';
+            const callId = 'inc1';
+
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            // Use a real handleSignal call so the service has a peer connection
+            // and remote description set up; the stubs above let it complete.
+            const offer: VoiceCallSignal = {
+                type: 'voice-call', action: 'offer', callId, sdp: 'v=0\r\n...'
+            };
+            await service.handleSignal(offer, senderNpub);
+            // Ignore any startCallSession call from handleOffer (there shouldn't
+            // be one in current code, but clear to be safe).
+            startCallSessionSpy.mockClear();
+
+            await service.acceptCall();
+
+            expect(startCallSessionSpy).toHaveBeenCalledTimes(1);
+            const args = startCallSessionSpy.mock.calls[0][0];
+            expect(args.role).toBe('incoming');
+            expect(args.peerNpub).toBe(senderNpub);
+            expect(args.callId).toBe(callId);
+        });
+
+        it('calls endCallSession when call transitions to ended via hangup', async () => {
+            const recipientNpub = 'npub1recipient';
+
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            await service.initiateCall(recipientNpub);
+            startCallSessionSpy.mockClear();
+            endCallSessionSpy.mockClear();
+
+            await service.hangup();
+
+            expect(endCallSessionSpy).toHaveBeenCalledTimes(1);
         });
     });
 });
