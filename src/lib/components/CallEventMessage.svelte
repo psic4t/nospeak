@@ -63,7 +63,7 @@
             </span>
         </div>
         <span class="text-xs text-gray-400 mt-1">
-            {new Date(message.sentAt * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(message.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
     </div>
 </div>

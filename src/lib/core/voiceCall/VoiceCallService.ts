@@ -312,9 +312,12 @@ export class VoiceCallService {
     private async handleHangup(signal: VoiceCallSignal): Promise<void> {
         const state = get(voiceCallState);
         if (state.callId !== signal.callId) return;
-        if (state.status === 'active') {
-            await this.createCallEvent('ended', state.duration);
-        } else if (state.status === 'incoming-ringing') {
+        // 'ended' events are authored by the hangup initiator (see hangup()),
+        // and delivered to us via the normal gift-wrap path. Authoring one
+        // here too would produce a duplicate pill with a slightly different
+        // duration. Only author for 'missed' (caller cancelled before we
+        // accepted), where no peer-side hangup() ran to author it.
+        if (state.status === 'incoming-ringing') {
             await this.createCallEvent('missed');
         }
         this.cleanup();
