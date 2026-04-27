@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/incoming_call_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:background="@drawable/bg_incoming_call"
+    android:fitsSystemWindows="true"
+    android:padding="24dp">
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/incoming_call_caption"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Incoming call"
+        android:textColor="@color/incoming_call_text"
+        android:textSize="16sp"
+        android:alpha="0.85"
+        android:layout_marginBottom="24dp" />
+
+    <ImageView
+        android:id="@+id/incoming_call_avatar"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:contentDescription="Caller avatar"
+        android:src="@drawable/ic_call_avatar_placeholder"
+        android:layout_marginBottom="20dp" />
+
+    <TextView
+        android:id="@+id/incoming_call_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="@color/incoming_call_text"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text="" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginBottom="48dp">
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/incoming_call_decline"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_call_button_decline"
+                android:src="@drawable/ic_call_end"
+                android:scaleType="center"
+                android:contentDescription="Decline call"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/incoming_call_accept"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_call_button_accept"
+                android:src="@drawable/ic_stat_call"
+                android:scaleType="center"
+                android:contentDescription="Accept call"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>
