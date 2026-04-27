@@ -646,7 +646,14 @@
       <ImageViewerOverlay />
       <Toast />
 
-      <IncomingCallOverlay />
+      <!-- The incoming-call overlay is suppressed on Android: the native
+           IncomingCallActivity is the authoritative incoming-call UI there.
+           Showing the Svelte overlay too would spuriously appear after the
+           user declined natively, when the queued offer was replayed on
+           foreground. The active-call overlay still shows on all platforms. -->
+      {#if !isAndroidApp}
+          <IncomingCallOverlay />
+      {/if}
       <ActiveCallOverlay />
 
       <!-- PIN Setup Modal - above all other modals -->

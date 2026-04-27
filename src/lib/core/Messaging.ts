@@ -22,6 +22,7 @@ import { contactSyncService } from './ContactSyncService';
 import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import type { Conversation } from '$lib/db/db';
 import { CALL_SIGNAL_EXPIRATION_SECONDS } from '$lib/core/voiceCall/constants';
+import { isAndroidNative } from '$lib/core/NativeDialogs';
 
 const READ_RECEIPT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60;
 const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
@@ -273,6 +274,18 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
             const { voiceCallService } = await import('$lib/core/voiceCall/VoiceCallService');
             const signal = voiceCallService.parseSignal(rumor.content);
             if (signal) {
+                // On Android, the native ringing activity is the authoritative UI
+                // for incoming-call offers. Skip dispatching offers from the live
+                // JS subscription so the JS state machine doesn't go to
+                // 'incoming-ringing' with no UI to clear it. The accept path
+                // (incomingCallAcceptHandler) bypasses this filter and still calls
+                // voiceCallService.handleSignal directly when the user taps Accept.
+                // Other actions (answer / ice-candidate / hangup / reject / busy)
+                // remain dispatched — they relate to outgoing calls or active-call
+                // lifecycle and must reach the JS WebRTC pipeline.
+                if (signal.action === 'offer' && isAndroidNative()) {
+                    return;
+                }
                 const senderNpub = nip19.npubEncode(rumor.pubkey);
                 await voiceCallService.handleSignal(signal, senderNpub);
             }

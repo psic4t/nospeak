@@ -872,12 +872,19 @@ public class NativeBackgroundMessagingService extends Service {
                 }
             }
 
-            try {
-                queueEventForJs(event);
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "Failed to queue event for JS layer", e);
+            // Process the event natively first. If it's a voice-call rumor, skip
+            // queueing for JS replay — voice calls are handled authoritatively by
+            // the native ringing activity, and queue-replay on app foreground was
+            // spuriously triggering the JS IncomingCallOverlay after the user had
+            // already declined natively.
+            boolean isVoiceCallEvent = handleLiveGiftWrapEvent(event, id);
+            if (!isVoiceCallEvent) {
+                try {
+                    queueEventForJs(event);
+                } catch (Exception e) {
+                    Log.w(LOG_TAG, "Failed to queue event for JS layer", e);
+                }
             }
-            handleLiveGiftWrapEvent(event, id);
 
 
         } catch (JSONException e) {
@@ -885,13 +892,23 @@ public class NativeBackgroundMessagingService extends Service {
         }
     }
 
-    private void handleLiveGiftWrapEvent(JSONObject giftWrapEvent, String eventId) {
+    /**
+     * Processes a gift-wrap event delivered live from a relay subscription.
+     *
+     * @return {@code true} if the event was identified as a voice-call rumor (which
+     *         the caller should NOT queue for JS replay — voice calls are handled
+     *         authoritatively on the native side, and replaying them post-unlock
+     *         spuriously triggered the JS incoming-call overlay). Returns
+     *         {@code false} for all other dispositions (chat DMs, reactions,
+     *         decrypt failures, etc.) so the caller queues them as before.
+     */
+    private boolean handleLiveGiftWrapEvent(JSONObject giftWrapEvent, String eventId) {
         if (!shouldEmitMessageNotification()) {
-            return;
+            return false;
         }
 
         if (currentPubkeyHex == null || currentPubkeyHex.isEmpty()) {
-            return;
+            return false;
         }
 
         DecryptedRumor rumor = tryDecryptGiftWrapToRumor(giftWrapEvent, currentPubkeyHex);
@@ -900,7 +917,7 @@ public class NativeBackgroundMessagingService extends Service {
                 Log.d(LOG_TAG, "Skip gift wrap " + eventId + ": decrypt_failed");
             }
             // Testing-stage behavior: suppress generic "new encrypted message" notifications.
-            return;
+            return false;
         }
  
         long nowSeconds = System.currentTimeMillis() / 1000L;
@@ -915,16 +932,16 @@ public class NativeBackgroundMessagingService extends Service {
                                 + notificationCutoffSeconds
                 );
             }
-            return;
+            return false;
         }
 
         if (rumor.pubkeyHex == null || rumor.pubkeyHex.isEmpty()) {
-            return;
+            return false;
         }
 
         // Suppress notifications for self-authored rumors (including self-sent copies).
         if (rumor.pubkeyHex.equalsIgnoreCase(currentPubkeyHex)) {
-            return;
+            return false;
         }
 
         // Voice-call rumors are kind 14 with a ['type', 'voice-call'] tag.
@@ -939,16 +956,16 @@ public class NativeBackgroundMessagingService extends Service {
                 if (isDebugBuild()) {
                     Log.d(LOG_TAG, "[VoiceCall] Skip duplicate gift wrap " + eventId);
                 }
-                return;
+                return true;
             }
             handleVoiceCallRumor(rumor);
-            return;
+            return true;
         }
 
         // Only notify for decrypted DMs (kinds 14 and 15). Reactions (kind 7) and other rumor kinds
         // are treated as background activity but do not produce OS notifications.
         if (rumor.kind != 14 && rumor.kind != 15) {
-            return;
+            return false;
         }
 
         // Sender's pubkey (for notification title/avatar)
@@ -962,16 +979,16 @@ public class NativeBackgroundMessagingService extends Service {
 
         // Suppress notification only if user is actively viewing this specific conversation
         if (shouldSuppressNotificationForConversation(conversationId)) {
-            return;
+            return false;
         }
 
         String preview = resolveRumorPreview(rumor);
         if (preview == null) {
-            return;
+            return false;
         }
 
         if (!markEventIdSeen(eventId)) {
-            return;
+            return false;
         }
  
         showConversationActivityNotification(senderPubkeyHex, conversationId, preview);
@@ -980,6 +997,7 @@ public class NativeBackgroundMessagingService extends Service {
             notificationCutoffSeconds = rumorCreatedAtSeconds;
             AndroidBackgroundMessagingPrefs.saveNotificationBaselineSeconds(getApplicationContext(), notificationCutoffSeconds);
         }
+        return false;
     }
 
     private static final int AVATAR_TARGET_PX = 192;
@@ -2820,8 +2838,7 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         // Post the incoming-call notification (full-screen-intent or heads-up depending on permission).
-        IncomingCallNotification.post(this, callId, peerName, senderNpub, senderPubkeyHex,
-            MainActivity.isAppVisible());
+        IncomingCallNotification.post(this, callId, peerName, senderNpub, senderPubkeyHex);
 
         // If app is foreground, push an event so JS can pick the offer up immediately
         // (rather than waiting for the user to tap the notification).

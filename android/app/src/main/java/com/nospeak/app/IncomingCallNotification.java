@@ -20,9 +20,10 @@ import androidx.core.app.NotificationCompat;
  * The Accept button launches MainActivity with {@code accept_pending_call=true};
  * the Decline button broadcasts to {@link IncomingCallActionReceiver}.
  *
- * If the app is currently in the foreground, the notification is posted with
- * {@code setSilent(true)} so the JS in-app ringtone path remains the
- * authoritative audible signal.
+ * On Android the JS-side {@code IncomingCallOverlay.svelte} no longer renders
+ * (the native ringing activity is the authoritative incoming-call UI), so the
+ * channel's default ringtone always plays — even when the app is foreground —
+ * to ensure the user has an audible cue.
  */
 public final class IncomingCallNotification {
 
@@ -38,8 +39,7 @@ public final class IncomingCallNotification {
         String callId,
         String peerName,
         String senderNpub,
-        String senderPubkeyHex,
-        boolean appVisible
+        String senderPubkeyHex
     ) {
         createChannelIfNeeded(context);
 
@@ -109,11 +109,10 @@ public final class IncomingCallNotification {
             .addAction(R.drawable.ic_stat_call, "Accept", acceptPi)
             .addAction(R.drawable.ic_call_end, "Decline", declinePi);
 
-        if (appVisible) {
-            // Foreground app: JS handles the ringtone via ringtone.ts.
-            // Suppress the channel default sound to avoid double-ringing.
-            b.setSilent(true);
-        }
+        // Always ring on Android. The JS-side IncomingCallOverlay no longer
+        // renders on Android (the native ringing activity is authoritative),
+        // so the channel's default ringtone must always play — even when the
+        // app is foreground — or the user would have no audible cue.
 
         NotificationManager nm = (NotificationManager)
             context.getSystemService(Context.NOTIFICATION_SERVICE);
