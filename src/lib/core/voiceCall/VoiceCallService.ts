@@ -250,6 +250,19 @@ export class VoiceCallService {
     private async handleOffer(signal: VoiceCallSignal, senderNpub: string): Promise<void> {
         const state = get(voiceCallState);
 
+        // Dedup: same callId from same peer while we're already ringing for it.
+        // This happens when the offer arrives both via the live JS subscription
+        // and via the Android persisted-prefs cold-start path (or any other
+        // double-delivery scenario). Short-circuit before any work, including
+        // peer-connection allocation.
+        if (
+            state.status === 'incoming-ringing' &&
+            state.callId === signal.callId &&
+            state.peerNpub === senderNpub
+        ) {
+            return;
+        }
+
         if (state.status !== 'idle') {
             await this.sendSignal(senderNpub, {
                 type: CALL_SIGNAL_TYPE,
