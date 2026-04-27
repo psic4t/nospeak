@@ -39,6 +39,10 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- For showing notifications on Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required for FGS type 'phoneCall' on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Required to launch the activity over the keyguard for incoming calls (Android 14+ runtime grant) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
  
     <application
          android:allowBackup="true"
@@ -110,6 +114,25 @@
                   android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                   android:value="nostr-dm" />
           </service>
+
+        <!-- Foreground service hosting the active voice call -->
+        <service
+            android:name=".VoiceCallForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
+
+        <!-- Hang up action from the active-call notification -->
+        <receiver
+            android:name=".VoiceCallActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Decline action from the incoming-call notification -->
+        <receiver
+            android:name=".IncomingCallActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
  
 </manifest>
