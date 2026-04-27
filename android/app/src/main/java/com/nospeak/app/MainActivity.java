@@ -38,6 +38,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AndroidVoiceCallPlugin.class);
   
         super.onCreate(savedInstanceState);
+        handleIncomingCallIntent(getIntent());
 
         // Enable edge-to-edge layout and delegate safe areas to the web UI
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -131,6 +132,29 @@ public class MainActivity extends BridgeActivity {
         // Keep the latest Intent available for plugins that read
         // getActivity().getIntent(), such as the AndroidShareTarget plugin.
         setIntent(intent);
+        handleIncomingCallIntent(intent);
+    }
+
+    /**
+     * When the activity is launched (or re-launched) via the incoming-call Accept
+     * full-screen intent, ensure we appear over the keyguard, turn the screen on,
+     * and request that the system dismiss the keyguard so the user lands directly
+     * in the active-call UI.
+     */
+    private void handleIncomingCallIntent(android.content.Intent intent) {
+        if (intent == null) return;
+        if (!intent.getBooleanExtra("accept_pending_call", false)) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            try {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+            } catch (Exception ignored) {}
+            try {
+                android.app.KeyguardManager km = (android.app.KeyguardManager)
+                    getSystemService(KEYGUARD_SERVICE);
+                if (km != null) km.requestDismissKeyguard(this, null);
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
