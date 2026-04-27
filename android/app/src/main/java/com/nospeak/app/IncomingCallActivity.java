@@ -77,6 +77,13 @@ public class IncomingCallActivity extends Activity {
 
     private BroadcastReceiver cancelReceiver;
 
+    /**
+     * True between the Accept tap and the keyguard-dismiss callback firing.
+     * Reset to false only in {@link KeyguardManager.KeyguardDismissCallback#onDismissCancelled};
+     * the success and error paths both call {@code finishAndRemoveTask()} so the residual
+     * {@code true} value is unobservable. If a future change adds a non-finishing branch,
+     * remember to reset this field there too.
+     */
     private boolean acceptInProgress = false;
 
     @Override
