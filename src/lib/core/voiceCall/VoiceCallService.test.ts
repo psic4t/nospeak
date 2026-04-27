@@ -195,6 +195,7 @@ describe('VoiceCallService', () => {
                 this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
                 this.close = vi.fn();
                 this.iceConnectionState = 'new';
+                (globalThis as any).__lastPeerConnection = this;
             };
             (globalThis as any).RTCSessionDescription = function (init: any) {
                 Object.assign(this, init);
@@ -270,6 +271,145 @@ describe('VoiceCallService', () => {
             await service.hangup();
 
             expect(endCallSessionSpy).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('ICE trickle gating', () => {
+        beforeEach(() => {
+            startCallSessionSpy.mockClear();
+            endCallSessionSpy.mockClear();
+
+            (globalThis as any).RTCPeerConnection = function () {
+                this.onicecandidate = null;
+                this.ontrack = null;
+                this.oniceconnectionstatechange = null;
+                this.addTrack = vi.fn();
+                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
+                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
+                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
+                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
+                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
+                this.close = vi.fn();
+                this.iceConnectionState = 'new';
+                (globalThis as any).__lastPeerConnection = this;
+            };
+            (globalThis as any).RTCSessionDescription = function (init: any) {
+                Object.assign(this, init);
+            };
+            (globalThis as any).RTCIceCandidate = function (init: any) {
+                Object.assign(this, init);
+            };
+
+            const fakeStream = {
+                getTracks: () => [{ stop: vi.fn(), enabled: true }],
+                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
+            };
+            (globalThis as any).navigator = {
+                ...((globalThis as any).navigator ?? {}),
+                mediaDevices: {
+                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
+                }
+            };
+        });
+
+        function countIceCandidateSignals(spy: ReturnType<typeof vi.fn>): number {
+            return spy.mock.calls.filter(call => {
+                try {
+                    const parsed = JSON.parse(call[1]);
+                    return parsed.action === 'ice-candidate';
+                } catch { return false; }
+            }).length;
+        }
+
+        function fakeCandidate(foundation: string) {
+            return {
+                candidate: `candidate:${foundation} 1 udp 2122260223 192.168.1.42 54321 typ host`,
+                sdpMid: '0',
+                sdpMLineIndex: 0,
+                toJSON() {
+                    return {
+                        candidate: this.candidate,
+                        sdpMid: this.sdpMid,
+                        sdpMLineIndex: this.sdpMLineIndex
+                    };
+                }
+            };
+        }
+
+        it('forwards candidates while gathering, before connection is established', async () => {
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            await service.initiateCall('npub1recipient');
+            const pc = (globalThis as any).__lastPeerConnection;
+            expect(pc.onicecandidate).toBeTypeOf('function');
+
+            pc.onicecandidate({ candidate: fakeCandidate('1') });
+
+            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+        });
+
+        it('stops forwarding once iceConnectionState reaches connected', async () => {
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            await service.initiateCall('npub1recipient');
+            const pc = (globalThis as any).__lastPeerConnection;
+
+            // First candidate trickles through.
+            pc.onicecandidate({ candidate: fakeCandidate('1') });
+            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+
+            // Connection comes up.
+            pc.iceConnectionState = 'connected';
+            pc.oniceconnectionstatechange();
+
+            // Subsequent candidates must NOT be signaled.
+            pc.onicecandidate({ candidate: fakeCandidate('2') });
+            pc.onicecandidate({ candidate: fakeCandidate('3') });
+
+            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+        });
+
+        it('stops forwarding once iceConnectionState reaches completed', async () => {
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            await service.initiateCall('npub1recipient');
+            const pc = (globalThis as any).__lastPeerConnection;
+
+            pc.onicecandidate({ candidate: fakeCandidate('1') });
+            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+
+            pc.iceConnectionState = 'completed';
+            pc.oniceconnectionstatechange();
+
+            pc.onicecandidate({ candidate: fakeCandidate('2') });
+
+            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+        });
+
+        it('re-arms trickle gating on the next call', async () => {
+            const sendSignalSpy = vi.fn();
+            service.registerSignalSender(sendSignalSpy);
+
+            // First call: connect, then end via hangup.
+            await service.initiateCall('npub1recipient');
+            let pc = (globalThis as any).__lastPeerConnection;
+            pc.onicecandidate({ candidate: fakeCandidate('1') });
+            pc.iceConnectionState = 'connected';
+            pc.oniceconnectionstatechange();
+            await service.hangup();
+
+            sendSignalSpy.mockClear();
+            resetCall();
+
+            // Second call: a candidate emitted before connection MUST trickle again.
+            await service.initiateCall('npub1recipient2');
+            pc = (globalThis as any).__lastPeerConnection;
+            pc.onicecandidate({ candidate: fakeCandidate('2') });
+
+            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
         });
     });
 });

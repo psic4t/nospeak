@@ -27,6 +27,14 @@ export class VoiceCallService {
     private durationIntervalId: ReturnType<typeof setInterval> | null = null;
     private sendSignalFn: SignalSender | null = null;
     private createCallEventFn: ((recipientNpub: string, type: string, duration?: number) => Promise<void>) | null = null;
+    /**
+     * Gates outgoing ice-candidate signaling. Armed in createPeerConnection,
+     * cleared once the connection reaches connected/completed (further
+     * candidates can't improve a live call — there's no ICE-restart path
+     * here — so signing & publishing them as gift wraps is wasted work).
+     * Reset to false in cleanup; re-armed by the next createPeerConnection.
+     */
+    private iceTrickleEnabled = false;
 
     public registerSignalSender(fn: SignalSender): void {
         this.sendSignalFn = fn;
@@ -213,8 +221,12 @@ export class VoiceCallService {
     private createPeerConnection(peerNpub: string, callId: string): void {
         const iceServers = getIceServers();
         this.peerConnection = new RTCPeerConnection({ iceServers });
+        this.iceTrickleEnabled = true;
 
         this.peerConnection.onicecandidate = (event) => {
+            // Suppress candidates emitted after the connection is up — they
+            // can't help a live call, only inflate signaling traffic.
+            if (!this.iceTrickleEnabled) return;
             if (event.candidate) {
                 // Fire-and-forget: don't await so candidates publish concurrently
                 this.sendSignal(peerNpub, {
@@ -233,6 +245,10 @@ export class VoiceCallService {
         this.peerConnection.oniceconnectionstatechange = () => {
             const iceState = this.peerConnection?.iceConnectionState;
             if (iceState === 'connected' || iceState === 'completed') {
+                // Stop forwarding further locally-gathered candidates; the
+                // connection is established and any late candidate (typically
+                // relay/TURN) would be wasted signaling traffic.
+                this.iceTrickleEnabled = false;
                 this.clearTimeouts();
                 setActive();
                 this.startDurationTimer();
@@ -379,6 +395,7 @@ export class VoiceCallService {
 
     private cleanup(): void {
         this.clearTimeouts();
+        this.iceTrickleEnabled = false;
 
         if (this.durationIntervalId) {
             clearInterval(this.durationIntervalId);
