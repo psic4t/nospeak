@@ -53,6 +53,11 @@
   import UploadProgressOverlay from '$lib/components/UploadProgressOverlay.svelte';
   import { setUploadPhase, setUploadPercent, clearUploadProgress } from '$lib/stores/uploadProgress';
   import { voiceCallService } from '$lib/core/voiceCall/VoiceCallService';
+  import {
+    evaluateFullScreenIntentPermission,
+    recordFsiPermissionSkipped
+  } from '$lib/core/voiceCall/fullScreenIntentPermission';
+  import FullScreenIntentPermissionModal from '$lib/components/FullScreenIntentPermissionModal.svelte';
   import CallEventMessage from './CallEventMessage.svelte';
 
    let {
@@ -1285,10 +1290,24 @@
     optimisticMessages = optimisticMessages.filter((m) => m.eventId !== eventId);
   }
 
+  let fsiModalOpen = $state(false);
+
   async function startVoiceCall() {
-    if (partnerNpub) {
-      await voiceCallService.initiateCall(partnerNpub);
+    if (!partnerNpub) return;
+    const decision = await evaluateFullScreenIntentPermission();
+    if (decision.shouldPrompt) {
+      fsiModalOpen = true;
+      return; // Wait for user choice; they can re-tap call button after.
     }
+    await voiceCallService.initiateCall(partnerNpub);
+  }
+
+  function handleFsiModalClose(action: 'opened-settings' | 'skipped') {
+    fsiModalOpen = false;
+    if (action === 'skipped') {
+      recordFsiPermissionSkipped();
+    }
+    // Don't auto-resume the call attempt — let the user tap call again.
   }
 
   async function send() {
@@ -2529,3 +2548,5 @@
   isFavorited={contextMenu.message?.eventId ? $favoriteEventIds.has(contextMenu.message.eventId) : false}
   message={contextMenu.message}
 />
+
+<FullScreenIntentPermissionModal open={fsiModalOpen} onClose={handleFsiModalClose} />
