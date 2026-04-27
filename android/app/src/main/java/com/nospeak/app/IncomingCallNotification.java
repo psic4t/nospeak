@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
@@ -24,6 +25,8 @@ import androidx.core.app.NotificationCompat;
  * authoritative audible signal.
  */
 public final class IncomingCallNotification {
+
+    private static final String TAG = "IncomingCallNotif";
 
     public static final String CHANNEL_ID = "nospeak_voice_call_incoming";
     public static final int NOTIFICATION_ID = 0xCA11;
@@ -49,7 +52,8 @@ public final class IncomingCallNotification {
             avatarPath = NativeBackgroundMessagingService.resolveCachedAvatarFilePath(
                 context, pictureUrl);
         } catch (Throwable t) {
-            // Best-effort — fall back to placeholder.
+            // Best-effort — fall back to placeholder. Log for diagnostics.
+            Log.d(TAG, "Avatar resolution failed; using placeholder", t);
         }
 
         // Full-screen intent → IncomingCallActivity (the lockscreen ringing screen).
