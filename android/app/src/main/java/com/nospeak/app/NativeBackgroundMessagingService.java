@@ -3167,6 +3167,11 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        Log.d(LOG_TAG, "[VoiceCall] reject: starting callId=" + callId
+            + " recipient=" + (recipientPubkeyHex.length() >= 8
+                ? recipientPubkeyHex.substring(0, 8) + ".." : recipientPubkeyHex)
+            + " mode=" + currentMode);
+
         try {
             long nowSec = System.currentTimeMillis() / 1000L;
             long expiresAt = nowSec + 60L;
@@ -3283,9 +3288,19 @@ public class NativeBackgroundMessagingService extends Service {
             //    NIP-17 gift wraps must reach the recipient's preferred DM relays
             //    or the recipient (subscribed to those) won't see them.
             List<String> targetRelays = resolveRecipientRelays(recipientPubkeyHex);
+
+            // Extract the wrap event id for OK-frame correlation in the logs.
+            String giftWrapId = "?";
+            try {
+                giftWrapId = new JSONObject(signedGiftWrapJson).optString("id", "?");
+            } catch (JSONException ignored) {}
+            Log.d(LOG_TAG, "[VoiceCall] reject: publishing wrapId="
+                + (giftWrapId.length() >= 8 ? giftWrapId.substring(0, 8) + ".." : giftWrapId)
+                + " to " + targetRelays.size() + " relays: " + targetRelays);
+
             int sent = publishEventToRelayUrls(signedGiftWrapJson, targetRelays);
-            Log.d(LOG_TAG, "[VoiceCall] reject sent for callId=" + callId
-                + " to " + sent + "/" + targetRelays.size() + " relays");
+            Log.d(LOG_TAG, "[VoiceCall] reject DONE callId=" + callId
+                + " sent=" + sent + "/" + targetRelays.size() + " relays");
         } catch (Exception e) {
             Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallReject failed", e);
         }
@@ -3339,10 +3354,11 @@ public class NativeBackgroundMessagingService extends Service {
     private static final int TRANSIENT_RELAY_OPEN_TIMEOUT_S = 3;
 
     /**
-     * Send {@code message} drain window before closing a transient socket, in ms.
-     * Gives OkHttp time to actually flush the queued frame before close discards.
+     * Drain window before closing a transient socket, in ms. Gives OkHttp time
+     * to flush the queued frame AND to receive the relay's OK / NOTICE response
+     * so we can log it for diagnostics.
      */
-    private static final int TRANSIENT_RELAY_DRAIN_MS = 500;
+    private static final int TRANSIENT_RELAY_DRAIN_MS = 1500;
 
     /**
      * Publishes an EVENT to each of the given relay URLs. For relays currently
@@ -3362,12 +3378,16 @@ public class NativeBackgroundMessagingService extends Service {
 
         JSONArray frame = new JSONArray();
         frame.put("EVENT");
+        String eventId = null;
         try {
-            frame.put(new JSONObject(signedEventJson));
+            JSONObject ev = new JSONObject(signedEventJson);
+            frame.put(ev);
+            eventId = ev.optString("id", null);
         } catch (JSONException e) {
             return 0;
         }
         final String message = frame.toString();
+        final String eventIdF = eventId;
 
         int sent = 0;
         int transientUsed = 0;
@@ -3380,19 +3400,22 @@ public class NativeBackgroundMessagingService extends Service {
             }
             if (existing != null) {
                 try {
-                    existing.send(message);
-                    sent++;
+                    boolean queued = existing.send(message);
+                    Log.d(LOG_TAG, "[VoiceCall] publish: existing socket " + url
+                        + " queued=" + queued);
+                    if (queued) sent++;
                 } catch (Exception e) {
-                    Log.w(LOG_TAG, "publishEventToRelayUrls: send failed on " + url, e);
+                    Log.w(LOG_TAG, "[VoiceCall] publish: send failed on " + url, e);
                 }
             } else if (transientUsed < MAX_TRANSIENT_RELAYS_PER_PUBLISH) {
-                if (publishEventToTransientRelay(url, message)) {
+                Log.d(LOG_TAG, "[VoiceCall] publish: " + url + " not connected, opening transient");
+                if (publishEventToTransientRelay(url, message, eventIdF)) {
                     sent++;
                 }
                 transientUsed++;
             } else {
-                Log.d(LOG_TAG, "publishEventToRelayUrls: skipping " + url
-                    + " (transient connect cap reached)");
+                Log.d(LOG_TAG, "[VoiceCall] publish: skip " + url
+                    + " (transient cap " + MAX_TRANSIENT_RELAYS_PER_PUBLISH + " reached)");
             }
         }
         return sent;
@@ -3407,12 +3430,12 @@ public class NativeBackgroundMessagingService extends Service {
      * Returns {@code true} if the EVENT was queued by OkHttp; {@code false}
      * on URL error, connection failure, or open-timeout.
      */
-    private boolean publishEventToTransientRelay(String relayUrl, String message) {
+    private boolean publishEventToTransientRelay(String relayUrl, String message, String eventId) {
         Request request;
         try {
             request = new Request.Builder().url(relayUrl).build();
         } catch (Exception e) {
-            Log.w(LOG_TAG, "publishEventToTransientRelay: bad URL " + relayUrl, e);
+            Log.w(LOG_TAG, "[VoiceCall] transient: bad URL " + relayUrl, e);
             return false;
         }
 
@@ -3420,19 +3443,56 @@ public class NativeBackgroundMessagingService extends Service {
             new java.util.concurrent.CountDownLatch(1);
         final java.util.concurrent.atomic.AtomicBoolean opened =
             new java.util.concurrent.atomic.AtomicBoolean(false);
+        final long openStartNs = System.nanoTime();
+        final String relayUrlF = relayUrl;
+        final String eventIdF = eventId;
 
         final WebSocket socket = client.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(WebSocket webSocket, okhttp3.Response response) {
+                long ms = (System.nanoTime() - openStartNs) / 1_000_000L;
+                Log.d(LOG_TAG, "[VoiceCall] transient: " + relayUrlF + " opened in " + ms + "ms");
                 opened.set(true);
                 openLatch.countDown();
             }
             @Override
+            public void onMessage(WebSocket webSocket, String text) {
+                String preview = text.length() > 200 ? text.substring(0, 200) + "..." : text;
+                Log.d(LOG_TAG, "[VoiceCall] transient: " + relayUrlF + " <- " + preview);
+                try {
+                    JSONArray arr = new JSONArray(text);
+                    String type = arr.optString(0, null);
+                    if ("OK".equals(type)) {
+                        String id = arr.optString(1, "");
+                        boolean accepted = arr.optBoolean(2, false);
+                        String reason = arr.optString(3, "");
+                        if (eventIdF != null && eventIdF.equals(id)) {
+                            Log.d(LOG_TAG, "[VoiceCall] transient: " + relayUrlF
+                                + " OK accepted=" + accepted + " reason=\"" + reason + "\"");
+                        }
+                    } else if ("NOTICE".equals(type)) {
+                        Log.w(LOG_TAG, "[VoiceCall] transient: " + relayUrlF
+                            + " NOTICE: " + arr.optString(1, ""));
+                    } else if ("AUTH".equals(type)) {
+                        Log.w(LOG_TAG, "[VoiceCall] transient: " + relayUrlF
+                            + " AUTH challenge — relay requires NIP-42 auth (not supported on transient sockets)");
+                    }
+                } catch (JSONException ignored) {
+                    // not a JSON frame
+                }
+            }
+            @Override
             public void onFailure(WebSocket webSocket, Throwable t, okhttp3.Response response) {
+                long ms = (System.nanoTime() - openStartNs) / 1_000_000L;
+                Log.w(LOG_TAG, "[VoiceCall] transient: " + relayUrlF + " onFailure after "
+                    + ms + "ms: " + (t != null ? t.getMessage() : "null")
+                    + " response=" + (response != null ? response.code() : -1));
                 openLatch.countDown();
             }
             @Override
             public void onClosed(WebSocket webSocket, int code, String reason) {
+                Log.d(LOG_TAG, "[VoiceCall] transient: " + relayUrlF + " onClosed code="
+                    + code + " reason=" + reason);
                 openLatch.countDown();
             }
         });
@@ -3447,8 +3507,8 @@ public class NativeBackgroundMessagingService extends Service {
 
         if (!awaitOk || !opened.get()) {
             try { socket.cancel(); } catch (Exception ignored) {}
-            Log.w(LOG_TAG, "publishEventToTransientRelay: " + relayUrl
-                + " did not open in " + TRANSIENT_RELAY_OPEN_TIMEOUT_S + "s");
+            Log.w(LOG_TAG, "[VoiceCall] transient: " + relayUrl
+                + " did not open in " + TRANSIENT_RELAY_OPEN_TIMEOUT_S + "s, giving up");
             return false;
         }
 
@@ -3457,9 +3517,13 @@ public class NativeBackgroundMessagingService extends Service {
             queued = socket.send(message);
         } catch (Exception e) {
             queued = false;
+            Log.w(LOG_TAG, "[VoiceCall] transient: " + relayUrl + " send threw", e);
         }
+        Log.d(LOG_TAG, "[VoiceCall] transient: " + relayUrl + " send queued=" + queued);
 
-        // Give OkHttp a moment to flush the frame before close discards it.
+        // Give OkHttp a moment to flush the frame AND receive the relay's OK
+        // response before close discards them. Slightly longer than a pure-flush
+        // window so we can log the OK frame for diagnostics.
         try {
             Thread.sleep(TRANSIENT_RELAY_DRAIN_MS);
         } catch (InterruptedException e) {
