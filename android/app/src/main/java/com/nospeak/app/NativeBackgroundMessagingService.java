@@ -2447,18 +2447,87 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * Serialize event for ID computation per NIP-01.
-     * Returns JSON array: [0, pubkey, created_at, kind, tags, content]
+     * NIP-01 canonical JSON serialization for event-id hashing:
+     *
+     *   [0, pubkey, created_at, kind, tags, content]
+     *
+     * <p><strong>Critical:</strong> this MUST NOT use {@code org.json}'s
+     * stringification. Android's {@code JSONStringer} escapes {@code '/'} as
+     * {@code "\/"} (a hardcoded legacy quirk; not configurable). Reference
+     * implementations (nostr-tools, Go relays, Rust relays) emit {@code '/'}
+     * literally. The mismatch produces a different SHA-256 hash, and relays
+     * reject our events with {@code "invalid: bad event id"} when the event
+     * content contains base64-encoded payloads (which include {@code '/'}).
+     *
+     * <p>NIP-01 escaping rules — only these escapes are emitted; everything
+     * else, including {@code '/'} and any non-ASCII codepoint, goes through
+     * raw (UTF-8 at byte-encoding time):
+     * <ul>
+     *   <li>{@code \b} (0x08)</li>
+     *   <li>{@code \t} (0x09)</li>
+     *   <li>{@code \n} (0x0A)</li>
+     *   <li>{@code \f} (0x0C)</li>
+     *   <li>{@code \r} (0x0D)</li>
+     *   <li>{@code \"} (0x22)</li>
+     *   <li>{@code \\} (0x5C)</li>
+     *   <li>{@code \}{@code u00XX} for any other codepoint &lt; 0x20 (lowercase hex)</li>
+     * </ul>
      */
     private static String serializeEventForId(JSONObject event) throws JSONException {
-        JSONArray arr = new JSONArray();
-        arr.put(0);
-        arr.put(event.getString("pubkey"));
-        arr.put(event.getLong("created_at"));
-        arr.put(event.getInt("kind"));
-        arr.put(event.getJSONArray("tags"));
-        arr.put(event.getString("content"));
-        return arr.toString();
+        StringBuilder sb = new StringBuilder(256);
+        sb.append('[');
+        sb.append('0');
+        sb.append(',');
+        appendNip01String(sb, event.getString("pubkey"));
+        sb.append(',');
+        sb.append(event.getLong("created_at"));
+        sb.append(',');
+        sb.append(event.getInt("kind"));
+        sb.append(',');
+        appendNip01TagsArray(sb, event.getJSONArray("tags"));
+        sb.append(',');
+        appendNip01String(sb, event.getString("content"));
+        sb.append(']');
+        return sb.toString();
+    }
+
+    private static void appendNip01TagsArray(StringBuilder sb, JSONArray tags) throws JSONException {
+        sb.append('[');
+        for (int i = 0; i < tags.length(); i++) {
+            if (i > 0) sb.append(',');
+            JSONArray tag = tags.getJSONArray(i);
+            sb.append('[');
+            for (int j = 0; j < tag.length(); j++) {
+                if (j > 0) sb.append(',');
+                // Per NIP-01, tag elements are strings.
+                appendNip01String(sb, tag.getString(j));
+            }
+            sb.append(']');
+        }
+        sb.append(']');
+    }
+
+    private static void appendNip01String(StringBuilder sb, String s) {
+        sb.append('"');
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\b': sb.append("\\b"); break;
+                case '\t': sb.append("\\t"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\f': sb.append("\\f"); break;
+                case '\r': sb.append("\\r"); break;
+                case '"':  sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                default:
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        sb.append('"');
     }
 
     /**
