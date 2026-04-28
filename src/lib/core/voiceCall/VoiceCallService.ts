@@ -121,6 +121,8 @@ export class VoiceCallService {
     }
 
     public async handleSignal(signal: VoiceCallSignal, senderNpub: string): Promise<void> {
+        console.log('[VoiceCall][Recv] handleSignal: action=' + signal.action
+            + ' callId=' + signal.callId);
         switch (signal.action) {
             case 'offer':
                 await this.handleOffer(signal, senderNpub);
@@ -342,7 +344,13 @@ export class VoiceCallService {
 
     private handleReject(signal: VoiceCallSignal): void {
         const state = get(voiceCallState);
-        if (state.callId !== signal.callId) return;
+        console.log('[VoiceCall][Recv] handleReject: signal.callId=' + signal.callId
+            + ' state.callId=' + state.callId + ' state.status=' + state.status);
+        if (state.callId !== signal.callId) {
+            console.warn('[VoiceCall][Recv] handleReject: callId MISMATCH — IGNORED');
+            return;
+        }
+        console.log('[VoiceCall][Recv] handleReject: matched, cleaning up and endCall("rejected")');
         this.cleanup();
         endCall('rejected');
     }

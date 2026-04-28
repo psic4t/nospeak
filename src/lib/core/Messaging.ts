@@ -189,6 +189,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
 
   private async handleGiftWrap(event: NostrEvent) {
+    console.log('[VoiceCall][Recv] gift wrap received id=' + (event.id?.substring(0, 8) ?? '?'));
     const s = get(signer);
     if (!s) return;
 
@@ -270,10 +271,16 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
       // Route voice-call signals to VoiceCallService (don't save to DB)
       const voiceCallTag = rumor.tags?.find((t: string[]) => t[0] === 'type' && t[1] === 'voice-call');
       if (voiceCallTag) {
+        console.log('[VoiceCall][Recv] voice-call rumor id=' + (event.id?.substring(0, 8) ?? '?')
+            + ' rumorContent=' + (rumor.content ? rumor.content.substring(0, 200) : 'null'));
         try {
             const { voiceCallService } = await import('$lib/core/voiceCall/VoiceCallService');
             const signal = voiceCallService.parseSignal(rumor.content);
             if (signal) {
+                const senderNpub = nip19.npubEncode(rumor.pubkey);
+                console.log('[VoiceCall][Recv] parsed signal: action=' + signal.action
+                    + ' callId=' + signal.callId
+                    + ' senderNpub=' + senderNpub.substring(0, 12) + '...');
                 // On Android, the native ringing activity is the authoritative UI
                 // for incoming-call offers. Skip dispatching offers from the live
                 // JS subscription so the JS state machine doesn't go to
@@ -284,13 +291,15 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
                 // remain dispatched — they relate to outgoing calls or active-call
                 // lifecycle and must reach the JS WebRTC pipeline.
                 if (signal.action === 'offer' && isAndroidNative()) {
+                    console.log('[VoiceCall][Recv] skip offer dispatch on Android (native UI is authoritative)');
                     return;
                 }
-                const senderNpub = nip19.npubEncode(rumor.pubkey);
                 await voiceCallService.handleSignal(signal, senderNpub);
+            } else {
+                console.warn('[VoiceCall][Recv] parseSignal returned null for content:', rumor.content);
             }
         } catch (err) {
-            console.error('[Messaging] Failed to handle voice call signal:', err);
+            console.error('[VoiceCall][Recv] Failed to handle voice call signal:', err);
         }
         return;
       }
