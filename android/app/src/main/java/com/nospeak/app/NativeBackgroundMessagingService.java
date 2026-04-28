@@ -3209,10 +3209,14 @@ public class NativeBackgroundMessagingService extends Service {
                 return;
             }
 
-            // 7. Publish to all currently-connected relays.
-            int sent = publishEventToConnectedRelays(signedGiftWrapJson);
+            // 7. Publish to the recipient's NIP-17 messaging relays (kind 10050)
+            //    if cached, falling back to all currently-connected relay sockets.
+            //    NIP-17 gift wraps must reach the recipient's preferred DM relays
+            //    or the recipient (subscribed to those) won't see them.
+            List<String> targetRelays = resolveRecipientRelays(recipientPubkeyHex);
+            int sent = publishEventToRelayUrls(signedGiftWrapJson, targetRelays);
             Log.d(LOG_TAG, "[VoiceCall] reject sent for callId=" + callId
-                + " to " + sent + " relays");
+                + " to " + sent + "/" + targetRelays.size() + " relays");
         } catch (Exception e) {
             Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallReject failed", e);
         }
@@ -3226,10 +3230,67 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * Send an EVENT command containing the signed event JSON to every currently-
-     * connected relay. Returns the number of sockets we attempted to send on.
+     * Resolves the relay URLs to publish a NIP-17 gift wrap to for
+     * {@code recipientPubkeyHex}.
+     *
+     * Preference order:
+     * <ol>
+     *   <li>The recipient's cached NIP-17 messaging relays (kind 10050) — populated
+     *       by JS via {@code AndroidBackgroundMessaging.cacheProfile} whenever
+     *       a profile is resolved. This is the relay set the recipient is
+     *       actually subscribed to for DMs.</li>
+     *   <li>Fall back to all currently-connected relay sockets (best-effort:
+     *       works only if the recipient happens to subscribe to one of them).</li>
+     * </ol>
+     *
+     * The returned list may include relays we are NOT currently connected to;
+     * {@link #publishEventToRelayUrls} opens transient WebSockets where needed.
      */
-    private int publishEventToConnectedRelays(String signedEventJson) {
+    private List<String> resolveRecipientRelays(String recipientPubkeyHex) {
+        if (recipientPubkeyHex != null && !recipientPubkeyHex.isEmpty()) {
+            AndroidProfileCachePrefs.Identity identity =
+                AndroidProfileCachePrefs.get(getApplicationContext(), recipientPubkeyHex);
+            if (identity != null && !identity.messagingRelays.isEmpty()) {
+                return new ArrayList<>(identity.messagingRelays);
+            }
+        }
+        synchronized (activeSockets) {
+            return new ArrayList<>(activeSockets.keySet());
+        }
+    }
+
+    /**
+     * Maximum number of transient (not currently connected) relays to open per
+     * publish call. Bounds the worst-case latency of {@link #sendVoiceCallReject}
+     * within the {@code goAsync()} ~10s receiver budget.
+     */
+    private static final int MAX_TRANSIENT_RELAYS_PER_PUBLISH = 3;
+
+    /** Connect timeout for transient publish-only WebSockets, in seconds. */
+    private static final int TRANSIENT_RELAY_OPEN_TIMEOUT_S = 3;
+
+    /**
+     * Send {@code message} drain window before closing a transient socket, in ms.
+     * Gives OkHttp time to actually flush the queued frame before close discards.
+     */
+    private static final int TRANSIENT_RELAY_DRAIN_MS = 500;
+
+    /**
+     * Publishes an EVENT to each of the given relay URLs. For relays currently
+     * in {@link #activeSockets} (subscribed for normal operation), sends on the
+     * existing socket. For others, opens a short-lived WebSocket, waits briefly
+     * for it to open, sends the EVENT, drains, then closes.
+     *
+     * Best-effort: per-relay errors are logged and skipped. Returns the number
+     * of relays we successfully sent on (queued by OkHttp; we do not wait for
+     * the OK frame).
+     *
+     * Caps transient connects at {@link #MAX_TRANSIENT_RELAYS_PER_PUBLISH} to
+     * stay within the BroadcastReceiver {@code goAsync()} budget.
+     */
+    private int publishEventToRelayUrls(String signedEventJson, List<String> relayUrls) {
+        if (relayUrls == null || relayUrls.isEmpty()) return 0;
+
         JSONArray frame = new JSONArray();
         frame.put("EVENT");
         try {
@@ -3237,23 +3298,109 @@ public class NativeBackgroundMessagingService extends Service {
         } catch (JSONException e) {
             return 0;
         }
-        String message = frame.toString();
-
-        List<WebSocket> snapshot;
-        synchronized (activeSockets) {
-            snapshot = new ArrayList<>(activeSockets.values());
-        }
+        final String message = frame.toString();
 
         int sent = 0;
-        for (WebSocket ws : snapshot) {
-            try {
-                ws.send(message);
-                sent++;
-            } catch (Exception e) {
-                // Continue to other relays — best-effort.
+        int transientUsed = 0;
+        for (String url : relayUrls) {
+            if (url == null || url.isEmpty()) continue;
+
+            WebSocket existing;
+            synchronized (activeSockets) {
+                existing = activeSockets.get(url);
+            }
+            if (existing != null) {
+                try {
+                    existing.send(message);
+                    sent++;
+                } catch (Exception e) {
+                    Log.w(LOG_TAG, "publishEventToRelayUrls: send failed on " + url, e);
+                }
+            } else if (transientUsed < MAX_TRANSIENT_RELAYS_PER_PUBLISH) {
+                if (publishEventToTransientRelay(url, message)) {
+                    sent++;
+                }
+                transientUsed++;
+            } else {
+                Log.d(LOG_TAG, "publishEventToRelayUrls: skipping " + url
+                    + " (transient connect cap reached)");
             }
         }
         return sent;
+    }
+
+    /**
+     * Opens a transient WebSocket to {@code relayUrl}, sends a single message,
+     * waits a short drain window, then closes. Used for relays we are not
+     * normally subscribed to but still need to publish to (the recipient's
+     * NIP-17 messaging relays for a reject signal).
+     *
+     * Returns {@code true} if the EVENT was queued by OkHttp; {@code false}
+     * on URL error, connection failure, or open-timeout.
+     */
+    private boolean publishEventToTransientRelay(String relayUrl, String message) {
+        Request request;
+        try {
+            request = new Request.Builder().url(relayUrl).build();
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "publishEventToTransientRelay: bad URL " + relayUrl, e);
+            return false;
+        }
+
+        final java.util.concurrent.CountDownLatch openLatch =
+            new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicBoolean opened =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        final WebSocket socket = client.newWebSocket(request, new WebSocketListener() {
+            @Override
+            public void onOpen(WebSocket webSocket, okhttp3.Response response) {
+                opened.set(true);
+                openLatch.countDown();
+            }
+            @Override
+            public void onFailure(WebSocket webSocket, Throwable t, okhttp3.Response response) {
+                openLatch.countDown();
+            }
+            @Override
+            public void onClosed(WebSocket webSocket, int code, String reason) {
+                openLatch.countDown();
+            }
+        });
+
+        boolean awaitOk;
+        try {
+            awaitOk = openLatch.await(TRANSIENT_RELAY_OPEN_TIMEOUT_S, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            awaitOk = false;
+        }
+
+        if (!awaitOk || !opened.get()) {
+            try { socket.cancel(); } catch (Exception ignored) {}
+            Log.w(LOG_TAG, "publishEventToTransientRelay: " + relayUrl
+                + " did not open in " + TRANSIENT_RELAY_OPEN_TIMEOUT_S + "s");
+            return false;
+        }
+
+        boolean queued;
+        try {
+            queued = socket.send(message);
+        } catch (Exception e) {
+            queued = false;
+        }
+
+        // Give OkHttp a moment to flush the frame before close discards it.
+        try {
+            Thread.sleep(TRANSIENT_RELAY_DRAIN_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            socket.close(1000, "publish complete");
+        } catch (Exception ignored) {}
+
+        return queued;
     }
 
     /**

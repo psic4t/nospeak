@@ -6,6 +6,14 @@ export interface AndroidProfileCacheEntry {
     pubkeyHex: string;
     username: string;
     picture?: string;
+    /**
+     * NIP-17 messaging relays (kind 10050) for this pubkey. When provided,
+     * the native side stores them and uses them as the publish target for
+     * outgoing gift wraps (e.g., the voice-call reject signal). Without this,
+     * native publishes blindly to its own connected sockets, which the
+     * recipient may not subscribe to.
+     */
+    messagingRelays?: string[];
     updatedAt?: number;
 }
 

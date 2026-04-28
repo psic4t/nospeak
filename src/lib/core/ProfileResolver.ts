@@ -21,6 +21,9 @@ export class ProfileResolver {
                         pubkeyHex: pubkey,
                         username,
                         picture: extractKind0Picture(cached.metadata) ?? undefined,
+                        messagingRelays: (cached.messagingRelays && cached.messagingRelays.length > 0)
+                            ? cached.messagingRelays
+                            : undefined,
                         updatedAt: Date.now()
                     });
                 }
@@ -109,6 +112,9 @@ export class ProfileResolver {
                         pubkeyHex: pubkey,
                         username,
                         picture: extractKind0Picture(metadata) ?? undefined,
+                        messagingRelays: (foundMessagingRelays && messagingRelays.length > 0)
+                            ? messagingRelays
+                            : undefined,
                         updatedAt: Date.now()
                     });
                 }
@@ -270,6 +276,9 @@ export class ProfileResolver {
                         pubkeyHex: pubkey as string,
                         username,
                         picture: extractKind0Picture(data.metadata) ?? undefined,
+                        messagingRelays: (data.foundMessagingRelays && data.messagingRelays.length > 0)
+                            ? data.messagingRelays
+                            : undefined,
                         updatedAt: Date.now()
                     });
                 }

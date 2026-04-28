@@ -18,6 +18,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONException;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @CapacitorPlugin(name = "AndroidBackgroundMessaging")
 public class AndroidBackgroundMessagingPlugin extends Plugin {
 
@@ -120,7 +123,27 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
             return;
         }
 
-        AndroidProfileCachePrefs.upsert(getContext(), pubkeyHex, username, picture, updatedAt);
+        // Optional NIP-17 messaging relays (kind 10050). Used by the native side
+        // to publish gift wraps (e.g., the voice-call reject signal) to the
+        // recipient's preferred DM relays rather than just our own.
+        List<String> messagingRelays = null;
+        JSArray relaysArr = call.getArray("messagingRelays");
+        if (relaysArr != null && relaysArr.length() > 0) {
+            messagingRelays = new ArrayList<>(relaysArr.length());
+            for (int i = 0; i < relaysArr.length(); i++) {
+                try {
+                    String url = relaysArr.getString(i);
+                    if (url != null && !url.trim().isEmpty()) {
+                        messagingRelays.add(url.trim());
+                    }
+                } catch (JSONException ignored) {
+                    // Skip malformed entry
+                }
+            }
+        }
+
+        AndroidProfileCachePrefs.upsert(
+            getContext(), pubkeyHex, username, picture, messagingRelays, updatedAt);
 
         // Trigger avatar pre-fetch if picture URL is provided and service is running.
         // This ensures avatars are cached before notifications arrive, avoiding the
