@@ -2663,6 +2663,37 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
+     * Pre-computed BIP-340 tagged-hash prefixes. For each tag the spec defines:
+     *
+     *   tagged_hash(tag, data) = sha256(sha256(tag) || sha256(tag) || data)
+     *
+     * To avoid recomputing {@code sha256(tag) || sha256(tag)} on every signing
+     * call, we precompute the 64-byte prefix at class-load time. SHA-256 is
+     * always available on Android so the static initializer cannot fail.
+     */
+    private static final byte[] BIP340_AUX_TAG_PREFIX = doubledTagHash("BIP0340/aux");
+    private static final byte[] BIP340_NONCE_TAG_PREFIX = doubledTagHash("BIP0340/nonce");
+    private static final byte[] BIP340_CHALLENGE_TAG_PREFIX = doubledTagHash("BIP0340/challenge");
+
+    private static byte[] doubledTagHash(String tag) {
+        byte[] h = sha256Bytes(tag.getBytes(StandardCharsets.UTF_8));
+        if (h == null) {
+            // SHA-256 should always be available; this is unreachable on Android.
+            return new byte[0];
+        }
+        return concat(h, h);
+    }
+
+    /**
+     * BIP-340 tagged hash: {@code sha256(sha256(tag) || sha256(tag) || data...)}.
+     * The prefix argument is the pre-computed {@code sha256(tag) || sha256(tag)}.
+     */
+    private static byte[] taggedHash(byte[] doubledTagPrefix, byte[]... data) {
+        byte[] payload = concat(data);
+        return sha256Bytes(concat(doubledTagPrefix, payload));
+    }
+
+    /**
      * Derive the x-only (BIP-340) public key for a secp256k1 private key.
      * Returns 32-byte hex (lowercase).
      */
@@ -2688,7 +2719,16 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * BIP-340 Schnorr signature using BouncyCastle.
+     * BIP-340 Schnorr signature using BouncyCastle for elliptic-curve math.
+     *
+     * <p>Spec-compliant per BIP-340 / Nostr NIP-01: uses the tagged-hash variants
+     * for nonce derivation and the challenge value {@code e}. Earlier versions
+     * of this method used plain SHA-256 in place of the tagged hashes, which
+     * produced signatures that relays rejected with {@code "invalid: bad signature"}
+     * (verified on nos.lol via on-device logcat). The challenge specifically must
+     * be {@code tagged_hash("BIP0340/challenge", R.x || P.x || m)}; using plain
+     * SHA-256 yields a different {@code e} than what the relay computes during
+     * verification, so {@code s*G != R + e*P} and verification fails.
      */
     private static byte[] schnorrSign(byte[] message, byte[] privateKey) {
         try {
@@ -2702,7 +2742,7 @@ public class NativeBackgroundMessagingService extends Service {
             BigInteger d = new BigInteger(1, privateKey);
             ECPoint P = G.multiply(d).normalize();
 
-            // If P.y is odd, negate d
+            // If P.y is odd, negate d so the effective signing key has even-y P.
             if (P.getAffineYCoord().testBitZero()) {
                 d = n.subtract(d);
             }
@@ -2716,15 +2756,21 @@ public class NativeBackgroundMessagingService extends Service {
                 pBytes = tmp;
             }
 
-            // Generate deterministic nonce per BIP-340
             byte[] dBytes = bigIntTo32Bytes(d);
-            byte[] aux = sha256Bytes(dBytes);
-            if (aux == null) return null;
 
-            byte[] t = xorBytes(aux, sha256Bytes(concat(dBytes, pBytes, message)));
+            // BIP-340 nonce derivation:
+            //   a = aux_rand (32 bytes; zeros are valid when no extra entropy needed)
+            //   t = bytes(d) XOR tagged_hash("BIP0340/aux", a)
+            //   rand = tagged_hash("BIP0340/nonce", t || bytes(P) || m)
+            //   k' = int(rand) mod n
+            byte[] auxRand = new byte[32]; // zeros — valid per BIP-340 spec
+            byte[] auxHash = taggedHash(BIP340_AUX_TAG_PREFIX, auxRand);
+            if (auxHash == null) return null;
+
+            byte[] t = xorBytes(dBytes, auxHash);
             if (t == null) return null;
 
-            byte[] kHash = sha256Bytes(concat(t, pBytes, message));
+            byte[] kHash = taggedHash(BIP340_NONCE_TAG_PREFIX, t, pBytes, message);
             if (kHash == null) return null;
 
             BigInteger k = new BigInteger(1, kHash).mod(n);
@@ -2734,7 +2780,7 @@ public class NativeBackgroundMessagingService extends Service {
 
             ECPoint R = G.multiply(k).normalize();
 
-            // If R.y is odd, negate k
+            // If R.y is odd, negate k so the on-wire R.x has even-y R.
             if (R.getAffineYCoord().testBitZero()) {
                 k = n.subtract(k);
             }
@@ -2748,8 +2794,9 @@ public class NativeBackgroundMessagingService extends Service {
                 rBytes = tmp;
             }
 
-            // e = sha256(R.x || P.x || m) mod n
-            byte[] eHash = sha256Bytes(concat(rBytes, pBytes, message));
+            // BIP-340 challenge:
+            //   e = int(tagged_hash("BIP0340/challenge", R.x || P.x || m)) mod n
+            byte[] eHash = taggedHash(BIP340_CHALLENGE_TAG_PREFIX, rBytes, pBytes, message);
             if (eHash == null) return null;
 
             BigInteger e = new BigInteger(1, eHash).mod(n);
