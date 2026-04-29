@@ -167,7 +167,7 @@ public class VoiceCallForegroundService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("On call")
             .setContentText(peerName != null ? peerName : "")
-            .setSmallIcon(R.drawable.ic_stat_call)
+            .setSmallIcon(R.drawable.ic_stat_nospeak)
             .setContentIntent(contentPi)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)

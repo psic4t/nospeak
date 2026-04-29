@@ -3135,6 +3135,7 @@ public class NativeBackgroundMessagingService extends Service {
 
         // Look up display name from existing profile cache.
         String peerName;
+        String pictureUrl = null;
         AndroidProfileCachePrefs.Identity identity =
             AndroidProfileCachePrefs.get(this, senderPubkeyHex);
         if (identity != null && identity.username != null && !identity.username.isEmpty()) {
@@ -3142,9 +3143,33 @@ public class NativeBackgroundMessagingService extends Service {
         } else {
             peerName = senderNpub.length() > 16 ? senderNpub.substring(0, 16) + "…" : senderNpub;
         }
+        if (identity != null) {
+            pictureUrl = identity.pictureUrl;
+        }
+
+        // Resolve the caller avatar (cached circular bitmap → identicon fallback)
+        // for the heads-up notification's CallStyle. Mirrors the DM notification
+        // path in enqueueChatNotification / buildSingleChatNotification.
+        Bitmap callerAvatar = resolveCachedAvatarBitmap(senderPubkeyHex, pictureUrl);
+        if (callerAvatar == null) {
+            try {
+                callerAvatar = generateIdenticonForPubkey(senderPubkeyHex);
+            } catch (Throwable t) {
+                Log.d(LOG_TAG, "[VoiceCall] Identicon generation failed; continuing without avatar", t);
+            }
+        }
+
+        // If avatar was missing, kick off async backfill so the next call has it.
+        if (callerAvatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
+            try {
+                fetchConversationAvatar(senderPubkeyHex, pictureUrl.trim());
+            } catch (Throwable t) {
+                Log.d(LOG_TAG, "[VoiceCall] Avatar backfill enqueue failed", t);
+            }
+        }
 
         // Post the incoming-call notification (full-screen-intent or heads-up depending on permission).
-        IncomingCallNotification.post(this, callId, peerName, senderNpub, senderPubkeyHex);
+        IncomingCallNotification.post(this, callId, peerName, senderNpub, senderPubkeyHex, callerAvatar);
 
         // If app is foreground, push an event so JS can pick the offer up immediately
         // (rather than waiting for the user to tap the notification).

@@ -5,22 +5,31 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.IconCompat;
 
 /**
  * Posts and dismisses the high-priority incoming-call notification.
  *
- * The notification uses {@code setFullScreenIntent} to bypass the keyguard on
+ * <p>The notification uses {@code setFullScreenIntent} to bypass the keyguard on
  * Android 14+ (when the {@code USE_FULL_SCREEN_INTENT} permission is granted).
- * The Accept button launches MainActivity with {@code accept_pending_call=true};
- * the Decline button broadcasts to {@link IncomingCallActionReceiver}.
+ * On Android 12+ the heads-up surface (when the phone is unlocked) is rendered
+ * via {@link NotificationCompat.CallStyle#forIncomingCall(Person, PendingIntent, PendingIntent)},
+ * giving system-styled green Accept / red Decline buttons and the caller's avatar.
  *
- * On Android the JS-side {@code IncomingCallOverlay.svelte} no longer renders
+ * <p>The Accept action launches MainActivity with {@code accept_pending_call=true};
+ * the Decline action broadcasts to {@link IncomingCallActionReceiver}.
+ *
+ * <p>On Android the JS-side {@code IncomingCallOverlay.svelte} no longer renders
  * (the native ringing activity is the authoritative incoming-call UI), so the
  * channel's default ringtone always plays — even when the app is foreground —
  * to ensure the user has an audible cue.
@@ -39,11 +48,13 @@ public final class IncomingCallNotification {
         String callId,
         String peerName,
         String senderNpub,
-        String senderPubkeyHex
+        String senderPubkeyHex,
+        @Nullable Bitmap avatar
     ) {
         createChannelIfNeeded(context);
 
-        // Resolve cached avatar (best-effort) for the lockscreen ringing screen.
+        // Resolve cached avatar file path for the lockscreen ringing screen
+        // (which reads from disk independently of the heads-up notification).
         String avatarPath = null;
         try {
             AndroidProfileCachePrefs.Identity identity =
@@ -53,7 +64,7 @@ public final class IncomingCallNotification {
                 context, pictureUrl);
         } catch (Throwable t) {
             // Best-effort — fall back to placeholder. Log for diagnostics.
-            Log.d(TAG, "Avatar resolution failed; using placeholder", t);
+            Log.d(TAG, "Avatar path resolution failed; using placeholder", t);
         }
 
         // Full-screen intent → IncomingCallActivity (the lockscreen ringing screen).
@@ -95,19 +106,33 @@ public final class IncomingCallNotification {
             context, 1, declineIntent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
+        // Build the caller Person used by CallStyle. Avatar is the cached
+        // circular bitmap (or generated identicon — both produced by the
+        // caller in NativeBackgroundMessagingService, mirroring the DM path).
+        Person.Builder callerBuilder = new Person.Builder()
+            .setName(peerName != null && !peerName.isEmpty() ? peerName : "Unknown")
+            .setKey(senderPubkeyHex != null ? senderPubkeyHex : "");
+        if (avatar != null) {
+            try {
+                callerBuilder.setIcon(IconCompat.createWithBitmap(avatar));
+            } catch (Throwable t) {
+                Log.d(TAG, "Failed to attach caller avatar; continuing without", t);
+            }
+        }
+        Person caller = callerBuilder.build();
+
         NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("Incoming call")
-            .setContentText(peerName != null ? peerName : "")
-            .setSmallIcon(R.drawable.ic_stat_call)
+            .setSmallIcon(R.drawable.ic_stat_nospeak)
+            .setColor(ContextCompat.getColor(context, R.color.incoming_call_accept))
+            .setColorized(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
             .setTimeoutAfter(60_000L)
             .setFullScreenIntent(ringingPi, true)
-            .setContentIntent(acceptPi)
-            .addAction(R.drawable.ic_stat_call, "Accept", acceptPi)
-            .addAction(R.drawable.ic_call_end, "Decline", declinePi);
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, declinePi, acceptPi));
 
         // Always ring on Android. The JS-side IncomingCallOverlay no longer
         // renders on Android (the native ringing activity is authoritative),

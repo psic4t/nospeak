@@ -144,6 +144,14 @@ public class MainActivity extends BridgeActivity {
     private void handleIncomingCallIntent(android.content.Intent intent) {
         if (intent == null) return;
         if (!intent.getBooleanExtra("accept_pending_call", false)) return;
+
+        // Dismiss the ringing heads-up notification immediately. Once we're
+        // launching MainActivity to accept, the "ringing" state is over from
+        // the user's perspective — the active-call FGS will post its own
+        // ongoing notification. Idempotent and safe across both cold-start
+        // (onCreate) and warm-start (onNewIntent) paths.
+        IncomingCallNotification.cancel(this);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             try {
                 setShowWhenLocked(true);
