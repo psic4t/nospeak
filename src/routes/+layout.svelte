@@ -289,9 +289,11 @@
               const { AndroidVoiceCall } = await import('$lib/core/voiceCall/androidVoiceCallPlugin');
               const { voiceCallService } = await import('$lib/core/voiceCall/VoiceCallService');
               void AndroidVoiceCall.addListener('hangupRequested', () => {
-                  voiceCallService.hangup().catch((err) =>
-                      console.warn('[VoiceCall] hangup from notification failed', err)
-                  );
+                  try {
+                      voiceCallService.hangup();
+                  } catch (err) {
+                      console.warn('[VoiceCall] hangup from notification failed', err);
+                  }
               });
           } catch (e) {
               console.error('Failed to wire hangupRequested listener:', e);

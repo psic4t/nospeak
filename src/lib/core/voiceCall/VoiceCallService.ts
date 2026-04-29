@@ -177,34 +177,52 @@ export class VoiceCallService {
         }
     }
 
-    public async declineCall(): Promise<void> {
+    public declineCall(): void {
         const state = get(voiceCallState);
         if (state.status !== 'incoming-ringing' || !state.peerNpub || !state.callId) return;
 
-        await this.sendSignal(state.peerNpub, {
-            type: CALL_SIGNAL_TYPE,
-            action: 'reject',
-            callId: state.callId
-        });
+        const { peerNpub, callId } = state;
+
+        // Dismiss the UI synchronously, then publish the reject signal in the
+        // background. Awaiting the publish here would freeze the overlay while
+        // the relay connection comes up (see Messaging.publishWithDeadline,
+        // 5 s deadline) — bug visible on desktop PWA where relays may not be
+        // pre-warmed. Android keeps relays warm via the foreground messaging
+        // service so it didn't surface there. sendSignal already swallows and
+        // logs publish failures, so fire-and-forget is safe.
         this.cleanup();
         endCall('rejected');
+
+        void this.sendSignal(peerNpub, {
+            type: CALL_SIGNAL_TYPE,
+            action: 'reject',
+            callId
+        });
     }
 
-    public async hangup(): Promise<void> {
+    public hangup(): void {
         const state = get(voiceCallState);
         if (!state.peerNpub || !state.callId) return;
 
-        if (state.status === 'active') {
-            await this.createCallEvent('ended', state.duration);
-        }
+        const { peerNpub, callId, status, duration } = state;
+        const shouldAuthorEndedEvent = status === 'active';
 
-        await this.sendSignal(state.peerNpub, {
-            type: CALL_SIGNAL_TYPE,
-            action: 'hangup',
-            callId: state.callId
-        });
+        // Dismiss the UI synchronously first; both the 'ended' call-event
+        // authoring and the hangup signal publish happen fire-and-forget so a
+        // slow relay can't keep the call overlay on screen. See declineCall()
+        // for the full rationale. createCallEvent and sendSignal both already
+        // catch+log their own errors.
         this.cleanup();
         endCall('hangup');
+
+        if (shouldAuthorEndedEvent) {
+            void this.createCallEvent('ended', duration, peerNpub);
+        }
+        void this.sendSignal(peerNpub, {
+            type: CALL_SIGNAL_TYPE,
+            action: 'hangup',
+            callId
+        });
     }
 
     public toggleMute(): void {
@@ -391,11 +409,19 @@ export class VoiceCallService {
         }
     }
 
-    private async createCallEvent(type: 'missed' | 'outgoing' | 'ended', duration?: number): Promise<void> {
-        const state = get(voiceCallState);
-        if (!state.peerNpub || !this.createCallEventFn) return;
+    private async createCallEvent(
+        type: 'missed' | 'outgoing' | 'ended',
+        duration?: number,
+        peerNpubOverride?: string
+    ): Promise<void> {
+        // Allow callers to pass peerNpub explicitly so they can mutate the
+        // store (e.g., endCall) before authoring without losing the recipient.
+        // Today endCall() preserves peerNpub, but capturing at the callsite
+        // is more robust against future store reducer changes.
+        const peerNpub = peerNpubOverride ?? get(voiceCallState).peerNpub;
+        if (!peerNpub || !this.createCallEventFn) return;
         try {
-            await this.createCallEventFn(state.peerNpub, type, duration);
+            await this.createCallEventFn(peerNpub, type, duration);
         } catch (err) {
             console.error('[VoiceCall] Failed to create call event:', err);
         }

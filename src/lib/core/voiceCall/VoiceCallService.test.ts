@@ -412,4 +412,136 @@ describe('VoiceCallService', () => {
             expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
         });
     });
+
+    describe('synchronous cancellation', () => {
+        // Regression coverage for the desktop-PWA bug where awaiting the
+        // hangup/reject signal publish (which can take up to 5 s on cold
+        // relays) kept the ActiveCallOverlay on screen long after the user
+        // tapped the cancel button. After the fix, hangup() and declineCall()
+        // must dismiss the UI synchronously and let the signal publish in the
+        // background.
+        beforeEach(() => {
+            startCallSessionSpy.mockClear();
+            endCallSessionSpy.mockClear();
+
+            (globalThis as any).RTCPeerConnection = function () {
+                this.onicecandidate = null;
+                this.ontrack = null;
+                this.oniceconnectionstatechange = null;
+                this.addTrack = vi.fn();
+                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
+                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
+                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
+                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
+                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
+                this.close = vi.fn();
+                this.iceConnectionState = 'new';
+            };
+            (globalThis as any).RTCSessionDescription = function (init: any) {
+                Object.assign(this, init);
+            };
+            (globalThis as any).RTCIceCandidate = function (init: any) {
+                Object.assign(this, init);
+            };
+
+            const fakeStream = {
+                getTracks: () => [{ stop: vi.fn(), enabled: true }],
+                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
+            };
+            (globalThis as any).navigator = {
+                ...((globalThis as any).navigator ?? {}),
+                mediaDevices: {
+                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
+                }
+            };
+        });
+
+        it('hangup() during outgoing-ringing dismisses the call synchronously even if the signal publish never resolves', async () => {
+            // The signalSender starts as a resolving stub so initiateCall()'s
+            // own offer publish completes; then we swap to a never-resolving
+            // stub for the hangup test to simulate a cold relay where
+            // publishWithDeadline is still waiting for connection.
+            let signalImpl: (...args: any[]) => Promise<void> = vi.fn().mockResolvedValue(undefined);
+            const sendSignalSpy = vi.fn((...args: any[]) => signalImpl(...args));
+            service.registerSignalSender(sendSignalSpy);
+
+            await service.initiateCall('npub1recipient');
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            expect(get(voiceCallState).status).toBe('outgoing-ringing');
+
+            // Now make any further publishes hang — only the hangup signal
+            // is published from this point on, so this isolates the test.
+            signalImpl = () => new Promise(() => {});
+
+            // Capture state synchronously after hangup() returns. On the
+            // pre-fix (awaiting) code, this would still read 'outgoing-ringing'
+            // until the publish settled or the 5 s deadline tripped.
+            service.hangup();
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('hangup');
+
+            // The hangup signal was still dispatched (fire-and-forget).
+            const hangupCall = sendSignalSpy.mock.calls.find(c => {
+                try { return JSON.parse(c[1]).action === 'hangup'; } catch { return false; }
+            });
+            expect(hangupCall).toBeDefined();
+        });
+
+        it('declineCall() during incoming-ringing dismisses synchronously even if the signal publish never resolves', async () => {
+            // declineCall doesn't run any publishes prior to its own reject
+            // signal, so we can register a never-resolving stub directly.
+            const hangingSendSignal = vi.fn().mockReturnValue(new Promise(() => {}));
+            service.registerSignalSender(hangingSendSignal);
+
+            setIncomingRinging('npub1sender', 'callId-decline-sync');
+
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            expect(get(voiceCallState).status).toBe('incoming-ringing');
+
+            service.declineCall();
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('rejected');
+
+            const rejectCall = hangingSendSignal.mock.calls.find(c => {
+                try { return JSON.parse(c[1]).action === 'reject'; } catch { return false; }
+            });
+            expect(rejectCall).toBeDefined();
+        });
+
+        it('hangup() during an active call still authors the ended call event without blocking the UI', async () => {
+            // Same swap-after-initiate pattern as the outgoing-ringing test:
+            // initiateCall must be able to publish its offer; then we make
+            // both sendSignal and createCallEvent hang to assert that
+            // hangup() doesn't depend on either to dismiss the UI.
+            let signalImpl: (...args: any[]) => Promise<void> = vi.fn().mockResolvedValue(undefined);
+            const sendSignalSpy = vi.fn((...args: any[]) => signalImpl(...args));
+            service.registerSignalSender(sendSignalSpy);
+
+            const hangingCreateCallEvent = vi.fn().mockReturnValue(new Promise(() => {}));
+            service.registerCallEventCreator(hangingCreateCallEvent);
+
+            await service.initiateCall('npub1recipient');
+            const { setActive, voiceCallState } = await import('$lib/stores/voiceCall');
+            const { get } = await import('svelte/store');
+            setActive();
+            expect(get(voiceCallState).status).toBe('active');
+
+            // From here on, every signal publish hangs.
+            signalImpl = () => new Promise(() => {});
+
+            service.hangup();
+            // UI dismissed without waiting on either pending promise.
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('hangup');
+
+            // createCallEvent was still invoked (fire-and-forget) with the
+            // recipient npub captured before endCall ran.
+            expect(hangingCreateCallEvent).toHaveBeenCalledTimes(1);
+            const args = hangingCreateCallEvent.mock.calls[0];
+            expect(args[0]).toBe('npub1recipient');
+            expect(args[1]).toBe('ended');
+        });
+    });
 });
