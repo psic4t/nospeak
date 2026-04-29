@@ -37,8 +37,13 @@ export interface Message {
     // failed, cancelled — cover every terminal call outcome. A single
     // 'declined' covers both directions; the renderer picks role-aware copy
     // by comparing callInitiatorNpub to the local user. See
-    // openspec/specs/voice-calling/spec.md → "Call History via Kind 16
+    // openspec/specs/voice-calling/spec.md → "Call History via Kind 1405
     // Events".
+    //
+    // Wire kind: rows authored by the current client carry rumorKind=1405
+    // (CALL_HISTORY_KIND). Rows from earlier client versions may have
+    // rumorKind=16 on disk; the Dexie v14 upgrade migrates those to 1405.
+    // See openspec/changes/move-call-history-to-kind-1405.
     //
     // Legacy values 'outgoing' and 'incoming' may exist in DBs from older
     // schemas; the renderer falls them through to the generic "Voice call"
@@ -235,6 +240,14 @@ export class NospeakDB extends Dexie {
         this.version(13).stores({
             reactions: '++id, targetEventId, reactionEventId, [targetEventId+authorNpub+emoji], emoji'
         });
+
+        // Version 14: Migrate call-history rumor kind from 16 (NIP-18 generic
+        // repost — incorrect public semantics) to 1405 (unassigned regular-
+        // range kind, adjacent to NIP-17's 14/15). No store/index change.
+        // See openspec/changes/move-call-history-to-kind-1405.
+        this.version(14).stores({
+            messages: '++id, [recipientNpub+sentAt], &eventId, sentAt, rumorId, [conversationId+sentAt]'
+        }).upgrade(trans => migrateCallHistoryKindToV14(trans));
     }
 
     public async clearAll(): Promise<void> {
@@ -245,3 +258,48 @@ export class NospeakDB extends Dexie {
 }
 
 export const db = new NospeakDB();
+
+/**
+ * Dexie v14 upgrade body, extracted so it can be unit-tested without
+ * running a real IndexedDB upgrade. Rewrites every {@link Message} row
+ * whose `rumorKind === 16` AND whose `callEventType` is set so that
+ * `rumorKind` becomes `1405`. All other rows are left untouched.
+ *
+ * Call-history rumors used to be authored as Kind 16 (NIP-18 Generic
+ * Repost) — incorrect public semantics. They are now authored as Kind
+ * 1405 (unassigned regular-range kind, adjacent to NIP-17's kinds 14/15).
+ * See openspec/changes/move-call-history-to-kind-1405.
+ *
+ * The argument shape mirrors Dexie's `Transaction` interface only as far
+ * as we need it: a `table(name)` function returning a Dexie-style
+ * collection that supports `.filter(...).modify(...)`. Any failure is
+ * caught and logged so a migration error does not brick app boot.
+ */
+export async function migrateCallHistoryKindToV14(trans: {
+    table: (name: string) => {
+        filter: (predicate: (row: any) => boolean) => {
+            modify: (mutator: (row: any) => void) => Promise<unknown>;
+        };
+    };
+}): Promise<void> {
+    try {
+        let migrated = 0;
+        // Defensive guard: only rewrite rows that are actually
+        // call-history events (rumorKind === 16 AND callEventType is
+        // set). Any other kind-16 row would be malformed; leave it alone
+        // to avoid corruption.
+        await trans.table('messages')
+            .filter((m: any) => m.rumorKind === 16 && !!m.callEventType)
+            .modify((m: any) => {
+                m.rumorKind = 1405;
+                migrated++;
+            });
+        console.log('[Dexie v14] migrated call-history rumorKind 16 → 1405 rows:', migrated);
+    } catch (err) {
+        // Don't brick app boot on migration failure. Worst case those
+        // users keep their kind-16 rows and the renderer won't show them
+        // as call pills until the migration is re-attempted on a future
+        // boot.
+        console.error('[Dexie v14] call-history kind migration failed', err);
+    }
+}

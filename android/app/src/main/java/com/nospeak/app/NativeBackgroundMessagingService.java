@@ -138,6 +138,14 @@ public class NativeBackgroundMessagingService extends Service {
 
     private static final int ACTIVE_PING_SECONDS = 120;
     private static final int LOCKED_PING_SECONDS = 300;
+
+    /**
+     * NIP-17 sealed-rumor kind for persistent call-history events. See
+     * {@code src/lib/core/voiceCall/constants.ts:CALL_HISTORY_KIND} and
+     * {@code openspec/changes/move-call-history-to-kind-1405} for the
+     * rationale. Must stay in sync with the TypeScript constant.
+     */
+    private static final int CALL_HISTORY_KIND = 1405;
     private static final long LOCK_GRACE_MS = 60_000L;
 
     private OkHttpClient client;
@@ -3379,15 +3387,16 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * Author and publish a NIP-17 gift-wrapped Kind 16 {@code 'declined'} call
-     * event in response to the user tapping Decline on the lockscreen
-     * full-screen-intent notification.
+     * Author and publish a NIP-17 gift-wrapped Kind {@value #CALL_HISTORY_KIND}
+     * {@code 'declined'} call event in response to the user tapping Decline on
+     * the lockscreen full-screen-intent notification.
      *
      * Mirrors the structure of {@link #sendVoiceCallReject} (rumor → seal →
-     * gift-wrap pipeline) but produces a chat-history event (kind 16) instead
-     * of a voice-call signal (kind 14). Differences from the reject path:
+     * gift-wrap pipeline) but produces a chat-history event (kind
+     * {@value #CALL_HISTORY_KIND}) instead of a voice-call signal (kind 14).
+     * Differences from the reject path:
      * <ul>
-     *   <li>Inner rumor is kind 16 with empty content and call-event tags
+     *   <li>Inner rumor is kind {@value #CALL_HISTORY_KIND} with empty content and call-event tags
      *       ({@code type=call-event}, {@code call-event-type=declined},
      *       {@code call-initiator=<caller pubkey>}, {@code call-id=<callId>},
      *       {@code p=<caller pubkey>}). The {@code call-initiator} is the
@@ -3425,10 +3434,10 @@ public class NativeBackgroundMessagingService extends Service {
         try {
             long nowSec = System.currentTimeMillis() / 1000L;
 
-            // 1. Build the unsigned Kind 16 rumor. Empty content; tags carry
+            // 1. Build the unsigned Kind 1405 rumor. Empty content; tags carry
             //    all the metadata the renderer needs.
             JSONObject rumor = new JSONObject();
-            rumor.put("kind", 16);
+            rumor.put("kind", CALL_HISTORY_KIND);
             rumor.put("created_at", nowSec);
             rumor.put("content", "");
             rumor.put("pubkey", currentPubkeyHex);

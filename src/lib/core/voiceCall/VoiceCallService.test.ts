@@ -549,7 +549,7 @@ describe('VoiceCallService', () => {
      * Coverage for every persisted call-event-type authored on a terminal
      * transition — ensures every possible call outcome leaves a chat-history
      * pill, per the voice-calling capability spec. See
-     * openspec/specs/voice-calling/spec.md → "Call History via Kind 16
+     * openspec/specs/voice-calling/spec.md → "Call History via Kind 1405
      * Events".
      *
      * Each test wires a resolving sendSignal stub plus a spy creator,

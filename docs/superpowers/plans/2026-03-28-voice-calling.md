@@ -1,5 +1,13 @@
 # 1-on-1 Encrypted Voice Calling — Implementation Plan
 
+> **HISTORICAL DOCUMENT — see openspec/specs/voice-calling/spec.md for current requirements.**
+>
+> This plan was authored when call-history rumors used Kind 16 (NIP-18
+> Generic Repost). They have since been moved to **Kind 1405** — see
+> `openspec/changes/move-call-history-to-kind-1405`. References to
+> `rumorKind === 16` and "Kind 16 rumor" in this document should be
+> read as `rumorKind === CALL_HISTORY_KIND` / Kind 1405.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add real-time 1-on-1 encrypted voice calling using WebRTC for P2P audio and Nostr relay gift-wrapping for signaling, with call event messages displayed in chat history.

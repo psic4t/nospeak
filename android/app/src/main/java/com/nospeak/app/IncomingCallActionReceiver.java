@@ -71,7 +71,7 @@ public class IncomingCallActionReceiver extends BroadcastReceiver {
                     Log.w(TAG, "sendVoiceCallReject failed (best-effort, ignoring)", e);
                 }
                 try {
-                    // 2. Author and publish the kind-16 'declined' chat-history
+                    // 2. Author and publish the kind-1405 'declined' chat-history
                     //    rumor (gift-wrapped to both the caller and self) so
                     //    BOTH peers' chat histories show a pill. Without this,
                     //    declining via the lockscreen notification leaves no

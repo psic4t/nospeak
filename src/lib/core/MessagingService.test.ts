@@ -1388,4 +1388,121 @@ describe('MessagingService - Auto-add Contacts', () => {
             expect(result).toBeNull();
         });
     });
+
+    /**
+     * Coverage for the call-history kind hard-switch from 16 (NIP-18 Generic
+     * Repost — incorrect public semantics) to 1405 (unassigned regular-range
+     * kind). See openspec/changes/move-call-history-to-kind-1405.
+     *
+     * The receive path MUST accept kind 1405 sealed rumors carrying
+     * call-event tags AND MUST reject kind 16 rumors entirely (no message
+     * row created from them).
+     */
+    describe('call-history kind switch (16 → 1405)', () => {
+        let messaging: MessagingService;
+        let mockSigner: any;
+        const myPubkey = '79dff8f426826fdd7c32deb1d9e1f9c01234567890abcdef1234567890abcdef';
+        const senderPubkey = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+        function makeRumorJson(kind: number, extraTags: string[][] = []): string {
+            return JSON.stringify({
+                kind,
+                pubkey: senderPubkey,
+                content: '',
+                created_at: 1600000000,
+                tags: [
+                    ['p', myPubkey],
+                    ['type', 'call-event'],
+                    ['call-event-type', 'ended'],
+                    ['call-initiator', senderPubkey],
+                    ['call-duration', '47'],
+                    ['call-id', 'abc123'],
+                    ...extraTags,
+                ],
+            });
+        }
+
+        function makeSealJson(): string {
+            return JSON.stringify({
+                kind: 13,
+                pubkey: senderPubkey,
+                content: 'A'.repeat(132),
+                created_at: 1600000000,
+                tags: [],
+                sig: 'valid-signature',
+            });
+        }
+
+        function giftWrap() {
+            return {
+                id: 'gift-wrap-id',
+                kind: 1059,
+                pubkey: 'ephemeral-pubkey',
+                content: 'encrypted-seal',
+                created_at: 1600000000,
+                tags: [['p', myPubkey]],
+                sig: 'gift-wrap-sig',
+            } as any;
+        }
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            messaging = new MessagingService();
+            mockSigner = {
+                getPublicKey: vi.fn().mockResolvedValue(myPubkey),
+                decrypt: vi.fn(),
+                encrypt: vi.fn(),
+                signEvent: vi.fn(),
+            };
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+            mockVerifyEvent.mockReturnValue(true);
+        });
+
+        it('processGiftWrapToMessage accepts a Kind 1405 call-history rumor and produces a call-event message', async () => {
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson(1405));
+
+            const result = await (messaging as any).processGiftWrapToMessage(giftWrap());
+
+            expect(result).not.toBeNull();
+            // Call-history rows carry rumorKind=1405, an empty message body,
+            // and the parsed call metadata.
+            expect(result.rumorKind).toBe(1405);
+            expect(result.message).toBe('');
+            expect(result.callEventType).toBe('ended');
+            expect(result.callDuration).toBe(47);
+            expect(result.callId).toBe('abc123');
+        });
+
+        it('processGiftWrapToMessage rejects a legacy Kind 16 rumor (hard switch)', async () => {
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson(16));
+
+            // Kind 16 is no longer in the allow-list; the inner kind check
+            // throws which is swallowed by the outer try/catch and surfaced
+            // as a null return so the history-fetch pipeline drops the row.
+            const result = await (messaging as any).processGiftWrapToMessage(giftWrap());
+            expect(result).toBeNull();
+        });
+
+        it('handleGiftWrap rejects a legacy Kind 16 rumor without invoking processRumor', async () => {
+            mockSigner.decrypt = vi.fn()
+                .mockResolvedValueOnce(makeSealJson())
+                .mockResolvedValueOnce(makeRumorJson(16));
+
+            const processRumorSpy = vi.spyOn(messaging as any, 'processRumor').mockResolvedValue(undefined);
+
+            // handleGiftWrap swallows decode errors internally; we only need
+            // to assert that the kind-16 rumor never reaches processRumor.
+            await (messaging as any).handleGiftWrap(giftWrap());
+
+            expect(processRumorSpy).not.toHaveBeenCalled();
+        });
+    });
 });

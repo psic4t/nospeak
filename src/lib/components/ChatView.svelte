@@ -53,6 +53,7 @@
   import UploadProgressOverlay from '$lib/components/UploadProgressOverlay.svelte';
   import { setUploadPhase, setUploadPercent, clearUploadProgress } from '$lib/stores/uploadProgress';
   import { voiceCallService } from '$lib/core/voiceCall/VoiceCallService';
+  import { CALL_HISTORY_KIND } from '$lib/core/voiceCall/constants';
   import {
     evaluateFullScreenIntentPermission,
     recordFsiPermissionSkipped
@@ -2201,7 +2202,7 @@
         </div>
       {/if}
 
-      {#if msg.rumorKind === 16}
+      {#if msg.rumorKind === CALL_HISTORY_KIND}
         <CallEventMessage message={msg} />
       {:else}
        {@const hasUnreadMarker = msg.direction === "received" && (

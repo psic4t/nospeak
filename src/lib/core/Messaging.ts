@@ -21,7 +21,7 @@ import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaP
 import { contactSyncService } from './ContactSyncService';
 import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import type { Conversation } from '$lib/db/db';
-import { CALL_SIGNAL_EXPIRATION_SECONDS } from '$lib/core/voiceCall/constants';
+import { CALL_SIGNAL_EXPIRATION_SECONDS, CALL_HISTORY_KIND } from '$lib/core/voiceCall/constants';
 import { isAndroidNative } from '$lib/core/NativeDialogs';
 
 const READ_RECEIPT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60;
@@ -251,9 +251,11 @@ export type AuthoredCallEventType =
       }
       const rumor = rumorCandidate as NostrEvent;
 
-      // Support Kind 14 (text), 15 (files), 7 (reactions), and 16 (call events)
-      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== 16) {
-        throw new Error(`Expected Rumor (Kind 14, 15, 7, or 16), got ${rumor.kind}`);
+      // Support Kind 14 (text), 15 (files), 7 (reactions), and CALL_HISTORY_KIND (call events).
+      // Kind 16 (NIP-18 Generic Repost) is explicitly rejected — see
+      // openspec/changes/move-call-history-to-kind-1405 for the rationale.
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== CALL_HISTORY_KIND) {
+        throw new Error(`Expected Rumor (Kind 14, 15, 7, or ${CALL_HISTORY_KIND}), got ${rumor.kind}`);
       }
 
       // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
@@ -375,9 +377,11 @@ export type AuthoredCallEventType =
       }
       const rumor = rumorCandidate as NostrEvent;
 
-      // Support Kind 14 (text), 15 (files), 7 (reactions), and 16 (call events)
-      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== 16) {
-        throw new Error(`Expected Rumor (Kind 14, 15, 7, or 16), got ${rumor.kind}`);
+      // Support Kind 14 (text), 15 (files), 7 (reactions), and CALL_HISTORY_KIND (call events).
+      // Kind 16 (NIP-18 Generic Repost) is explicitly rejected — see
+      // openspec/changes/move-call-history-to-kind-1405 for the rationale.
+      if (rumor.kind !== 14 && rumor.kind !== 15 && rumor.kind !== 7 && rumor.kind !== CALL_HISTORY_KIND) {
+        throw new Error(`Expected Rumor (Kind 14, 15, 7, or ${CALL_HISTORY_KIND}), got ${rumor.kind}`);
       }
 
       // NIP-17: Verify seal pubkey matches rumor pubkey to prevent sender impersonation
@@ -541,8 +545,9 @@ export type AuthoredCallEventType =
         };
       }
 
-      // Kind 16: call event messages
-      if (rumor.kind === 16) {
+      // Kind 1405: call event messages (formerly Kind 16; see
+      // openspec/changes/move-call-history-to-kind-1405).
+      if (rumor.kind === CALL_HISTORY_KIND) {
         const callEventTypeTag = rumor.tags?.find((t: string[]) => t[0] === 'call-event-type');
         const callDurationTag = rumor.tags?.find((t: string[]) => t[0] === 'call-duration');
         const callInitiatorTag = rumor.tags?.find((t: string[]) => t[0] === 'call-initiator');
@@ -1898,12 +1903,12 @@ export type AuthoredCallEventType =
   }
 
   /**
-   * Create a call event message as a Kind 16 rumor that is gift-wrapped to
-   * the peer (and self-wrapped to the sender via standard NIP-59). Used for
-   * call-event types that should appear in BOTH peers' chat history:
-   * `ended`, `no-answer`, `declined`, `busy`, `failed`. The peer receives
-   * the rumor through the normal NIP-17 path and SHALL NOT author a
-   * duplicate locally.
+   * Create a call event message as a Kind 1405 rumor that is gift-wrapped
+   * to the peer (and self-wrapped to the sender via standard NIP-59).
+   * Used for call-event types that should appear in BOTH peers' chat
+   * history: `ended`, `no-answer`, `declined`, `busy`, `failed`. The peer
+   * receives the rumor through the normal NIP-17 path and SHALL NOT
+   * author a duplicate locally.
    *
    * For asymmetric outcomes that only make sense on one side
    * (`missed`, `cancelled`), use `createLocalCallEventMessage` instead.
@@ -1940,7 +1945,7 @@ export type AuthoredCallEventType =
     const tags = this.buildCallEventTags(recipientPubkey, callEventType, initiatorPubkey, duration, callId);
 
     const rumor: Partial<NostrEvent> = {
-        kind: 16,
+        kind: CALL_HISTORY_KIND,
         created_at: Math.floor(Date.now() / 1000),
         content: '',
         tags,
@@ -1960,13 +1965,13 @@ export type AuthoredCallEventType =
   }
 
   /**
-   * Create a call event message as a LOCAL-ONLY Kind 16 rumor: built with
-   * the same tag structure as the gift-wrapped variant but persisted only
-   * to the local message database — no relay publish, no gift-wrap, no
-   * self-wrap. Used for `missed` and `cancelled`, where each side observes
-   * a different reality (the caller observes "I cancelled"; the callee
-   * observes "I missed"), and gift-wrapping either rumor to both peers
-   * would produce duplicate pills with conflicting wording.
+   * Create a call event message as a LOCAL-ONLY Kind 1405 rumor: built
+   * with the same tag structure as the gift-wrapped variant but persisted
+   * only to the local message database — no relay publish, no gift-wrap,
+   * no self-wrap. Used for `missed` and `cancelled`, where each side
+   * observes a different reality (the caller observes "I cancelled"; the
+   * callee observes "I missed"), and gift-wrapping either rumor to both
+   * peers would produce duplicate pills with conflicting wording.
    *
    * The DB row carries `direction: 'sent'` because the local user is the
    * author; `eventId` is set to the rumor id (no gift-wrap exists to take
@@ -1993,7 +1998,7 @@ export type AuthoredCallEventType =
     const createdAtSec = Math.floor(Date.now() / 1000);
 
     const rumor: Partial<NostrEvent> = {
-        kind: 16,
+        kind: CALL_HISTORY_KIND,
         created_at: createdAtSec,
         content: '',
         tags,
@@ -2010,7 +2015,7 @@ export type AuthoredCallEventType =
         rumorId,
         direction: 'sent',
         createdAt: Date.now(),
-        rumorKind: 16,
+        rumorKind: CALL_HISTORY_KIND,
         callEventType,
         callInitiatorNpub: resolvedInitiatorNpub,
         callId
