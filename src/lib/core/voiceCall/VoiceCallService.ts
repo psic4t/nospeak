@@ -18,6 +18,54 @@ import type { VoiceCallSignal } from './types';
 
 type SignalSender = (recipientNpub: string, signalContent: string) => Promise<void>;
 
+/**
+ * Persisted call-event types authored on terminal call transitions. Mirrors
+ * the union in Messaging.createCallEventMessage and the renderer in
+ * CallEventMessage.svelte. Legacy values 'outgoing'/'incoming' are NOT in
+ * this set — new code SHALL NOT author them.
+ */
+export type AuthoredCallEventType =
+    | 'missed'
+    | 'ended'
+    | 'no-answer'
+    | 'declined'
+    | 'busy'
+    | 'failed'
+    | 'cancelled';
+
+/**
+ * Authoring callback for call-event types that should appear in BOTH peers'
+ * chat history (`ended`, `no-answer`, `declined`, `busy`, `failed`).
+ * Implemented by Messaging.createCallEventMessage — gift-wraps the rumor to
+ * the peer and self-wraps for the sender.
+ *
+ * `initiatorNpub` (optional, bech32) SHALL be the original WebRTC call
+ * initiator. Defaults to the local user when omitted; callee-authored
+ * types MUST pass the caller's npub explicitly so the persisted
+ * `call-initiator` tag points to the actual initiator (not the rumor
+ * author) and the renderer can pick role-aware copy.
+ */
+type CallEventCreator = (
+    recipientNpub: string,
+    type: AuthoredCallEventType,
+    duration?: number,
+    callId?: string,
+    initiatorNpub?: string
+) => Promise<void>;
+
+/**
+ * Authoring callback for call-event types that are LOCAL-ONLY — only the
+ * authoring side ever has a row (`missed`, `cancelled`). Implemented by
+ * Messaging.createLocalCallEventMessage — saves to the local DB without any
+ * relay publish or gift-wrap. The peer will not receive this rumor.
+ */
+type LocalCallEventCreator = (
+    recipientNpub: string,
+    type: AuthoredCallEventType,
+    callId?: string,
+    initiatorNpub?: string
+) => Promise<void>;
+
 export class VoiceCallService {
     private peerConnection: RTCPeerConnection | null = null;
     private localStream: MediaStream | null = null;
@@ -26,7 +74,8 @@ export class VoiceCallService {
     private iceTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private durationIntervalId: ReturnType<typeof setInterval> | null = null;
     private sendSignalFn: SignalSender | null = null;
-    private createCallEventFn: ((recipientNpub: string, type: string, duration?: number) => Promise<void>) | null = null;
+    private createCallEventFn: CallEventCreator | null = null;
+    private localCreateCallEventFn: LocalCallEventCreator | null = null;
     /**
      * Gates outgoing ice-candidate signaling. Armed in createPeerConnection,
      * cleared once the connection reaches connected/completed (further
@@ -35,13 +84,25 @@ export class VoiceCallService {
      * Reset to false in cleanup; re-armed by the next createPeerConnection.
      */
     private iceTrickleEnabled = false;
+    /**
+     * True iff the current call was started by us (initiateCall). Drives the
+     * caller-only authoring of the 'failed' chat-history pill on ICE failure
+     * — the spec assigns 'failed' to the caller and relies on NIP-59
+     * self-wrap to deliver the rumor to the callee. Set in initiateCall(),
+     * reset to false in cleanup().
+     */
+    private isInitiator = false;
 
     public registerSignalSender(fn: SignalSender): void {
         this.sendSignalFn = fn;
     }
 
-    public registerCallEventCreator(fn: (recipientNpub: string, type: string, duration?: number) => Promise<void>): void {
+    public registerCallEventCreator(fn: CallEventCreator): void {
         this.createCallEventFn = fn;
+    }
+
+    public registerLocalCallEventCreator(fn: LocalCallEventCreator): void {
+        this.localCreateCallEventFn = fn;
     }
 
     public isVoiceCallSignal(content: string): boolean {
@@ -79,6 +140,7 @@ export class VoiceCallService {
         }
 
         const callId = this.generateCallId();
+        this.isInitiator = true;
         setOutgoingRinging(recipientNpub, callId);
         await this.startAndroidSession(callId, recipientNpub, 'outgoing');
 
@@ -108,9 +170,16 @@ export class VoiceCallService {
             this.offerTimeoutId = setTimeout(async () => {
                 const current = get(voiceCallState);
                 if (current.status === 'outgoing-ringing' && current.callId === callId) {
-                    await this.createCallEvent('outgoing');
+                    // Capture peerNpub + callId synchronously before cleanup
+                    // (cleanup() doesn't touch the store, but endCall does and
+                    // future reducer changes shouldn't be able to drop the
+                    // recipient out from under the author).
+                    const peerNpub = current.peerNpub;
                     this.cleanup();
                     endCall('timeout');
+                    if (peerNpub) {
+                        void this.createCallEvent('no-answer', undefined, peerNpub, callId);
+                    }
                 }
             }, CALL_OFFER_TIMEOUT_MS);
         } catch (err) {
@@ -198,6 +267,19 @@ export class VoiceCallService {
             action: 'reject',
             callId
         });
+        // Author the single 'declined' rumor on the callee side. It is
+        // gift-wrapped to the caller, so the caller's chat history will
+        // also show the call as declined — with role-aware copy at render
+        // time (the caller sees "Call declined", the callee sees
+        // "Declined"). The caller's handleReject() must NOT author a
+        // duplicate rumor.
+        //
+        // The `call-initiator` MUST be the caller (the original WebRTC
+        // initiator), not the local user (rumor author). Pass `peerNpub`
+        // explicitly: in the incoming-ringing state, peerNpub is the
+        // caller. Without this, the renderer's iAmInitiator check would
+        // be inverted and both peers would see the wrong copy.
+        void this.createCallEvent('declined', undefined, peerNpub, callId, peerNpub);
     }
 
     public hangup(): void {
@@ -205,18 +287,38 @@ export class VoiceCallService {
         if (!state.peerNpub || !state.callId) return;
 
         const { peerNpub, callId, status, duration } = state;
-        const shouldAuthorEndedEvent = status === 'active';
+        // Capture isInitiator before cleanup() resets it. Used to set the
+        // call-initiator tag correctly for 'ended' rumors authored by the
+        // callee (where the local user is NOT the WebRTC initiator).
+        const wasInitiator = this.isInitiator;
 
-        // Dismiss the UI synchronously first; both the 'ended' call-event
-        // authoring and the hangup signal publish happen fire-and-forget so a
-        // slow relay can't keep the call overlay on screen. See declineCall()
-        // for the full rationale. createCallEvent and sendSignal both already
+        // Dismiss the UI synchronously first; both the call-event authoring
+        // and the hangup signal publish happen fire-and-forget so a slow
+        // relay can't keep the call overlay on screen. See declineCall() for
+        // the full rationale. createCallEvent and sendSignal both already
         // catch+log their own errors.
         this.cleanup();
         endCall('hangup');
 
-        if (shouldAuthorEndedEvent) {
-            void this.createCallEvent('ended', duration, peerNpub);
+        if (status === 'active') {
+            // Either side hangs up an established call → 'ended' with
+            // duration. Authored exactly once by the hangup initiator and
+            // gift-wrapped to the peer; the peer's handleHangup() must NOT
+            // author a duplicate. The `call-initiator` tag is the WebRTC
+            // initiator: the local user if we initiated, otherwise the
+            // peer.
+            const initiatorNpub = wasInitiator ? undefined : peerNpub;
+            void this.createCallEvent('ended', duration, peerNpub, callId, initiatorNpub);
+        } else if (status === 'outgoing-ringing') {
+            // Caller cancelled an outgoing call before the callee answered.
+            // Author 'cancelled' on the caller's local DB ONLY — do NOT
+            // gift-wrap to the callee. The callee's own handleHangup()
+            // authors a separate local-only 'missed' rumor; both sides see
+            // their own perspective without producing a duplicate pill.
+            // call-initiator defaults to the local user, which is correct
+            // here because only the caller can hang up while
+            // outgoing-ringing.
+            void this.createLocalCallEvent('cancelled', peerNpub, callId);
         }
         void this.sendSignal(peerNpub, {
             type: CALL_SIGNAL_TYPE,
@@ -273,18 +375,40 @@ export class VoiceCallService {
                 setActive();
                 this.startDurationTimer();
             } else if (iceState === 'failed' || iceState === 'disconnected') {
-                this.cleanup();
-                endCall('ice-failed');
+                this.handleIceFailure();
             }
         };
 
         this.iceTimeoutId = setTimeout(() => {
             const iceState = this.peerConnection?.iceConnectionState;
             if (iceState !== 'connected' && iceState !== 'completed') {
-                this.cleanup();
-                endCall('ice-failed');
+                this.handleIceFailure();
             }
         }, ICE_CONNECTION_TIMEOUT_MS);
+    }
+
+    /**
+     * Common terminal handler for ICE-level failures. Authors a 'failed'
+     * chat-history pill exactly once per call, and only on the caller side
+     * (gated on `isInitiator`); the rumor reaches the callee via NIP-59
+     * self-wrap. The callee just tears its side down silently — they will
+     * also typically detect the failure themselves but don't author a
+     * duplicate pill.
+     *
+     * Capturing peerNpub/callId/isInitiator before cleanup() because
+     * cleanup() resets isInitiator. endCall() preserves peerNpub/callId
+     * today but capturing locally is robust against future store changes.
+     */
+    private handleIceFailure(): void {
+        const state = get(voiceCallState);
+        const wasInitiator = this.isInitiator;
+        const peerNpub = state.peerNpub;
+        const callId = state.callId;
+        this.cleanup();
+        endCall('ice-failed');
+        if (wasInitiator && peerNpub && callId) {
+            void this.createCallEvent('failed', undefined, peerNpub, callId);
+        }
     }
 
     private async handleOffer(signal: VoiceCallSignal, senderNpub: string): Promise<void> {
@@ -348,16 +472,25 @@ export class VoiceCallService {
     private async handleHangup(signal: VoiceCallSignal): Promise<void> {
         const state = get(voiceCallState);
         if (state.callId !== signal.callId) return;
-        // 'ended' events are authored by the hangup initiator (see hangup()),
-        // and delivered to us via the normal gift-wrap path. Authoring one
-        // here too would produce a duplicate pill with a slightly different
-        // duration. Only author for 'missed' (caller cancelled before we
-        // accepted), where no peer-side hangup() ran to author it.
-        if (state.status === 'incoming-ringing') {
-            await this.createCallEvent('missed');
-        }
+        // 'ended' events are authored by the hangup initiator (see hangup())
+        // and delivered to us via the normal gift-wrap path; we don't author
+        // a duplicate here.
+        //
+        // For an unanswered incoming call (caller cancelled before pickup)
+        // we author 'missed' as a LOCAL-ONLY rumor — only the callee sees
+        // this row. The caller authors its own local-only 'cancelled'
+        // rumor in hangup(). This way each side gets exactly one
+        // perspective-appropriate pill without duplicates.
+        const peerNpub = state.peerNpub;
+        const callId = state.callId;
+        const wasIncomingRinging = state.status === 'incoming-ringing';
         this.cleanup();
         endCall('hangup');
+        if (wasIncomingRinging && peerNpub && callId) {
+            // call-initiator is the caller, not the local user (callee /
+            // rumor author). peerNpub is the caller during incoming-ringing.
+            void this.createLocalCallEvent('missed', peerNpub, callId, peerNpub);
+        }
     }
 
     private handleReject(signal: VoiceCallSignal): void {
@@ -369,6 +502,9 @@ export class VoiceCallService {
             return;
         }
         console.log('[VoiceCall][Recv] handleReject: matched, cleaning up and endCall("rejected")');
+        // The callee authored the single 'declined' rumor in declineCall()
+        // and gift-wrapped it to us; we do NOT author a duplicate here.
+        // Just transition state.
         this.cleanup();
         endCall('rejected');
     }
@@ -376,8 +512,16 @@ export class VoiceCallService {
     private handleBusy(signal: VoiceCallSignal): void {
         const state = get(voiceCallState);
         if (state.callId !== signal.callId) return;
+        const peerNpub = state.peerNpub;
+        const callId = state.callId;
         this.cleanup();
         endCall('busy');
+        // Caller-only authoring: the callee already had an active call and
+        // just sent us back a 'busy' signal — for them this attempt was
+        // never a real call.
+        if (peerNpub && callId) {
+            void this.createCallEvent('busy', undefined, peerNpub, callId);
+        }
     }
 
     private async sendSignal(recipientNpub: string, signal: VoiceCallSignal): Promise<void> {
@@ -410,26 +554,55 @@ export class VoiceCallService {
     }
 
     private async createCallEvent(
-        type: 'missed' | 'outgoing' | 'ended',
+        type: AuthoredCallEventType,
         duration?: number,
-        peerNpubOverride?: string
+        peerNpubOverride?: string,
+        callId?: string,
+        initiatorNpub?: string
     ): Promise<void> {
-        // Allow callers to pass peerNpub explicitly so they can mutate the
-        // store (e.g., endCall) before authoring without losing the recipient.
-        // Today endCall() preserves peerNpub, but capturing at the callsite
-        // is more robust against future store reducer changes.
+        // Allow callers to pass peerNpub + callId explicitly so they can
+        // mutate the store (e.g., endCall) before authoring without losing
+        // the recipient. Today endCall() preserves peerNpub, but capturing
+        // at the callsite is more robust against future store reducer
+        // changes.
+        //
+        // `initiatorNpub` is the original WebRTC caller; when omitted the
+        // implementation defaults to the local user. Callee-authored
+        // types MUST pass the caller's npub explicitly.
         const peerNpub = peerNpubOverride ?? get(voiceCallState).peerNpub;
         if (!peerNpub || !this.createCallEventFn) return;
         try {
-            await this.createCallEventFn(peerNpub, type, duration);
+            await this.createCallEventFn(peerNpub, type, duration, callId, initiatorNpub);
         } catch (err) {
             console.error('[VoiceCall] Failed to create call event:', err);
+        }
+    }
+
+    /**
+     * Author a local-only call-event rumor — the rumor lands in the local
+     * DB but is NOT gift-wrapped or published. Used for `missed` and
+     * `cancelled` where each side's history reflects only what they
+     * observed locally and a peer-delivered pill would either duplicate
+     * the local one or contradict the local user's perspective.
+     */
+    private async createLocalCallEvent(
+        type: AuthoredCallEventType,
+        peerNpubOverride: string,
+        callId: string,
+        initiatorNpub?: string
+    ): Promise<void> {
+        if (!this.localCreateCallEventFn) return;
+        try {
+            await this.localCreateCallEventFn(peerNpubOverride, type, callId, initiatorNpub);
+        } catch (err) {
+            console.error('[VoiceCall] Failed to create local call event:', err);
         }
     }
 
     private cleanup(): void {
         this.clearTimeouts();
         this.iceTrickleEnabled = false;
+        this.isInitiator = false;
 
         if (this.durationIntervalId) {
             clearInterval(this.durationIntervalId);

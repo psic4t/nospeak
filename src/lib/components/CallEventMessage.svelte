@@ -1,5 +1,7 @@
 <script lang="ts">
     import type { Message } from '$lib/db/db';
+    import { t } from '$lib/i18n';
+    import { currentUser } from '$lib/stores/auth';
 
     interface Props {
         message: Message;
@@ -14,25 +16,73 @@
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 
-    function getMessageText(): string {
+    /**
+     * True iff the local user is the call's initiator (the side that called
+     * `voiceCallService.initiateCall`). Determined by comparing the rumor's
+     * `call-initiator` tag (persisted as `callInitiatorNpub`) against the
+     * locally-authenticated user's npub.
+     *
+     * For asymmetric outcomes (`declined`, `busy`, `no-answer`) this drives
+     * role-aware copy: the same Kind 16 rumor renders differently on the
+     * caller's vs callee's device. Symmetric outcomes (`ended`, `failed`)
+     * ignore this. Local-only outcomes (`missed`, `cancelled`) only ever
+     * appear on the side that authored them, so role is implied.
+     */
+    const iAmInitiator = $derived(
+        !!message.callInitiatorNpub &&
+        !!$currentUser &&
+        message.callInitiatorNpub === $currentUser.npub
+    );
+
+    /**
+     * Map a callEventType (+ role) to its pill label.
+     *
+     * Legacy values (`'outgoing'`, `'incoming'`, plus the interim
+     * `'declined-outgoing'`/`'declined-incoming'` from an earlier iteration
+     * of this same change that never shipped) and any forward-compat value
+     * we don't recognise fall through to the generic 'Voice call' label so
+     * the row never renders blank.
+     */
+    const messageText = $derived.by(() => {
         switch (message.callEventType) {
             case 'missed':
-                return 'Missed voice call';
+                return $t('voiceCall.pill.missed');
+            case 'cancelled':
+                return $t('voiceCall.pill.cancelled');
             case 'ended': {
                 const duration = formatDuration(message.callDuration);
-                return duration ? `Voice call ended \u2022 ${duration}` : 'Voice call ended';
+                if (duration) {
+                    const template = $t('voiceCall.pill.endedWithDuration');
+                    return template.replace('{duration}', duration);
+                }
+                return $t('voiceCall.pill.ended');
             }
-            case 'outgoing':
-                return 'Outgoing voice call';
-            case 'incoming':
-                return 'Incoming voice call';
+            case 'declined':
+                return iAmInitiator
+                    ? $t('voiceCall.pill.declinedByPeer')
+                    : $t('voiceCall.pill.declinedByMe');
+            case 'busy':
+                return iAmInitiator
+                    ? $t('voiceCall.pill.busyByPeer')
+                    : $t('voiceCall.pill.busyMe');
+            case 'no-answer':
+                return iAmInitiator
+                    ? $t('voiceCall.pill.noAnswerByPeer')
+                    : $t('voiceCall.pill.noAnswerMe');
+            case 'failed':
+                return $t('voiceCall.pill.failed');
             default:
-                return 'Voice call';
+                // Legacy ('outgoing', 'incoming', 'declined-outgoing',
+                // 'declined-incoming') and unknown forward-compat values.
+                return $t('voiceCall.pill.generic');
         }
-    }
+    });
 
-    const isMissed = $derived(message.callEventType === 'missed');
-    const iconColor = $derived(isMissed ? 'text-red-500' : 'text-green-500');
+    // Green phone for the only "successful conversation" outcome; red
+    // strikethrough for every other terminal state (the call did not result
+    // in a connected conversation).
+    const isSuccessful = $derived(message.callEventType === 'ended');
+    const iconColor = $derived(isSuccessful ? 'text-green-500' : 'text-red-500');
 </script>
 
 <div class="flex justify-center my-2">
@@ -48,7 +98,7 @@
                 stroke-linejoin="round"
                 class="w-4 h-4 {iconColor}"
             >
-                {#if isMissed}
+                {#if !isSuccessful}
                     <line x1="1" y1="1" x2="23" y2="23"></line>
                     <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
                     <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
@@ -59,7 +109,7 @@
                 {/if}
             </svg>
             <span class="text-sm text-gray-700 dark:text-gray-300">
-                {getMessageText()}
+                {messageText}
             </span>
         </div>
         <span class="text-xs text-gray-400 mt-1">

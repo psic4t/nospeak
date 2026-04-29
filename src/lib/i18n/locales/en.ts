@@ -507,7 +507,37 @@ const en = {
         endReasonBusy: 'User busy',
         endReasonTimeout: 'No answer',
         endReasonIceFailed: 'Connection failed',
-        endReasonError: 'Call failed'
+        endReasonError: 'Call failed',
+        // Chat-history pill labels (CallEventMessage.svelte). Vocabulary
+        // mirrors the live-overlay endReason* strings where the situation
+        // is symmetric (call ended, connection failed). For asymmetric
+        // outcomes we use role-suffixed pairs:
+        //   *ByPeer  — the peer is the actor; local user is the recipient
+        //              of the action (e.g. "they declined my call")
+        //   *Me      — the local user is the actor (e.g. "I missed their
+        //              call")
+        // The renderer picks the right suffix by comparing the rumor's
+        // call-initiator tag to the locally-authenticated user's npub.
+        pill: {
+            missed: 'Missed voice call',
+            ended: 'Voice call ended',
+            // Used as a sprintf-style template; {duration} replaced with
+            // formatted MM:SS by the renderer.
+            endedWithDuration: 'Voice call ended \u2022 {duration}',
+            noAnswerByPeer: 'No answer',
+            noAnswerMe: 'Missed voice call',
+            declinedByPeer: 'Call declined',
+            declinedByMe: 'Declined',
+            busyByPeer: 'User busy',
+            busyMe: 'Missed voice call (busy)',
+            failed: 'Connection failed',
+            cancelled: 'Cancelled',
+            // Fallback for unknown / legacy call-event-type values
+            // (e.g. 'outgoing', 'incoming', 'declined-outgoing',
+            // 'declined-incoming' from older schemas, or values introduced
+            // by a future client). Keeps the row from rendering blank.
+            generic: 'Voice call'
+        }
     }
 };
 

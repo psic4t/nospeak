@@ -31,10 +31,32 @@ export interface Message {
     conversationId?: string; // npub for 1-on-1, hash for groups
     participants?: string[]; // null/undefined for 1-on-1, array of npubs for groups
     senderNpub?: string; // sender's npub for group messages (to show attribution)
-    // Call event fields
-    callEventType?: 'missed' | 'outgoing' | 'incoming' | 'ended';
+    // Call event fields.
+    //
+    // The seven authored types — missed, ended, no-answer, declined, busy,
+    // failed, cancelled — cover every terminal call outcome. A single
+    // 'declined' covers both directions; the renderer picks role-aware copy
+    // by comparing callInitiatorNpub to the local user. See
+    // openspec/specs/voice-calling/spec.md → "Call History via Kind 16
+    // Events".
+    //
+    // Legacy values 'outgoing' and 'incoming' may exist in DBs from older
+    // schemas; the renderer falls them through to the generic "Voice call"
+    // label. New code SHALL NOT author them.
+    callEventType?:
+        | 'missed'
+        | 'ended'
+        | 'no-answer'
+        | 'declined'
+        | 'busy'
+        | 'failed'
+        | 'cancelled'
+        // Legacy / forward-compat fall-through values. Do not author.
+        | 'outgoing'
+        | 'incoming';
     callDuration?: number; // in seconds
     callInitiatorNpub?: string;
+    callId?: string; // WebRTC call identifier; carried in the ['call-id', ...] tag
 }
 
 export interface Conversation {

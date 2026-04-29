@@ -64,9 +64,23 @@ public class IncomingCallActionReceiver extends BroadcastReceiver {
             @Override
             public void run() {
                 try {
+                    // 1. Send the kind-14 reject voice-call signal to the
+                    //    caller so their UI dismisses immediately.
                     svc.sendVoiceCallReject(senderPubkeyHex, callId);
                 } catch (Exception e) {
                     Log.w(TAG, "sendVoiceCallReject failed (best-effort, ignoring)", e);
+                }
+                try {
+                    // 2. Author and publish the kind-16 'declined' chat-history
+                    //    rumor (gift-wrapped to both the caller and self) so
+                    //    BOTH peers' chat histories show a pill. Without this,
+                    //    declining via the lockscreen notification leaves no
+                    //    pill on either side because the JS layer (which
+                    //    normally authors via voiceCallService.declineCall)
+                    //    isn't running.
+                    svc.sendVoiceCallDeclinedEvent(senderPubkeyHex, callId);
+                } catch (Exception e) {
+                    Log.w(TAG, "sendVoiceCallDeclinedEvent failed (best-effort, ignoring)", e);
                 } finally {
                     pendingResult.finish();
                 }

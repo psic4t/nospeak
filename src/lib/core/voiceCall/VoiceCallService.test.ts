@@ -544,4 +544,286 @@ describe('VoiceCallService', () => {
             expect(args[1]).toBe('ended');
         });
     });
+
+    /**
+     * Coverage for every persisted call-event-type authored on a terminal
+     * transition — ensures every possible call outcome leaves a chat-history
+     * pill, per the voice-calling capability spec. See
+     * openspec/specs/voice-calling/spec.md → "Call History via Kind 16
+     * Events".
+     *
+     * Each test wires a resolving sendSignal stub plus a spy creator,
+     * triggers the relevant transition, and asserts:
+     *  - the creator is invoked exactly once with the expected type
+     *  - the recipient npub captured before cleanup is correct
+     *  - the callId tag is forwarded
+     *  - the end-state ends up correct
+     */
+    describe('call-event authoring per terminal transition', () => {
+        beforeEach(() => {
+            startCallSessionSpy.mockClear();
+            endCallSessionSpy.mockClear();
+
+            (globalThis as any).RTCPeerConnection = function () {
+                this.onicecandidate = null;
+                this.ontrack = null;
+                this.oniceconnectionstatechange = null;
+                this.addTrack = vi.fn();
+                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
+                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
+                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
+                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
+                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
+                this.close = vi.fn();
+                this.iceConnectionState = 'new';
+                (globalThis as any).__lastPeerConnection = this;
+            };
+            (globalThis as any).RTCSessionDescription = function (init: any) {
+                Object.assign(this, init);
+            };
+            (globalThis as any).RTCIceCandidate = function (init: any) {
+                Object.assign(this, init);
+            };
+
+            const fakeStream = {
+                getTracks: () => [{ stop: vi.fn(), enabled: true }],
+                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
+            };
+            (globalThis as any).navigator = {
+                ...((globalThis as any).navigator ?? {}),
+                mediaDevices: {
+                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
+                }
+            };
+        });
+
+        it("authors 'cancelled' via the LOCAL-ONLY path when the caller hangs up while outgoing-ringing", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+            service.registerLocalCallEventCreator(localCreateCallEventSpy);
+
+            await service.initiateCall('npub1recipient');
+
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            expect(get(voiceCallState).status).toBe('outgoing-ringing');
+            const expectedCallId = get(voiceCallState).callId;
+
+            service.hangup();
+
+            expect(get(voiceCallState).status).toBe('ended');
+            // 'cancelled' must go through the local-only path (no
+            // gift-wrap, no peer delivery) — see spec scenario "Cancelled-
+            // call rumor is local-only on the caller".
+            expect(localCreateCallEventSpy).toHaveBeenCalledTimes(1);
+            const [recipient, type, callId] = localCreateCallEventSpy.mock.calls[0];
+            expect(recipient).toBe('npub1recipient');
+            expect(type).toBe('cancelled');
+            expect(callId).toBe(expectedCallId);
+            // The gift-wrapped path must NOT be used for 'cancelled'.
+            expect(createCallEventSpy).not.toHaveBeenCalled();
+        });
+
+        it("authors 'declined' via the gift-wrapped path when the user declines an incoming call", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+            service.registerLocalCallEventCreator(localCreateCallEventSpy);
+
+            setIncomingRinging('npub1sender', 'call-decline-1');
+
+            service.declineCall();
+
+            // Single 'declined' rumor on the gift-wrapped path; the caller
+            // will receive it via standard NIP-17 delivery.
+            expect(createCallEventSpy).toHaveBeenCalledTimes(1);
+            const [recipient, type, duration, callId, initiatorNpub] =
+                createCallEventSpy.mock.calls[0];
+            expect(recipient).toBe('npub1sender');
+            expect(type).toBe('declined');
+            expect(duration).toBeUndefined();
+            expect(callId).toBe('call-decline-1');
+            // call-initiator MUST be the caller (the original WebRTC
+            // initiator), NOT the local user (callee / rumor author).
+            // This is what drives role-aware rendering: without it both
+            // peers would see the wrong copy. peerNpub here is the caller.
+            expect(initiatorNpub).toBe('npub1sender');
+            // No local-only authoring on this path.
+            expect(localCreateCallEventSpy).not.toHaveBeenCalled();
+        });
+
+        it("does NOT author anything when the caller receives a reject signal", async () => {
+            // Regression for the duplicate-pill bug: previously the caller
+            // authored 'declined-outgoing' here while the callee authored
+            // 'declined-incoming', producing two rumors per call. Now the
+            // callee is the sole author of a single 'declined' rumor; the
+            // caller just transitions state.
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+            service.registerLocalCallEventCreator(localCreateCallEventSpy);
+
+            await service.initiateCall('npub1recipient');
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            const callId = get(voiceCallState).callId!;
+            // The initial offer publish is the only call we expect on the
+            // gift-wrapped creator BEFORE the reject — actually it's not
+            // called at all by initiateCall (only sendSignal is). Reset to
+            // be sure we're measuring only the reject handling.
+            createCallEventSpy.mockClear();
+            localCreateCallEventSpy.mockClear();
+
+            await service.handleSignal({
+                type: 'voice-call', action: 'reject', callId
+            }, 'npub1recipient');
+
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('rejected');
+            // Crucially: no authoring on either path.
+            expect(createCallEventSpy).not.toHaveBeenCalled();
+            expect(localCreateCallEventSpy).not.toHaveBeenCalled();
+        });
+
+        it("authors 'busy' when the caller receives a busy signal", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+
+            await service.initiateCall('npub1recipient');
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            const callId = get(voiceCallState).callId!;
+
+            await service.handleSignal({
+                type: 'voice-call', action: 'busy', callId
+            }, 'npub1recipient');
+
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('busy');
+            expect(createCallEventSpy).toHaveBeenCalledTimes(1);
+            const args = createCallEventSpy.mock.calls[0];
+            expect(args[0]).toBe('npub1recipient');
+            expect(args[1]).toBe('busy');
+        });
+
+        it("authors 'failed' on the caller side when ICE state goes failed", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+
+            await service.initiateCall('npub1recipient');
+            const pc = (globalThis as any).__lastPeerConnection;
+
+            // Trigger ICE failure post-offer, simulating "no candidate
+            // ever connected end-to-end".
+            pc.iceConnectionState = 'failed';
+            pc.oniceconnectionstatechange();
+
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('ice-failed');
+
+            expect(createCallEventSpy).toHaveBeenCalledTimes(1);
+            const args = createCallEventSpy.mock.calls[0];
+            expect(args[0]).toBe('npub1recipient');
+            expect(args[1]).toBe('failed');
+        });
+
+        it("does NOT author 'failed' on the callee side when ICE state goes failed", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+
+            // Simulate the callee side: an offer arrives, RTCPeerConnection
+            // is allocated, and then ICE fails. The callee's isInitiator
+            // flag should be false (set only by initiateCall), so no pill
+            // is authored — the caller is responsible.
+            const offer: VoiceCallSignal = {
+                type: 'voice-call', action: 'offer', callId: 'call-failed-callee', sdp: 'v=0\r\n...'
+            };
+            await service.handleSignal(offer, 'npub1caller');
+
+            const pc = (globalThis as any).__lastPeerConnection;
+            pc.iceConnectionState = 'failed';
+            pc.oniceconnectionstatechange();
+
+            const { get } = await import('svelte/store');
+            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('ice-failed');
+
+            // No 'failed' rumor authored on the callee side.
+            const failedCall = createCallEventSpy.mock.calls.find(c => c[1] === 'failed');
+            expect(failedCall).toBeUndefined();
+        });
+
+        it("authors 'missed' via the LOCAL-ONLY path when the caller hangs up before pickup", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+            service.registerLocalCallEventCreator(localCreateCallEventSpy);
+
+            const callId = 'call-missed-1';
+            setIncomingRinging('npub1caller', callId);
+
+            await service.handleSignal({
+                type: 'voice-call', action: 'hangup', callId
+            }, 'npub1caller');
+
+            // 'missed' must go through the local-only path — see spec
+            // scenario "Missed-call rumor is local-only on the callee".
+            expect(localCreateCallEventSpy).toHaveBeenCalledTimes(1);
+            const [recipient, type, callIdArg, initiatorNpub] =
+                localCreateCallEventSpy.mock.calls[0];
+            expect(recipient).toBe('npub1caller');
+            expect(type).toBe('missed');
+            expect(callIdArg).toBe(callId);
+            // call-initiator MUST be the caller, NOT the local user
+            // (callee / rumor author). Even though missed is rendered
+            // symmetrically today, the persisted tag should be
+            // semantically correct for future role-aware rendering.
+            expect(initiatorNpub).toBe('npub1caller');
+            // No gift-wrapped authoring for missed.
+            expect(createCallEventSpy).not.toHaveBeenCalled();
+        });
+
+        it("authors 'ended' with duration when the caller hangs up an active call (regression)", async () => {
+            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            service.registerSignalSender(sendSignalSpy);
+            service.registerCallEventCreator(createCallEventSpy);
+
+            await service.initiateCall('npub1recipient');
+            const { setActive, voiceCallState, incrementDuration } = await import('$lib/stores/voiceCall');
+            const { get } = await import('svelte/store');
+            setActive();
+            incrementDuration();
+            incrementDuration();
+            incrementDuration(); // duration === 3
+
+            const expectedCallId = get(voiceCallState).callId;
+            service.hangup();
+
+            expect(createCallEventSpy).toHaveBeenCalledTimes(1);
+            const [recipient, type, duration, callId] = createCallEventSpy.mock.calls[0];
+            expect(recipient).toBe('npub1recipient');
+            expect(type).toBe('ended');
+            expect(duration).toBe(3);
+            expect(callId).toBe(expectedCallId);
+        });
+    });
 });

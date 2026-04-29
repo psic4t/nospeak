@@ -3379,6 +3379,234 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
+     * Author and publish a NIP-17 gift-wrapped Kind 16 {@code 'declined'} call
+     * event in response to the user tapping Decline on the lockscreen
+     * full-screen-intent notification.
+     *
+     * Mirrors the structure of {@link #sendVoiceCallReject} (rumor → seal →
+     * gift-wrap pipeline) but produces a chat-history event (kind 16) instead
+     * of a voice-call signal (kind 14). Differences from the reject path:
+     * <ul>
+     *   <li>Inner rumor is kind 16 with empty content and call-event tags
+     *       ({@code type=call-event}, {@code call-event-type=declined},
+     *       {@code call-initiator=<caller pubkey>}, {@code call-id=<callId>},
+     *       {@code p=<caller pubkey>}). The {@code call-initiator} is the
+     *       caller's pubkey — NOT the local user (who is the callee/rumor
+     *       author) — so the renderer's role-aware logic shows "Call declined"
+     *       to the caller and "Declined" to the callee.</li>
+     *   <li>No NIP-40 {@code expiration} tag — call-history rumors are
+     *       persistent, unlike the ephemeral signaling rumors.</li>
+     *   <li>Gift-wrapped to TWO recipients: the caller AND the local user
+     *       (NIP-59 self-wrap). The self-wrap delivers the rumor back to the
+     *       JS layer when it next runs, so the local chat history also gets
+     *       the pill.</li>
+     * </ul>
+     *
+     * Best-effort: any failure in encryption, signing, or publishing results
+     * in a log warning and a silent return. The caller ultimately falls back
+     * to the existing 60s offer-timeout in that case.
+     *
+     * Must be called from a background thread (Amber NIP-55 ContentResolver
+     * + WebSocket sends).
+     */
+    public void sendVoiceCallDeclinedEvent(String callerPubkeyHex, String callId) {
+        if (callerPubkeyHex == null || callerPubkeyHex.isEmpty()
+            || callId == null || callId.isEmpty()
+            || currentPubkeyHex == null || currentPubkeyHex.isEmpty()) {
+            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallDeclinedEvent: missing args; aborting");
+            return;
+        }
+
+        Log.d(LOG_TAG, "[VoiceCall] declined-event: starting callId=" + callId
+            + " caller=" + (callerPubkeyHex.length() >= 8
+                ? callerPubkeyHex.substring(0, 8) + ".." : callerPubkeyHex)
+            + " mode=" + currentMode);
+
+        try {
+            long nowSec = System.currentTimeMillis() / 1000L;
+
+            // 1. Build the unsigned Kind 16 rumor. Empty content; tags carry
+            //    all the metadata the renderer needs.
+            JSONObject rumor = new JSONObject();
+            rumor.put("kind", 16);
+            rumor.put("created_at", nowSec);
+            rumor.put("content", "");
+            rumor.put("pubkey", currentPubkeyHex);
+            JSONArray rumorTags = new JSONArray();
+
+            JSONArray pTag = new JSONArray();
+            pTag.put("p");
+            pTag.put(callerPubkeyHex);
+            rumorTags.put(pTag);
+
+            JSONArray typeTag = new JSONArray();
+            typeTag.put("type");
+            typeTag.put("call-event");
+            rumorTags.put(typeTag);
+
+            JSONArray eventTypeTag = new JSONArray();
+            eventTypeTag.put("call-event-type");
+            eventTypeTag.put("declined");
+            rumorTags.put(eventTypeTag);
+
+            // call-initiator MUST be the caller (original WebRTC initiator),
+            // NOT the local user. Without this the renderer would invert
+            // role-aware copy on both peers.
+            JSONArray initiatorTag = new JSONArray();
+            initiatorTag.put("call-initiator");
+            initiatorTag.put(callerPubkeyHex);
+            rumorTags.put(initiatorTag);
+
+            JSONArray callIdTag = new JSONArray();
+            callIdTag.put("call-id");
+            callIdTag.put(callId);
+            rumorTags.put(callIdTag);
+
+            rumor.put("tags", rumorTags);
+
+            String rumorSerialized = serializeEventForId(rumor);
+            byte[] rumorIdBytes = sha256Bytes(rumorSerialized.getBytes(StandardCharsets.UTF_8));
+            if (rumorIdBytes == null) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: rumor id hash failed");
+                return;
+            }
+            rumor.put("id", bytesToHex(rumorIdBytes));
+
+            // 2. Build a single signed seal (kind 13). Same seal for both
+            //    recipients — only the gift-wrap layer differs per recipient.
+            //    NIP-44-encrypt the rumor JSON with the user's key; the encryption
+            //    is symmetric (NIP-44 derives the conversation key from the user
+            //    private key + recipient pubkey), so the seal must be re-encrypted
+            //    per recipient. We therefore build TWO sealed events below — one
+            //    encrypted to the caller and one self-encrypted.
+
+            // 3. Encrypt + sign + wrap + publish for the caller.
+            int caller_sent = encryptSealAndPublishGiftWrap(
+                rumor, callerPubkeyHex, nowSec, "caller");
+
+            // 4. Encrypt + sign + wrap + publish for the local user (self-wrap).
+            //    This is what brings the rumor back into the local chat history
+            //    via the JS NIP-17 receive path on next attach.
+            int self_sent = encryptSealAndPublishGiftWrap(
+                rumor, currentPubkeyHex, nowSec, "self");
+
+            Log.d(LOG_TAG, "[VoiceCall] declined-event DONE callId=" + callId
+                + " caller_sent=" + caller_sent + " self_sent=" + self_sent);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallDeclinedEvent failed", e);
+        }
+    }
+
+    /**
+     * Encrypts the given rumor to a seal addressed to {@code recipientPubkeyHex},
+     * signs the seal with the user's key, gift-wraps the seal with a fresh
+     * ephemeral key to the same recipient, and publishes the gift-wrap to the
+     * recipient's NIP-17 messaging relays.
+     *
+     * Returns the number of relays the gift-wrap was successfully queued on, or
+     * 0 on any failure (logs the warning).
+     *
+     * {@code recipientLabel} is a short tag for log lines so caller/self gift
+     * wraps can be distinguished in diagnostics.
+     */
+    private int encryptSealAndPublishGiftWrap(
+        JSONObject rumor,
+        String recipientPubkeyHex,
+        long nowSec,
+        String recipientLabel
+    ) {
+        try {
+            // 1. Encrypt rumor → seal content (NIP-44 with user key).
+            String sealContent = encryptNip44(rumor.toString(), recipientPubkeyHex);
+            if (sealContent == null) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: encrypt rumor failed for "
+                    + recipientLabel);
+                return 0;
+            }
+
+            // 2. Build seal (kind 13) and sign with user key.
+            JSONObject seal = new JSONObject();
+            seal.put("kind", 13);
+            seal.put("pubkey", currentPubkeyHex);
+            seal.put("created_at", randomizedPastTimestamp(nowSec));
+            seal.put("content", sealContent);
+            // No expiration tag on call-history seals — the rumor is meant to
+            // be persistent.
+            seal.put("tags", new JSONArray());
+
+            String signedSealJson = signEvent(seal.toString());
+            if (signedSealJson == null) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: sign seal failed for "
+                    + recipientLabel);
+                return 0;
+            }
+
+            // 3. Generate ephemeral keypair for the gift wrap.
+            byte[] ephPrivKey = generateRandomSecretKey();
+            String ephPubkeyHex = derivePublicKeyHex(ephPrivKey);
+            if (ephPubkeyHex == null) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: ephemeral pubkey derive failed for "
+                    + recipientLabel);
+                return 0;
+            }
+
+            // 4. Encrypt seal → gift-wrap content with ephemeral key + recipient.
+            byte[] giftWrapConvKey;
+            try {
+                giftWrapConvKey = getConversationKey(ephPrivKey, recipientPubkeyHex);
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: gift-wrap conv key failed for "
+                    + recipientLabel, e);
+                return 0;
+            }
+            String giftWrapContent = nip44V2EncryptPayload(signedSealJson, giftWrapConvKey);
+            if (giftWrapContent == null) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: encrypt seal failed for "
+                    + recipientLabel);
+                return 0;
+            }
+
+            // 5. Build gift-wrap event (kind 1059), sign with ephemeral key.
+            JSONObject giftWrap = new JSONObject();
+            giftWrap.put("kind", 1059);
+            giftWrap.put("pubkey", ephPubkeyHex);
+            giftWrap.put("created_at", randomizedPastTimestamp(nowSec));
+            giftWrap.put("content", giftWrapContent);
+            JSONArray gwTags = new JSONArray();
+            JSONArray gwPTag = new JSONArray();
+            gwPTag.put("p");
+            gwPTag.put(recipientPubkeyHex);
+            gwTags.put(gwPTag);
+            // No expiration tag — see seal comment above.
+            giftWrap.put("tags", gwTags);
+
+            String signedGiftWrapJson = localSignEventWithKey(giftWrap.toString(), ephPrivKey);
+            if (signedGiftWrapJson == null) {
+                Log.w(LOG_TAG, "[VoiceCall] declined-event: sign gift wrap failed for "
+                    + recipientLabel);
+                return 0;
+            }
+
+            // 6. Publish to the recipient's NIP-17 messaging relays.
+            List<String> targetRelays = resolveRecipientRelays(recipientPubkeyHex);
+
+            String giftWrapId = "?";
+            try {
+                giftWrapId = new JSONObject(signedGiftWrapJson).optString("id", "?");
+            } catch (JSONException ignored) {}
+            Log.d(LOG_TAG, "[VoiceCall] declined-event: publishing wrapId="
+                + (giftWrapId.length() >= 8 ? giftWrapId.substring(0, 8) + ".." : giftWrapId)
+                + " to=" + recipientLabel + " across " + targetRelays.size() + " relays");
+
+            return publishEventToRelayUrls(signedGiftWrapJson, targetRelays);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[VoiceCall] encryptSealAndPublishGiftWrap failed for "
+                + recipientLabel, e);
+            return 0;
+        }
+    }
+
+    /**
      * Per NIP-17: randomize seal/gift-wrap created_at up to 2 days in the past.
      */
     private static long randomizedPastTimestamp(long nowSec) {

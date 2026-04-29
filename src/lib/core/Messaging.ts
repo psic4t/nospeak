@@ -27,6 +27,25 @@ import { isAndroidNative } from '$lib/core/NativeDialogs';
 const READ_RECEIPT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60;
 const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
 
+/**
+ * Persisted call-event types authored on terminal call transitions. Mirrors
+ * the union in `Message.callEventType` (sans the legacy fall-through values
+ * 'outgoing'/'incoming' which are not authored by current code) and the
+ * VoiceCallService's `AuthoredCallEventType`.
+ *
+ * Defined here rather than imported from VoiceCallService to avoid a
+ * circular module load — Messaging lazy-imports VoiceCallService at runtime
+ * for the signal-sender wiring.
+ */
+export type AuthoredCallEventType =
+    | 'missed'
+    | 'ended'
+    | 'no-answer'
+    | 'declined'
+    | 'busy'
+    | 'failed'
+    | 'cancelled';
+
  export class MessagingService {
     private debug: boolean = false;
     private isFetchingHistory: boolean = false;
@@ -102,8 +121,12 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
                  this.sendVoiceCallSignal(recipientNpub, signalContent)
          );
          voiceCallService.registerCallEventCreator(
-             (recipientNpub: string, type: string, duration?: number) =>
-                 this.createCallEventMessage(recipientNpub, type as any, duration)
+             (recipientNpub, type, duration, callId, initiatorPubkeyHex) =>
+                 this.createCallEventMessage(recipientNpub, type, duration, callId, initiatorPubkeyHex)
+         );
+         voiceCallService.registerLocalCallEventCreator(
+             (recipientNpub, type, callId, initiatorPubkeyHex) =>
+                 this.createLocalCallEventMessage(recipientNpub, type, callId, initiatorPubkeyHex)
          );
      });
 
@@ -523,6 +546,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
         const callEventTypeTag = rumor.tags?.find((t: string[]) => t[0] === 'call-event-type');
         const callDurationTag = rumor.tags?.find((t: string[]) => t[0] === 'call-duration');
         const callInitiatorTag = rumor.tags?.find((t: string[]) => t[0] === 'call-initiator');
+        const callIdTag = rumor.tags?.find((t: string[]) => t[0] === 'call-id');
 
         return {
           recipientNpub: partnerNpub,
@@ -536,6 +560,7 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
           callEventType: callEventTypeTag?.[1],
           callDuration: callDurationTag ? parseInt(callDurationTag[1]) : undefined,
           callInitiatorNpub: callInitiatorTag ? nip19.npubEncode(callInitiatorTag[1]) : undefined,
+          callId: callIdTag?.[1],
           conversationId,
           participants,
           senderNpub
@@ -1873,31 +1898,46 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
   }
 
   /**
-   * Create a call event message (missed, ended, etc.) as a Kind 16 rumor.
-   * Saved to DB and synced via Nostr for both parties.
+   * Create a call event message as a Kind 16 rumor that is gift-wrapped to
+   * the peer (and self-wrapped to the sender via standard NIP-59). Used for
+   * call-event types that should appear in BOTH peers' chat history:
+   * `ended`, `no-answer`, `declined`, `busy`, `failed`. The peer receives
+   * the rumor through the normal NIP-17 path and SHALL NOT author a
+   * duplicate locally.
+   *
+   * For asymmetric outcomes that only make sense on one side
+   * (`missed`, `cancelled`), use `createLocalCallEventMessage` instead.
+   *
+   * `callId` is the WebRTC call identifier; when supplied it's carried in a
+   * ['call-id', ...] tag. Purely advisory metadata — clients that don't
+   * understand the tag SHALL ignore it.
+   *
+   * `initiatorNpub` SHALL be the WebRTC call initiator's npub (the side
+   * that originally invoked initiateCall). When omitted, defaults to the
+   * local user — correct for caller-authored types (`ended` while the
+   * local user is the call initiator, `cancelled`, `no-answer`, `busy`,
+   * `failed`). Callee-authored types (`declined`) MUST pass the caller's
+   * npub explicitly so the renderer can pick role-aware copy via the
+   * persisted `call-initiator` tag.
    */
   public async createCallEventMessage(
     recipientNpub: string,
-    callEventType: 'missed' | 'outgoing' | 'incoming' | 'ended',
-    duration?: number
+    callEventType: AuthoredCallEventType,
+    duration?: number,
+    callId?: string,
+    initiatorNpub?: string
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
 
     const pubkey = await s.getPublicKey();
-    const senderNpub = nip19.npubEncode(pubkey);
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+    const initiatorPubkey = initiatorNpub
+        ? (nip19.decode(initiatorNpub).data as string)
+        : pubkey;
+    const resolvedInitiatorNpub = initiatorNpub ?? nip19.npubEncode(initiatorPubkey);
 
-    const tags: string[][] = [
-        ['p', recipientPubkey],
-        ['type', 'call-event'],
-        ['call-event-type', callEventType],
-        ['call-initiator', pubkey]
-    ];
-
-    if (duration !== undefined) {
-        tags.push(['call-duration', String(duration)]);
-    }
+    const tags = this.buildCallEventTags(recipientPubkey, callEventType, initiatorPubkey, duration, callId);
 
     const rumor: Partial<NostrEvent> = {
         kind: 16,
@@ -1910,8 +1950,93 @@ const READ_RECEIPT_EXPIRATION_MS = READ_RECEIPT_EXPIRATION_SECONDS * 1000;
     await this.sendEnvelope({
         recipients: [recipientNpub],
         rumor,
-        messageDbFields: { callEventType, callDuration: duration, callInitiatorNpub: senderNpub }
+        messageDbFields: {
+            callEventType,
+            callDuration: duration,
+            callInitiatorNpub: resolvedInitiatorNpub,
+            callId
+        }
     });
+  }
+
+  /**
+   * Create a call event message as a LOCAL-ONLY Kind 16 rumor: built with
+   * the same tag structure as the gift-wrapped variant but persisted only
+   * to the local message database — no relay publish, no gift-wrap, no
+   * self-wrap. Used for `missed` and `cancelled`, where each side observes
+   * a different reality (the caller observes "I cancelled"; the callee
+   * observes "I missed"), and gift-wrapping either rumor to both peers
+   * would produce duplicate pills with conflicting wording.
+   *
+   * The DB row carries `direction: 'sent'` because the local user is the
+   * author; `eventId` is set to the rumor id (no gift-wrap exists to take
+   * an id from), which keeps the unique-eventId constraint happy as long
+   * as no two local-only rumors collide in the same call.
+   */
+  public async createLocalCallEventMessage(
+    recipientNpub: string,
+    callEventType: AuthoredCallEventType,
+    callId?: string,
+    initiatorNpub?: string
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const pubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+    const initiatorPubkey = initiatorNpub
+        ? (nip19.decode(initiatorNpub).data as string)
+        : pubkey;
+    const resolvedInitiatorNpub = initiatorNpub ?? nip19.npubEncode(initiatorPubkey);
+
+    const tags = this.buildCallEventTags(recipientPubkey, callEventType, initiatorPubkey, undefined, callId);
+    const createdAtSec = Math.floor(Date.now() / 1000);
+
+    const rumor: Partial<NostrEvent> = {
+        kind: 16,
+        created_at: createdAtSec,
+        content: '',
+        tags,
+        pubkey
+    };
+
+    const rumorId = getEventHash(rumor as NostrEvent);
+
+    await messageRepo.saveMessage({
+        recipientNpub,
+        message: '',
+        sentAt: createdAtSec * 1000,
+        eventId: rumorId,
+        rumorId,
+        direction: 'sent',
+        createdAt: Date.now(),
+        rumorKind: 16,
+        callEventType,
+        callInitiatorNpub: resolvedInitiatorNpub,
+        callId
+    } as any);
+  }
+
+  private buildCallEventTags(
+    recipientPubkey: string,
+    callEventType: AuthoredCallEventType,
+    initiatorPubkey: string,
+    duration: number | undefined,
+    callId: string | undefined
+  ): string[][] {
+    const tags: string[][] = [
+        ['p', recipientPubkey],
+        ['type', 'call-event'],
+        ['call-event-type', callEventType],
+        ['call-initiator', initiatorPubkey]
+    ];
+    if (duration !== undefined) {
+        tags.push(['call-duration', String(duration)]);
+    }
+    if (callId !== undefined) {
+        tags.push(['call-id', callId]);
+    }
+    return tags;
   }
 
   /**
