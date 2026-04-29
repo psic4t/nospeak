@@ -720,18 +720,25 @@ public class NativeBackgroundMessagingService extends Service {
                 try {
                     JSONArray filters = new JSONArray();
                     JSONObject filter = new JSONObject();
-                    filter.put("kinds", new JSONArray().put(1059));
- 
+                    // Subscribe to BOTH NIP-17 chat gift wraps (kind 1059)
+                    // and NIP-AC ephemeral signaling wraps (kind 21059).
+                    // The dispatch branches on event.kind in
+                    // handleLiveGiftWrapEvent.
+                    JSONArray kinds = new JSONArray();
+                    kinds.put(1059);
+                    kinds.put(21059);
+                    filter.put("kinds", kinds);
+
                     JSONArray pTag = new JSONArray();
                     pTag.put(pubkeyHex);
                     filter.put("#p", pTag);
                     filters.put(filter);
- 
+
                     JSONArray req = new JSONArray();
                     req.put("REQ");
                     req.put("nospeak-native-bg");
                     req.put(filter);
- 
+
                     webSocket.send(req.toString());
                 } catch (JSONException e) {
                     // Ignore malformed JSON construction
@@ -872,7 +879,9 @@ public class NativeBackgroundMessagingService extends Service {
             if (event == null) return;
 
             int kind = event.optInt("kind", -1);
-            if (kind != 1059) return;
+            // Accept kind 1059 (NIP-17 chat / call-history) and kind 21059
+            // (NIP-AC ephemeral voice-call signaling).
+            if (kind != 1059 && kind != 21059) return;
 
             String id = event.optString("id", null);
             if (id == null) return;
@@ -881,6 +890,15 @@ public class NativeBackgroundMessagingService extends Service {
                 if (seenEventIds.contains(id)) {
                     return;
                 }
+            }
+
+            if (kind == 21059) {
+                // NIP-AC: dispatch natively (offer notification / cancel
+                // pending) and never queue for JS — the live JS path
+                // re-receives via its own subscription. No-op if not the
+                // ringing user.
+                handleNipAcWrapEvent(event, id);
+                return;
             }
 
             // Process the event natively first. If it's a voice-call rumor, skip
@@ -955,21 +973,18 @@ public class NativeBackgroundMessagingService extends Service {
             return false;
         }
 
-        // Voice-call rumors are kind 14 with a ['type', 'voice-call'] tag.
-        // Route to the incoming-call flow instead of the chat-notification path.
-        String rumorType = getTagValue(rumor.tags, "type");
-        if ("voice-call".equals(rumorType)) {
-            // Dedup by gift-wrap event ID to suppress duplicates delivered by
-            // multiple relays (or after a relay reconnect). Without this, the
-            // ringing screen would re-appear after the user declines, because
-            // the same offer event is re-delivered from another relay.
-            if (!markEventIdSeen(eventId)) {
-                if (isDebugBuild()) {
-                    Log.d(LOG_TAG, "[VoiceCall] Skip duplicate gift wrap " + eventId);
-                }
-                return true;
+        // Legacy nospeak voice-call rumors (kind 14 with ['type','voice-call'])
+        // are silently dropped after the NIP-AC migration. NIP-AC voice
+        // signaling now travels in kind 21059 wraps with kinds 25050-25054
+        // inner events; see handleNipAcWrapEvent. Returning true tells the
+        // caller not to queue this for JS replay (which would not consume
+        // it anyway after the JS-side migration).
+        String legacyRumorType = getTagValue(rumor.tags, "type");
+        if ("voice-call".equals(legacyRumorType)) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] dropping legacy kind-14 voice-call rumor; "
+                    + "peer is on a pre-NIP-AC build");
             }
-            handleVoiceCallRumor(rumor);
             return true;
         }
 
@@ -2966,7 +2981,12 @@ public class NativeBackgroundMessagingService extends Service {
 
         try {
             JSONObject filter = new JSONObject();
-            filter.put("kinds", new JSONArray().put(1059));
+            // Subscribe to both kind 1059 (NIP-17 chat / call history) and
+            // kind 21059 (NIP-AC ephemeral signaling).
+            JSONArray kinds = new JSONArray();
+            kinds.put(1059);
+            kinds.put(21059);
+            filter.put("kinds", kinds);
 
             JSONArray pTag = new JSONArray();
             pTag.put(currentPubkeyHex);
@@ -3075,118 +3095,6 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * Handle a decrypted voice-call signaling rumor. Only `offer` actions produce
-     * a user-visible incoming-call notification; other actions (answer, ice-candidate,
-     * hangup, reject, busy) arriving while the app is closed are useless without an
-     * active in-JS call session and are silently discarded.
-     */
-    private void handleVoiceCallRumor(DecryptedRumor rumor) {
-        if (rumor == null || rumor.pubkeyHex == null) return;
-
-        org.json.JSONObject signal;
-        try {
-            signal = new org.json.JSONObject(rumor.content);
-        } catch (org.json.JSONException e) {
-            Log.w(LOG_TAG, "[VoiceCall] Malformed signal content; dropping");
-            return;
-        }
-        if (!"voice-call".equals(signal.optString("type"))) return;
-        String action = signal.optString("action");
-        String callId = signal.optString("callId");
-        if (callId == null || callId.isEmpty()) return;
-
-        // NIP-40 expiration check (defense in depth — JS will check too).
-        String expirationStr = getTagValue(rumor.tags, "expiration");
-        long nowSec = System.currentTimeMillis() / 1000L;
-        long expiresAt = 0L;
-        if (expirationStr != null) {
-            try { expiresAt = Long.parseLong(expirationStr); } catch (NumberFormatException ignored) {}
-            if (expiresAt > 0 && expiresAt < nowSec) {
-                Log.d(LOG_TAG, "[VoiceCall] Dropping expired signal");
-                return;
-            }
-        }
-
-        // Hangup-while-ringing: if the caller cancels before the user answers,
-        // dismiss the ringing screen and the incoming-call notification.
-        if ("hangup".equals(action) || "reject".equals(action) || "busy".equals(action)) {
-            handleRemoteCallCancellation(callId);
-            return;
-        }
-
-        // Only 'offer' actions while the app is closed produce notifications.
-        if (!"offer".equals(action)) {
-            Log.d(LOG_TAG, "[VoiceCall] Discarding action='" + action + "' while app closed");
-            return;
-        }
-
-        String senderPubkeyHex = rumor.pubkeyHex;
-        String senderNpub;
-        try {
-            senderNpub = Bech32.pubkeyHexToNpub(senderPubkeyHex);
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "[VoiceCall] Failed to encode sender npub", e);
-            return;
-        }
-
-        // Persist the offer for JS cold-start handoff.
-        SharedPreferences prefs = getSharedPreferences(
-            "nospeak_pending_incoming_call", MODE_PRIVATE);
-        prefs.edit()
-            .putString("signalJson", signal.toString())
-            .putString("senderNpub", senderNpub)
-            .putString("senderPubkeyHex", senderPubkeyHex)
-            .putString("callId", callId)
-            .putLong("receivedAt", nowSec)
-            .putLong("expiresAt", expiresAt)
-            .apply();
-
-        // Look up display name from existing profile cache.
-        String peerName;
-        String pictureUrl = null;
-        AndroidProfileCachePrefs.Identity identity =
-            AndroidProfileCachePrefs.get(this, senderPubkeyHex);
-        if (identity != null && identity.username != null && !identity.username.isEmpty()) {
-            peerName = identity.username;
-        } else {
-            peerName = senderNpub.length() > 16 ? senderNpub.substring(0, 16) + "…" : senderNpub;
-        }
-        if (identity != null) {
-            pictureUrl = identity.pictureUrl;
-        }
-
-        // Resolve the caller avatar (cached circular bitmap → identicon fallback)
-        // for the heads-up notification's CallStyle. Mirrors the DM notification
-        // path in enqueueChatNotification / buildSingleChatNotification.
-        Bitmap callerAvatar = resolveCachedAvatarBitmap(senderPubkeyHex, pictureUrl);
-        if (callerAvatar == null) {
-            try {
-                callerAvatar = generateIdenticonForPubkey(senderPubkeyHex);
-            } catch (Throwable t) {
-                Log.d(LOG_TAG, "[VoiceCall] Identicon generation failed; continuing without avatar", t);
-            }
-        }
-
-        // If avatar was missing, kick off async backfill so the next call has it.
-        if (callerAvatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
-            try {
-                fetchConversationAvatar(senderPubkeyHex, pictureUrl.trim());
-            } catch (Throwable t) {
-                Log.d(LOG_TAG, "[VoiceCall] Avatar backfill enqueue failed", t);
-            }
-        }
-
-        // Post the incoming-call notification (full-screen-intent or heads-up depending on permission).
-        IncomingCallNotification.post(this, callId, peerName, senderNpub, senderPubkeyHex, callerAvatar);
-
-        // If app is foreground, push an event so JS can pick the offer up immediately
-        // (rather than waiting for the user to tap the notification).
-        if (MainActivity.isAppVisible()) {
-            AndroidVoiceCallPlugin.emitPendingCallAvailable(callId);
-        }
-    }
-
-    /**
      * Cleans up after a remote hangup/reject/busy received while the local user
      * has a pending incoming-call ringing (i.e., the offer is in SharedPrefs and
      * the IncomingCallActivity / notification may be showing).
@@ -3224,12 +3132,217 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
-     * Send a NIP-17 gift-wrapped {@code reject} voice-call signal back to the caller.
+     * NIP-AC ephemeral gift-wrap (kind 21059) handler.
      *
-     * Constructs the rumor → seal → gift-wrap pipeline natively (Java + BouncyCastle),
-     * mirroring the JS path in {@code Messaging.sendVoiceCallSignal}. Supports both
-     * nsec mode (pure Java) and amber mode (Amber NIP-55 ContentResolver for sign +
-     * NIP44 encrypt of the inner rumor; the outer gift-wrap layer always uses an
+     * Decrypts the wrap directly to the signed inner event (no seal
+     * layer), applies a 60-second created_at staleness check, dedups by
+     * inner event ID, and dispatches based on inner kind:
+     * <ul>
+     *   <li>25050 (Call Offer): persist to SharedPrefs and post the FSI
+     *       ringer notification, AFTER follow-gating against the saved
+     *       NIP-02 contact-list set.</li>
+     *   <li>25053 (Hangup) and 25054 (Reject): treated as a remote
+     *       cancellation of any pending ringing call.</li>
+     *   <li>25051 (Answer), 25052 (ICE), self-authored events: silently
+     *       discarded — these are useless without an active in-JS call
+     *       session and the JS layer has its own subscription for them
+     *       once the user is in-app.</li>
+     * </ul>
+     *
+     * NOTE: signature verification on the inner event is NOT performed
+     * here. Without a Java-side BIP-340 verifier we trust that the
+     * combination of NIP-44 decryption (which requires a valid shared
+     * key with the user's identity) and the JS-layer signature check
+     * (in unwrapNipAcGiftWrap) is sufficient. The native side's only
+     * effect is the FSI ring; a forged offer that decrypts can ring
+     * the user once but cannot establish a call without the real key.
+     */
+    private void handleNipAcWrapEvent(JSONObject wrap, String wrapEventId) {
+        if (currentPubkeyHex == null || currentPubkeyHex.isEmpty()) return;
+
+        // Note: do NOT early-return on MainActivity.isAppVisible(). On Android,
+        // the native IncomingCallNotification (heads-up + lockscreen FSI) is
+        // the authoritative incoming-call UI on ALL foreground states — the
+        // JS-side IncomingCallOverlay is suppressed via +layout.svelte's
+        // `{#if !isAndroidApp}` guard, and Messaging.handleNipAcWrap also
+        // skips kind-25050 dispatch on Android. If both layers defer, the
+        // offer is dropped silently. The legacy kind-14 path established
+        // this same invariant; see commit 1d236ed.
+        String outerSenderPubkeyHex = wrap.optString("pubkey", null);
+        String wrapCiphertext = wrap.optString("content", null);
+        if (outerSenderPubkeyHex == null || wrapCiphertext == null) return;
+
+        String innerJson = decryptNip44(wrapCiphertext, outerSenderPubkeyHex, currentPubkeyHex);
+        if (innerJson == null) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] decrypt failed wrap=" + wrapEventId);
+            }
+            return;
+        }
+
+        JSONObject inner;
+        try {
+            inner = new JSONObject(innerJson);
+        } catch (JSONException e) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] inner JSON parse failed wrap=" + wrapEventId);
+            }
+            return;
+        }
+
+        int innerKind = inner.optInt("kind", -1);
+        String innerSenderHex = inner.optString("pubkey", null);
+        String innerEventId = inner.optString("id", null);
+        long innerCreatedAt = inner.optLong("created_at", 0L);
+        String innerContent = inner.optString("content", "");
+        JSONArray innerTags = inner.optJSONArray("tags");
+
+        if (innerSenderHex == null || innerEventId == null || innerTags == null) return;
+
+        // Discard self-authored events — they are echoes of our own send.
+        // (Self-Answer / self-Reject for multi-device dismissal are
+        // handled by the JS layer when the app is open; while the app is
+        // closed there is no ringing UI to dismiss.)
+        if (innerSenderHex.equalsIgnoreCase(currentPubkeyHex)) {
+            return;
+        }
+
+        // 60s staleness check.
+        long nowSec = System.currentTimeMillis() / 1000L;
+        if (nowSec - innerCreatedAt > 60L) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] drop stale inner kind=" + innerKind
+                    + " ageSec=" + (nowSec - innerCreatedAt));
+            }
+            return;
+        }
+
+        // Dedup by inner event id (the wrap id is randomized per relay
+        // ephemeral key, but the inner id is stable).
+        if (!markEventIdSeen(innerEventId)) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] drop duplicate inner=" + innerEventId);
+            }
+            return;
+        }
+
+        String callId = getTagValue(innerTags, "call-id");
+        if (callId == null || callId.isEmpty()) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] drop inner with no call-id kind=" + innerKind);
+            }
+            return;
+        }
+
+        // Hangup / Reject of a currently-ringing call: dismiss the FSI.
+        if (innerKind == 25053 || innerKind == 25054) {
+            handleRemoteCallCancellation(callId);
+            return;
+        }
+
+        // Only Call Offer (25050) produces a notification while the app
+        // is closed. Answer/ICE are useless without a JS call session.
+        if (innerKind != 25050) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] drop non-offer kind while app closed: " + innerKind);
+            }
+            return;
+        }
+
+        // Follow-gate: drop offers from non-followed pubkeys, and drop
+        // entirely if the JS layer has not yet persisted the contact
+        // list (cold-start rule).
+        java.util.Set<String> followSet =
+            AndroidBackgroundMessagingPrefs.loadFollowGateHex(getApplicationContext());
+        if (followSet == null) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] drop offer; follow-gate cache not loaded");
+            }
+            return;
+        }
+        if (!followSet.contains(innerSenderHex.toLowerCase())) {
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] drop offer from non-followed sender");
+            }
+            return;
+        }
+
+        // Extract NIP-AC tags.
+        String callType = getTagValue(innerTags, "call-type");
+        if (callType == null) callType = "voice";
+        String alt = getTagValue(innerTags, "alt");
+        if (alt == null) alt = "WebRTC call offer";
+
+        String senderNpub;
+        try {
+            senderNpub = Bech32.pubkeyHexToNpub(innerSenderHex);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] failed to encode sender npub", e);
+            return;
+        }
+
+        // Persist the offer for JS cold-start handoff. Schema is the
+        // NIP-AC shape — sdp + peerHex + callType + alt + innerEventId
+        // + createdAt — distinct from the legacy signalJson shape.
+        SharedPreferences prefs = getSharedPreferences(
+            "nospeak_pending_incoming_call", MODE_PRIVATE);
+        prefs.edit()
+            .putString("callId", callId)
+            .putString("sdp", innerContent)
+            .putString("peerHex", innerSenderHex)
+            .putString("callType", callType)
+            .putString("alt", alt)
+            .putString("innerEventId", innerEventId)
+            .putLong("createdAt", innerCreatedAt)
+            .apply();
+
+        // Look up display name from existing profile cache.
+        String peerName;
+        String pictureUrl = null;
+        AndroidProfileCachePrefs.Identity identity =
+            AndroidProfileCachePrefs.get(this, innerSenderHex);
+        if (identity != null && identity.username != null && !identity.username.isEmpty()) {
+            peerName = identity.username;
+        } else {
+            peerName = senderNpub.length() > 16 ? senderNpub.substring(0, 16) + "…" : senderNpub;
+        }
+        if (identity != null) {
+            pictureUrl = identity.pictureUrl;
+        }
+
+        Bitmap callerAvatar = resolveCachedAvatarBitmap(innerSenderHex, pictureUrl);
+        if (callerAvatar == null) {
+            try {
+                callerAvatar = generateIdenticonForPubkey(innerSenderHex);
+            } catch (Throwable t) {
+                Log.d(LOG_TAG, "[NIP-AC] identicon generation failed", t);
+            }
+        }
+        if (callerAvatar == null && pictureUrl != null && !pictureUrl.trim().isEmpty()) {
+            try {
+                fetchConversationAvatar(innerSenderHex, pictureUrl.trim());
+            } catch (Throwable t) {
+                Log.d(LOG_TAG, "[NIP-AC] avatar backfill enqueue failed", t);
+            }
+        }
+
+        IncomingCallNotification.post(this, callId, peerName, senderNpub, innerSenderHex, callerAvatar);
+
+        if (MainActivity.isAppVisible()) {
+            AndroidVoiceCallPlugin.emitPendingCallAvailable(callId);
+        }
+    }
+
+    /**
+     * Send a NIP-AC kind-25054 Call Reject signal back to the caller, with
+     * an additional self-wrap to the user's own pubkey for multi-device
+     * "rejected elsewhere" dismissal.
+     *
+     * Constructs a NIP-AC kind-21059 ephemeral gift wrap natively (no
+     * NIP-13 seal layer), mirroring the JS path in
+     * {@code Messaging.sendCallReject}. Supports both nsec mode (pure
+     * Java) and amber mode (Amber NIP-55 ContentResolver signs the
+     * inner kind-25054 event; the outer 21059 wrap always uses a fresh
      * ephemeral key signed locally).
      *
      * Best-effort: failure to encrypt, sign, or publish results in a log warning
@@ -3247,142 +3360,128 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
-        Log.d(LOG_TAG, "[VoiceCall] reject: starting callId=" + callId
+        Log.d(LOG_TAG, "[NIP-AC] reject (25054): starting callId=" + callId
             + " recipient=" + (recipientPubkeyHex.length() >= 8
                 ? recipientPubkeyHex.substring(0, 8) + ".." : recipientPubkeyHex)
             + " mode=" + currentMode);
 
         try {
             long nowSec = System.currentTimeMillis() / 1000L;
-            long expiresAt = nowSec + 60L;
 
-            // 1. Build the voice-call signal payload.
-            JSONObject signal = new JSONObject();
-            signal.put("type", "voice-call");
-            signal.put("action", "reject");
-            signal.put("callId", callId);
-            String signalContent = signal.toString();
-
-            // 2. Build the unsigned rumor (kind 14). NIP-17 rumors carry an id but
-            // are NOT signed — only the seal and gift-wrap are signed.
-            JSONObject rumor = new JSONObject();
-            rumor.put("kind", 14);
-            rumor.put("created_at", nowSec);
-            rumor.put("content", signalContent);
-            rumor.put("pubkey", currentPubkeyHex);
-            JSONArray rumorTags = new JSONArray();
+            // 1. Build the signed inner Call Reject event (kind 25054).
+            //    Content is empty (we don't signal "busy" from the native
+            //    decline path — busy-reject is a JS-side concern).
+            JSONObject inner = new JSONObject();
+            inner.put("kind", 25054);
+            inner.put("created_at", nowSec);
+            inner.put("content", "");
+            inner.put("pubkey", currentPubkeyHex);
+            JSONArray innerTags = new JSONArray();
             JSONArray pTag = new JSONArray();
             pTag.put("p");
             pTag.put(recipientPubkeyHex);
-            rumorTags.put(pTag);
-            JSONArray typeTag = new JSONArray();
-            typeTag.put("type");
-            typeTag.put("voice-call");
-            rumorTags.put(typeTag);
-            JSONArray expTag = new JSONArray();
-            expTag.put("expiration");
-            expTag.put(String.valueOf(expiresAt));
-            rumorTags.put(expTag);
-            rumor.put("tags", rumorTags);
+            innerTags.put(pTag);
+            JSONArray callIdTag = new JSONArray();
+            callIdTag.put("call-id");
+            callIdTag.put(callId);
+            innerTags.put(callIdTag);
+            JSONArray altTag = new JSONArray();
+            altTag.put("alt");
+            altTag.put("WebRTC call rejection");
+            innerTags.put(altTag);
+            inner.put("tags", innerTags);
 
-            String rumorSerialized = serializeEventForId(rumor);
-            byte[] rumorIdBytes = sha256Bytes(rumorSerialized.getBytes(StandardCharsets.UTF_8));
-            if (rumorIdBytes == null) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: rumor id hash failed");
+            String innerSerialized = serializeEventForId(inner);
+            byte[] innerIdBytes = sha256Bytes(innerSerialized.getBytes(StandardCharsets.UTF_8));
+            if (innerIdBytes == null) {
+                Log.w(LOG_TAG, "[NIP-AC] reject: inner id hash failed");
                 return;
             }
-            rumor.put("id", bytesToHex(rumorIdBytes));
+            inner.put("id", bytesToHex(innerIdBytes));
 
-            // 3. Encrypt rumor → seal content using the user's key.
-            String sealContent = encryptNip44(rumor.toString(), recipientPubkeyHex);
-            if (sealContent == null) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: encrypt rumor failed (sealContent null)");
-                return;
-            }
-
-            // 4. Build seal (kind 13), sign with user key (local Schnorr or Amber).
-            JSONObject seal = new JSONObject();
-            seal.put("kind", 13);
-            seal.put("pubkey", currentPubkeyHex);
-            seal.put("created_at", randomizedPastTimestamp(nowSec));
-            seal.put("content", sealContent);
-            JSONArray sealTags = new JSONArray();
-            JSONArray sealExpTag = new JSONArray();
-            sealExpTag.put("expiration");
-            sealExpTag.put(String.valueOf(expiresAt));
-            sealTags.put(sealExpTag);
-            seal.put("tags", sealTags);
-
-            String signedSealJson = signEvent(seal.toString());
-            if (signedSealJson == null) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: sign seal failed");
+            String signedInnerJson = signEvent(inner.toString());
+            if (signedInnerJson == null) {
+                Log.w(LOG_TAG, "[NIP-AC] reject: sign inner failed");
                 return;
             }
 
-            // 5. Generate ephemeral keypair, encrypt seal → gift-wrap content.
+            // 2. Wrap to recipient (NIP-AC kind 21059, single layer, no seal).
+            String recipientWrapJson = buildNipAcWrap(signedInnerJson, recipientPubkeyHex, nowSec);
+            if (recipientWrapJson == null) return;
+
+            List<String> recipientRelays = resolveRecipientRelays(recipientPubkeyHex);
+            int sentRecipient = publishEventToRelayUrls(recipientWrapJson, recipientRelays);
+            Log.d(LOG_TAG, "[NIP-AC] reject: published recipient wrap "
+                + sentRecipient + "/" + recipientRelays.size());
+
+            // 3. Self-wrap for multi-device "rejected elsewhere".
+            String selfWrapJson = buildNipAcWrap(signedInnerJson, currentPubkeyHex, nowSec);
+            if (selfWrapJson != null) {
+                List<String> selfRelays = resolveRecipientRelays(currentPubkeyHex);
+                int sentSelf = publishEventToRelayUrls(selfWrapJson, selfRelays);
+                Log.d(LOG_TAG, "[NIP-AC] reject: published self-wrap "
+                    + sentSelf + "/" + selfRelays.size());
+            }
+
+            Log.d(LOG_TAG, "[NIP-AC] reject DONE callId=" + callId);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] sendVoiceCallReject failed", e);
+        }
+    }
+
+    /**
+     * Build a signed NIP-AC kind-21059 ephemeral gift wrap around an
+     * already-signed inner event JSON, addressed to the given recipient
+     * hex pubkey. Returns the signed wrap JSON, or {@code null} on any
+     * failure (logged at WARN).
+     */
+    private String buildNipAcWrap(String signedInnerJson, String recipientPubkeyHex, long nowSec) {
+        try {
             byte[] ephPrivKey = generateRandomSecretKey();
             String ephPubkeyHex = derivePublicKeyHex(ephPrivKey);
             if (ephPubkeyHex == null) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: ephemeral pubkey derivation failed");
-                return;
+                Log.w(LOG_TAG, "[NIP-AC] wrap: ephemeral pubkey derivation failed");
+                return null;
             }
-
-            byte[] giftWrapConvKey;
+            byte[] convKey;
             try {
-                giftWrapConvKey = getConversationKey(ephPrivKey, recipientPubkeyHex);
+                convKey = getConversationKey(ephPrivKey, recipientPubkeyHex);
             } catch (Exception e) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: gift-wrap conversation key failed", e);
-                return;
+                Log.w(LOG_TAG, "[NIP-AC] wrap: conversation key failed", e);
+                return null;
             }
-            String giftWrapContent = nip44V2EncryptPayload(signedSealJson, giftWrapConvKey);
-            if (giftWrapContent == null) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: encrypt seal failed");
-                return;
-            }
-
-            // 6. Build gift wrap (kind 1059), sign locally with the ephemeral key.
-            JSONObject giftWrap = new JSONObject();
-            giftWrap.put("kind", 1059);
-            giftWrap.put("pubkey", ephPubkeyHex);
-            giftWrap.put("created_at", randomizedPastTimestamp(nowSec));
-            giftWrap.put("content", giftWrapContent);
-            JSONArray gwTags = new JSONArray();
-            JSONArray gwPTag = new JSONArray();
-            gwPTag.put("p");
-            gwPTag.put(recipientPubkeyHex);
-            gwTags.put(gwPTag);
-            JSONArray gwExpTag = new JSONArray();
-            gwExpTag.put("expiration");
-            gwExpTag.put(String.valueOf(expiresAt));
-            gwTags.put(gwExpTag);
-            giftWrap.put("tags", gwTags);
-
-            String signedGiftWrapJson = localSignEventWithKey(giftWrap.toString(), ephPrivKey);
-            if (signedGiftWrapJson == null) {
-                Log.w(LOG_TAG, "[VoiceCall] reject: sign gift wrap failed");
-                return;
+            String wrapContent = nip44V2EncryptPayload(signedInnerJson, convKey);
+            if (wrapContent == null) {
+                Log.w(LOG_TAG, "[NIP-AC] wrap: encrypt failed");
+                return null;
             }
 
-            // 7. Publish to the recipient's NIP-17 messaging relays (kind 10050)
-            //    if cached, falling back to all currently-connected relay sockets.
-            //    NIP-17 gift wraps must reach the recipient's preferred DM relays
-            //    or the recipient (subscribed to those) won't see them.
-            List<String> targetRelays = resolveRecipientRelays(recipientPubkeyHex);
+            JSONObject wrap = new JSONObject();
+            wrap.put("kind", 21059);
+            wrap.put("pubkey", ephPubkeyHex);
+            // Use nowSec (NOT randomizedPastTimestamp): kind 21059 is an
+            // ephemeral event and relays reject anything more than a few
+            // seconds in the past with "invalid: ephemeral event expired".
+            // The wrap pubkey is already a fresh ephemeral key for sender
+            // anonymity; randomizing the timestamp adds nothing.
+            wrap.put("created_at", nowSec);
+            wrap.put("content", wrapContent);
+            JSONArray tags = new JSONArray();
+            JSONArray pTag = new JSONArray();
+            pTag.put("p");
+            pTag.put(recipientPubkeyHex);
+            tags.put(pTag);
+            wrap.put("tags", tags);
 
-            // Extract the wrap event id for OK-frame correlation in the logs.
-            String giftWrapId = "?";
-            try {
-                giftWrapId = new JSONObject(signedGiftWrapJson).optString("id", "?");
-            } catch (JSONException ignored) {}
-            Log.d(LOG_TAG, "[VoiceCall] reject: publishing wrapId="
-                + (giftWrapId.length() >= 8 ? giftWrapId.substring(0, 8) + ".." : giftWrapId)
-                + " to " + targetRelays.size() + " relays: " + targetRelays);
-
-            int sent = publishEventToRelayUrls(signedGiftWrapJson, targetRelays);
-            Log.d(LOG_TAG, "[VoiceCall] reject DONE callId=" + callId
-                + " sent=" + sent + "/" + targetRelays.size() + " relays");
+            String signedWrap = localSignEventWithKey(wrap.toString(), ephPrivKey);
+            if (signedWrap == null) {
+                Log.w(LOG_TAG, "[NIP-AC] wrap: sign wrap failed");
+                return null;
+            }
+            return signedWrap;
         } catch (Exception e) {
-            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallReject failed", e);
+            Log.w(LOG_TAG, "[NIP-AC] buildNipAcWrap failed", e);
+            return null;
         }
     }
 

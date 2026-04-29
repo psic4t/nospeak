@@ -21,7 +21,19 @@ import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaP
 import { contactSyncService } from './ContactSyncService';
 import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import type { Conversation } from '$lib/db/db';
-import { CALL_SIGNAL_EXPIRATION_SECONDS, CALL_HISTORY_KIND } from '$lib/core/voiceCall/constants';
+import {
+    CALL_HISTORY_KIND,
+    NIP_AC_GIFT_WRAP_KIND,
+    NIP_AC_KIND_OFFER,
+    NIP_AC_KIND_ANSWER,
+    NIP_AC_KIND_ICE,
+    NIP_AC_KIND_HANGUP,
+    NIP_AC_KIND_REJECT,
+    NIP_AC_STALENESS_SECONDS,
+    NIP_AC_PROCESSED_ID_CAPACITY
+} from '$lib/core/voiceCall/constants';
+import { createNipAcGiftWrap, unwrapNipAcGiftWrap } from '$lib/core/voiceCall/nipAcGiftWrap';
+import { followGate } from '$lib/core/voiceCall/followGate';
 import { isAndroidNative } from '$lib/core/NativeDialogs';
 
 const READ_RECEIPT_EXPIRATION_SECONDS = 7 * 24 * 60 * 60;
@@ -77,6 +89,15 @@ export type AuthoredCallEventType =
     // Short-lived relay cache for voice call signals (avoids repeated DB lookups per ICE candidate)
     private voiceCallRelayCache = new Map<string, { relays: string[], cachedAt: number }>();
     private readonly VOICE_RELAY_CACHE_TTL = 60_000; // 60 seconds
+
+    /**
+     * NIP-AC dedup ring: inner-event IDs of kind-21059 wraps already
+     * dispatched. Bounded by NIP_AC_PROCESSED_ID_CAPACITY; oldest entries
+     * evicted FIFO. Defends against the same signaling event being
+     * delivered by multiple relays.
+     */
+    private nipAcProcessedIds: string[] = [];
+    private nipAcProcessedIdSet: Set<string> = new Set();
  
     // Listen for incoming messages
     public listenForMessages(publicKey: string): () => void {
@@ -86,8 +107,11 @@ export type AuthoredCallEventType =
      // use randomized created_at timestamps (NIP-59 style),
      // which can place new messages in the past. We rely on
      // messageRepo.hasMessage() for deduplication.
+     // Subscribe to BOTH NIP-17 chat gift wraps (kind 1059) and NIP-AC
+     // ephemeral signaling wraps (kind 21059). The dispatch branches on
+     // event.kind in handleGiftWrap.
      const filters = [{
-       kinds: [1059], // Kind 1059 Gift Wrap
+       kinds: [1059, NIP_AC_GIFT_WRAP_KIND],
        '#p': [publicKey]
      }];
  
@@ -114,12 +138,23 @@ export type AuthoredCallEventType =
        await this.handleGiftWrap(event);
      });
  
-      // Register voice call callbacks (lazy import to avoid circular dependency)
+      // Register voice call callbacks (lazy import to avoid circular dependency).
+     // After the NIP-AC migration, VoiceCallService receives typed senders
+     // (one per inner-event kind) instead of a single JSON-serialising
+     // sendSignal callback.
      import('$lib/core/voiceCall/VoiceCallService').then(({ voiceCallService }) => {
-         voiceCallService.registerSignalSender(
-             (recipientNpub: string, signalContent: string) =>
-                 this.sendVoiceCallSignal(recipientNpub, signalContent)
-         );
+         voiceCallService.registerNipAcSenders({
+             sendOffer: (npub, callId, sdp) =>
+                 this.sendCallOffer(npub, callId, sdp),
+             sendAnswer: (npub, callId, sdp) =>
+                 this.sendCallAnswer(npub, callId, sdp),
+             sendIceCandidate: (npub, callId, candidate, sdpMid, sdpMLineIndex) =>
+                 this.sendIceCandidate(npub, callId, candidate, sdpMid, sdpMLineIndex),
+             sendHangup: (npub, callId, reason) =>
+                 this.sendCallHangup(npub, callId, reason),
+             sendReject: (npub, callId, reason) =>
+                 this.sendCallReject(npub, callId, reason)
+         });
          voiceCallService.registerCallEventCreator(
              (recipientNpub, type, duration, callId, initiatorPubkeyHex) =>
                  this.createCallEventMessage(recipientNpub, type, duration, callId, initiatorPubkeyHex)
@@ -212,10 +247,22 @@ export type AuthoredCallEventType =
 
 
   private async handleGiftWrap(event: NostrEvent) {
-    console.log('[VoiceCall][Recv] gift wrap received id=' + (event.id?.substring(0, 8) ?? '?'));
     const s = get(signer);
     if (!s) return;
 
+    // Branch on outer wrap kind:
+    //   1059 → NIP-17/NIP-59 chat & call-history pipeline (3-layer with seal)
+    //   21059 → NIP-AC ephemeral signaling pipeline (single-layer, signed inner)
+    if (event.kind === NIP_AC_GIFT_WRAP_KIND) {
+      console.log(
+        '[NIP-AC][Recv] kind 21059 wrap received id=' +
+          (event.id?.substring(0, 8) ?? '?')
+      );
+      await this.handleNipAcWrap(event, s);
+      return;
+    }
+
+    console.log('[VoiceCall][Recv] gift wrap received id=' + (event.id?.substring(0, 8) ?? '?'));
     try {
       // Step 1: Decrypt Gift Wrap
       if (!event.content || typeof event.content !== 'string') {
@@ -293,38 +340,18 @@ export type AuthoredCallEventType =
         return;
       }
 
-      // Route voice-call signals to VoiceCallService (don't save to DB)
-      const voiceCallTag = rumor.tags?.find((t: string[]) => t[0] === 'type' && t[1] === 'voice-call');
-      if (voiceCallTag) {
-        console.log('[VoiceCall][Recv] voice-call rumor id=' + (event.id?.substring(0, 8) ?? '?')
-            + ' rumorContent=' + (rumor.content ? rumor.content.substring(0, 200) : 'null'));
-        try {
-            const { voiceCallService } = await import('$lib/core/voiceCall/VoiceCallService');
-            const signal = voiceCallService.parseSignal(rumor.content);
-            if (signal) {
-                const senderNpub = nip19.npubEncode(rumor.pubkey);
-                console.log('[VoiceCall][Recv] parsed signal: action=' + signal.action
-                    + ' callId=' + signal.callId
-                    + ' senderNpub=' + senderNpub.substring(0, 12) + '...');
-                // On Android, the native ringing activity is the authoritative UI
-                // for incoming-call offers. Skip dispatching offers from the live
-                // JS subscription so the JS state machine doesn't go to
-                // 'incoming-ringing' with no UI to clear it. The accept path
-                // (incomingCallAcceptHandler) bypasses this filter and still calls
-                // voiceCallService.handleSignal directly when the user taps Accept.
-                // Other actions (answer / ice-candidate / hangup / reject / busy)
-                // remain dispatched — they relate to outgoing calls or active-call
-                // lifecycle and must reach the JS WebRTC pipeline.
-                if (signal.action === 'offer' && isAndroidNative()) {
-                    console.log('[VoiceCall][Recv] skip offer dispatch on Android (native UI is authoritative)');
-                    return;
-                }
-                await voiceCallService.handleSignal(signal, senderNpub);
-            } else {
-                console.warn('[VoiceCall][Recv] parseSignal returned null for content:', rumor.content);
-            }
-        } catch (err) {
-            console.error('[VoiceCall][Recv] Failed to handle voice call signal:', err);
+      // Legacy nospeak voice-call rumors (kind 14 with ['type','voice-call'])
+      // are dropped silently after the NIP-AC migration. Older clients on the
+      // pre-migration build will never reach a current client this way.
+      const legacyVoiceCallTag = rumor.tags?.find(
+        (t: string[]) => t[0] === 'type' && t[1] === 'voice-call'
+      );
+      if (legacyVoiceCallTag) {
+        if (this.debug) {
+          console.log(
+            '[NIP-AC] dropping legacy voice-call rumor (pre-NIP-AC build)',
+            { id: event.id?.substring(0, 8) }
+          );
         }
         return;
       }
@@ -334,6 +361,151 @@ export type AuthoredCallEventType =
 
     } catch (e) {
       console.error('Failed to unwrap/decrypt message:', e);
+    }
+  }
+
+  /**
+   * Handle a NIP-AC kind-21059 ephemeral gift wrap. Decrypts, verifies the
+   * inner event signature, applies staleness + dedup + self-event-filter
+   * + follow-gate, and dispatches surviving inner events to
+   * VoiceCallService.
+   */
+  private async handleNipAcWrap(event: NostrEvent, s: any): Promise<void> {
+    try {
+      const decryptFn = (senderPubkey: string, content: string) =>
+        s.decrypt(senderPubkey, content) as Promise<string>;
+      const inner = await unwrapNipAcGiftWrap(event, decryptFn);
+      if (!inner) {
+        // unwrap already logged the cause (decrypt failure / bad shape /
+        // invalid signature). Drop.
+        return;
+      }
+
+      // Staleness: drop inner events whose created_at is more than
+      // NIP_AC_STALENESS_SECONDS in the past. NIP-AC compensates for the
+      // absence of a NIP-40 expiration tag with this check.
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec - inner.created_at > NIP_AC_STALENESS_SECONDS) {
+        if (this.debug) {
+          console.log('[NIP-AC] drop stale inner event', {
+            kind: inner.kind,
+            ageSec: nowSec - inner.created_at
+          });
+        }
+        return;
+      }
+
+      // Dedup by inner event ID.
+      if (this.nipAcProcessedIdSet.has(inner.id)) {
+        if (this.debug) {
+          console.log('[NIP-AC] drop duplicate inner event', {
+            id: inner.id.substring(0, 8)
+          });
+        }
+        return;
+      }
+      this.nipAcProcessedIdSet.add(inner.id);
+      this.nipAcProcessedIds.push(inner.id);
+      if (this.nipAcProcessedIds.length > NIP_AC_PROCESSED_ID_CAPACITY) {
+        const evicted = this.nipAcProcessedIds.shift();
+        if (evicted) this.nipAcProcessedIdSet.delete(evicted);
+      }
+
+      // Validate kind range. NIP-AC defines 25050-25055; this scope
+      // supports 25050-25054 (no renegotiation). Drop unknown kinds.
+      const kind = inner.kind;
+      if (
+        kind !== NIP_AC_KIND_OFFER &&
+        kind !== NIP_AC_KIND_ANSWER &&
+        kind !== NIP_AC_KIND_ICE &&
+        kind !== NIP_AC_KIND_HANGUP &&
+        kind !== NIP_AC_KIND_REJECT
+      ) {
+        if (this.debug) {
+          console.log('[NIP-AC] drop unsupported inner kind', { kind });
+        }
+        return;
+      }
+
+      const myPubkey = await s.getPublicKey();
+      const isSelf = inner.pubkey === myPubkey;
+
+      // Self-event filter (NIP-AC §"Self-Event Filtering"):
+      //   - Self ICE / Hangup → always ignore
+      //   - Self Answer / Reject → ignored unless local status is
+      //     'incoming-ringing' AND call-id matches; in that case
+      //     transition to answered-elsewhere / rejected-elsewhere.
+      if (isSelf) {
+        if (kind === NIP_AC_KIND_ICE || kind === NIP_AC_KIND_HANGUP) {
+          return;
+        }
+        if (kind === NIP_AC_KIND_ANSWER || kind === NIP_AC_KIND_REJECT) {
+          try {
+            const { voiceCallService } = await import(
+              '$lib/core/voiceCall/VoiceCallService'
+            );
+            if (kind === NIP_AC_KIND_ANSWER) {
+              await voiceCallService.handleSelfAnswer(inner);
+            } else {
+              await voiceCallService.handleSelfReject(inner);
+            }
+          } catch (err) {
+            console.error('[NIP-AC] self-event handler failed', err);
+          }
+          return;
+        }
+        // Self Offer is a degenerate case (calling yourself). Drop.
+        return;
+      }
+
+      // Follow-gate: only Call Offer (kind 25050) is gated. In-progress
+      // signaling kinds (Answer/ICE/Hangup/Reject) bypass the gate.
+      if (kind === NIP_AC_KIND_OFFER) {
+        // Trigger initial load if cache is cold; result is awaited so
+        // first-call-after-startup races toward "loaded" rather than
+        // dropping forever. If the load is in flight when this runs,
+        // the same promise is reused.
+        await followGate.ensureLoaded();
+        if (!followGate.isLoaded()) {
+          if (this.debug) {
+            console.log('[NIP-AC] drop offer; contact list not loaded');
+          }
+          return;
+        }
+        if (!followGate.isFollowed(inner.pubkey)) {
+          if (this.debug) {
+            console.log('[NIP-AC] drop offer from non-followed pubkey', {
+              sender: inner.pubkey.substring(0, 8)
+            });
+          }
+          return;
+        }
+      }
+
+      // On Android, the native FSI is the authoritative ringing UI for
+      // incoming offers from a closed/backgrounded app. Skip dispatch
+      // here so the JS state machine doesn't enter incoming-ringing
+      // with no overlay to clear it. Other kinds and the cold-start
+      // accept path bypass this check.
+      if (kind === NIP_AC_KIND_OFFER && isAndroidNative()) {
+        if (this.debug) {
+          console.log(
+            '[NIP-AC] skip offer dispatch on Android (native UI authoritative)'
+          );
+        }
+        return;
+      }
+
+      try {
+        const { voiceCallService } = await import(
+          '$lib/core/voiceCall/VoiceCallService'
+        );
+        await voiceCallService.handleNipAcEvent(inner);
+      } catch (err) {
+        console.error('[NIP-AC] dispatch failed', err);
+      }
+    } catch (err) {
+      console.error('[NIP-AC] handleNipAcWrap failed', err);
     }
   }
 
@@ -2063,62 +2235,283 @@ export type AuthoredCallEventType =
     this.voiceCallRelayCache.clear();
   }
 
-  public async sendVoiceCallSignal(recipientNpub: string, signalContent: string): Promise<void> {
-    const s = get(signer);
-    if (!s) throw new Error('Not authenticated');
+  /**
+   * Build a signed NIP-AC inner event with required tags. The caller is
+   * responsible for filling `kind` and `content`. The user's signer is
+   * used to sign the event with its real key (NIP-AC inner events are
+   * signed, unlike NIP-17 rumors).
+   */
+  private async buildSignedNipAcInner(opts: {
+    s: any;
+    senderPubkey: string;
+    recipientPubkey: string;
+    kind: number;
+    content: string;
+    callId: string;
+    altText: string;
+    extraTags?: string[][];
+  }): Promise<NostrEvent> {
+    const tags: string[][] = [
+      ['p', opts.recipientPubkey],
+      ['call-id', opts.callId],
+      ['alt', opts.altText]
+    ];
+    if (opts.extraTags) tags.push(...opts.extraTags);
 
-    const pubkey = await s.getPublicKey();
-    const senderNpub = nip19.npubEncode(pubkey);
-    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+    const partial: Partial<NostrEvent> = {
+      kind: opts.kind,
+      pubkey: opts.senderPubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      content: opts.content,
+      tags
+    };
+    partial.id = getEventHash(partial as NostrEvent);
+    // signer.signEvent attaches `sig` and returns the fully-signed event.
+    return await opts.s.signEvent(partial);
+  }
 
-    // Use cached relay lookups for voice signals
-    const recipientRelays = await this.getVoiceCallRelays(recipientNpub);
+  /**
+   * Publish a signed NIP-AC inner event as a kind 21059 ephemeral gift
+   * wrap. If `selfWrap` is true, also publish a second wrap addressed to
+   * the sender's own pubkey (for multi-device "answered/rejected
+   * elsewhere"). NIP-AC requires self-wrap ONLY on Answer (25051) and
+   * Reject (25054). The recipient relay list is cached for 60 seconds
+   * via `getVoiceCallRelays`. Publishes only to already-connected relays
+   * to avoid subscription replays.
+   */
+  private async publishNipAcSignal(opts: {
+    signedInner: NostrEvent;
+    recipientNpub: string;
+    recipientPubkey: string;
+    senderPubkey: string;
+    selfWrap: boolean;
+  }): Promise<void> {
+    const recipientRelays = await this.getVoiceCallRelays(opts.recipientNpub);
     if (recipientRelays.length === 0) {
       throw new Error('Contact has no messaging relays configured');
     }
 
-    const nowSec = Math.floor(Date.now() / 1000);
-    const expiresAt = nowSec + CALL_SIGNAL_EXPIRATION_SECONDS;
-
-    const rumor: Partial<NostrEvent> = {
-        kind: 14,
-        created_at: nowSec,
-        content: signalContent,
-        tags: [
-            ['p', recipientPubkey, recipientRelays[0]],
-            ['type', 'voice-call'],
-            ['expiration', String(expiresAt)]
-        ],
-        pubkey
-    };
-
-    // Compute stable rumor ID
-    const rumorId = getEventHash(rumor as NostrEvent);
-    rumor.id = rumorId;
-
-    // Publish to already-connected relays only — don't add temporary relays
-    // for voice signals, as that triggers subscription replay and message floods.
-    // Filter to relays that are already connected.
-    const connectedRelays = recipientRelays.filter(url => {
+    const connectedRecipientRelays = recipientRelays.filter((url) => {
       const health = connectionManager.getRelayHealth(url);
       return health?.isConnected && health.relay;
     });
-
-    if (connectedRelays.length === 0) {
-      console.warn('[VoiceCall] No connected relays for recipient, signal may not be delivered');
-      // Fall back to all relays — publishWithDeadline will wait for connection
+    if (connectedRecipientRelays.length === 0) {
+      console.warn(
+        '[NIP-AC] No connected relays for recipient, signal may not be delivered'
+      );
     }
+    const publishRelays =
+      connectedRecipientRelays.length > 0
+        ? connectedRecipientRelays
+        : recipientRelays;
 
-    const publishRelays = connectedRelays.length > 0 ? connectedRelays : recipientRelays;
-
-    // NIP-40: gift wrap, seal, and rumor all carry the expiration so cooperating
-    // relays drop the gift wrap and any leaked seal/rumor are also marked expired.
-    const giftWrap = await this.createGiftWrap(rumor, recipientPubkey, s, expiresAt);
+    const recipientWrap = createNipAcGiftWrap(
+      opts.signedInner,
+      opts.recipientPubkey
+    );
     await publishWithDeadline({
       connectionManager,
-      event: giftWrap,
+      event: recipientWrap,
       relayUrls: publishRelays,
-      deadlineMs: 5000,
+      deadlineMs: 5000
+    });
+
+    if (opts.selfWrap) {
+      // Multi-device: publish a second wrap to the sender's own pubkey
+      // so other logged-in devices of the same user can transition to
+      // answered-elsewhere / rejected-elsewhere. Use the sender's own
+      // messaging relays (resolved via the same cache, keyed by their
+      // own npub) so the wrap reaches the user's own subscriptions.
+      const selfNpub = nip19.npubEncode(opts.senderPubkey);
+      const selfRelays = await this.getVoiceCallRelays(selfNpub);
+      const connectedSelfRelays = selfRelays.filter((url) => {
+        const health = connectionManager.getRelayHealth(url);
+        return health?.isConnected && health.relay;
+      });
+      const selfPublishRelays =
+        connectedSelfRelays.length > 0 ? connectedSelfRelays : selfRelays;
+      if (selfPublishRelays.length === 0) {
+        console.warn(
+          '[NIP-AC] No relays for self-wrap; multi-device signaling skipped'
+        );
+        return;
+      }
+      const selfWrap = createNipAcGiftWrap(
+        opts.signedInner,
+        opts.senderPubkey
+      );
+      await publishWithDeadline({
+        connectionManager,
+        event: selfWrap,
+        relayUrls: selfPublishRelays,
+        deadlineMs: 5000
+      });
+    }
+  }
+
+  /** NIP-AC kind 25050 Call Offer. SDP is the raw `content`. No self-wrap. */
+  public async sendCallOffer(
+    recipientNpub: string,
+    callId: string,
+    sdp: string
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const inner = await this.buildSignedNipAcInner({
+      s,
+      senderPubkey,
+      recipientPubkey,
+      kind: NIP_AC_KIND_OFFER,
+      content: sdp,
+      callId,
+      altText: 'WebRTC call offer',
+      extraTags: [['call-type', 'voice']]
+    });
+    await this.publishNipAcSignal({
+      signedInner: inner,
+      recipientNpub,
+      recipientPubkey,
+      senderPubkey,
+      selfWrap: false
+    });
+  }
+
+  /**
+   * NIP-AC kind 25051 Call Answer. SDP is the raw `content`. SELF-WRAPPED
+   * for multi-device "answered elsewhere" support.
+   */
+  public async sendCallAnswer(
+    recipientNpub: string,
+    callId: string,
+    sdp: string
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const inner = await this.buildSignedNipAcInner({
+      s,
+      senderPubkey,
+      recipientPubkey,
+      kind: NIP_AC_KIND_ANSWER,
+      content: sdp,
+      callId,
+      altText: 'WebRTC call answer'
+    });
+    await this.publishNipAcSignal({
+      signedInner: inner,
+      recipientNpub,
+      recipientPubkey,
+      senderPubkey,
+      selfWrap: true
+    });
+  }
+
+  /**
+   * NIP-AC kind 25052 ICE Candidate. `content` is a strict JSON object
+   * `{candidate, sdpMid, sdpMLineIndex}`. No self-wrap. The publish
+   * promise is intentionally NOT awaited at the VoiceCallService
+   * onicecandidate callsite (fire-and-forget), but this method awaits
+   * the wrap publish itself to surface failures via the caller's catch.
+   */
+  public async sendIceCandidate(
+    recipientNpub: string,
+    callId: string,
+    candidate: string,
+    sdpMid: string | null,
+    sdpMLineIndex: number | null
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const payload = {
+      candidate,
+      sdpMid,
+      sdpMLineIndex
+    };
+    const inner = await this.buildSignedNipAcInner({
+      s,
+      senderPubkey,
+      recipientPubkey,
+      kind: NIP_AC_KIND_ICE,
+      content: JSON.stringify(payload),
+      callId,
+      altText: 'WebRTC ICE candidate'
+    });
+    await this.publishNipAcSignal({
+      signedInner: inner,
+      recipientNpub,
+      recipientPubkey,
+      senderPubkey,
+      selfWrap: false
+    });
+  }
+
+  /** NIP-AC kind 25053 Call Hangup. No self-wrap. */
+  public async sendCallHangup(
+    recipientNpub: string,
+    callId: string,
+    reason?: string
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const inner = await this.buildSignedNipAcInner({
+      s,
+      senderPubkey,
+      recipientPubkey,
+      kind: NIP_AC_KIND_HANGUP,
+      content: reason ?? '',
+      callId,
+      altText: 'WebRTC call hangup'
+    });
+    await this.publishNipAcSignal({
+      signedInner: inner,
+      recipientNpub,
+      recipientPubkey,
+      senderPubkey,
+      selfWrap: false
+    });
+  }
+
+  /**
+   * NIP-AC kind 25054 Call Reject. SELF-WRAPPED for multi-device
+   * "rejected elsewhere" support. Pass `'busy'` as `reason` for the
+   * auto-reject from a non-idle state.
+   */
+  public async sendCallReject(
+    recipientNpub: string,
+    callId: string,
+    reason?: string
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const inner = await this.buildSignedNipAcInner({
+      s,
+      senderPubkey,
+      recipientPubkey,
+      kind: NIP_AC_KIND_REJECT,
+      content: reason ?? '',
+      callId,
+      altText: 'WebRTC call rejection'
+    });
+    await this.publishNipAcSignal({
+      signedInner: inner,
+      recipientNpub,
+      recipientPubkey,
+      senderPubkey,
+      selfWrap: true
     });
   }
 

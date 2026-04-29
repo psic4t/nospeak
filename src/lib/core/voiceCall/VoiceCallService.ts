@@ -1,5 +1,6 @@
 import { get } from 'svelte/store';
 import { Capacitor } from '@capacitor/core';
+import { nip19, type NostrEvent } from 'nostr-tools';
 import {
     setOutgoingRinging,
     setIncomingRinging,
@@ -7,16 +8,23 @@ import {
     setActive,
     endCall,
     toggleMute as storeMute,
-    resetCall,
     voiceCallState,
-    incrementDuration
+    incrementDuration,
+    setEndedAnsweredElsewhere,
+    setEndedRejectedElsewhere
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
 import { AndroidVoiceCall } from '$lib/core/voiceCall/androidVoiceCallPlugin';
-import { CALL_OFFER_TIMEOUT_MS, ICE_CONNECTION_TIMEOUT_MS, CALL_SIGNAL_TYPE, AUDIO_CONSTRAINTS } from './constants';
-import type { VoiceCallSignal } from './types';
-
-type SignalSender = (recipientNpub: string, signalContent: string) => Promise<void>;
+import {
+    CALL_OFFER_TIMEOUT_MS,
+    ICE_CONNECTION_TIMEOUT_MS,
+    AUDIO_CONSTRAINTS,
+    NIP_AC_KIND_OFFER,
+    NIP_AC_KIND_ANSWER,
+    NIP_AC_KIND_ICE,
+    NIP_AC_KIND_HANGUP,
+    NIP_AC_KIND_REJECT
+} from './constants';
 
 /**
  * Persisted call-event types authored on terminal call transitions. Mirrors
@@ -66,6 +74,27 @@ type LocalCallEventCreator = (
     initiatorNpub?: string
 ) => Promise<void>;
 
+/**
+ * Typed NIP-AC senders registered by Messaging.ts. One per inner-event
+ * kind. Each helper signs the inner event with the user's signer, wraps
+ * it in a kind-21059 ephemeral gift wrap, and publishes to connected
+ * relays. `sendAnswer` and `sendReject` additionally publish a
+ * self-wrap for multi-device "answered/rejected elsewhere".
+ */
+export interface NipAcSenders {
+    sendOffer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
+    sendAnswer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
+    sendIceCandidate: (
+        recipientNpub: string,
+        callId: string,
+        candidate: string,
+        sdpMid: string | null,
+        sdpMLineIndex: number | null
+    ) => Promise<void>;
+    sendHangup: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
+    sendReject: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
+}
+
 export class VoiceCallService {
     private peerConnection: RTCPeerConnection | null = null;
     private localStream: MediaStream | null = null;
@@ -73,7 +102,7 @@ export class VoiceCallService {
     private offerTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private iceTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private durationIntervalId: ReturnType<typeof setInterval> | null = null;
-    private sendSignalFn: SignalSender | null = null;
+    private senders: NipAcSenders | null = null;
     private createCallEventFn: CallEventCreator | null = null;
     private localCreateCallEventFn: LocalCallEventCreator | null = null;
     /**
@@ -93,8 +122,32 @@ export class VoiceCallService {
      */
     private isInitiator = false;
 
-    public registerSignalSender(fn: SignalSender): void {
-        this.sendSignalFn = fn;
+    /**
+     * NIP-AC ICE candidate buffering — global layer.
+     *
+     * Holds candidates received before any RTCPeerConnection exists for
+     * the sending peer. Keyed by sender hex pubkey. Drained into
+     * sessionPendingIce when createPeerConnection is invoked for that
+     * peer. Survives across acceptCall() so candidates that arrive while
+     * ringing are not lost.
+     */
+    private globalIceBuffer: Map<string, RTCIceCandidateInit[]> = new Map();
+
+    /**
+     * NIP-AC ICE candidate buffering — per-session layer.
+     *
+     * Holds candidates that arrived after the RTCPeerConnection was
+     * created but before setRemoteDescription() resolved. Flushed to
+     * peerConnection.addIceCandidate() in arrival order after
+     * setRemoteDescription resolves.
+     */
+    private sessionPendingIce: RTCIceCandidateInit[] = [];
+
+    /** True after setRemoteDescription resolves on the active session. */
+    private sessionRemoteDescriptionSet = false;
+
+    public registerNipAcSenders(senders: NipAcSenders): void {
+        this.senders = senders;
     }
 
     public registerCallEventCreator(fn: CallEventCreator): void {
@@ -103,27 +156,6 @@ export class VoiceCallService {
 
     public registerLocalCallEventCreator(fn: LocalCallEventCreator): void {
         this.localCreateCallEventFn = fn;
-    }
-
-    public isVoiceCallSignal(content: string): boolean {
-        return this.parseSignal(content) !== null;
-    }
-
-    public parseSignal(content: string): VoiceCallSignal | null {
-        try {
-            const parsed = JSON.parse(content);
-            if (
-                parsed &&
-                parsed.type === CALL_SIGNAL_TYPE &&
-                typeof parsed.action === 'string' &&
-                typeof parsed.callId === 'string'
-            ) {
-                return parsed as VoiceCallSignal;
-            }
-            return null;
-        } catch {
-            return null;
-        }
     }
 
     public generateCallId(): string {
@@ -148,7 +180,8 @@ export class VoiceCallService {
             console.log('[VoiceCall] Requesting microphone access...');
             this.localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
             console.log('[VoiceCall] Microphone acquired, creating peer connection...');
-            this.createPeerConnection(recipientNpub, callId);
+            const recipientHex = nip19.decode(recipientNpub).data as string;
+            this.createPeerConnection(recipientNpub, recipientHex, callId);
 
             this.localStream.getTracks().forEach(track => {
                 this.peerConnection!.addTrack(track, this.localStream!);
@@ -159,21 +192,16 @@ export class VoiceCallService {
             await this.peerConnection!.setLocalDescription(offer);
 
             console.log('[VoiceCall] Sending offer signal...');
-            await this.sendSignal(recipientNpub, {
-                type: CALL_SIGNAL_TYPE,
-                action: 'offer',
-                callId,
-                sdp: offer.sdp
-            });
+            if (this.senders && offer.sdp) {
+                await this.tryCall(() =>
+                    this.senders!.sendOffer(recipientNpub, callId, offer.sdp!)
+                );
+            }
             console.log('[VoiceCall] Offer sent, waiting for answer...');
 
             this.offerTimeoutId = setTimeout(async () => {
                 const current = get(voiceCallState);
                 if (current.status === 'outgoing-ringing' && current.callId === callId) {
-                    // Capture peerNpub + callId synchronously before cleanup
-                    // (cleanup() doesn't touch the store, but endCall does and
-                    // future reducer changes shouldn't be able to drop the
-                    // recipient out from under the author).
                     const peerNpub = current.peerNpub;
                     this.cleanup();
                     endCall('timeout');
@@ -189,29 +217,78 @@ export class VoiceCallService {
         }
     }
 
-    public async handleSignal(signal: VoiceCallSignal, senderNpub: string): Promise<void> {
-        console.log('[VoiceCall][Recv] handleSignal: action=' + signal.action
-            + ' callId=' + signal.callId);
-        switch (signal.action) {
-            case 'offer':
-                await this.handleOffer(signal, senderNpub);
-                break;
-            case 'answer':
-                await this.handleAnswer(signal);
-                break;
-            case 'ice-candidate':
-                await this.handleIceCandidate(signal);
-                break;
-            case 'hangup':
-                this.handleHangup(signal);
-                break;
-            case 'reject':
-                this.handleReject(signal);
-                break;
-            case 'busy':
-                this.handleBusy(signal);
-                break;
+    /**
+     * Dispatch a verified NIP-AC inner event from Messaging's receive path.
+     * Self-events and follow-gating have already been applied; this method
+     * only sees events from the remote peer that have passed all upstream
+     * checks.
+     */
+    public async handleNipAcEvent(inner: NostrEvent): Promise<void> {
+        const callId = this.getTagValue(inner, 'call-id');
+        if (!callId) {
+            console.warn('[VoiceCall][Recv] inner event missing call-id', { kind: inner.kind });
+            return;
         }
+        const senderNpub = nip19.npubEncode(inner.pubkey);
+
+        switch (inner.kind) {
+            case NIP_AC_KIND_OFFER:
+                await this.handleOffer(inner, senderNpub, callId);
+                break;
+            case NIP_AC_KIND_ANSWER:
+                await this.handleAnswer(inner, callId);
+                break;
+            case NIP_AC_KIND_ICE:
+                await this.handleIceCandidate(inner, callId);
+                break;
+            case NIP_AC_KIND_HANGUP:
+                await this.handleHangup(callId);
+                break;
+            case NIP_AC_KIND_REJECT:
+                this.handleReject(inner, callId);
+                break;
+            default:
+                console.warn('[VoiceCall][Recv] unsupported kind', inner.kind);
+        }
+    }
+
+    /**
+     * NIP-AC self-event handler invoked when a self-addressed kind-25051
+     * Call Answer arrives in `incoming-ringing` state. Transitions to
+     * `ended` with reason `answered-elsewhere` if the call-id matches.
+     */
+    public async handleSelfAnswer(inner: NostrEvent): Promise<void> {
+        const callId = this.getTagValue(inner, 'call-id');
+        const state = get(voiceCallState);
+        if (
+            state.status !== 'incoming-ringing' ||
+            !callId ||
+            state.callId !== callId
+        ) {
+            return;
+        }
+        await this.dismissAndroidIncoming(callId);
+        this.cleanup();
+        setEndedAnsweredElsewhere();
+    }
+
+    /**
+     * NIP-AC self-event handler invoked when a self-addressed kind-25054
+     * Call Reject arrives in `incoming-ringing` state.
+     */
+    public async handleSelfReject(inner: NostrEvent): Promise<void> {
+        const callId = this.getTagValue(inner, 'call-id');
+        const state = get(voiceCallState);
+        if (
+            state.status !== 'incoming-ringing' ||
+            !callId ||
+            state.callId !== callId
+        ) {
+            return;
+        }
+        await this.dismissAndroidIncoming(callId);
+        this.cleanup();
+        setEndedRejectedElsewhere();
     }
 
     public async acceptCall(): Promise<void> {
@@ -233,12 +310,11 @@ export class VoiceCallService {
             const answer = await this.peerConnection!.createAnswer();
             await this.peerConnection!.setLocalDescription(answer);
 
-            await this.sendSignal(state.peerNpub, {
-                type: CALL_SIGNAL_TYPE,
-                action: 'answer',
-                callId: state.callId,
-                sdp: answer.sdp
-            });
+            if (this.senders && answer.sdp) {
+                await this.tryCall(() =>
+                    this.senders!.sendAnswer(state.peerNpub!, state.callId!, answer.sdp!)
+                );
+            }
         } catch (err) {
             console.error('[VoiceCall] Failed to accept call:', err);
             this.cleanup();
@@ -254,31 +330,23 @@ export class VoiceCallService {
 
         // Dismiss the UI synchronously, then publish the reject signal in the
         // background. Awaiting the publish here would freeze the overlay while
-        // the relay connection comes up (see Messaging.publishWithDeadline,
-        // 5 s deadline) — bug visible on desktop PWA where relays may not be
-        // pre-warmed. Android keeps relays warm via the foreground messaging
-        // service so it didn't surface there. sendSignal already swallows and
-        // logs publish failures, so fire-and-forget is safe.
+        // the relay connection comes up. sendReject already handles its own
+        // failures via the registered helper.
         this.cleanup();
         endCall('rejected');
 
-        void this.sendSignal(peerNpub, {
-            type: CALL_SIGNAL_TYPE,
-            action: 'reject',
-            callId
-        });
+        if (this.senders) {
+            void this.tryCall(() => this.senders!.sendReject(peerNpub, callId));
+        }
         // Author the single 'declined' rumor on the callee side. It is
         // gift-wrapped to the caller, so the caller's chat history will
         // also show the call as declined — with role-aware copy at render
-        // time (the caller sees "Call declined", the callee sees
-        // "Declined"). The caller's handleReject() must NOT author a
-        // duplicate rumor.
+        // time. The caller's handleReject() must NOT author a duplicate
+        // rumor.
         //
         // The `call-initiator` MUST be the caller (the original WebRTC
-        // initiator), not the local user (rumor author). Pass `peerNpub`
-        // explicitly: in the incoming-ringing state, peerNpub is the
-        // caller. Without this, the renderer's iAmInitiator check would
-        // be inverted and both peers would see the wrong copy.
+        // initiator), not the local user (rumor author). In
+        // incoming-ringing, peerNpub IS the caller.
         void this.createCallEvent('declined', undefined, peerNpub, callId, peerNpub);
     }
 
@@ -287,44 +355,20 @@ export class VoiceCallService {
         if (!state.peerNpub || !state.callId) return;
 
         const { peerNpub, callId, status, duration } = state;
-        // Capture isInitiator before cleanup() resets it. Used to set the
-        // call-initiator tag correctly for 'ended' rumors authored by the
-        // callee (where the local user is NOT the WebRTC initiator).
         const wasInitiator = this.isInitiator;
 
-        // Dismiss the UI synchronously first; both the call-event authoring
-        // and the hangup signal publish happen fire-and-forget so a slow
-        // relay can't keep the call overlay on screen. See declineCall() for
-        // the full rationale. createCallEvent and sendSignal both already
-        // catch+log their own errors.
         this.cleanup();
         endCall('hangup');
 
         if (status === 'active') {
-            // Either side hangs up an established call → 'ended' with
-            // duration. Authored exactly once by the hangup initiator and
-            // gift-wrapped to the peer; the peer's handleHangup() must NOT
-            // author a duplicate. The `call-initiator` tag is the WebRTC
-            // initiator: the local user if we initiated, otherwise the
-            // peer.
             const initiatorNpub = wasInitiator ? undefined : peerNpub;
             void this.createCallEvent('ended', duration, peerNpub, callId, initiatorNpub);
         } else if (status === 'outgoing-ringing') {
-            // Caller cancelled an outgoing call before the callee answered.
-            // Author 'cancelled' on the caller's local DB ONLY — do NOT
-            // gift-wrap to the callee. The callee's own handleHangup()
-            // authors a separate local-only 'missed' rumor; both sides see
-            // their own perspective without producing a duplicate pill.
-            // call-initiator defaults to the local user, which is correct
-            // here because only the caller can hang up while
-            // outgoing-ringing.
             void this.createLocalCallEvent('cancelled', peerNpub, callId);
         }
-        void this.sendSignal(peerNpub, {
-            type: CALL_SIGNAL_TYPE,
-            action: 'hangup',
-            callId
-        });
+        if (this.senders) {
+            void this.tryCall(() => this.senders!.sendHangup(peerNpub, callId));
+        }
     }
 
     public toggleMute(): void {
@@ -340,23 +384,41 @@ export class VoiceCallService {
         return this.remoteStream;
     }
 
-    private createPeerConnection(peerNpub: string, callId: string): void {
+    private createPeerConnection(peerNpub: string, peerHex: string, callId: string): void {
         const iceServers = getIceServers();
         this.peerConnection = new RTCPeerConnection({ iceServers });
         this.iceTrickleEnabled = true;
+        this.sessionRemoteDescriptionSet = false;
+        this.sessionPendingIce = [];
+
+        // NIP-AC: drain the global buffer for this peer into the session
+        // buffer. Candidates accumulated while ringing must not be lost
+        // when the user accepts. Per-session flush happens after
+        // setRemoteDescription resolves.
+        const buffered = this.globalIceBuffer.get(peerHex);
+        if (buffered && buffered.length > 0) {
+            this.sessionPendingIce.push(...buffered);
+            this.globalIceBuffer.delete(peerHex);
+        }
 
         this.peerConnection.onicecandidate = (event) => {
             // Suppress candidates emitted after the connection is up — they
             // can't help a live call, only inflate signaling traffic.
             if (!this.iceTrickleEnabled) return;
-            if (event.candidate) {
-                // Fire-and-forget: don't await so candidates publish concurrently
-                this.sendSignal(peerNpub, {
-                    type: CALL_SIGNAL_TYPE,
-                    action: 'ice-candidate',
-                    callId,
-                    candidate: event.candidate.toJSON()
-                });
+            if (event.candidate && this.senders) {
+                // Fire-and-forget: don't await so candidates publish concurrently.
+                // sendIceCandidate awaits its own internal publish; tryCall
+                // swallows + logs failures so they don't bubble.
+                const c = event.candidate;
+                void this.tryCall(() =>
+                    this.senders!.sendIceCandidate(
+                        peerNpub,
+                        callId,
+                        c.candidate,
+                        c.sdpMid,
+                        c.sdpMLineIndex
+                    )
+                );
             }
         };
 
@@ -367,9 +429,6 @@ export class VoiceCallService {
         this.peerConnection.oniceconnectionstatechange = () => {
             const iceState = this.peerConnection?.iceConnectionState;
             if (iceState === 'connected' || iceState === 'completed') {
-                // Stop forwarding further locally-gathered candidates; the
-                // connection is established and any late candidate (typically
-                // relay/TURN) would be wasted signaling traffic.
                 this.iceTrickleEnabled = false;
                 this.clearTimeouts();
                 setActive();
@@ -391,13 +450,7 @@ export class VoiceCallService {
      * Common terminal handler for ICE-level failures. Authors a 'failed'
      * chat-history pill exactly once per call, and only on the caller side
      * (gated on `isInitiator`); the rumor reaches the callee via NIP-59
-     * self-wrap. The callee just tears its side down silently — they will
-     * also typically detect the failure themselves but don't author a
-     * duplicate pill.
-     *
-     * Capturing peerNpub/callId/isInitiator before cleanup() because
-     * cleanup() resets isInitiator. endCall() preserves peerNpub/callId
-     * today but capturing locally is robust against future store changes.
+     * self-wrap. The callee just tears its side down silently.
      */
     private handleIceFailure(): void {
         const state = get(voiceCallState);
@@ -411,129 +464,182 @@ export class VoiceCallService {
         }
     }
 
-    private async handleOffer(signal: VoiceCallSignal, senderNpub: string): Promise<void> {
+    private async handleOffer(
+        inner: NostrEvent,
+        senderNpub: string,
+        callId: string
+    ): Promise<void> {
         const state = get(voiceCallState);
 
         // Dedup: same callId from same peer while we're already ringing for it.
         // This happens when the offer arrives both via the live JS subscription
-        // and via the Android persisted-prefs cold-start path (or any other
-        // double-delivery scenario). Short-circuit before any work, including
-        // peer-connection allocation.
+        // and via the Android persisted-prefs cold-start path. Short-circuit
+        // before any work, including peer-connection allocation.
         if (
             state.status === 'incoming-ringing' &&
-            state.callId === signal.callId &&
+            state.callId === callId &&
             state.peerNpub === senderNpub
         ) {
             return;
         }
 
         if (state.status !== 'idle') {
-            await this.sendSignal(senderNpub, {
-                type: CALL_SIGNAL_TYPE,
-                action: 'busy',
-                callId: signal.callId
-            });
+            // NIP-AC: busy is a Call Reject (kind 25054) with content "busy".
+            if (this.senders) {
+                await this.tryCall(() =>
+                    this.senders!.sendReject(senderNpub, callId, 'busy')
+                );
+            }
             return;
         }
 
-        setIncomingRinging(senderNpub, signal.callId);
-        this.createPeerConnection(senderNpub, signal.callId);
+        setIncomingRinging(senderNpub, callId);
+        this.createPeerConnection(senderNpub, inner.pubkey, callId);
 
         const remoteDesc = new RTCSessionDescription({
             type: 'offer',
-            sdp: signal.sdp!
+            sdp: inner.content
         });
         await this.peerConnection!.setRemoteDescription(remoteDesc);
+        await this.flushPerSessionIce();
     }
 
-    private async handleAnswer(signal: VoiceCallSignal): Promise<void> {
+    private async handleAnswer(inner: NostrEvent, callId: string): Promise<void> {
         const state = get(voiceCallState);
-        if (state.callId !== signal.callId || !this.peerConnection) return;
+        if (state.callId !== callId || !this.peerConnection) return;
 
         this.clearTimeouts();
         setConnecting();
 
         const remoteDesc = new RTCSessionDescription({
             type: 'answer',
-            sdp: signal.sdp!
+            sdp: inner.content
         });
         await this.peerConnection.setRemoteDescription(remoteDesc);
+        await this.flushPerSessionIce();
     }
 
-    private async handleIceCandidate(signal: VoiceCallSignal): Promise<void> {
-        const state = get(voiceCallState);
-        if (state.callId !== signal.callId || !this.peerConnection) return;
+    /**
+     * Apply an incoming kind-25052 ICE Candidate per NIP-AC's two-layer
+     * buffering rule:
+     *   - No PeerConnection for this sender → push to global buffer
+     *   - PeerConnection exists, but setRemoteDescription not resolved → push to per-session buffer
+     *   - Otherwise → addIceCandidate directly
+     *
+     * The session call-id check is intentionally NOT applied for the
+     * global-buffer path: ICE may arrive before the local state has
+     * accepted the call (and thus before the local callId matches).
+     * Once a session for that peer exists, the global buffer is drained
+     * irrespective of call-id; a stale candidate is harmless because
+     * ICE candidates with no matching transport are simply ignored by
+     * the peer connection.
+     */
+    private async handleIceCandidate(inner: NostrEvent, callId: string): Promise<void> {
+        let payload: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
+        try {
+            payload = JSON.parse(inner.content);
+        } catch (err) {
+            console.warn('[VoiceCall] handleIceCandidate: malformed JSON content', err);
+            return;
+        }
+        const init: RTCIceCandidateInit = {
+            candidate: payload.candidate,
+            sdpMid: payload.sdpMid ?? undefined,
+            sdpMLineIndex: payload.sdpMLineIndex ?? undefined
+        };
 
-        if (signal.candidate) {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        if (!this.peerConnection) {
+            // No session yet — buffer globally keyed by sender pubkey.
+            const senderHex = inner.pubkey;
+            const list = this.globalIceBuffer.get(senderHex) ?? [];
+            list.push(init);
+            this.globalIceBuffer.set(senderHex, list);
+            return;
+        }
+
+        // PeerConnection exists. Verify call-id matches the live session
+        // before applying — a candidate from a stale call-id should not
+        // reach the active connection.
+        const state = get(voiceCallState);
+        if (state.callId !== callId) return;
+
+        if (!this.sessionRemoteDescriptionSet) {
+            this.sessionPendingIce.push(init);
+            return;
+        }
+
+        try {
+            await this.peerConnection.addIceCandidate(new RTCIceCandidate(init));
+        } catch (err) {
+            console.warn('[VoiceCall] addIceCandidate failed', err);
         }
     }
 
-    private async handleHangup(signal: VoiceCallSignal): Promise<void> {
+    /**
+     * Flush all per-session buffered candidates to addIceCandidate.
+     * Called after setRemoteDescription resolves on offer or answer.
+     * Marks the session as ready to apply candidates directly.
+     */
+    private async flushPerSessionIce(): Promise<void> {
+        if (!this.peerConnection) return;
+        this.sessionRemoteDescriptionSet = true;
+        const pending = this.sessionPendingIce;
+        this.sessionPendingIce = [];
+        for (const init of pending) {
+            try {
+                await this.peerConnection.addIceCandidate(new RTCIceCandidate(init));
+            } catch (err) {
+                console.warn('[VoiceCall] flushPerSessionIce: addIceCandidate failed', err);
+            }
+        }
+    }
+
+    private async handleHangup(callId: string): Promise<void> {
         const state = get(voiceCallState);
-        if (state.callId !== signal.callId) return;
-        // 'ended' events are authored by the hangup initiator (see hangup())
-        // and delivered to us via the normal gift-wrap path; we don't author
-        // a duplicate here.
-        //
-        // For an unanswered incoming call (caller cancelled before pickup)
-        // we author 'missed' as a LOCAL-ONLY rumor — only the callee sees
-        // this row. The caller authors its own local-only 'cancelled'
-        // rumor in hangup(). This way each side gets exactly one
-        // perspective-appropriate pill without duplicates.
+        if (state.callId !== callId) return;
         const peerNpub = state.peerNpub;
-        const callId = state.callId;
         const wasIncomingRinging = state.status === 'incoming-ringing';
         this.cleanup();
         endCall('hangup');
         if (wasIncomingRinging && peerNpub && callId) {
-            // call-initiator is the caller, not the local user (callee /
-            // rumor author). peerNpub is the caller during incoming-ringing.
+            // call-initiator is the caller (peerNpub during incoming-ringing).
             void this.createLocalCallEvent('missed', peerNpub, callId, peerNpub);
         }
     }
 
-    private handleReject(signal: VoiceCallSignal): void {
+    private handleReject(inner: NostrEvent, callId: string): void {
         const state = get(voiceCallState);
-        console.log('[VoiceCall][Recv] handleReject: signal.callId=' + signal.callId
-            + ' state.callId=' + state.callId + ' state.status=' + state.status);
-        if (state.callId !== signal.callId) {
+        if (state.callId !== callId) {
             console.warn('[VoiceCall][Recv] handleReject: callId MISMATCH — IGNORED');
             return;
         }
-        console.log('[VoiceCall][Recv] handleReject: matched, cleaning up and endCall("rejected")');
-        // The callee authored the single 'declined' rumor in declineCall()
-        // and gift-wrapped it to us; we do NOT author a duplicate here.
-        // Just transition state.
-        this.cleanup();
-        endCall('rejected');
-    }
-
-    private handleBusy(signal: VoiceCallSignal): void {
-        const state = get(voiceCallState);
-        if (state.callId !== signal.callId) return;
+        const reason = inner.content;
         const peerNpub = state.peerNpub;
-        const callId = state.callId;
         this.cleanup();
-        endCall('busy');
-        // Caller-only authoring: the callee already had an active call and
-        // just sent us back a 'busy' signal — for them this attempt was
-        // never a real call.
-        if (peerNpub && callId) {
-            void this.createCallEvent('busy', undefined, peerNpub, callId);
+        if (reason === 'busy') {
+            endCall('busy');
+            // Caller-only authoring: the callee already had an active call.
+            if (peerNpub) {
+                void this.createCallEvent('busy', undefined, peerNpub, callId);
+            }
+        } else {
+            // The callee authored the single 'declined' rumor in declineCall()
+            // and gift-wrapped it to us; we do NOT author a duplicate here.
+            endCall('rejected');
         }
     }
 
-    private async sendSignal(recipientNpub: string, signal: VoiceCallSignal): Promise<void> {
-        if (!this.sendSignalFn) {
-            console.error('[VoiceCall] Signal sender not registered');
-            return;
-        }
+    private async tryCall(fn: () => Promise<void>): Promise<void> {
         try {
-            await this.sendSignalFn(recipientNpub, JSON.stringify(signal));
+            await fn();
         } catch (err) {
-            console.error('[VoiceCall] Failed to send signal:', err);
+            console.error('[VoiceCall] send helper failed:', err);
         }
+    }
+
+    private getTagValue(event: NostrEvent, tagName: string): string | null {
+        const tag = event.tags.find((t) => Array.isArray(t) && t[0] === tagName);
+        return tag && typeof tag[1] === 'string' ? tag[1] : null;
     }
 
     private startDurationTimer(): void {
@@ -560,15 +666,6 @@ export class VoiceCallService {
         callId?: string,
         initiatorNpub?: string
     ): Promise<void> {
-        // Allow callers to pass peerNpub + callId explicitly so they can
-        // mutate the store (e.g., endCall) before authoring without losing
-        // the recipient. Today endCall() preserves peerNpub, but capturing
-        // at the callsite is more robust against future store reducer
-        // changes.
-        //
-        // `initiatorNpub` is the original WebRTC caller; when omitted the
-        // implementation defaults to the local user. Callee-authored
-        // types MUST pass the caller's npub explicitly.
         const peerNpub = peerNpubOverride ?? get(voiceCallState).peerNpub;
         if (!peerNpub || !this.createCallEventFn) return;
         try {
@@ -578,13 +675,6 @@ export class VoiceCallService {
         }
     }
 
-    /**
-     * Author a local-only call-event rumor — the rumor lands in the local
-     * DB but is NOT gift-wrapped or published. Used for `missed` and
-     * `cancelled` where each side's history reflects only what they
-     * observed locally and a peer-delivered pill would either duplicate
-     * the local one or contradict the local user's perspective.
-     */
     private async createLocalCallEvent(
         type: AuthoredCallEventType,
         peerNpubOverride: string,
@@ -603,6 +693,9 @@ export class VoiceCallService {
         this.clearTimeouts();
         this.iceTrickleEnabled = false;
         this.isInitiator = false;
+        this.sessionRemoteDescriptionSet = false;
+        this.sessionPendingIce = [];
+        this.globalIceBuffer.clear();
 
         if (this.durationIntervalId) {
             clearInterval(this.durationIntervalId);
@@ -649,6 +742,20 @@ export class VoiceCallService {
             await AndroidVoiceCall.endCallSession();
         } catch (err) {
             console.warn('[VoiceCall] endCallSession failed', err);
+        }
+    }
+
+    /**
+     * Cancel the lockscreen FSI ringer on Android when a NIP-AC self-wrap
+     * Answer/Reject for the matching call-id arrives from another device.
+     * Fire-and-forget: no caller cares about the result.
+     */
+    private async dismissAndroidIncoming(callId: string): Promise<void> {
+        if (Capacitor.getPlatform() !== 'android') return;
+        try {
+            await AndroidVoiceCall.dismissIncomingCall({ callId });
+        } catch (err) {
+            console.warn('[VoiceCall] dismissIncomingCall failed', err);
         }
     }
 }

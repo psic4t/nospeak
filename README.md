@@ -250,6 +250,9 @@ Nospeak Web implements the following NIPs (Nostr Implementation Proposals):
 - **NIP-59**: Gift wrapper events for DM and media delivery
 - **NIP-98**: HTTP-authenticated media uploads
 
+### Voice Calls
+- **NIP-AC**: P2P voice calls over WebRTC (signaling kinds 25050–25054 wrapped in ephemeral kind 21059 gift wraps; voice-only, 1-on-1; multi-device "answered/rejected elsewhere"; follow-gated incoming ringing)
+
 ### Signer Integration
 - **NIP-07**: Browser extension signer integration
 - **NIP-55**: Android native signer integration (Amber and similar)

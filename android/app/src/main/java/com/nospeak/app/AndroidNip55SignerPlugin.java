@@ -47,15 +47,23 @@ public class AndroidNip55SignerPlugin extends Plugin {
         // Request the specific permissions nospeak requires so that the signer
         // can offer a "remember my choice" option for them in a single flow.
         // We currently sign:
-        // - kind 0  (metadata)
-        // - kind 13 (gift wrap seals)
-        // - kind 10050 (NIP-17 messaging relays)
-        // - kind 22242 (NIP-42 relay authentication)
-        // - kind 27235 (NIP-98 upload auth)
+        // - kind 0           (metadata)
+        // - kind 13          (gift wrap seals)
+        // - kind 10050       (NIP-17 messaging relays)
+        // - kind 22242       (NIP-42 relay authentication)
+        // - kind 25050-25054 (NIP-AC voice-call signaling: Offer, Answer,
+        //                     ICE Candidate, Hangup, Reject)
+        // - kind 27235       (NIP-98 upload auth)
         // and use nip44 encrypt/decrypt for messaging.
         // The structure follows NIP-55's suggested "permissions" extra.
+        // Note: kind 1059 (NIP-17 gift wrap) and kind 21059 (NIP-AC
+        // ephemeral wrap) are NOT in this list because they are signed
+        // locally by a fresh ephemeral keypair (not the user's identity
+        // key), bypassing Amber. Kind 14 / 15 / 1405 (NIP-17 rumors) are
+        // also not in this list because rumors are unsigned by design;
+        // only their enclosing seal (kind 13) gets signed.
         String permissionsJson = "[" +
-                "{\"type\":\"sign_event\",\"kinds\":[0,13,10050,22242,27235]}," +
+                "{\"type\":\"sign_event\",\"kinds\":[0,13,10050,22242,25050,25051,25052,25053,25054,27235]}," +
                 "{\"type\":\"nip44_encrypt\"}," +
                 "{\"type\":\"nip44_decrypt\"}" +
                 "]";

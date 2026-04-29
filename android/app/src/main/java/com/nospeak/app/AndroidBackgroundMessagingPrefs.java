@@ -17,6 +17,7 @@ public final class AndroidBackgroundMessagingPrefs {
     private static final String KEY_READ_RELAYS_JSON = "readRelaysJson";
     private static final String KEY_NOTIFICATIONS_ENABLED = "notificationsEnabled";
     private static final String KEY_NOTIFICATION_BASELINE_SECONDS = "notificationBaselineSeconds";
+    private static final String KEY_FOLLOW_GATE_HEX_JSON = "followGateHexJson";
 
     private AndroidBackgroundMessagingPrefs() {
     }
@@ -85,6 +86,52 @@ public final class AndroidBackgroundMessagingPrefs {
 
     public static long loadNotificationBaselineSeconds(Context context) {
         return getPrefs(context).getLong(KEY_NOTIFICATION_BASELINE_SECONDS, 0L);
+    }
+
+    /**
+     * Persist the user's NIP-02 contact list (followed pubkeys, lowercase
+     * hex) for the NIP-AC follow-gate consulted by the native background
+     * service before posting an incoming-call FSI notification.
+     *
+     * Stored as a JSON array string. An empty array is distinct from
+     * "never written" — the latter is treated as "contact list not loaded
+     * yet" and per Q1 causes the gate to drop the offer.
+     */
+    public static void saveFollowGateHex(Context context, String[] hexPubkeys) {
+        JSONArray arr = new JSONArray();
+        if (hexPubkeys != null) {
+            for (String hex : hexPubkeys) {
+                if (hex != null && !hex.isEmpty()) {
+                    arr.put(hex.toLowerCase());
+                }
+            }
+        }
+        SharedPreferences.Editor editor = getPrefs(context).edit();
+        editor.putString(KEY_FOLLOW_GATE_HEX_JSON, arr.toString());
+        editor.apply();
+    }
+
+    /**
+     * Read the persisted follow-gate set, or {@code null} if it has never
+     * been written. The native NIP-AC offer handler treats null as
+     * "contact list not loaded; drop the offer" per the cold-start rule.
+     */
+    public static java.util.Set<String> loadFollowGateHex(Context context) {
+        String raw = getPrefs(context).getString(KEY_FOLLOW_GATE_HEX_JSON, null);
+        if (raw == null) return null;
+        try {
+            JSONArray arr = new JSONArray(raw);
+            java.util.HashSet<String> set = new java.util.HashSet<>();
+            for (int i = 0; i < arr.length(); i++) {
+                String hex = arr.optString(i, null);
+                if (hex != null && !hex.isEmpty()) {
+                    set.add(hex.toLowerCase());
+                }
+            }
+            return set;
+        } catch (JSONException e) {
+            return null;
+        }
     }
 
     public static Config load(Context context) {

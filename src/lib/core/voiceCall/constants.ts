@@ -1,6 +1,5 @@
 export const CALL_OFFER_TIMEOUT_MS = 60_000;
 export const ICE_CONNECTION_TIMEOUT_MS = 30_000;
-export const CALL_SIGNAL_TYPE = 'voice-call' as const;
 export const CALL_END_DISPLAY_MS = 2_000;
 /**
  * NIP-17 sealed-rumor kind for persistent call-history events
@@ -14,13 +13,47 @@ export const CALL_END_DISPLAY_MS = 2_000;
  * unrelated public semantics and was the previous, incorrect choice.
  */
 export const CALL_HISTORY_KIND = 1405;
+
 /**
- * NIP-40 expiration window for voice-call signaling gift wraps.
- * Sized to match CALL_OFFER_TIMEOUT_MS — past 60s the call attempt has
- * timed out anyway, so any lingering signal is useless. Cooperating relays
- * SHOULD drop expired events; receivers also drop them defensively.
+ * NIP-AC ephemeral gift-wrap kind. Per NIP-AC the kind range
+ * 20000-29999 conveys ephemerality to relays. The ephemeral wrap has no
+ * NIP-13 seal layer; the inner signaling event is signed by the sender's
+ * real key and the wrap itself is signed by a fresh ephemeral key.
  */
-export const CALL_SIGNAL_EXPIRATION_SECONDS = 60;
+export const NIP_AC_GIFT_WRAP_KIND = 21059;
+
+/**
+ * NIP-AC inner-event kinds. These are the kinds carried inside a kind
+ * 21059 wrap. Each is signed by the sender's real key.
+ */
+export const NIP_AC_KIND_OFFER = 25050;
+export const NIP_AC_KIND_ANSWER = 25051;
+export const NIP_AC_KIND_ICE = 25052;
+export const NIP_AC_KIND_HANGUP = 25053;
+export const NIP_AC_KIND_REJECT = 25054;
+
+/**
+ * Receive-path staleness window for NIP-AC inner signaling events.
+ * Inner events whose `created_at` is more than this many seconds before
+ * the current Unix time are dropped silently. This protects against
+ * uncooperative relays that persist ephemeral events past their
+ * usefulness.
+ *
+ * Set to 60s to match `CALL_OFFER_TIMEOUT_MS` rather than NIP-AC's draft
+ * 20s default — community feedback on the NIP-AC PR notes 20s is too
+ * aggressive for cold-start scenarios. Revisit if upstream consensus
+ * settles on a different value.
+ */
+export const NIP_AC_STALENESS_SECONDS = 60;
+
+/**
+ * Capacity of the receive-path processed-event-ID dedup buffer. NIP-AC
+ * mandates clients drop duplicate signaling events delivered by multiple
+ * relays. A 256-entry FIFO Set is sized for typical session traffic
+ * (~5 events per call × tens of calls per session).
+ */
+export const NIP_AC_PROCESSED_ID_CAPACITY = 256;
+
 export const AUDIO_CONSTRAINTS: MediaStreamConstraints = {
     audio: {
         echoCancellation: true,

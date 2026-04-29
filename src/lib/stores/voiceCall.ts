@@ -43,6 +43,31 @@ export function endCall(reason: VoiceCallEndReason): void {
     voiceCallState.update(s => ({ ...s, status: 'ended', endReason: reason }));
 }
 
+/**
+ * NIP-AC multi-device: another device of the same user accepted the
+ * incoming call. Transitions to `ended` with reason `answered-elsewhere`
+ * while preserving peerNpub and callId for the brief Ended display.
+ */
+export function setEndedAnsweredElsewhere(): void {
+    voiceCallState.update(s => ({
+        ...s,
+        status: 'ended',
+        endReason: 'answered-elsewhere'
+    }));
+}
+
+/**
+ * NIP-AC multi-device: another device of the same user rejected the
+ * incoming call.
+ */
+export function setEndedRejectedElsewhere(): void {
+    voiceCallState.update(s => ({
+        ...s,
+        status: 'ended',
+        endReason: 'rejected-elsewhere'
+    }));
+}
+
 export function toggleMute(): void {
     voiceCallState.update(s => ({ ...s, isMuted: !s.isMuted }));
 }

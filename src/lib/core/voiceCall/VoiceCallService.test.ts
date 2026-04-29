@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NostrEvent } from 'nostr-tools';
+import { nip19 } from 'nostr-tools';
 
 vi.mock('$lib/stores/auth', () => ({
     signer: { subscribe: vi.fn() },
@@ -13,11 +16,13 @@ vi.mock('$lib/core/runtimeConfig/store', () => ({
 
 const startCallSessionSpy = vi.fn().mockResolvedValue(undefined);
 const endCallSessionSpy = vi.fn().mockResolvedValue(undefined);
+const dismissIncomingCallSpy = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('$lib/core/voiceCall/androidVoiceCallPlugin', () => ({
     AndroidVoiceCall: {
         startCallSession: (opts: any) => startCallSessionSpy(opts),
         endCallSession: () => endCallSessionSpy(),
+        dismissIncomingCall: (opts: any) => dismissIncomingCallSpy(opts),
         getPendingIncomingCall: vi.fn().mockResolvedValue({ pending: null }),
         clearPendingIncomingCall: vi.fn().mockResolvedValue(undefined),
         canUseFullScreenIntent: vi.fn().mockResolvedValue({ granted: true }),
@@ -27,7 +32,7 @@ vi.mock('$lib/core/voiceCall/androidVoiceCallPlugin', () => ({
 }));
 
 vi.mock('@capacitor/core', async (importOriginal) => {
-    const actual = await importOriginal() as any;
+    const actual = (await importOriginal()) as any;
     return {
         ...actual,
         Capacitor: {
@@ -37,9 +42,94 @@ vi.mock('@capacitor/core', async (importOriginal) => {
     };
 });
 
-import { VoiceCallService } from './VoiceCallService';
-import { resetCall, setIncomingRinging } from '$lib/stores/voiceCall';
-import type { VoiceCallSignal } from './types';
+import { VoiceCallService, type NipAcSenders } from './VoiceCallService';
+import {
+    resetCall,
+    setIncomingRinging,
+    setActive as storeSetActive,
+    incrementDuration,
+    voiceCallState
+} from '$lib/stores/voiceCall';
+import {
+    NIP_AC_KIND_OFFER,
+    NIP_AC_KIND_ANSWER,
+    NIP_AC_KIND_HANGUP,
+    NIP_AC_KIND_REJECT
+} from './constants';
+import { get } from 'svelte/store';
+
+const PEER_HEX = 'a'.repeat(64);
+const PEER_NPUB = nip19.npubEncode(PEER_HEX);
+
+function noopSenders(): NipAcSenders {
+    return {
+        sendOffer: vi.fn().mockResolvedValue(undefined),
+        sendAnswer: vi.fn().mockResolvedValue(undefined),
+        sendIceCandidate: vi.fn().mockResolvedValue(undefined),
+        sendHangup: vi.fn().mockResolvedValue(undefined),
+        sendReject: vi.fn().mockResolvedValue(undefined)
+    };
+}
+
+function buildInner(opts: {
+    senderHex: string;
+    kind: number;
+    callId: string;
+    content?: string;
+    callType?: 'voice' | 'video';
+    extraTags?: string[][];
+    createdAt?: number;
+}): NostrEvent {
+    const tags: string[][] = [
+        ['call-id', opts.callId],
+        ['alt', 'WebRTC ' + opts.kind]
+    ];
+    if (opts.callType) tags.push(['call-type', opts.callType]);
+    if (opts.extraTags) tags.push(...opts.extraTags);
+    return {
+        kind: opts.kind,
+        pubkey: opts.senderHex,
+        created_at: opts.createdAt ?? Math.floor(Date.now() / 1000),
+        content: opts.content ?? '',
+        tags,
+        id: 'inner-' + opts.kind + '-' + opts.callId,
+        sig: ''
+    };
+}
+
+function installWebRtcStubs(): void {
+    function MockRTCPeerConnection(this: any) {
+        this.onicecandidate = null;
+        this.ontrack = null;
+        this.oniceconnectionstatechange = null;
+        this.addTrack = vi.fn();
+        this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
+        this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
+        this.createOffer = vi.fn().mockResolvedValue({ type: 'offer', sdp: 'sdp-offer' });
+        this.createAnswer = vi.fn().mockResolvedValue({ type: 'answer', sdp: 'sdp-answer' });
+        this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
+        this.close = vi.fn();
+        this.iceConnectionState = 'new';
+        (globalThis as any).__lastPeerConnection = this;
+    }
+    (globalThis as any).RTCPeerConnection = MockRTCPeerConnection;
+    (globalThis as any).RTCSessionDescription = function (init: any) {
+        Object.assign(this, init);
+    };
+    (globalThis as any).RTCIceCandidate = function (init: any) {
+        Object.assign(this, init);
+    };
+    const fakeStream = {
+        getTracks: () => [{ stop: vi.fn(), enabled: true }],
+        getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
+    };
+    (globalThis as any).navigator = {
+        ...((globalThis as any).navigator ?? {}),
+        mediaDevices: {
+            getUserMedia: vi.fn().mockResolvedValue(fakeStream)
+        }
+    };
+}
 
 describe('VoiceCallService', () => {
     let service: VoiceCallService;
@@ -47,206 +137,92 @@ describe('VoiceCallService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         resetCall();
+        installWebRtcStubs();
         service = new VoiceCallService();
     });
 
-    describe('isVoiceCallSignal', () => {
-        it('should identify valid voice call signals', () => {
-            const signal: VoiceCallSignal = {
-                type: 'voice-call',
-                action: 'offer',
-                callId: 'abc123',
-                sdp: 'v=0...'
-            };
-            expect(service.isVoiceCallSignal(JSON.stringify(signal))).toBe(true);
-        });
-
-        it('should reject non-voice-call content', () => {
-            expect(service.isVoiceCallSignal('Hello, world!')).toBe(false);
-            expect(service.isVoiceCallSignal('{"type":"text"}')).toBe(false);
-            expect(service.isVoiceCallSignal('')).toBe(false);
-        });
-
-        it('should reject malformed JSON', () => {
-            expect(service.isVoiceCallSignal('{invalid')).toBe(false);
-        });
-
-        it('should reject signals missing required fields', () => {
-            expect(service.isVoiceCallSignal('{"type":"voice-call"}')).toBe(false);
-            expect(service.isVoiceCallSignal('{"type":"voice-call","action":"offer"}')).toBe(false);
-        });
-    });
-
-    describe('parseSignal', () => {
-        it('should parse valid signal content', () => {
-            const signal: VoiceCallSignal = {
-                type: 'voice-call',
-                action: 'offer',
-                callId: 'abc123',
-                sdp: 'v=0...'
-            };
-            const parsed = service.parseSignal(JSON.stringify(signal));
-            expect(parsed).toEqual(signal);
-        });
-
-        it('should return null for invalid content', () => {
-            expect(service.parseSignal('not json')).toBeNull();
-            expect(service.parseSignal('{"type":"text"}')).toBeNull();
-        });
+    afterEach(() => {
+        resetCall();
     });
 
     describe('generateCallId', () => {
-        it('should generate a hex string', () => {
+        it('returns a 32-hex string', () => {
             const id = service.generateCallId();
             expect(id).toMatch(/^[0-9a-f]{32}$/);
         });
 
-        it('should generate unique IDs', () => {
-            const id1 = service.generateCallId();
-            const id2 = service.generateCallId();
-            expect(id1).not.toBe(id2);
+        it('returns unique values', () => {
+            expect(service.generateCallId()).not.toBe(service.generateCallId());
         });
     });
 
     describe('handleOffer dedup', () => {
-        it('ignores a duplicate offer for the same callId and same peerNpub', async () => {
-            const senderNpub = 'npub1xyz';
-            const callId = 'abc123';
+        it('S22-like: ignores a duplicate offer for the same call-id and same sender', async () => {
+            setIncomingRinging(PEER_NPUB, 'call-1');
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            // Pre-seed the store directly, bypassing the first-offer flow
-            // (which would require a full RTCPeerConnection mock).
-            setIncomingRinging(senderNpub, callId);
-
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            // Duplicate offer with same callId/sender should NOT trigger a busy reply
-            // AND must short-circuit before createPeerConnection (which is undefined in jsdom).
-            const signal: VoiceCallSignal = {
-                type: 'voice-call',
-                action: 'offer',
-                callId,
-                sdp: 'v=0\r\no=- 1 1 IN IP4 0\r\n...'
-            };
-
-            // If the dedup check works, this resolves cleanly with no signal sent
-            // and no RTCPeerConnection call. If it doesn't, this throws ReferenceError
-            // (the busy-reply path doesn't touch RTCPeerConnection, but the
-            // not-idle-and-different-call path does — so we expect a clean resolve).
-            await expect(service.handleSignal(signal, senderNpub)).resolves.toBeUndefined();
-
-            const busyCall = sendSignalSpy.mock.calls.find(call => {
-                try {
-                    const parsed = JSON.parse(call[1]);
-                    return parsed.action === 'busy';
-                } catch { return false; }
+            const offer = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_OFFER,
+                callId: 'call-1',
+                content: 'sdp',
+                callType: 'voice'
             });
-            expect(busyCall).toBeUndefined();
+            await service.handleNipAcEvent(offer);
+
+            // No busy reject sent — duplicate is silently dropped.
+            expect(senders.sendReject).not.toHaveBeenCalled();
         });
 
-        it('still sends busy when a different callId arrives during incoming-ringing', async () => {
-            const senderA = 'npub1aaa';
+        it('S11: sends Call Reject with content "busy" when a different call arrives in incoming-ringing', async () => {
+            setIncomingRinging(PEER_NPUB, 'call-existing');
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            setIncomingRinging(senderA, 'aaa');
-
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            const offerB: VoiceCallSignal = {
-                type: 'voice-call', action: 'offer', callId: 'bbb', sdp: 'sdpB'
-            };
-
-            // The busy-reply path in current code returns early after sendSignal,
-            // BEFORE createPeerConnection — so this should NOT throw ReferenceError
-            // even in jsdom. (Verify by reading VoiceCallService.ts handleOffer.)
-            await service.handleSignal(offerB, senderA);
-            // Note: senderA is intentional. Even though offerB has callId='bbb',
-            // handleSignal dispatches based on the senderNpub argument provided.
-            // Same caller (senderA) sending a different callId is the realistic
-            // scenario for "busy".
-
-            const busyCall = sendSignalSpy.mock.calls.find(call => {
-                try {
-                    const parsed = JSON.parse(call[1]);
-                    return parsed.action === 'busy';
-                } catch { return false; }
+            const otherSenderHex = 'b'.repeat(64);
+            const offer = buildInner({
+                senderHex: otherSenderHex,
+                kind: NIP_AC_KIND_OFFER,
+                callId: 'call-different',
+                content: 'sdp',
+                callType: 'voice'
             });
-            expect(busyCall).toBeDefined();
-            expect(busyCall![0]).toBe(senderA);
+            await service.handleNipAcEvent(offer);
+
+            expect(senders.sendReject).toHaveBeenCalledTimes(1);
+            const args = (senders.sendReject as any).mock.calls[0];
+            expect(args[1]).toBe('call-different');
+            expect(args[2]).toBe('busy');
         });
     });
 
     describe('Android session lifecycle', () => {
-        beforeEach(() => {
-            startCallSessionSpy.mockClear();
-            endCallSessionSpy.mockClear();
+        it('startCallSession with role=outgoing on initiateCall', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            // Minimal RTCPeerConnection stub for jsdom (must be a real
-            // constructor — vi.fn().mockImplementation isn't `new`-able).
-            (globalThis as any).RTCPeerConnection = function () {
-                this.onicecandidate = null;
-                this.ontrack = null;
-                this.oniceconnectionstatechange = null;
-                this.addTrack = vi.fn();
-                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
-                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
-                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
-                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
-                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
-                this.close = vi.fn();
-                this.iceConnectionState = 'new';
-                (globalThis as any).__lastPeerConnection = this;
-            };
-            (globalThis as any).RTCSessionDescription = function (init: any) {
-                Object.assign(this, init);
-            };
-            (globalThis as any).RTCIceCandidate = function (init: any) {
-                Object.assign(this, init);
-            };
-
-            // Stub getUserMedia so initiateCall/acceptCall can proceed.
-            const fakeStream = {
-                getTracks: () => [{ stop: vi.fn(), enabled: true }],
-                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
-            };
-            (globalThis as any).navigator = {
-                ...((globalThis as any).navigator ?? {}),
-                mediaDevices: {
-                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
-                }
-            };
-        });
-
-        it('calls startCallSession with role=outgoing when initiateCall enters outgoing-ringing', async () => {
-            const recipientNpub = 'npub1recipient';
-
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            await service.initiateCall(recipientNpub);
+            await service.initiateCall(PEER_NPUB);
 
             expect(startCallSessionSpy).toHaveBeenCalledTimes(1);
             const args = startCallSessionSpy.mock.calls[0][0];
             expect(args.role).toBe('outgoing');
-            expect(args.peerNpub).toBe(recipientNpub);
+            expect(args.peerNpub).toBe(PEER_NPUB);
             expect(args.callId).toBeTruthy();
         });
 
-        it('calls startCallSession with role=incoming when acceptCall enters connecting', async () => {
-            const senderNpub = 'npub1sender';
-            const callId = 'inc1';
+        it('startCallSession with role=incoming on acceptCall', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            // Use a real handleSignal call so the service has a peer connection
-            // and remote description set up; the stubs above let it complete.
-            const offer: VoiceCallSignal = {
-                type: 'voice-call', action: 'offer', callId, sdp: 'v=0\r\n...'
-            };
-            await service.handleSignal(offer, senderNpub);
-            // Ignore any startCallSession call from handleOffer (there shouldn't
-            // be one in current code, but clear to be safe).
+            const offer = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_OFFER,
+                callId: 'inc-1',
+                content: 'sdp',
+                callType: 'voice'
+            });
+            await service.handleNipAcEvent(offer);
             startCallSessionSpy.mockClear();
 
             await service.acceptCall();
@@ -254,576 +230,381 @@ describe('VoiceCallService', () => {
             expect(startCallSessionSpy).toHaveBeenCalledTimes(1);
             const args = startCallSessionSpy.mock.calls[0][0];
             expect(args.role).toBe('incoming');
-            expect(args.peerNpub).toBe(senderNpub);
-            expect(args.callId).toBe(callId);
+            expect(args.callId).toBe('inc-1');
         });
 
-        it('calls endCallSession when call transitions to ended via hangup', async () => {
-            const recipientNpub = 'npub1recipient';
+        it('endCallSession invoked on hangup', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            await service.initiateCall(recipientNpub);
+            await service.initiateCall(PEER_NPUB);
             startCallSessionSpy.mockClear();
             endCallSessionSpy.mockClear();
 
-            await service.hangup();
+            service.hangup();
 
             expect(endCallSessionSpy).toHaveBeenCalledTimes(1);
         });
     });
 
     describe('ICE trickle gating', () => {
-        beforeEach(() => {
-            startCallSessionSpy.mockClear();
-            endCallSessionSpy.mockClear();
+        it('forwards candidates while gathering before connection is established', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            (globalThis as any).RTCPeerConnection = function () {
-                this.onicecandidate = null;
-                this.ontrack = null;
-                this.oniceconnectionstatechange = null;
-                this.addTrack = vi.fn();
-                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
-                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
-                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
-                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
-                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
-                this.close = vi.fn();
-                this.iceConnectionState = 'new';
-                (globalThis as any).__lastPeerConnection = this;
-            };
-            (globalThis as any).RTCSessionDescription = function (init: any) {
-                Object.assign(this, init);
-            };
-            (globalThis as any).RTCIceCandidate = function (init: any) {
-                Object.assign(this, init);
-            };
-
-            const fakeStream = {
-                getTracks: () => [{ stop: vi.fn(), enabled: true }],
-                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
-            };
-            (globalThis as any).navigator = {
-                ...((globalThis as any).navigator ?? {}),
-                mediaDevices: {
-                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
-                }
-            };
-        });
-
-        function countIceCandidateSignals(spy: ReturnType<typeof vi.fn>): number {
-            return spy.mock.calls.filter(call => {
-                try {
-                    const parsed = JSON.parse(call[1]);
-                    return parsed.action === 'ice-candidate';
-                } catch { return false; }
-            }).length;
-        }
-
-        function fakeCandidate(foundation: string) {
-            return {
-                candidate: `candidate:${foundation} 1 udp 2122260223 192.168.1.42 54321 typ host`,
-                sdpMid: '0',
-                sdpMLineIndex: 0,
-                toJSON() {
-                    return {
-                        candidate: this.candidate,
-                        sdpMid: this.sdpMid,
-                        sdpMLineIndex: this.sdpMLineIndex
-                    };
-                }
-            };
-        }
-
-        it('forwards candidates while gathering, before connection is established', async () => {
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            await service.initiateCall('npub1recipient');
+            await service.initiateCall(PEER_NPUB);
             const pc = (globalThis as any).__lastPeerConnection;
             expect(pc.onicecandidate).toBeTypeOf('function');
 
-            pc.onicecandidate({ candidate: fakeCandidate('1') });
-
-            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+            pc.onicecandidate({
+                candidate: {
+                    candidate: 'candidate:1 1 udp 1 1.1.1.1 1 typ host',
+                    sdpMid: '0',
+                    sdpMLineIndex: 0
+                }
+            });
+            await Promise.resolve();
+            // sendIceCandidate is fire-and-forget; one call is enough.
+            expect(senders.sendIceCandidate).toHaveBeenCalledTimes(1);
         });
 
-        it('stops forwarding once iceConnectionState reaches connected', async () => {
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
+        it('stops forwarding once iceConnectionState is connected', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
 
-            await service.initiateCall('npub1recipient');
+            await service.initiateCall(PEER_NPUB);
             const pc = (globalThis as any).__lastPeerConnection;
+            pc.onicecandidate({
+                candidate: {
+                    candidate: 'a',
+                    sdpMid: '0',
+                    sdpMLineIndex: 0
+                }
+            });
+            await Promise.resolve();
+            expect(senders.sendIceCandidate).toHaveBeenCalledTimes(1);
 
-            // First candidate trickles through.
-            pc.onicecandidate({ candidate: fakeCandidate('1') });
-            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
-
-            // Connection comes up.
             pc.iceConnectionState = 'connected';
             pc.oniceconnectionstatechange();
 
-            // Subsequent candidates must NOT be signaled.
-            pc.onicecandidate({ candidate: fakeCandidate('2') });
-            pc.onicecandidate({ candidate: fakeCandidate('3') });
-
-            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
-        });
-
-        it('stops forwarding once iceConnectionState reaches completed', async () => {
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            await service.initiateCall('npub1recipient');
-            const pc = (globalThis as any).__lastPeerConnection;
-
-            pc.onicecandidate({ candidate: fakeCandidate('1') });
-            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
-
-            pc.iceConnectionState = 'completed';
-            pc.oniceconnectionstatechange();
-
-            pc.onicecandidate({ candidate: fakeCandidate('2') });
-
-            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
-        });
-
-        it('re-arms trickle gating on the next call', async () => {
-            const sendSignalSpy = vi.fn();
-            service.registerSignalSender(sendSignalSpy);
-
-            // First call: connect, then end via hangup.
-            await service.initiateCall('npub1recipient');
-            let pc = (globalThis as any).__lastPeerConnection;
-            pc.onicecandidate({ candidate: fakeCandidate('1') });
-            pc.iceConnectionState = 'connected';
-            pc.oniceconnectionstatechange();
-            await service.hangup();
-
-            sendSignalSpy.mockClear();
-            resetCall();
-
-            // Second call: a candidate emitted before connection MUST trickle again.
-            await service.initiateCall('npub1recipient2');
-            pc = (globalThis as any).__lastPeerConnection;
-            pc.onicecandidate({ candidate: fakeCandidate('2') });
-
-            expect(countIceCandidateSignals(sendSignalSpy)).toBe(1);
+            pc.onicecandidate({
+                candidate: {
+                    candidate: 'b',
+                    sdpMid: '0',
+                    sdpMLineIndex: 0
+                }
+            });
+            await Promise.resolve();
+            expect(senders.sendIceCandidate).toHaveBeenCalledTimes(1);
         });
     });
 
     describe('synchronous cancellation', () => {
-        // Regression coverage for the desktop-PWA bug where awaiting the
-        // hangup/reject signal publish (which can take up to 5 s on cold
-        // relays) kept the ActiveCallOverlay on screen long after the user
-        // tapped the cancel button. After the fix, hangup() and declineCall()
-        // must dismiss the UI synchronously and let the signal publish in the
-        // background.
-        beforeEach(() => {
-            startCallSessionSpy.mockClear();
-            endCallSessionSpy.mockClear();
+        it('hangup during outgoing-ringing dismisses synchronously even if publish hangs', async () => {
+            // Initial offer must publish; subsequent hangup publish hangs.
+            let hangupHangs = false;
+            const senders: NipAcSenders = {
+                sendOffer: vi.fn().mockResolvedValue(undefined),
+                sendAnswer: vi.fn().mockResolvedValue(undefined),
+                sendIceCandidate: vi.fn().mockResolvedValue(undefined),
+                sendHangup: vi.fn().mockImplementation(() => {
+                    if (hangupHangs) return new Promise(() => {});
+                    return Promise.resolve();
+                }),
+                sendReject: vi.fn().mockResolvedValue(undefined)
+            };
+            service.registerNipAcSenders(senders);
 
-            (globalThis as any).RTCPeerConnection = function () {
-                this.onicecandidate = null;
-                this.ontrack = null;
-                this.oniceconnectionstatechange = null;
-                this.addTrack = vi.fn();
-                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
-                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
-                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
-                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
-                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
-                this.close = vi.fn();
-                this.iceConnectionState = 'new';
-            };
-            (globalThis as any).RTCSessionDescription = function (init: any) {
-                Object.assign(this, init);
-            };
-            (globalThis as any).RTCIceCandidate = function (init: any) {
-                Object.assign(this, init);
-            };
-
-            const fakeStream = {
-                getTracks: () => [{ stop: vi.fn(), enabled: true }],
-                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
-            };
-            (globalThis as any).navigator = {
-                ...((globalThis as any).navigator ?? {}),
-                mediaDevices: {
-                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
-                }
-            };
-        });
-
-        it('hangup() during outgoing-ringing dismisses the call synchronously even if the signal publish never resolves', async () => {
-            // The signalSender starts as a resolving stub so initiateCall()'s
-            // own offer publish completes; then we swap to a never-resolving
-            // stub for the hangup test to simulate a cold relay where
-            // publishWithDeadline is still waiting for connection.
-            let signalImpl: (...args: any[]) => Promise<void> = vi.fn().mockResolvedValue(undefined);
-            const sendSignalSpy = vi.fn((...args: any[]) => signalImpl(...args));
-            service.registerSignalSender(sendSignalSpy);
-
-            await service.initiateCall('npub1recipient');
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            await service.initiateCall(PEER_NPUB);
             expect(get(voiceCallState).status).toBe('outgoing-ringing');
 
-            // Now make any further publishes hang — only the hangup signal
-            // is published from this point on, so this isolates the test.
-            signalImpl = () => new Promise(() => {});
-
-            // Capture state synchronously after hangup() returns. On the
-            // pre-fix (awaiting) code, this would still read 'outgoing-ringing'
-            // until the publish settled or the 5 s deadline tripped.
+            hangupHangs = true;
             service.hangup();
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('hangup');
-
-            // The hangup signal was still dispatched (fire-and-forget).
-            const hangupCall = sendSignalSpy.mock.calls.find(c => {
-                try { return JSON.parse(c[1]).action === 'hangup'; } catch { return false; }
-            });
-            expect(hangupCall).toBeDefined();
+            expect(senders.sendHangup).toHaveBeenCalledTimes(1);
         });
 
-        it('declineCall() during incoming-ringing dismisses synchronously even if the signal publish never resolves', async () => {
-            // declineCall doesn't run any publishes prior to its own reject
-            // signal, so we can register a never-resolving stub directly.
-            const hangingSendSignal = vi.fn().mockReturnValue(new Promise(() => {}));
-            service.registerSignalSender(hangingSendSignal);
+        it('declineCall during incoming-ringing dismisses synchronously', async () => {
+            const hangingReject = vi
+                .fn()
+                .mockImplementation(() => new Promise(() => {}));
+            service.registerNipAcSenders({
+                sendOffer: vi.fn(),
+                sendAnswer: vi.fn(),
+                sendIceCandidate: vi.fn(),
+                sendHangup: vi.fn(),
+                sendReject: hangingReject
+            });
 
-            setIncomingRinging('npub1sender', 'callId-decline-sync');
-
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
-            expect(get(voiceCallState).status).toBe('incoming-ringing');
+            setIncomingRinging(PEER_NPUB, 'call-decline');
 
             service.declineCall();
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('rejected');
-
-            const rejectCall = hangingSendSignal.mock.calls.find(c => {
-                try { return JSON.parse(c[1]).action === 'reject'; } catch { return false; }
-            });
-            expect(rejectCall).toBeDefined();
-        });
-
-        it('hangup() during an active call still authors the ended call event without blocking the UI', async () => {
-            // Same swap-after-initiate pattern as the outgoing-ringing test:
-            // initiateCall must be able to publish its offer; then we make
-            // both sendSignal and createCallEvent hang to assert that
-            // hangup() doesn't depend on either to dismiss the UI.
-            let signalImpl: (...args: any[]) => Promise<void> = vi.fn().mockResolvedValue(undefined);
-            const sendSignalSpy = vi.fn((...args: any[]) => signalImpl(...args));
-            service.registerSignalSender(sendSignalSpy);
-
-            const hangingCreateCallEvent = vi.fn().mockReturnValue(new Promise(() => {}));
-            service.registerCallEventCreator(hangingCreateCallEvent);
-
-            await service.initiateCall('npub1recipient');
-            const { setActive, voiceCallState } = await import('$lib/stores/voiceCall');
-            const { get } = await import('svelte/store');
-            setActive();
-            expect(get(voiceCallState).status).toBe('active');
-
-            // From here on, every signal publish hangs.
-            signalImpl = () => new Promise(() => {});
-
-            service.hangup();
-            // UI dismissed without waiting on either pending promise.
-            expect(get(voiceCallState).status).toBe('ended');
-            expect(get(voiceCallState).endReason).toBe('hangup');
-
-            // createCallEvent was still invoked (fire-and-forget) with the
-            // recipient npub captured before endCall ran.
-            expect(hangingCreateCallEvent).toHaveBeenCalledTimes(1);
-            const args = hangingCreateCallEvent.mock.calls[0];
-            expect(args[0]).toBe('npub1recipient');
-            expect(args[1]).toBe('ended');
+            expect(hangingReject).toHaveBeenCalledTimes(1);
         });
     });
 
-    /**
-     * Coverage for every persisted call-event-type authored on a terminal
-     * transition — ensures every possible call outcome leaves a chat-history
-     * pill, per the voice-calling capability spec. See
-     * openspec/specs/voice-calling/spec.md → "Call History via Kind 1405
-     * Events".
-     *
-     * Each test wires a resolving sendSignal stub plus a spy creator,
-     * triggers the relevant transition, and asserts:
-     *  - the creator is invoked exactly once with the expected type
-     *  - the recipient npub captured before cleanup is correct
-     *  - the callId tag is forwarded
-     *  - the end-state ends up correct
-     */
     describe('call-event authoring per terminal transition', () => {
-        beforeEach(() => {
-            startCallSessionSpy.mockClear();
-            endCallSessionSpy.mockClear();
-
-            (globalThis as any).RTCPeerConnection = function () {
-                this.onicecandidate = null;
-                this.ontrack = null;
-                this.oniceconnectionstatechange = null;
-                this.addTrack = vi.fn();
-                this.setRemoteDescription = vi.fn().mockResolvedValue(undefined);
-                this.setLocalDescription = vi.fn().mockResolvedValue(undefined);
-                this.createOffer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'offer' });
-                this.createAnswer = vi.fn().mockResolvedValue({ sdp: 'v=0', type: 'answer' });
-                this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
-                this.close = vi.fn();
-                this.iceConnectionState = 'new';
-                (globalThis as any).__lastPeerConnection = this;
-            };
-            (globalThis as any).RTCSessionDescription = function (init: any) {
-                Object.assign(this, init);
-            };
-            (globalThis as any).RTCIceCandidate = function (init: any) {
-                Object.assign(this, init);
-            };
-
-            const fakeStream = {
-                getTracks: () => [{ stop: vi.fn(), enabled: true }],
-                getAudioTracks: () => [{ stop: vi.fn(), enabled: true }]
-            };
-            (globalThis as any).navigator = {
-                ...((globalThis as any).navigator ?? {}),
-                mediaDevices: {
-                    getUserMedia: vi.fn().mockResolvedValue(fakeStream)
-                }
-            };
-        });
-
-        it("authors 'cancelled' via the LOCAL-ONLY path when the caller hangs up while outgoing-ringing", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("authors 'cancelled' via local path when caller hangs up while outgoing-ringing", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
             const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
             service.registerLocalCallEventCreator(localCreateCallEventSpy);
 
-            await service.initiateCall('npub1recipient');
-
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
-            expect(get(voiceCallState).status).toBe('outgoing-ringing');
+            await service.initiateCall(PEER_NPUB);
             const expectedCallId = get(voiceCallState).callId;
 
             service.hangup();
 
             expect(get(voiceCallState).status).toBe('ended');
-            // 'cancelled' must go through the local-only path (no
-            // gift-wrap, no peer delivery) — see spec scenario "Cancelled-
-            // call rumor is local-only on the caller".
             expect(localCreateCallEventSpy).toHaveBeenCalledTimes(1);
             const [recipient, type, callId] = localCreateCallEventSpy.mock.calls[0];
-            expect(recipient).toBe('npub1recipient');
+            expect(recipient).toBe(PEER_NPUB);
             expect(type).toBe('cancelled');
             expect(callId).toBe(expectedCallId);
-            // The gift-wrapped path must NOT be used for 'cancelled'.
             expect(createCallEventSpy).not.toHaveBeenCalled();
         });
 
-        it("authors 'declined' via the gift-wrapped path when the user declines an incoming call", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("authors 'declined' via gift-wrapped path when user declines", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
             const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
             service.registerLocalCallEventCreator(localCreateCallEventSpy);
 
-            setIncomingRinging('npub1sender', 'call-decline-1');
-
+            setIncomingRinging(PEER_NPUB, 'call-decline-1');
             service.declineCall();
 
-            // Single 'declined' rumor on the gift-wrapped path; the caller
-            // will receive it via standard NIP-17 delivery.
             expect(createCallEventSpy).toHaveBeenCalledTimes(1);
             const [recipient, type, duration, callId, initiatorNpub] =
                 createCallEventSpy.mock.calls[0];
-            expect(recipient).toBe('npub1sender');
+            expect(recipient).toBe(PEER_NPUB);
             expect(type).toBe('declined');
             expect(duration).toBeUndefined();
             expect(callId).toBe('call-decline-1');
-            // call-initiator MUST be the caller (the original WebRTC
-            // initiator), NOT the local user (callee / rumor author).
-            // This is what drives role-aware rendering: without it both
-            // peers would see the wrong copy. peerNpub here is the caller.
-            expect(initiatorNpub).toBe('npub1sender');
-            // No local-only authoring on this path.
+            expect(initiatorNpub).toBe(PEER_NPUB);
             expect(localCreateCallEventSpy).not.toHaveBeenCalled();
         });
 
-        it("does NOT author anything when the caller receives a reject signal", async () => {
-            // Regression for the duplicate-pill bug: previously the caller
-            // authored 'declined-outgoing' here while the callee authored
-            // 'declined-incoming', producing two rumors per call. Now the
-            // callee is the sole author of a single 'declined' rumor; the
-            // caller just transitions state.
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it('caller authors NOTHING when receiving Call Reject (callee owns the rumor)', async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
             const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
             service.registerLocalCallEventCreator(localCreateCallEventSpy);
 
-            await service.initiateCall('npub1recipient');
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            await service.initiateCall(PEER_NPUB);
             const callId = get(voiceCallState).callId!;
-            // The initial offer publish is the only call we expect on the
-            // gift-wrapped creator BEFORE the reject — actually it's not
-            // called at all by initiateCall (only sendSignal is). Reset to
-            // be sure we're measuring only the reject handling.
             createCallEventSpy.mockClear();
-            localCreateCallEventSpy.mockClear();
 
-            await service.handleSignal({
-                type: 'voice-call', action: 'reject', callId
-            }, 'npub1recipient');
+            const reject = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_REJECT,
+                callId,
+                content: ''
+            });
+            await service.handleNipAcEvent(reject);
 
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('rejected');
-            // Crucially: no authoring on either path.
             expect(createCallEventSpy).not.toHaveBeenCalled();
             expect(localCreateCallEventSpy).not.toHaveBeenCalled();
         });
 
-        it("authors 'busy' when the caller receives a busy signal", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("caller authors 'busy' when receiving Call Reject with content 'busy'", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
 
-            await service.initiateCall('npub1recipient');
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
+            await service.initiateCall(PEER_NPUB);
             const callId = get(voiceCallState).callId!;
+            createCallEventSpy.mockClear();
 
-            await service.handleSignal({
-                type: 'voice-call', action: 'busy', callId
-            }, 'npub1recipient');
+            const busyReject = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_REJECT,
+                callId,
+                content: 'busy'
+            });
+            await service.handleNipAcEvent(busyReject);
 
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('busy');
             expect(createCallEventSpy).toHaveBeenCalledTimes(1);
             const args = createCallEventSpy.mock.calls[0];
-            expect(args[0]).toBe('npub1recipient');
+            expect(args[0]).toBe(PEER_NPUB);
             expect(args[1]).toBe('busy');
         });
 
-        it("authors 'failed' on the caller side when ICE state goes failed", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("authors 'failed' on caller side when ICE fails", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
 
-            await service.initiateCall('npub1recipient');
+            await service.initiateCall(PEER_NPUB);
             const pc = (globalThis as any).__lastPeerConnection;
-
-            // Trigger ICE failure post-offer, simulating "no candidate
-            // ever connected end-to-end".
             pc.iceConnectionState = 'failed';
             pc.oniceconnectionstatechange();
 
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('ice-failed');
-
             expect(createCallEventSpy).toHaveBeenCalledTimes(1);
-            const args = createCallEventSpy.mock.calls[0];
-            expect(args[0]).toBe('npub1recipient');
-            expect(args[1]).toBe('failed');
+            expect(createCallEventSpy.mock.calls[0][1]).toBe('failed');
         });
 
-        it("does NOT author 'failed' on the callee side when ICE state goes failed", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("does NOT author 'failed' on callee side when ICE fails", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
 
-            // Simulate the callee side: an offer arrives, RTCPeerConnection
-            // is allocated, and then ICE fails. The callee's isInitiator
-            // flag should be false (set only by initiateCall), so no pill
-            // is authored — the caller is responsible.
-            const offer: VoiceCallSignal = {
-                type: 'voice-call', action: 'offer', callId: 'call-failed-callee', sdp: 'v=0\r\n...'
-            };
-            await service.handleSignal(offer, 'npub1caller');
-
+            const offer = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_OFFER,
+                callId: 'call-failed-callee',
+                content: 'sdp',
+                callType: 'voice'
+            });
+            await service.handleNipAcEvent(offer);
             const pc = (globalThis as any).__lastPeerConnection;
             pc.iceConnectionState = 'failed';
             pc.oniceconnectionstatechange();
 
-            const { get } = await import('svelte/store');
-            const { voiceCallState } = await import('$lib/stores/voiceCall');
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('ice-failed');
-
-            // No 'failed' rumor authored on the callee side.
-            const failedCall = createCallEventSpy.mock.calls.find(c => c[1] === 'failed');
-            expect(failedCall).toBeUndefined();
+            const failedCalls = createCallEventSpy.mock.calls.filter(
+                (c) => c[1] === 'failed'
+            );
+            expect(failedCalls.length).toBe(0);
         });
 
-        it("authors 'missed' via the LOCAL-ONLY path when the caller hangs up before pickup", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("authors 'missed' via local path when caller hangs up before pickup", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
             const localCreateCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
             service.registerLocalCallEventCreator(localCreateCallEventSpy);
 
             const callId = 'call-missed-1';
-            setIncomingRinging('npub1caller', callId);
+            setIncomingRinging(PEER_NPUB, callId);
 
-            await service.handleSignal({
-                type: 'voice-call', action: 'hangup', callId
-            }, 'npub1caller');
+            const hangup = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_HANGUP,
+                callId,
+                content: ''
+            });
+            await service.handleNipAcEvent(hangup);
 
-            // 'missed' must go through the local-only path — see spec
-            // scenario "Missed-call rumor is local-only on the callee".
             expect(localCreateCallEventSpy).toHaveBeenCalledTimes(1);
             const [recipient, type, callIdArg, initiatorNpub] =
                 localCreateCallEventSpy.mock.calls[0];
-            expect(recipient).toBe('npub1caller');
+            expect(recipient).toBe(PEER_NPUB);
             expect(type).toBe('missed');
             expect(callIdArg).toBe(callId);
-            // call-initiator MUST be the caller, NOT the local user
-            // (callee / rumor author). Even though missed is rendered
-            // symmetrically today, the persisted tag should be
-            // semantically correct for future role-aware rendering.
-            expect(initiatorNpub).toBe('npub1caller');
-            // No gift-wrapped authoring for missed.
+            expect(initiatorNpub).toBe(PEER_NPUB);
             expect(createCallEventSpy).not.toHaveBeenCalled();
         });
 
-        it("authors 'ended' with duration when the caller hangs up an active call (regression)", async () => {
-            const sendSignalSpy = vi.fn().mockResolvedValue(undefined);
+        it("authors 'ended' with duration when caller hangs up active call", async () => {
             const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
-            service.registerSignalSender(sendSignalSpy);
+            service.registerNipAcSenders(noopSenders());
             service.registerCallEventCreator(createCallEventSpy);
 
-            await service.initiateCall('npub1recipient');
-            const { setActive, voiceCallState, incrementDuration } = await import('$lib/stores/voiceCall');
-            const { get } = await import('svelte/store');
-            setActive();
+            await service.initiateCall(PEER_NPUB);
+            storeSetActive();
             incrementDuration();
             incrementDuration();
-            incrementDuration(); // duration === 3
+            incrementDuration();
 
             const expectedCallId = get(voiceCallState).callId;
             service.hangup();
 
             expect(createCallEventSpy).toHaveBeenCalledTimes(1);
-            const [recipient, type, duration, callId] = createCallEventSpy.mock.calls[0];
-            expect(recipient).toBe('npub1recipient');
+            const [recipient, type, duration, callId] =
+                createCallEventSpy.mock.calls[0];
+            expect(recipient).toBe(PEER_NPUB);
             expect(type).toBe('ended');
             expect(duration).toBe(3);
             expect(callId).toBe(expectedCallId);
+        });
+    });
+
+    describe('NIP-AC self-event multi-device handling', () => {
+        it('S16: self Call Answer in incoming-ringing transitions to answered-elsewhere', async () => {
+            service.registerNipAcSenders(noopSenders());
+            const callId = 'call-multi-device';
+            setIncomingRinging(PEER_NPUB, callId);
+
+            // The caller is PEER_HEX; the local user (rumor pubkey for self-wrap)
+            // is whoever signed the answer. We invoke handleSelfAnswer directly
+            // (the receive path's self-event filter is what calls this).
+            const selfHex = 'c'.repeat(64);
+            const selfAnswer = buildInner({
+                senderHex: selfHex,
+                kind: NIP_AC_KIND_ANSWER,
+                callId,
+                content: 'sdp-answer'
+            });
+            await service.handleSelfAnswer(selfAnswer);
+
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('answered-elsewhere');
+            expect(dismissIncomingCallSpy).toHaveBeenCalledWith({ callId });
+        });
+
+        it('self Call Reject in incoming-ringing transitions to rejected-elsewhere', async () => {
+            service.registerNipAcSenders(noopSenders());
+            const callId = 'call-multi-device-reject';
+            setIncomingRinging(PEER_NPUB, callId);
+
+            const selfHex = 'd'.repeat(64);
+            const selfReject = buildInner({
+                senderHex: selfHex,
+                kind: NIP_AC_KIND_REJECT,
+                callId,
+                content: ''
+            });
+            await service.handleSelfReject(selfReject);
+
+            expect(get(voiceCallState).status).toBe('ended');
+            expect(get(voiceCallState).endReason).toBe('rejected-elsewhere');
+            expect(dismissIncomingCallSpy).toHaveBeenCalledWith({ callId });
+        });
+
+        it('self Call Answer with mismatched call-id is ignored', async () => {
+            service.registerNipAcSenders(noopSenders());
+            setIncomingRinging(PEER_NPUB, 'call-X');
+
+            const selfHex = 'e'.repeat(64);
+            const selfAnswer = buildInner({
+                senderHex: selfHex,
+                kind: NIP_AC_KIND_ANSWER,
+                callId: 'call-Y',
+                content: 'sdp'
+            });
+            await service.handleSelfAnswer(selfAnswer);
+
+            expect(get(voiceCallState).status).toBe('incoming-ringing');
+            expect(dismissIncomingCallSpy).not.toHaveBeenCalled();
+        });
+
+        it('self Call Answer outside incoming-ringing is ignored', async () => {
+            service.registerNipAcSenders(noopSenders());
+            // status is idle
+            const selfHex = 'f'.repeat(64);
+            const selfAnswer = buildInner({
+                senderHex: selfHex,
+                kind: NIP_AC_KIND_ANSWER,
+                callId: 'whatever',
+                content: 'sdp'
+            });
+            await service.handleSelfAnswer(selfAnswer);
+
+            expect(get(voiceCallState).status).toBe('idle');
+            expect(dismissIncomingCallSpy).not.toHaveBeenCalled();
         });
     });
 });

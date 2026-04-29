@@ -33,6 +33,10 @@ import { isAndroidNative } from './NativeDialogs';
 import { notificationService } from './NotificationService';
 import { clearAndroidLocalSecretKey, getAndroidLocalSecretKeyHex, setAndroidLocalSecretKeyHex } from './AndroidLocalSecretKey';
 import { contactSyncService } from './ContactSyncService';
+import {
+    warmAmberNipAcPermissions,
+    clearAmberPermissionsWarmupFlag
+} from './voiceCall/amberPermissionsWarmup';
 import { favoriteSyncService } from './FavoriteSyncService';
 import { loadFavorites } from '$lib/stores/favorites';
 import { archiveSyncService } from './ArchiveSyncService';
@@ -242,6 +246,12 @@ export class AuthService {
 
             localStorage.setItem(AUTH_METHOD_KEY, 'amber');
             localStorage.setItem('nospeak:amber_pubkey_hex', pubkeyHex);
+
+            // Pre-warm Amber's per-app+kind permission grants for the
+            // NIP-AC kinds that natural call usage doesn't seed (25050
+            // Offer, 25054 Reject). Fire-and-forget; never blocks login
+            // navigation. See amberPermissionsWarmup.ts for rationale.
+            void warmAmberNipAcPermissions();
 
             beginLoginSyncFlow(true);
             goto('/chat', { replaceState: true });
@@ -730,6 +740,13 @@ export class AuthService {
                 signer.set(s);
                 currentUser.set({ npub });
  
+                // Pre-warm Amber's per-app+kind permission grants for
+                // the NIP-AC kinds that natural call usage doesn't seed.
+                // Fire-and-forget; gated by a localStorage flag so
+                // existing Amber users see the prompts exactly once on
+                // their first launch after the NIP-AC migration.
+                void warmAmberNipAcPermissions();
+
                 await ensureRelaysAndHistory(npub, 'Restoration');
  
                  await messagingService.startSubscriptionsForCurrentUser().catch(e => {
@@ -786,6 +803,7 @@ export class AuthService {
         localStorage.removeItem(NIP46_SECRET_KEY);
         localStorage.removeItem(NIP46_URI_KEY);
         localStorage.removeItem('nospeak:amber_pubkey_hex');
+        clearAmberPermissionsWarmupFlag();
         localStorage.removeItem('nospeak-settings');
         localStorage.removeItem('nospeak-theme');
         localStorage.removeItem('nospeak-theme-mode');

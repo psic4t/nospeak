@@ -284,4 +284,36 @@ public class AndroidBackgroundMessagingPlugin extends Plugin {
         getContext().stopService(intent);
         call.resolve();
     }
+
+    /**
+     * NIP-AC follow-gate: persist the user's NIP-02 contact-list hex
+     * pubkeys for the native background service to consult before posting
+     * the lockscreen FSI ringer for an incoming call. Called from JS
+     * whenever the contact list refreshes.
+     *
+     * Argument shape: {@code { hexPubkeys: string[] }}. An empty array is
+     * a valid value (means "no followers"); the absence of any prior call
+     * to this method is the "not loaded yet" state that drops offers per
+     * the cold-start rule.
+     */
+    @PluginMethod
+    public void setFollowGate(PluginCall call) {
+        com.getcapacitor.JSArray jsArr = call.getArray("hexPubkeys");
+        String[] hex;
+        if (jsArr == null) {
+            hex = new String[0];
+        } else {
+            int len = jsArr.length();
+            hex = new String[len];
+            for (int i = 0; i < len; i++) {
+                try {
+                    hex[i] = jsArr.getString(i);
+                } catch (Exception e) {
+                    hex[i] = "";
+                }
+            }
+        }
+        AndroidBackgroundMessagingPrefs.saveFollowGateHex(getContext(), hex);
+        call.resolve();
+    }
 }

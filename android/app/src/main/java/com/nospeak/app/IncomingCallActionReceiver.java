@@ -64,8 +64,9 @@ public class IncomingCallActionReceiver extends BroadcastReceiver {
             @Override
             public void run() {
                 try {
-                    // 1. Send the kind-14 reject voice-call signal to the
-                    //    caller so their UI dismisses immediately.
+                    // 1. Send the NIP-AC kind-25054 Call Reject (with
+                    //    self-wrap for multi-device) to the caller so
+                    //    their UI dismisses immediately.
                     svc.sendVoiceCallReject(senderPubkeyHex, callId);
                 } catch (Exception e) {
                     Log.w(TAG, "sendVoiceCallReject failed (best-effort, ignoring)", e);

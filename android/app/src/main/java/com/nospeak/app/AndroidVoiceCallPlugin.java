@@ -97,19 +97,34 @@ public class AndroidVoiceCallPlugin extends Plugin {
     public void getPendingIncomingCall(PluginCall call) {
         SharedPreferences prefs = getContext().getSharedPreferences(
             "nospeak_pending_incoming_call", Context.MODE_PRIVATE);
-        String signalJson = prefs.getString("signalJson", null);
+
+        // NIP-AC handoff schema. Old-shape entries from pre-NIP-AC builds
+        // are missing the new keys (sdp, callType, alt, innerEventId,
+        // createdAt) — treat them as missing and clear the slot.
+        String sdp = prefs.getString("sdp", null);
+        String callType = prefs.getString("callType", null);
+        String alt = prefs.getString("alt", null);
+        String innerEventId = prefs.getString("innerEventId", null);
+        long createdAt = prefs.getLong("createdAt", 0L);
 
         JSObject ret = new JSObject();
-        if (signalJson == null) {
+        if (sdp == null || callType == null || alt == null
+            || innerEventId == null || createdAt == 0L) {
+            // Either nothing pending, or a legacy-shape entry from a prior
+            // build. Clear to avoid spurious re-reads.
+            if (prefs.getAll() != null && !prefs.getAll().isEmpty()) {
+                Log.d(TAG, "getPendingIncomingCall: clearing legacy/empty slot");
+                prefs.edit().clear().apply();
+            }
             ret.put("pending", null);
             call.resolve(ret);
             return;
         }
 
-        long expiresAt = prefs.getLong("expiresAt", 0L);
+        // NIP-AC: 60s staleness check on inner event's createdAt.
         long nowSec = System.currentTimeMillis() / 1000L;
-        if (expiresAt > 0 && expiresAt < nowSec) {
-            // Stale — clear and report none.
+        if (nowSec - createdAt > 60L) {
+            Log.d(TAG, "getPendingIncomingCall: stale (createdAt=" + createdAt + ")");
             prefs.edit().clear().apply();
             ret.put("pending", null);
             call.resolve(ret);
@@ -117,12 +132,13 @@ public class AndroidVoiceCallPlugin extends Plugin {
         }
 
         JSObject pending = new JSObject();
-        pending.put("signalJson", signalJson);
-        pending.put("senderNpub", prefs.getString("senderNpub", ""));
-        pending.put("senderPubkeyHex", prefs.getString("senderPubkeyHex", ""));
         pending.put("callId", prefs.getString("callId", ""));
-        pending.put("receivedAt", prefs.getLong("receivedAt", 0L));
-        pending.put("expiresAt", expiresAt);
+        pending.put("sdp", sdp);
+        pending.put("peerHex", prefs.getString("peerHex", ""));
+        pending.put("callType", callType);
+        pending.put("alt", alt);
+        pending.put("innerEventId", innerEventId);
+        pending.put("createdAt", createdAt);
         ret.put("pending", pending);
         call.resolve(ret);
     }
@@ -131,6 +147,52 @@ public class AndroidVoiceCallPlugin extends Plugin {
     public void clearPendingIncomingCall(PluginCall call) {
         getContext().getSharedPreferences("nospeak_pending_incoming_call",
             Context.MODE_PRIVATE).edit().clear().apply();
+        call.resolve();
+    }
+
+    /**
+     * NIP-AC multi-device: another device of the same user accepted or
+     * rejected the call. Cancel the FSI notification, finish the
+     * IncomingCallActivity if it's showing, and stop the ringer FGS.
+     * Idempotent and safe to call when none of those are active.
+     */
+    @PluginMethod
+    public void dismissIncomingCall(PluginCall call) {
+        String callId = call.getString("callId");
+        Context ctx = getContext();
+
+        // Cancel the FSI notification regardless of callId match — the
+        // user-visible state is "ringing for some incoming call", and a
+        // dismiss for any callId means we should stop ringing.
+        try {
+            IncomingCallNotification.cancel(ctx);
+        } catch (Exception e) {
+            Log.w(TAG, "dismissIncomingCall: cancel notification failed", e);
+        }
+
+        // Tell the ringing activity to finish (broadcast is no-op if
+        // activity isn't running). Reuses the same broadcast as a remote
+        // hangup-while-ringing.
+        try {
+            Intent broadcast = new Intent(IncomingCallActivity.ACTION_CALL_CANCELLED)
+                .setPackage(ctx.getPackageName());
+            if (callId != null) {
+                broadcast.putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId);
+            }
+            ctx.sendBroadcast(broadcast);
+        } catch (Exception e) {
+            Log.w(TAG, "dismissIncomingCall: broadcast cancel failed", e);
+        }
+
+        // Clear the pending-call SharedPrefs so a later cold-start tap
+        // doesn't try to accept a dead call.
+        try {
+            ctx.getSharedPreferences("nospeak_pending_incoming_call",
+                Context.MODE_PRIVATE).edit().clear().apply();
+        } catch (Exception e) {
+            Log.w(TAG, "dismissIncomingCall: clear prefs failed", e);
+        }
+
         call.resolve();
     }
 
