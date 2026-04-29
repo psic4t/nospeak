@@ -313,6 +313,26 @@ public class IncomingCallActivity extends Activity {
             .putExtra(IncomingCallActionReceiver.EXTRA_SENDER_PUBKEY_HEX, senderPubkeyHex);
         sendBroadcast(broadcast);
 
+        // If the device is locked, route the user back to the launcher BEFORE
+        // finishing this activity. This activity runs in its own task
+        // (singleInstance + empty taskAffinity); without an explicit redirect,
+        // Android promotes the next-most-recent task — typically MainActivity's
+        // background task, which is kept alive by NativeBackgroundMessagingService —
+        // and surfaces it over the keyguard. Launching the home intent makes the
+        // launcher the new foreground task; because the launcher cannot show over
+        // the lockscreen, the keyguard remains visible after we finish.
+        try {
+            KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (km != null && km.isKeyguardLocked()) {
+                Intent home = new Intent(Intent.ACTION_MAIN);
+                home.addCategory(Intent.CATEGORY_HOME);
+                home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(home);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to route to home before decline finish", e);
+        }
+
         finishAndRemoveTask();
     }
 }

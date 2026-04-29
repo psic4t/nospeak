@@ -1,7 +1,10 @@
 package com.nospeak.app;
  
+import android.app.KeyguardManager;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
@@ -127,7 +130,31 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onNewIntent(android.content.Intent intent) {
+    public void onResume() {
+        super.onResume();
+        // Safety net: if MainActivity becomes visible while the keyguard is
+        // locked AND we were not launched via the incoming-call Accept path,
+        // something else (typically Android promoting our background task
+        // after IncomingCallActivity's lockscreen task finishes on Decline)
+        // surfaced us over the lockscreen. Send the task back so the user
+        // returns to the keyguard. The Accept path (handleIncomingCallIntent)
+        // is allowed to keep us visible over the lockscreen.
+        try {
+            Intent intent = getIntent();
+            boolean acceptingCall = intent != null
+                && intent.getBooleanExtra("accept_pending_call", false);
+            if (!acceptingCall) {
+                KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+                if (km != null && km.isKeyguardLocked()) {
+                    Log.d("MainActivity", "Keyguard locked and not accepting call; moving task to back");
+                    moveTaskToBack(true);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         // Keep the latest Intent available for plugins that read
         // getActivity().getIntent(), such as the AndroidShareTarget plugin.
