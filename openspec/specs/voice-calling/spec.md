@@ -4,34 +4,52 @@
 Define requirements for one-to-one peer-to-peer encrypted voice calls between Nostr users. Calls SHALL use WebRTC for media transport, NIP-17 gift wraps for signaling, NIP-40 expiration tags to mark signaling messages as ephemeral, and NIP-59 sealed Kind 16 events for persistent call history (missed/ended).
 ## Requirements
 ### Requirement: Voice Call Lifecycle
-The system SHALL support a complete one-to-one voice call lifecycle with the following statuses: `idle`, `outgoing-ringing`, `incoming-ringing`, `connecting`, `active`, `ended`. The system SHALL transition between statuses in response to local user actions (initiate, accept, decline, hangup, mute) and signaling events received from the remote peer (offer, answer, ice-candidate, hangup, reject, busy). Only one call SHALL be active at any time per client.
+The system SHALL support a complete one-to-one voice call lifecycle with the following statuses: `idle`, `outgoing-ringing`, `incoming-ringing`, `connecting`, `active`, `ended`. The system SHALL transition between statuses in response to local user actions (initiate, accept, decline, hangup, mute) and signaling events received from the remote peer (Call Offer kind 25050, Call Answer kind 25051, ICE Candidate kind 25052, Call Hangup kind 25053, Call Reject kind 25054). Only one call SHALL be active at any time per client. The `ended` state SHALL carry one of the following end reasons: `hangup`, `rejected`, `busy`, `timeout`, `ice-failed`, `error`, `answered-elsewhere`, `rejected-elsewhere`.
 
 #### Scenario: Successful call setup and termination
 - **GIVEN** the user is `idle` and authenticated
 - **WHEN** the user initiates a call to a contact
 - **THEN** the local status SHALL transition to `outgoing-ringing`
-- **AND** an `offer` signaling message SHALL be sent to the recipient
-- **WHEN** the recipient sends an `answer`
+- **AND** a Call Offer (kind 25050) signaling event SHALL be sent to the recipient
+- **WHEN** the recipient sends a Call Answer (kind 25051)
 - **THEN** the local status SHALL transition to `connecting`
 - **WHEN** the WebRTC ICE connection state becomes `connected` or `completed`
 - **THEN** the local status SHALL transition to `active`
 - **AND** the call duration timer SHALL start
 - **WHEN** the user hangs up
-- **THEN** a `hangup` signaling message SHALL be sent to the peer
-- **AND** the local status SHALL transition to `ended`
+- **THEN** a Call Hangup (kind 25053) signaling event SHALL be sent to the peer
+- **AND** the local status SHALL transition to `ended` with reason `hangup`
 - **AND** all media tracks SHALL be released and the peer connection SHALL be closed
 
 #### Scenario: Recipient declines an incoming call
 - **GIVEN** the user has status `incoming-ringing`
 - **WHEN** the user declines the call
-- **THEN** a `reject` signaling message SHALL be sent to the caller
+- **THEN** a Call Reject (kind 25054) signaling event SHALL be sent to the caller
 - **AND** the local status SHALL transition to `ended` with reason `rejected`
 
 #### Scenario: Initiator hangs up before answer
 - **GIVEN** the user has status `outgoing-ringing`
 - **WHEN** the user cancels the call before an answer arrives
-- **THEN** a `hangup` signaling message SHALL be sent
+- **THEN** a Call Hangup (kind 25053) signaling event SHALL be sent
 - **AND** the local status SHALL transition to `ended`
+
+#### Scenario: Concurrent call rejected with busy
+- **GIVEN** the user has an `active` call with peer A
+- **WHEN** a Call Offer (kind 25050) arrives from peer B
+- **THEN** the system SHALL respond to peer B with a Call Reject (kind 25054) whose `content` is `"busy"`
+- **AND** the existing call with peer A SHALL be unaffected
+
+#### Scenario: Multi-device answered-elsewhere
+- **GIVEN** the user is logged in on devices D1 and D2 and the local status on D1 is `incoming-ringing` for `call-id=X`
+- **WHEN** D2 accepts the same call and publishes a self-addressed Call Answer (kind 25051) gift wrap with matching `call-id=X`
+- **THEN** D1 SHALL transition to `ended` with reason `answered-elsewhere`
+- **AND** D1 SHALL stop ringing
+
+#### Scenario: Multi-device rejected-elsewhere
+- **GIVEN** the user is logged in on devices D1 and D2 and the local status on D1 is `incoming-ringing` for `call-id=X`
+- **WHEN** D2 rejects the same call and publishes a self-addressed Call Reject (kind 25054) gift wrap with matching `call-id=X`
+- **THEN** D1 SHALL transition to `ended` with reason `rejected-elsewhere`
+- **AND** D1 SHALL stop ringing
 
 ### Requirement: Call Initiation Restrictions
 The system SHALL only allow voice call initiation in one-to-one conversations. The phone-icon call button SHALL NOT be rendered in group conversations. The system SHALL only allow one concurrent call; if the user is already in a non-`idle` call state, attempts to initiate or accept a new call SHALL be rejected.
@@ -53,53 +71,46 @@ The system SHALL only allow voice call initiation in one-to-one conversations. T
 - **AND** the existing call with peer A SHALL be unaffected
 
 ### Requirement: Voice Signaling Transport
-The system SHALL transmit WebRTC signaling messages (offer, answer, ice-candidate, hangup, reject, busy) as NIP-17 gift wraps (Kind 1059) containing a Kind 14 rumor. The rumor SHALL include a `['type', 'voice-call']` tag to discriminate signals from chat messages. The rumor `content` SHALL be the JSON-encoded signaling payload `{ type: 'voice-call', action, callId, sdp?, candidate? }`. The system SHALL NOT persist signaling rumors to the local database. The system SHALL NOT create a self-wrap (sender-targeted gift wrap) for signaling rumors.
+The system SHALL transmit WebRTC signaling messages as NIP-AC ephemeral gift wraps of kind `21059`. The inner signaling event SHALL be one of the following kinds, signed by the sender's real key:
 
-#### Scenario: Signal sent as gift-wrapped Kind 14 rumor with discriminator
-- **WHEN** the system sends a voice-call signal
-- **THEN** the inner rumor SHALL have `kind: 14`
-- **AND** the rumor `tags` SHALL include `['type', 'voice-call']`
-- **AND** the rumor `content` SHALL be the JSON-encoded signaling payload
-- **AND** the rumor SHALL be wrapped in a NIP-17 gift wrap (Kind 1059) addressed to the recipient
+| Kind  | Name           | `content`                                                                                       |
+|-------|----------------|--------------------------------------------------------------------------------------------------|
+| 25050 | Call Offer     | Raw SDP offer string                                                                             |
+| 25051 | Call Answer    | Raw SDP answer string                                                                            |
+| 25052 | ICE Candidate  | JSON string `{"candidate":...,"sdpMid":...,"sdpMLineIndex":...}`                                 |
+| 25053 | Call Hangup    | Empty string OR human-readable reason                                                            |
+| 25054 | Call Reject    | Empty string OR `"busy"` for auto-reject from a non-idle state                                   |
+
+Every inner signaling event SHALL include the tags `['p', <recipient-hex>]`, `['call-id', <UUID>]`, and `['alt', <human-readable-description>]`. Call Offer events (kind 25050) SHALL additionally include `['call-type', 'voice']`. Inner signaling events SHALL NOT carry an `expiration` tag — the ephemeral kind range conveys transience. The gift wrap (kind 21059) SHALL have a single `['p', <recipient-hex>]` tag, no `expiration` tag, and SHALL be signed with a freshly generated ephemeral key. The wrap content SHALL be the NIP-44 v2 ciphertext of the signed inner event JSON. The system SHALL NOT use the NIP-13 seal layer for signaling. The system SHALL NOT persist signaling events to the local database. The system SHALL NOT create a self-wrap for Call Offer (25050), ICE Candidate (25052), or Call Hangup (25053) events.
+
+#### Scenario: Call Offer event structure
+- **WHEN** the system sends a Call Offer
+- **THEN** the inner event SHALL have `kind: 25050` and `content` equal to the raw SDP offer string
+- **AND** the inner event tags SHALL include `['p', <recipient-hex>]`, `['call-id', <UUID>]`, `['call-type', 'voice']`, and `['alt', <human-readable>]`
+- **AND** the inner event SHALL be signed by the sender's real key
+- **AND** the wrap SHALL have `kind: 21059`, a single `['p', <recipient-hex>]` tag, no `expiration` tag, and SHALL be signed by a fresh ephemeral key
+- **AND** the wrap `content` SHALL be the NIP-44 v2 ciphertext of the signed inner event
+
+#### Scenario: ICE Candidate content shape
+- **WHEN** the system sends an ICE Candidate
+- **THEN** the inner event SHALL have `kind: 25052`
+- **AND** `content` SHALL be a JSON string with exactly the fields `candidate`, `sdpMid`, and `sdpMLineIndex`
+- **AND** quotes and backslashes in the SDP fragment SHALL be JSON-escaped
 
 #### Scenario: Received signal routed to call service and not persisted
-- **WHEN** a gift wrap is decrypted to a Kind 14 rumor with the `type:voice-call` tag
-- **THEN** the parsed signal SHALL be dispatched to the voice call service
-- **AND** the rumor SHALL NOT be saved to the message database
-- **AND** the rumor SHALL NOT be rendered as a chat message
+- **WHEN** a kind 21059 gift wrap is decrypted to a signed inner event of kind 25050, 25051, 25052, 25053, or 25054
+- **THEN** the inner event SHALL be dispatched to the voice call service
+- **AND** the inner event SHALL NOT be saved to the message database
+- **AND** the inner event SHALL NOT be rendered as a chat message
 
-### Requirement: Ephemeral Signaling via NIP-40
-The system SHALL mark voice-call signaling events as ephemeral by adding a NIP-40 `['expiration', <unix-seconds>]` tag with a value of `now + 60` seconds to the inner rumor (Kind 14), the seal (Kind 13), and the outer gift wrap (Kind 1059). On receive, the system SHALL silently drop any decrypted rumor whose `expiration` tag value is in the past, before any kind-specific routing. A rumor with no `expiration` tag SHALL be processed normally. A rumor with a non-numeric `expiration` tag value SHALL be processed normally.
-
-#### Scenario: Outgoing voice signal carries 60-second expiration on all three layers
-- **WHEN** the system sends a voice-call signal at wall-clock time T
-- **THEN** the inner rumor's `tags` SHALL include `['expiration', String(T + 60)]`
-- **AND** the seal's `tags` SHALL include `['expiration', String(T + 60)]`
-- **AND** the gift wrap's `tags` SHALL include `['expiration', String(T + 60)]`
-
-#### Scenario: Expired rumor silently dropped on receive
-- **GIVEN** a gift wrap is decrypted to a rumor with `['expiration', <past-unix-time>]`
-- **WHEN** the system finishes seal/rumor pubkey verification and the my-pubkey-in-p-tags check
-- **THEN** the system SHALL NOT dispatch the rumor to any kind-specific handler (reactions, voice signals, normal message processing)
-- **AND** the system SHALL NOT save the rumor to the database
-
-#### Scenario: Future-expiration rumor processed normally
-- **GIVEN** a gift wrap is decrypted to a voice-call signal rumor with `['expiration', String(now + 60)]`
-- **WHEN** the system completes the expiration check
-- **THEN** the rumor SHALL be dispatched to the voice call service handler
-
-#### Scenario: Rumor without expiration tag processed normally
-- **GIVEN** a gift wrap is decrypted to a Kind 14 rumor with no `expiration` tag
-- **WHEN** the system completes the expiration check
-- **THEN** the rumor SHALL be processed by the normal message-handling pipeline
-
-#### Scenario: Read receipts continue to function under generic expiration check
-- **GIVEN** a gift wrap is decrypted to a Kind 7 reaction rumor with a 7-day-future `expiration` tag
-- **WHEN** the system completes the expiration check
-- **THEN** the rumor SHALL be dispatched to the reaction handler
+#### Scenario: Legacy kind-14 voice-call rumor silently ignored
+- **GIVEN** an older client publishes a kind 14 rumor with `['type','voice-call']`
+- **WHEN** the new client decrypts the wrap
+- **THEN** the rumor SHALL NOT be dispatched to the voice call service
+- **AND** the rumor SHALL NOT trigger any user-facing notification
 
 ### Requirement: Voice Signal Publishing Performance
-The system SHALL publish voice-call signaling gift wraps only to relays that are already connected at the time of send, to avoid triggering subscription replays caused by adding temporary relays. The system SHALL cache the recipient's messaging-relay list for 60 seconds to avoid repeated profile lookups during ICE candidate trickle. The system SHALL emit ICE candidates fire-and-forget (without awaiting publish completion) so that candidates can be sent concurrently. The system SHALL apply a 5-second per-publish deadline to voice signal sends.
+The system SHALL publish voice-call signaling gift wraps only to relays that are already connected at the time of send, to avoid triggering subscription replays caused by adding temporary relays. The system SHALL cache the recipient's messaging-relay list for 60 seconds to avoid repeated profile lookups during ICE candidate trickle. The system SHALL emit ICE candidates fire-and-forget (without awaiting publish completion) so that candidates can be sent concurrently. The system SHALL apply a 5-second per-publish deadline to voice signal sends. For Call Answer (kind 25051) and Call Reject (kind 25054), the system SHALL additionally publish a self-wrap (a second kind 21059 wrap addressed to the sender's own pubkey) to enable multi-device "answered/rejected elsewhere" handling. The system SHALL NOT self-wrap Call Offer (25050), ICE Candidate (25052), or Call Hangup (25053).
 
 #### Scenario: Voice signals only target connected relays
 - **GIVEN** the recipient has three configured messaging relays, of which one is currently connected
@@ -117,19 +128,21 @@ The system SHALL publish voice-call signaling gift wraps only to relays that are
 - **THEN** each candidate SHALL be sent without blocking the next
 - **AND** the publish promises SHALL NOT be awaited inside the `onicecandidate` handler
 
-### Requirement: NIP-17 Anti-Impersonation Enforcement
-On receive, the system SHALL verify that the seal's pubkey equals the rumor's pubkey to prevent sender impersonation. The system SHALL verify the seal's signature using `verifyEvent`. The system SHALL drop any rumor whose decrypted seal fails either check.
+#### Scenario: Call Answer is also self-wrapped
+- **WHEN** the user accepts an incoming call and a Call Answer (kind 25051) is sent
+- **THEN** the system SHALL publish one kind 21059 gift wrap addressed to the caller
+- **AND** the system SHALL publish a second kind 21059 gift wrap addressed to the sender's own pubkey
+- **AND** both wraps SHALL contain the same signed inner kind-25051 event
 
-#### Scenario: Mismatched seal/rumor pubkey rejected
-- **GIVEN** a gift wrap is decrypted to a seal whose `pubkey` does not equal the inner rumor's `pubkey`
-- **WHEN** the system processes the gift wrap
-- **THEN** the rumor SHALL NOT be dispatched to any handler
-- **AND** an error SHALL be logged
+#### Scenario: Call Reject is also self-wrapped
+- **WHEN** the user declines an incoming call and a Call Reject (kind 25054) is sent
+- **THEN** the system SHALL publish one kind 21059 gift wrap addressed to the caller
+- **AND** the system SHALL publish a second kind 21059 gift wrap addressed to the sender's own pubkey
 
-#### Scenario: Invalid seal signature rejected
-- **GIVEN** a gift wrap is decrypted to a seal whose signature is invalid
-- **WHEN** the system processes the gift wrap
-- **THEN** the rumor SHALL NOT be dispatched to any handler
+#### Scenario: Call Offer is not self-wrapped
+- **WHEN** the user initiates a call and a Call Offer (kind 25050) is sent
+- **THEN** the system SHALL publish exactly one kind 21059 gift wrap addressed to the recipient
+- **AND** the system SHALL NOT publish a self-wrap for the offer
 
 ### Requirement: Call Timeouts
 The system SHALL apply a 60-second timeout to outgoing call offers; if no `answer` arrives within this window the call SHALL transition to `ended` with reason `timeout`. The system SHALL apply a 30-second timeout to ICE connection establishment after answer exchange; if the peer connection does not reach `connected`/`completed` within this window the call SHALL transition to `ended` with reason `ice-failed`. The system SHALL also transition to `ended` with reason `ice-failed` if the ICE connection state becomes `failed` or `disconnected`.
@@ -196,25 +209,6 @@ On the **web/PWA build**, ringback SHALL be played via Web Audio. On **Android**
 - **AND** the Web Audio ringback SHALL NOT play
 - **WHEN** the status transitions to `connecting`, `active`, or `ended`
 - **THEN** the native ringback SHALL stop
-
-### Requirement: Call History via Kind 16 Events
-The system SHALL persist call history as NIP-17 gift-wrapped Kind 16 rumor events sent to both the initiator and the recipient (via standard NIP-59 self-wrap behavior). Each call-event rumor SHALL include the following tags: `['p', <recipient-pubkey>]`, `['type', 'call-event']`, `['call-event-type', <type>]` where `<type>` is one of `missed`, `outgoing`, `incoming`, `ended`, and `['call-initiator', <initiator-pubkey>]`. When the call event represents a completed conversation, the rumor SHALL include a `['call-duration', <seconds>]` tag with the call duration in seconds. The rumor `content` SHALL be the empty string. Call events SHALL be saved to the local message database and rendered as system-style entries in the conversation timeline.
-
-#### Scenario: Ended-call event includes duration
-- **GIVEN** a call between A and B was `active` for 47 seconds
-- **WHEN** either party hangs up
-- **THEN** a Kind 16 rumor SHALL be sent with tags including `['call-event-type', 'ended']` and `['call-duration', '47']`
-- **AND** the rumor SHALL be persisted to the local message database
-- **AND** the rumor SHALL be rendered as a centered system-style entry in the conversation
-
-#### Scenario: Missed-call event sent when incoming call goes unanswered
-- **GIVEN** the user is `incoming-ringing` and the caller hangs up before the user accepts
-- **WHEN** the system processes the caller's `hangup` signal
-- **THEN** a Kind 16 rumor SHALL be sent with `['call-event-type', 'missed']` and no `call-duration` tag
-
-#### Scenario: Call event rendered with initiator and direction
-- **WHEN** the conversation timeline includes a Kind 16 message with tags `['call-event-type', 'ended']`, `['call-duration', '47']`, `['call-initiator', <my-pubkey>]`
-- **THEN** the message SHALL be rendered with text indicating an outgoing call lasting 47 seconds
 
 ### Requirement: Active Call Controls
 The system SHALL render an active-call user interface providing mute toggle, speaker toggle, hangup button, and a live duration display, and an incoming-call user interface providing accept and decline buttons. On the **web/PWA build**, both interfaces SHALL be Svelte overlays (`ActiveCallOverlay` and `IncomingCallOverlay`) mounted in the root layout so they are visible regardless of the active route. On **Android**, the active-call interface SHALL be the native `ActiveCallActivity` (see "Native Active-Call Activity on Android") and the Svelte `ActiveCallOverlay` SHALL be gated off (mirroring the existing `IncomingCallOverlay` gating). The incoming-call interface on Android remains the native `IncomingCallActivity`.
@@ -283,52 +277,59 @@ On Android, the voice-call foreground service SHALL set the system audio mode to
 - **THEN** the service SHALL call `AudioManager.setMode(...)` with the previously remembered mode value
 
 ### Requirement: Lock-Screen Incoming Call Notification
-On Android, when the existing background messaging service decrypts a NIP-17 gift-wrapped rumor whose `tags` include `['type', 'voice-call']` and whose parsed signal `action` is `offer` and whose NIP-40 `expiration` is in the future, the service SHALL persist the offer to SharedPreferences and post a high-priority notification on a dedicated channel `nospeak_voice_call_incoming`. The notification SHALL include a full-screen intent targeting `MainActivity` with extras `accept_pending_call=true`, `call_id=<callId>`, and `nospeak_route_kind=voice-call-accept`. The notification SHALL include Accept and Decline action buttons. For voice-call rumors with any other `action` (`answer`, `ice-candidate`, `hangup`, `reject`, `busy`) received while the app is closed, the service SHALL discard the rumor without posting any notification.
+On Android, when the existing background messaging service decrypts a kind 21059 ephemeral gift wrap whose inner event is a Call Offer (kind 25050) with a future-or-present `created_at` (no older than 60 seconds), and whose sender pubkey passes the follow-gate (is in the user's NIP-02 contact list), the service SHALL persist the offer to SharedPreferences and post a high-priority notification on a dedicated channel `nospeak_voice_call_incoming`. The notification SHALL include a full-screen intent targeting `MainActivity` with extras `accept_pending_call=true`, `call_id=<callId>`, and `nospeak_route_kind=voice-call-accept`. The notification SHALL include Accept and Decline action buttons. For NIP-AC inner events of any other kind (25051, 25052, 25053, 25054) received while the app is closed, the service SHALL discard the event without posting any notification. The persisted SharedPreferences slot `nospeak_pending_incoming_call` SHALL include `callId`, `sdp`, `peerHex`, `callType`, `alt`, `innerEventId`, and `createdAt`. Old-shape entries from prior versions (lacking the new keys) SHALL be ignored on first read after upgrade.
 
-#### Scenario: Voice-call offer triggers full-screen-intent notification
+#### Scenario: Call Offer triggers full-screen-intent notification
 - **GIVEN** the background messaging service is running and connected to relays
-- **WHEN** a kind 1059 gift wrap arrives whose decrypted rumor has `['type','voice-call']` and content with `action: 'offer'` and a future `expiration`
-- **THEN** the service SHALL write the parsed signal, sender npub, sender pubkey hex, callId, receivedAt timestamp, and expiresAt to SharedPreferences `nospeak_pending_incoming_call`
+- **WHEN** a kind 21059 gift wrap arrives whose decrypted signed inner event is kind 25050 with `created_at` within the last 60 seconds and whose sender is in the user's contact list
+- **THEN** the service SHALL write `callId`, `sdp`, `peerHex`, `callType`, `alt`, `innerEventId`, and `createdAt` to SharedPreferences `nospeak_pending_incoming_call`
 - **AND** the service SHALL post a notification on channel `nospeak_voice_call_incoming` with `setFullScreenIntent` set to a `MainActivity` PendingIntent carrying the route extras
-- **AND** the service SHALL NOT post a chat-message notification for this rumor
+- **AND** the service SHALL NOT post a chat-message notification for this event
 
 #### Scenario: Foreground app suppresses native ringtone
-- **GIVEN** the background messaging service detects an incoming voice-call offer
+- **GIVEN** the background messaging service detects an incoming Call Offer
 - **WHEN** `MainActivity.isAppVisible()` returns `true`
 - **THEN** the posted notification SHALL be built with `setSilent(true)` so the system ringtone does not play
 - **AND** the JS layer's existing in-app ringtone path SHALL handle the audible ring
 
-#### Scenario: Stale voice-call signal is dropped
-- **GIVEN** an incoming voice-call rumor whose `expiration` tag value is less than the current Unix time
-- **WHEN** the background messaging service decrypts and inspects the rumor
-- **THEN** the service SHALL discard the rumor without persisting state and without posting any notification
+#### Scenario: Stale Call Offer is dropped
+- **GIVEN** an incoming kind 25050 inner event whose `created_at` is more than 60 seconds before the current Unix time
+- **WHEN** the background messaging service inspects the event
+- **THEN** the service SHALL discard the event without persisting state and without posting any notification
 
-#### Scenario: Non-offer voice-call signals are discarded while app is closed
-- **GIVEN** an incoming voice-call rumor whose `action` is `answer`, `ice-candidate`, `hangup`, `reject`, or `busy`
-- **WHEN** the background messaging service inspects the parsed signal
-- **THEN** the service SHALL discard the rumor without persisting state and without posting any notification
+#### Scenario: Non-offer NIP-AC events are discarded while app is closed
+- **GIVEN** an incoming kind 21059 inner event whose kind is 25051, 25052, 25053, or 25054
+- **WHEN** the background messaging service inspects the event
+- **THEN** the service SHALL discard the event without persisting state and without posting any notification
+
+#### Scenario: Old-shape pending-call slot ignored on first boot
+- **GIVEN** a pre-upgrade SharedPreferences `nospeak_pending_incoming_call` entry exists, lacking the keys `callType`, `alt`, `innerEventId`, or `createdAt`
+- **WHEN** the new build reads the slot
+- **THEN** the entry SHALL be treated as missing
+- **AND** the slot SHALL be cleared
 
 ### Requirement: Pending Incoming Call Handoff
-On Android, the lockscreen Accept tap on `IncomingCallActivity` SHALL start `VoiceCallForegroundService` directly with `ACTION_ACCEPT_NATIVE` (see "Native Cold-Start Accept on Android"); the JavaScript `incomingCallAcceptHandler` SHALL NOT be invoked. The persisted-offer SharedPreferences slot (`nospeak_pending_incoming_call`) SHALL be the source of truth for the offer SDP, read by the native call manager. The JavaScript layer SHALL receive a post-hoc `callStateChanged` event to update its store. A duplicate offer arriving via the live subscription for a call already in `incoming-ringing` for the same `callId` and same `peerNpub` SHALL be ignored rather than producing a `busy` response.
+On Android, when the activity launches via the Accept full-screen intent, the JS layer SHALL read the persisted incoming-call payload via the plugin's `getPendingIncomingCall` method, clear it via `clearPendingIncomingCall`, hand the parsed Call Offer to `voiceCallService.handleNipAcEvent`, and immediately invoke `voiceCallService.acceptCall` without showing the in-app `IncomingCallOverlay`. If the persisted payload is missing or its `createdAt` is more than 60 seconds in the past, the JS layer SHALL surface a "missed call" toast and SHALL NOT enter `incoming-ringing`. A duplicate Call Offer arriving via the live subscription for a call already in `incoming-ringing` for the same `callId` and same `peerNpub` SHALL be ignored rather than producing a `busy` response.
 
-#### Scenario: Lockscreen accept routes to native FGS
-- **GIVEN** the device is locked and an incoming-call full-screen-intent notification is showing
-- **WHEN** the user taps Accept on `IncomingCallActivity`
-- **THEN** the system SHALL start `VoiceCallForegroundService` with action `ACTION_ACCEPT_NATIVE`
-- **AND** `MainActivity` SHALL NOT be on the critical path for the accept
-- **AND** the JavaScript `incomingCallAcceptHandler` SHALL NOT be invoked
+#### Scenario: Activity launch via Accept consumes pending offer
+- **GIVEN** the user tapped Accept on the lockscreen full-screen-intent notification
+- **WHEN** `MainActivity` launches with intent extra `accept_pending_call=true`
+- **THEN** the activity SHALL call `setShowWhenLocked(true)` and `setTurnScreenOn(true)`
+- **AND** the activity SHALL call `KeyguardManager.requestDismissKeyguard`
+- **AND** the notification router SHALL emit a `routeReceived` event with `kind: 'voice-call-accept'`
+- **AND** the JS handler SHALL call `getPendingIncomingCall`, then `clearPendingIncomingCall`, then `voiceCallService.handleNipAcEvent`, then `voiceCallService.acceptCall`
 
-#### Scenario: Pending offer SharedPreferences slot consumed by native FGS
-- **GIVEN** the FGS has started with `ACTION_ACCEPT_NATIVE`
-- **WHEN** `NativeVoiceCallManager` initializes
-- **THEN** the manager SHALL read the offer SDP from the `nospeak_pending_incoming_call` SharedPreferences slot
-- **AND** the manager SHALL clear the slot after consuming it
+#### Scenario: Missing pending offer surfaces missed-call toast
+- **GIVEN** the activity launches with `accept_pending_call=true`
+- **WHEN** the JS handler calls `getPendingIncomingCall` and receives `{ pending: null }`
+- **THEN** the handler SHALL display a missed-call toast
+- **AND** the handler SHALL NOT invoke `voiceCallService.handleNipAcEvent`
 
 #### Scenario: Duplicate offer for active call is ignored
 - **GIVEN** the local status is `incoming-ringing` for a call with `callId=X` and `peerNpub=Y`
-- **WHEN** a second `offer` signal arrives with the same `callId=X` from the same `peerNpub=Y`
+- **WHEN** a second Call Offer (kind 25050) arrives with the same `callId=X` from the same `peerNpub=Y`
 - **THEN** the system SHALL ignore the duplicate
-- **AND** the system SHALL NOT send a `busy` reply
+- **AND** the system SHALL NOT send a Call Reject
 
 ### Requirement: Full-Screen Intent Permission UX
 On Android 14+, the system SHALL detect via `NotificationManager.canUseFullScreenIntent()` whether the user has granted full-screen-intent permission. The first time the user initiates or accepts a call, if the permission is not granted, the system SHALL show an explanation modal offering to open the system settings page. If the user skips, the system SHALL record that fact in client storage and SHALL NOT prompt again automatically. Calls SHALL still function via heads-up notifications when the permission is denied; only the lockscreen full-screen ringing UI is degraded.
@@ -353,7 +354,7 @@ On Android 14+, the system SHALL detect via `NotificationManager.canUseFullScree
 - **AND** tapping Accept SHALL still open the activity (after manual unlock if the device is locked)
 
 ### Requirement: Decline Action Best-Effort Reject Signal
-On Android, when the user taps the Decline action button on the incoming-call notification, the system SHALL clear the pending-call SharedPreferences and cancel the notification. The system SHALL additionally send a NIP-AC kind-25054 reject signal to the caller via the existing native `sendVoiceCallReject` helper, and SHALL author and gift-wrap a kind-1405 `declined` chat-history rumor via the native `sendVoiceCallHistoryRumor` helper. Both sends SHALL be best-effort (failures SHALL NOT crash or block the Decline action).
+On Android, when the user taps the Decline action button on the incoming-call notification, the system SHALL clear the pending-call SharedPreferences and cancel the notification. The system MAY additionally attempt to send a Call Reject (kind 25054) signal to the caller through the messaging service's already-connected WebSocket relays, with a self-wrap to the sender's own pubkey for multi-device dismissal; this is best-effort. If no reject is sent, or sending fails, the caller will eventually see a `timeout` end reason.
 
 #### Scenario: Decline clears pending state and dismisses notification
 - **GIVEN** an incoming-call notification is showing
@@ -361,20 +362,20 @@ On Android, when the user taps the Decline action button on the incoming-call no
 - **THEN** the SharedPreferences `nospeak_pending_incoming_call` SHALL be cleared
 - **AND** the notification SHALL be cancelled
 
-#### Scenario: Decline sends native reject and declined chat-history rumor
-- **GIVEN** the user has tapped Decline
-- **AND** the messaging service is running with at least one connected relay
-- **WHEN** the receiver processes the Decline action
-- **THEN** the system SHALL invoke `sendVoiceCallReject` to publish a kind-25054 wrap to the caller's messaging relays
-- **AND** the system SHALL invoke `sendVoiceCallHistoryRumor` (or `sendVoiceCallDeclinedEvent` which delegates to it) to gift-wrap and publish a kind-1405 `declined` chat-history rumor to both the caller and the user's own relays
-
 #### Scenario: Decline tolerates offline or absent messaging service
 - **GIVEN** the user has tapped Decline
 - **AND** the messaging service is not running OR has no connected relays
 - **WHEN** the receiver processes the Decline action
 - **THEN** the receiver SHALL NOT throw or crash
 - **AND** the pending state SHALL still be cleared and the notification SHALL still be cancelled
-- **AND** the caller SHALL eventually see a `timeout` end reason for the call if neither send completed
+- **AND** the caller SHALL eventually see a `timeout` end reason for the call
+
+#### Scenario: Decline best-effort send uses kind 25054 with self-wrap
+- **GIVEN** the user has tapped Decline
+- **AND** the messaging service has at least one connected relay
+- **WHEN** the receiver attempts the best-effort reject send
+- **THEN** the inner event SHALL be a signed kind 25054 with tags `['p', <caller-hex>]`, `['call-id', <callId>]`, and `['alt', ...]`
+- **AND** the inner event SHALL be wrapped twice in kind 21059: once addressed to the caller and once addressed to the user's own pubkey
 
 ### Requirement: Android Native WebRTC Peer Connection
 On Android, the system SHALL host the WebRTC peer connection in a native `NativeVoiceCallManager` class owned by `VoiceCallForegroundService`, using the `io.getstream:stream-webrtc-android` library. The native peer connection SHALL own all WebRTC state (peer connection, ICE candidate buffer, local audio track, remote audio playback, call duration timer) for the entire call lifecycle. The WebView's JavaScript layer SHALL NOT host an `RTCPeerConnection` for calls placed or received on Android.
@@ -574,4 +575,199 @@ On Android, the outgoing ringback tone SHALL be played by the native foreground 
 - **GIVEN** native ringback is playing during `outgoing-ringing`
 - **WHEN** the local status transitions to `connecting`, `active`, or `ended`
 - **THEN** the foreground service SHALL stop the ringback playback
+
+### Requirement: NIP-AC Anti-Impersonation Enforcement
+On receive, the system SHALL verify the inner signed event's signature against its declared `pubkey` using `verifyEvent`. The system SHALL drop any inner event whose signature is invalid. Because the NIP-AC gift wrap has no seal layer, the inner-event signature is the sole authentication mechanism for sender identity.
+
+#### Scenario: Invalid inner-event signature rejected
+- **GIVEN** a kind 21059 gift wrap is decrypted to an inner event whose signature does not verify against its `pubkey`
+- **WHEN** the system processes the gift wrap
+- **THEN** the inner event SHALL NOT be dispatched to any handler
+- **AND** an error SHALL be logged
+
+#### Scenario: Valid signature accepted
+- **GIVEN** a kind 21059 gift wrap is decrypted to a kind 25050 inner event whose signature is valid
+- **WHEN** the system completes signature verification
+- **THEN** the inner event SHALL proceed to subsequent receive-path checks (staleness, dedup, self-event filter, follow-gate)
+
+### Requirement: Call History via Kind 1405 Events
+The system SHALL persist call history as NIP-17 gift-wrapped Kind 1405 rumor events sent to both the initiator and the recipient (via standard NIP-59 self-wrap behavior). Each call-event rumor SHALL include the following tags: `['p', <recipient-pubkey>]`, `['type', 'call-event']`, `['call-event-type', <type>]` where `<type>` is one of `missed`, `ended`, `no-answer`, `declined`, `busy`, `failed`, `cancelled`, and `['call-initiator', <initiator-pubkey>]`. When the call event represents a completed conversation, the rumor SHALL include a `['call-duration', <seconds>]` tag with the call duration in seconds. The rumor `content` SHALL be the empty string. Call events SHALL be saved to the local message database and rendered as system-style entries in the conversation timeline. Call-event rumors are nospeak-specific and are NOT defined by NIP-AC; they continue to use the existing 3-layer NIP-17 gift-wrap pipeline (kind 14 rumor inside kind 13 seal inside kind 1059 wrap), distinct from the NIP-AC kind 21059 signaling pipeline.
+
+#### Scenario: Ended-call event includes duration
+- **GIVEN** a call between A and B was `active` for 47 seconds
+- **WHEN** either party hangs up
+- **THEN** a Kind 1405 rumor SHALL be sent with tags including `['call-event-type', 'ended']` and `['call-duration', '47']`
+- **AND** the rumor SHALL be persisted to the local message database
+- **AND** the rumor SHALL be rendered as a centered system-style entry in the conversation
+
+#### Scenario: Missed-call event sent when incoming call goes unanswered
+- **GIVEN** the user is `incoming-ringing` and the caller hangs up before the user accepts
+- **WHEN** the system processes the caller's Call Hangup (kind 25053)
+- **THEN** a Kind 1405 rumor SHALL be sent with `['call-event-type', 'missed']` and no `call-duration` tag
+
+#### Scenario: Call event rendered with initiator and direction
+- **WHEN** the conversation timeline includes a Kind 1405 message with tags `['call-event-type', 'ended']`, `['call-duration', '47']`, `['call-initiator', <my-pubkey>]`
+- **THEN** the message SHALL be rendered with text indicating an outgoing call lasting 47 seconds
+
+### Requirement: NIP-AC Receive-Path Staleness and Deduplication
+The system SHALL discard any decrypted kind-21059 inner event whose `created_at` is more than 60 seconds before the current Unix time. The system SHALL maintain a recent processed-event-ID set (at least 256 entries, FIFO eviction) and SHALL drop any inner event whose ID has already been processed. Both checks SHALL run before kind-specific dispatch.
+
+#### Scenario: Stale offer dropped silently
+- **GIVEN** a kind 21059 wrap whose decrypted inner kind-25050 event has `created_at` more than 60 seconds in the past
+- **WHEN** the receive path processes the event
+- **THEN** the event SHALL NOT be dispatched to the voice call service
+- **AND** no user-facing notification SHALL be raised
+
+#### Scenario: Duplicate event dropped silently
+- **GIVEN** a kind 21059 wrap whose decrypted inner event ID is present in the processed-event-ID set
+- **WHEN** the receive path processes the event
+- **THEN** the event SHALL NOT be dispatched to the voice call service
+
+#### Scenario: Fresh first-delivery event processed
+- **GIVEN** a kind 21059 wrap whose decrypted inner kind-25050 event has `created_at` within the last 60 seconds
+- **AND** the inner event ID is not in the processed-event-ID set
+- **WHEN** the receive path processes the event
+- **THEN** the event SHALL proceed to the self-event filter and follow-gate, then dispatch to the voice call service
+
+### Requirement: NIP-AC Self-Event Filter
+On receive, the system SHALL apply the following filter to inner signaling events whose `pubkey` equals the user's own public key:
+
+- Kind **25052 (ICE Candidate)** and kind **25053 (Call Hangup)** from self SHALL always be ignored.
+- Kind **25051 (Call Answer)** and kind **25054 (Call Reject)** from self SHALL be ignored UNLESS the local status is `incoming-ringing` AND the event's `call-id` matches the currently ringing call. When both conditions hold, the system SHALL transition to `ended` with reason `answered-elsewhere` (for kind 25051) or `rejected-elsewhere` (for kind 25054), and SHALL stop ringing.
+
+#### Scenario: Self ICE candidate ignored
+- **GIVEN** the local status is `connecting` or `active`
+- **WHEN** a kind 25052 inner event arrives whose `pubkey` equals the user's own pubkey
+- **THEN** the event SHALL NOT be applied to any peer connection
+- **AND** the local status SHALL be unchanged
+
+#### Scenario: Self hangup ignored
+- **GIVEN** the local status is `active`
+- **WHEN** a kind 25053 inner event arrives whose `pubkey` equals the user's own pubkey
+- **THEN** the event SHALL be ignored
+- **AND** the local status SHALL remain `active`
+
+#### Scenario: Self answer in incoming-ringing triggers answered-elsewhere
+- **GIVEN** the local status is `incoming-ringing` for `call-id=X`
+- **WHEN** a kind 25051 inner event arrives whose `pubkey` equals the user's own pubkey and whose `call-id` tag equals `X`
+- **THEN** the local status SHALL transition to `ended` with reason `answered-elsewhere`
+- **AND** ringtones SHALL stop
+
+#### Scenario: Self reject in incoming-ringing triggers rejected-elsewhere
+- **GIVEN** the local status is `incoming-ringing` for `call-id=X`
+- **WHEN** a kind 25054 inner event arrives whose `pubkey` equals the user's own pubkey and whose `call-id` tag equals `X`
+- **THEN** the local status SHALL transition to `ended` with reason `rejected-elsewhere`
+- **AND** ringtones SHALL stop
+
+#### Scenario: Self answer in offering ignored
+- **GIVEN** the local status is `outgoing-ringing`
+- **WHEN** a kind 25051 inner event arrives whose `pubkey` equals the user's own pubkey
+- **THEN** the event SHALL be ignored
+- **AND** the local status SHALL remain `outgoing-ringing`
+
+### Requirement: Spam Prevention via Follow-Gating
+The system SHALL only display incoming-call notifications and SHALL only enter `incoming-ringing` state for Call Offer (kind 25050) events whose sender's pubkey appears in the user's NIP-02 contact list. Offers from non-followed pubkeys SHALL be silently dropped. If the user's contact list has not been loaded in the current session at the time the offer is processed, the offer SHALL be silently dropped (no ringing, no notification). Follow-gating applies only to Call Offer (kind 25050); Call Answer, ICE Candidate, Call Hangup, and Call Reject events SHALL pass without follow-gating because they belong to in-progress calls. The follow-gate SHALL be enforced both in the JavaScript receive path and in the Android `NativeBackgroundMessagingService` so that the lockscreen full-screen-intent ringer respects the same gate when the app is closed. There is no user-facing toggle for follow-gating in this version.
+
+#### Scenario: Offer from followed user rings
+- **GIVEN** the user's contact list is loaded and contains pubkey P
+- **WHEN** a kind 25050 Call Offer arrives with sender pubkey P
+- **THEN** the local status SHALL transition to `incoming-ringing`
+- **AND** the in-app ringtone SHALL play
+- **AND** on Android the lockscreen FSI notification SHALL be posted
+
+#### Scenario: Offer from non-followed user dropped silently
+- **GIVEN** the user's contact list is loaded and does NOT contain pubkey P
+- **WHEN** a kind 25050 Call Offer arrives with sender pubkey P
+- **THEN** the local status SHALL remain `idle`
+- **AND** no ringtone SHALL play
+- **AND** no notification SHALL be posted
+- **AND** no error SHALL be returned to the sender
+
+#### Scenario: Offer dropped on cold start before contacts loaded
+- **GIVEN** the contact list has not yet been loaded in the current session
+- **WHEN** a kind 25050 Call Offer arrives
+- **THEN** the local status SHALL remain `idle`
+- **AND** no ringtone SHALL play
+- **AND** no notification SHALL be posted
+
+#### Scenario: Native lockscreen FSI also respects follow-gate
+- **GIVEN** the app is closed and the Android `NativeBackgroundMessagingService` is the only listener
+- **AND** an incoming Call Offer arrives from a pubkey not in the user's NIP-02 contact list
+- **WHEN** the service decrypts the wrap and inspects the inner event
+- **THEN** the service SHALL discard the event
+- **AND** no full-screen-intent notification SHALL be posted
+
+#### Scenario: Non-offer events bypass follow-gating
+- **GIVEN** the local status is `outgoing-ringing` for a call to peer P
+- **WHEN** a kind 25051 Call Answer arrives from peer P
+- **THEN** the answer SHALL be processed normally
+- **AND** the follow-gate SHALL NOT block in-progress call signaling
+
+### Requirement: ICE Candidate Buffering
+The system SHALL implement two layers of ICE candidate buffering:
+
+1. A **global buffer** keyed by sender pubkey, holding ICE candidates received before any `RTCPeerConnection` exists for that sender. When a `RTCPeerConnection` is later created for that peer, the buffered candidates SHALL be moved to the per-session buffer and the global buffer entry SHALL be cleared.
+2. A **per-session buffer** holding ICE candidates received after the `RTCPeerConnection` exists but before `setRemoteDescription()` has resolved. Once `setRemoteDescription()` resolves successfully, the system SHALL flush the per-session buffer by calling `addIceCandidate()` for each buffered candidate, in arrival order.
+
+ICE candidates that arrive after both `setRemoteDescription()` and a live `RTCPeerConnection` exist SHALL be applied directly via `addIceCandidate()` without buffering. Candidates buffered while ringing SHALL NOT be cleared when accepting the call — they SHALL be drained into the new session. Both buffers SHALL be cleared on call cleanup (transition out of any non-`idle` state into `idle`).
+
+#### Scenario: Candidate before peer connection buffered globally
+- **GIVEN** the local status is `incoming-ringing` and no `RTCPeerConnection` has been created
+- **WHEN** a kind 25052 ICE Candidate arrives from the caller
+- **THEN** the candidate SHALL be appended to the global buffer keyed by the caller's pubkey
+- **AND** no `addIceCandidate()` call SHALL be made
+
+#### Scenario: Global buffer drains into session on peer-connection creation
+- **GIVEN** the global buffer holds 3 candidates for caller pubkey P
+- **WHEN** the user accepts the call and a `RTCPeerConnection` is created for peer P
+- **THEN** all 3 candidates SHALL be moved to the per-session buffer in arrival order
+- **AND** the global buffer entry for P SHALL be cleared
+
+#### Scenario: Per-session buffer flushed after setRemoteDescription
+- **GIVEN** the per-session buffer holds N candidates and `setRemoteDescription()` has been awaited
+- **WHEN** `setRemoteDescription()` resolves successfully
+- **THEN** `addIceCandidate()` SHALL be called for each buffered candidate in arrival order
+- **AND** the per-session buffer SHALL be empty afterward
+
+#### Scenario: Late candidate applied directly
+- **GIVEN** the `RTCPeerConnection` exists and `setRemoteDescription()` has already resolved
+- **WHEN** a kind 25052 ICE Candidate arrives from the peer
+- **THEN** the candidate SHALL be applied directly via `addIceCandidate()` without entering any buffer
+
+#### Scenario: Buffers cleared on call cleanup
+- **GIVEN** a call ends (transition to `idle` after the `ended` display window)
+- **WHEN** the cleanup routine runs
+- **THEN** the global buffer SHALL be cleared
+- **AND** the per-session buffer SHALL be cleared
+
+### Requirement: Multi-Device Self-Notification
+To support a user logged in on multiple devices, when the user accepts an incoming call (sending a Call Answer, kind 25051) or rejects an incoming call (sending a Call Reject, kind 25054), the system SHALL publish two kind 21059 gift wraps containing the same signed inner event: one addressed to the peer and one addressed to the sender's own pubkey. Other devices owned by the same user that receive the self-addressed wrap and are currently in `incoming-ringing` for the matching `call-id` SHALL transition to `ended` with reason `answered-elsewhere` or `rejected-elsewhere` respectively, and SHALL stop ringing. On Android, the JS layer SHALL invoke a new plugin method `dismissIncomingCall(callId)` to cancel the lockscreen full-screen-intent notification, finish the `IncomingCallActivity` if it is showing, and stop the ringer foreground service if it is running.
+
+#### Scenario: Answer self-wrap dismisses ringer on another device
+- **GIVEN** device D1 is in `incoming-ringing` for `call-id=X`
+- **AND** device D2 of the same user accepts the call and publishes a self-addressed kind 25051
+- **WHEN** D1 receives and decrypts the self-addressed wrap
+- **THEN** D1 SHALL transition to `ended` with reason `answered-elsewhere`
+- **AND** D1's in-app ringtone SHALL stop
+- **AND** on Android, D1 SHALL invoke `dismissIncomingCall(X)` to cancel the lockscreen FSI notification
+
+#### Scenario: Reject self-wrap dismisses ringer on another device
+- **GIVEN** device D1 is in `incoming-ringing` for `call-id=X`
+- **AND** device D2 of the same user rejects the call and publishes a self-addressed kind 25054
+- **WHEN** D1 receives and decrypts the self-addressed wrap
+- **THEN** D1 SHALL transition to `ended` with reason `rejected-elsewhere`
+- **AND** D1's in-app ringtone SHALL stop
+- **AND** on Android, D1 SHALL invoke `dismissIncomingCall(X)` to cancel the lockscreen FSI notification
+
+#### Scenario: Self-addressed wrap with mismatched call-id ignored
+- **GIVEN** device D1 is in `incoming-ringing` for `call-id=X`
+- **WHEN** D1 receives a self-addressed kind 25051 whose `call-id` tag is `Y` (Y ≠ X)
+- **THEN** the event SHALL be ignored
+- **AND** D1 SHALL remain in `incoming-ringing`
+
+#### Scenario: Self-addressed wrap outside incoming-ringing ignored
+- **GIVEN** device D1 is in `idle`
+- **WHEN** D1 receives a self-addressed kind 25051 (echo of D2's answer)
+- **THEN** the event SHALL be ignored
+- **AND** D1 SHALL remain in `idle`
 
