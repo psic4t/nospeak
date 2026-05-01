@@ -93,6 +93,13 @@ public class NativeVoiceCallManager {
         void onDurationTick(int seconds);
         /** Called when the mute state flips. */
         void onMuteChanged(boolean muted);
+        /**
+         * Called when the speakerphone routing flips. Default no-op so
+         * older listener implementations (and the few internal test
+         * doubles) still compile while only ActiveCallActivity needs to
+         * observe the new state. Mirrors {@link #onMuteChanged}.
+         */
+        default void onSpeakerChanged(boolean speakerOn) {}
     }
 
     /**
@@ -185,6 +192,15 @@ public class NativeVoiceCallManager {
      */
     private UiListener serviceListener;
     private boolean isMuted = false;
+    /**
+     * Last-applied speakerphone routing. Mirrors {@link #isMuted} so
+     * {@link ActiveCallActivity} can recover the correct visual state
+     * after rotation, return-from-background, or relaunch from the
+     * FGS notification — without polling AudioManager (which can
+     * report stale values when the audio mode briefly drifts on some
+     * OEMs).
+     */
+    private boolean isSpeakerOn = false;
 
     private long callStartedAtMs = 0L;
     private int durationSec = 0;
@@ -438,21 +454,35 @@ public class NativeVoiceCallManager {
             }
         }
         AndroidVoiceCallPlugin.emitMuteStateChanged(callId, muted);
-        if (uiListener != null) {
-            try { uiListener.onMuteChanged(muted); } catch (Throwable t) {
-                Log.w(TAG, "uiListener.onMuteChanged failed", t);
-            }
-        }
-        if (serviceListener != null) {
-            try { serviceListener.onMuteChanged(muted); } catch (Throwable t) {
-                Log.w(TAG, "serviceListener.onMuteChanged failed", t);
-            }
-        }
+        notifyMuteChanged(uiListener, muted, "uiListener");
+        notifyMuteChanged(serviceListener, muted, "serviceListener");
     }
 
     /** Current mute state. Used by ActiveCallActivity on bind. */
     public boolean isMuted() {
         return isMuted;
+    }
+
+    /**
+     * Package-private listener-emission helper. Extracted so the
+     * try/catch contract (a throwing listener does NOT propagate) can
+     * be unit-tested without spinning up a real {@link Looper} or
+     * WebRTC stack. Production callers in {@link #setMuted} go through
+     * this method too — the test path and prod path are the same.
+     */
+    static void notifyMuteChanged(UiListener listener, boolean muted, String label) {
+        if (listener == null) return;
+        try { listener.onMuteChanged(muted); } catch (Throwable t) {
+            Log.w(TAG, (label != null ? label : "listener") + ".onMuteChanged failed", t);
+        }
+    }
+
+    /** See {@link #notifyMuteChanged}. */
+    static void notifySpeakerChanged(UiListener listener, boolean speakerOn, String label) {
+        if (listener == null) return;
+        try { listener.onSpeakerChanged(speakerOn); } catch (Throwable t) {
+            Log.w(TAG, (label != null ? label : "listener") + ".onSpeakerChanged failed", t);
+        }
     }
 
 
@@ -500,14 +530,26 @@ public class NativeVoiceCallManager {
                 listener.onDurationTick(durationSec);
             }
             listener.onMuteChanged(isMuted);
+            listener.onSpeakerChanged(isSpeakerOn);
         } catch (Throwable t) {
             Log.w(TAG, "initial listener push failed", t);
         }
     }
 
-    /** Toggle speakerphone routing through the system AudioManager. */
+    /**
+     * Toggle speakerphone routing through the system AudioManager and
+     * notify any registered UI/service listener. Idempotent in the
+     * sense that re-setting the same state still re-emits to the
+     * listener — this matches {@link #setMuted}'s contract and keeps
+     * ActiveCallActivity's visual in sync if it ever drifts.
+     *
+     * <p>The actual audio-route change requires
+     * {@link AudioManager#MODE_IN_COMMUNICATION}, which the FGS sets
+     * on start ({@code VoiceCallForegroundService.configureAudioMode}).
+     */
     public void setSpeakerOn(boolean on) {
         ensureMain();
+        isSpeakerOn = on;
         try {
             AudioManager am = (AudioManager) appContext.getSystemService(
                 Context.AUDIO_SERVICE);
@@ -515,6 +557,13 @@ public class NativeVoiceCallManager {
         } catch (Throwable t) {
             Log.w(TAG, "setSpeakerOn failed", t);
         }
+        notifySpeakerChanged(uiListener, on, "uiListener");
+        notifySpeakerChanged(serviceListener, on, "serviceListener");
+    }
+
+    /** Current speakerphone state. Used by ActiveCallActivity on bind. */
+    public boolean isSpeakerOn() {
+        return isSpeakerOn;
     }
 
     /**

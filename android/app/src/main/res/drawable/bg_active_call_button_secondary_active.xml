@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Active-state background for the active-call mute and speaker
+    toggle buttons. Opaque white circle paired with a dark icon tint
+    in ActiveCallActivity.applyMute / applySpeaker for unambiguous
+    "engaged" feedback. Off-state continues to use
+    bg_active_call_button_secondary.xml (translucent white).
+
+    Visual convention follows Google Phone / Signal: when a binary
+    call control is on, the button inverts to a bright surface so the
+    user can tell at a glance which routes/mics are currently active.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#FFFFFFFF" />
+</shape>

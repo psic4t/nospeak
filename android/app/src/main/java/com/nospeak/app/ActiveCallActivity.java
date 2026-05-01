@@ -5,6 +5,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,6 +19,8 @@ import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.core.content.ContextCompat;
 
 /**
  * Active-call screen for the native voice-call stack. Phase 2 of
@@ -73,8 +77,15 @@ public class ActiveCallActivity extends Activity {
     private String avatarPath;
     private String peerHex;
 
-    private boolean speakerOn = false;
+    /**
+     * Last-known mute and speaker states. The manager
+     * ({@link NativeVoiceCallManager}) is the source of truth; these
+     * fields cache the most recent listener callback so click handlers
+     * can compute "the opposite of the current state" without polling
+     * the manager from the UI thread.
+     */
     private boolean muted = false;
+    private boolean speakerOn = false;
 
     private VoiceCallForegroundService boundService;
     private boolean bound = false;
@@ -96,6 +107,11 @@ public class ActiveCallActivity extends Activity {
             @Override
             public void onMuteChanged(boolean newMuted) {
                 mainHandler.post(() -> applyMute(newMuted));
+            }
+
+            @Override
+            public void onSpeakerChanged(boolean newSpeakerOn) {
+                mainHandler.post(() -> applySpeaker(newSpeakerOn));
             }
         };
 
@@ -252,8 +268,10 @@ public class ActiveCallActivity extends Activity {
                 @Override public void onClick(View v) {
                     NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
                     if (mgr == null) return;
-                    boolean next = !muted;
-                    mgr.setMuted(next);
+                    // Ask the manager for the current state instead of
+                    // reading the local cache so back-to-back taps
+                    // before the listener fires can't double-toggle.
+                    mgr.setMuted(!mgr.isMuted());
                 }
             });
         }
@@ -270,12 +288,19 @@ public class ActiveCallActivity extends Activity {
                 @Override public void onClick(View v) {
                     NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
                     if (mgr == null) return;
-                    speakerOn = !speakerOn;
-                    mgr.setSpeakerOn(speakerOn);
-                    applySpeakerVisual();
+                    // The visual update happens via the manager's
+                    // onSpeakerChanged callback, mirroring the mute
+                    // path. Keeps the activity's view state strictly
+                    // a function of the manager's authoritative state.
+                    mgr.setSpeakerOn(!mgr.isSpeakerOn());
                 }
             });
         }
+        // Initial paint with the off-state visual so the buttons render
+        // correctly before the manager's pushInitialState callback
+        // arrives (which happens after onServiceConnected / setUiListener).
+        applyMute(false);
+        applySpeaker(false);
     }
 
     private void applyStatus(NativeVoiceCallManager.CallStatus status, String reason) {
@@ -315,17 +340,59 @@ public class ActiveCallActivity extends Activity {
 
     private void applyMute(boolean newMuted) {
         muted = newMuted;
-        if (muteButton == null) return;
-        // Visual feedback: tint changes via alpha. The full ic_mic
-        // glyph stays — Phase 2 keeps the button visually identical to
-        // its base state but lowers opacity when active to indicate
-        // muting. A future polish pass can swap to a mic-off vector.
-        muteButton.setAlpha(newMuted ? 1.0f : 0.7f);
+        // Swap the glyph too: mic when unmuted, mic-with-strikethrough
+        // when muted, so the engaged state is unambiguous beyond just
+        // the background-inversion.
+        applyToggleVisual(
+            muteButton,
+            newMuted,
+            R.drawable.ic_mic,
+            R.drawable.ic_mic_off);
     }
 
-    private void applySpeakerVisual() {
-        if (speakerButton == null) return;
-        speakerButton.setAlpha(speakerOn ? 1.0f : 0.7f);
+    private void applySpeaker(boolean newSpeakerOn) {
+        speakerOn = newSpeakerOn;
+        // Speaker uses the same glyph in both states; the background
+        // inversion alone communicates the toggle.
+        applyToggleVisual(
+            speakerButton,
+            newSpeakerOn,
+            R.drawable.ic_speaker,
+            R.drawable.ic_speaker);
+    }
+
+    /**
+     * Apply the inverted-active visual to a binary call-control button.
+     * On state: opaque white background + dark icon (and optionally a
+     * different glyph, e.g. mic_off). Off state: the existing
+     * translucent-white circle + white icon. This replaces the prior
+     * alpha-only feedback (which was inverted and too subtle to read),
+     * matching the Google Phone / Signal convention for binary call
+     * controls.
+     */
+    private void applyToggleVisual(
+            ImageButton button,
+            boolean active,
+            int offGlyphRes,
+            int onGlyphRes) {
+        if (button == null) return;
+        button.setAlpha(1.0f);
+        button.setImageResource(active ? onGlyphRes : offGlyphRes);
+        if (active) {
+            button.setBackgroundResource(
+                R.drawable.bg_active_call_button_secondary_active);
+            // Dark glyph against the bright background. Hard-coded
+            // near-black instead of pulling a theme color so the
+            // contrast is identical regardless of the device's day /
+            // night setting (the call surface is always dark).
+            button.setColorFilter(Color.parseColor("#1F1F1F"),
+                PorterDuff.Mode.SRC_IN);
+        } else {
+            button.setBackgroundResource(R.drawable.bg_active_call_button_secondary);
+            button.setColorFilter(
+                ContextCompat.getColor(this, R.color.incoming_call_text),
+                PorterDuff.Mode.SRC_IN);
+        }
     }
 
     private String endReasonText(String reason) {
