@@ -137,32 +137,31 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * When the activity is launched (or re-launched) via the incoming-call Accept
-     * full-screen intent, ensure we appear over the keyguard, turn the screen on,
-     * and request that the system dismiss the keyguard so the user lands directly
-     * in the active-call UI.
-     *
-     * <p>Also handles the {@link VoiceCallIntentContract#EXTRA_UNLOCK_FOR_CALL}
+     * Handle the {@link VoiceCallIntentContract#EXTRA_UNLOCK_FOR_CALL}
      * intent extra (Phase 2 of {@code add-native-voice-calls}): when a
      * PIN-locked user accepts a call from the lockscreen, the native
-     * {@link IncomingCallActivity} routes through us with this extra so the
-     * existing JS unlock flow can run; on success the JS layer calls
-     * {@code AndroidVoiceCall.notifyUnlockComplete} and the FGS resumes the
-     * accept natively.
+     * {@link IncomingCallActivity} routes through us with this extra so
+     * the existing JS unlock flow can run; on success the JS layer
+     * calls {@code AndroidVoiceCall.notifyUnlockComplete} and the FGS
+     * resumes the accept natively.
+     *
+     * <p>The legacy {@code accept_pending_call=true} branch was removed
+     * after the FSI heads-up Accept moved to {@code IncomingCallActivity}'s
+     * {@code ACTION_AUTO_ACCEPT} path \u2014 MainActivity is no longer
+     * on the accept critical path.
      */
     private void handleIncomingCallIntent(android.content.Intent intent) {
         if (intent == null) return;
-        boolean isAccept = intent.getBooleanExtra("accept_pending_call", false);
         boolean isUnlock = intent.getStringExtra(
             VoiceCallIntentContract.EXTRA_UNLOCK_FOR_CALL) != null;
-        if (!isAccept && !isUnlock) return;
+        if (!isUnlock) return;
 
-        // Dismiss the ringing heads-up notification immediately. Once we're
-        // launching MainActivity to accept (or unlock-then-accept), the
+        // Dismiss the ringing heads-up notification immediately. Once
+        // we're launching MainActivity to unlock-then-accept, the
         // "ringing" state is over from the user's perspective — the
-        // active-call FGS will post its own ongoing notification. Idempotent
-        // and safe across both cold-start (onCreate) and warm-start
-        // (onNewIntent) paths.
+        // active-call FGS will post its own ongoing notification.
+        // Idempotent and safe across both cold-start (onCreate) and
+        // warm-start (onNewIntent) paths.
         IncomingCallNotification.cancel(this);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {

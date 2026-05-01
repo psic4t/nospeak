@@ -30,10 +30,14 @@ import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
  * Shows the call UI over the keyguard WITHOUT dismissing it. PIN entry is only
  * requested after the user explicitly taps Accept ({@link KeyguardManager#requestDismissKeyguard}).
  *
- * After successful keyguard dismissal, launches {@link MainActivity} with
- * {@code accept_pending_call=true} — the existing JS handler ({@code incomingCallAcceptHandler.ts})
- * then auto-accepts. The "auto" is correct here because the user explicitly tapped
- * Accept on this screen.
+ * After successful keyguard dismissal, starts the
+ * {@link VoiceCallForegroundService} with {@code ACTION_ACCEPT_NATIVE};
+ * the FGS reads the persisted offer from SharedPreferences, drives
+ * {@link NativeVoiceCallManager}, and surfaces
+ * {@link ActiveCallActivity}. For PIN-locked nsec users the activity
+ * routes through {@link MainActivity} with
+ * {@link VoiceCallIntentContract#EXTRA_UNLOCK_FOR_CALL} so the JS
+ * unlock screen can collect the PIN before the FGS resumes the accept.
  *
  * Decline broadcasts to {@link IncomingCallActionReceiver} (same path as the
  * notification's existing Decline action) and finishes — phone stays locked.

@@ -2,18 +2,12 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 export type AndroidNotificationRouteKind =
     | 'chat'
-    | 'voice-call-accept'
     | 'voice-call-active'
     | 'voice-call-unlock';
 
 export interface AndroidNotificationChatRoutePayload {
     kind: 'chat';
     conversationId: string;
-}
-
-export interface AndroidNotificationVoiceCallAcceptPayload {
-    kind: 'voice-call-accept';
-    callId: string;
 }
 
 export interface AndroidNotificationVoiceCallActivePayload {
@@ -37,7 +31,6 @@ export interface AndroidNotificationVoiceCallUnlockPayload {
 
 export type AndroidNotificationRoutePayload =
     | AndroidNotificationChatRoutePayload
-    | AndroidNotificationVoiceCallAcceptPayload
     | AndroidNotificationVoiceCallActivePayload
     | AndroidNotificationVoiceCallUnlockPayload;
 
