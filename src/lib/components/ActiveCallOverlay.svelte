@@ -152,41 +152,157 @@
 
 {#if isVisible}
     {#if isVideoCall}
-        <!-- Video call layout: full-screen remote, PiP local self-view -->
-        <div class="fixed inset-0 z-[55] bg-black flex flex-col">
-            <!-- Hidden audio element (only used pre-active or as fallback) -->
+        <!--
+            Video-call layout. Mobile-first:
+              * Mobile (default): full-bleed black, video fills viewport,
+                status header + controls overlay the video with gradient
+                scrims (top + bottom).
+              * Desktop (md: and up): voice-modal-style scrim around a
+                centered card. Card holds a 16:9 remote-video frame with
+                the self-view PiP'd inside it; status header sits above
+                the video and controls sit below in plain card chrome
+                (no scrim).
+            The mobile and desktop variants of the header and control row
+            are duplicated rather than class-toggled so each is small and
+            self-contained. The <video> elements are NOT duplicated — they
+            keep the same identity across breakpoints so srcObject
+            bindings survive a window resize mid-call.
+        -->
+        <div class="fixed inset-0 z-[55] bg-black md:bg-black/40 md:backdrop-blur-sm flex md:items-center md:justify-center md:p-4">
+            <!-- Hidden audio element. Pre-active fallback / Safari quirks. -->
             <audio bind:this={audioEl} autoplay></audio>
 
-            <!-- Full-screen remote video -->
-            <video
-                bind:this={remoteVideoEl}
-                autoplay
-                playsinline
-                class="absolute inset-0 w-full h-full object-cover bg-black"
-            ></video>
-
-            <!-- Self-view PiP -->
-            <video
-                bind:this={localVideoEl}
-                autoplay
-                playsinline
-                muted
-                class="absolute top-4 right-4 w-28 h-40 md:w-32 md:h-44 object-cover rounded-2xl border-2 border-white/30 shadow-xl bg-black z-10"
-                class:scale-x-[-1]={$voiceCallState.facingMode === 'user'}
-            ></video>
-
-            <!-- Top status bar -->
-            <div class="absolute top-0 left-0 right-0 p-4 pt-[calc(1rem+env(safe-area-inset-top))] z-10 bg-gradient-to-b from-black/60 to-transparent">
-                <div class="flex flex-col items-center text-white">
+            <!-- Modal card. Full-bleed on mobile; bounded card on md+. -->
+            <div
+                class="relative w-full h-full
+                       md:w-full md:max-w-2xl lg:max-w-3xl xl:max-w-4xl md:h-auto
+                       md:bg-slate-900/95 md:backdrop-blur-xl
+                       md:rounded-3xl md:shadow-2xl md:border md:border-white/10
+                       md:overflow-hidden flex flex-col"
+            >
+                <!-- Desktop-only header above the video. -->
+                <div class="hidden md:flex flex-col items-center px-6 pt-5 pb-3 text-white">
                     <span class="text-lg font-medium">{profileName}</span>
                     <span class="text-sm text-gray-300">{statusText}</span>
                 </div>
-            </div>
 
-            <!-- Bottom controls -->
-            {#if $voiceCallState.status !== 'ended'}
-                <div class="absolute bottom-0 left-0 right-0 z-10 px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-12 bg-gradient-to-t from-black/70 to-transparent">
-                    <div class="flex justify-around items-center">
+                <!-- Remote video frame.
+                     Mobile: fills the screen.
+                     Desktop: fixed 16:9 aspect inside the card. -->
+                <div class="relative flex-1 md:flex-none md:aspect-video bg-black overflow-hidden">
+                    <video
+                        bind:this={remoteVideoEl}
+                        autoplay
+                        playsinline
+                        class="absolute inset-0 w-full h-full object-cover bg-black"
+                    ></video>
+
+                    <!-- Self-view PiP.
+                         Mobile: top-right of viewport.
+                         Desktop: bottom-right corner of the video rectangle. -->
+                    <video
+                        bind:this={localVideoEl}
+                        autoplay
+                        playsinline
+                        muted
+                        class="absolute top-4 right-4 md:top-auto md:right-3 md:bottom-3
+                               w-28 h-40 md:w-32 md:h-24
+                               object-cover rounded-2xl border-2 border-white/30 shadow-xl bg-black z-10"
+                        class:scale-x-[-1]={$voiceCallState.facingMode === 'user'}
+                    ></video>
+
+                    <!-- Mobile-only top scrim header. -->
+                    <div class="absolute top-0 left-0 right-0 p-4 pt-[calc(1rem+env(safe-area-inset-top))] z-10 bg-gradient-to-b from-black/60 to-transparent md:hidden">
+                        <div class="flex flex-col items-center text-white">
+                            <span class="text-lg font-medium">{profileName}</span>
+                            <span class="text-sm text-gray-300">{statusText}</span>
+                        </div>
+                    </div>
+
+                    <!-- Mobile-only bottom-overlay controls. -->
+                    {#if $voiceCallState.status !== 'ended'}
+                        <div class="absolute bottom-0 left-0 right-0 z-10 px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-12 bg-gradient-to-t from-black/70 to-transparent md:hidden">
+                            <div class="flex justify-around items-center">
+                                <!-- Mute -->
+                                <button
+                                    onclick={handleToggleMute}
+                                    class="flex flex-col items-center gap-2"
+                                    aria-label={$voiceCallState.isMuted ? $t('voiceCall.unmute') : $t('voiceCall.mute')}
+                                >
+                                    <div class="w-12 h-12 rounded-full flex items-center justify-center {$voiceCallState.isMuted ? 'bg-white' : 'bg-white/20 backdrop-blur'}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 {$voiceCallState.isMuted ? 'text-black' : 'text-white'}">
+                                            {#if $voiceCallState.isMuted}
+                                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                                                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                                                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.49-.35 2.17"></path>
+                                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                                            {:else}
+                                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                                            {/if}
+                                        </svg>
+                                    </div>
+                                </button>
+
+                                <!-- Camera off / on -->
+                                <button
+                                    onclick={handleToggleCamera}
+                                    class="flex flex-col items-center gap-2"
+                                    aria-label={$voiceCallState.isCameraOff ? $t('voiceCall.cameraOn') : $t('voiceCall.cameraOff')}
+                                >
+                                    <div class="w-12 h-12 rounded-full flex items-center justify-center {$voiceCallState.isCameraOff ? 'bg-white' : 'bg-white/20 backdrop-blur'}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 {$voiceCallState.isCameraOff ? 'text-black' : 'text-white'}">
+                                            {#if $voiceCallState.isCameraOff}
+                                                <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"></path>
+                                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                                            {:else}
+                                                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                                            {/if}
+                                        </svg>
+                                    </div>
+                                </button>
+
+                                <!-- Hangup -->
+                                <button
+                                    onclick={handleHangup}
+                                    class="flex flex-col items-center gap-2"
+                                    aria-label={$t('voiceCall.hangup')}
+                                >
+                                    <div class="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 rotate-[135deg]">
+                                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                                        </svg>
+                                    </div>
+                                </button>
+
+                                <!-- Flip camera -->
+                                <button
+                                    onclick={handleFlipCamera}
+                                    disabled={$voiceCallState.isCameraFlipping}
+                                    class="flex flex-col items-center gap-2 disabled:opacity-50"
+                                    aria-label={$t('voiceCall.flipCamera')}
+                                >
+                                    <div class="w-12 h-12 rounded-full flex items-center justify-center bg-white/20 backdrop-blur">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-white">
+                                            <path d="M23 4v6h-6"></path>
+                                            <path d="M1 20v-6h6"></path>
+                                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                                            <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
+                                        </svg>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- Desktop-only controls bar below the video. -->
+                {#if $voiceCallState.status !== 'ended'}
+                    <div class="hidden md:flex justify-center items-center gap-8 px-6 py-5">
                         <!-- Mute -->
                         <button
                             onclick={handleToggleMute}
@@ -260,8 +376,8 @@
                             </div>
                         </button>
                     </div>
-                </div>
-            {/if}
+                {/if}
+            </div>
         </div>
     {:else}
         <!-- Voice call layout (unchanged from pre-video baseline) -->
