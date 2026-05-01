@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+
 let audioContext: AudioContext | null = null;
 let oscillator: OscillatorNode | null = null;
 let gainNode: GainNode | null = null;
@@ -13,8 +15,15 @@ function getAudioContext(): AudioContext {
 /**
  * Play a repeating ring pattern for incoming calls.
  * Two-tone burst every 3 seconds.
+ *
+ * No-op on Android: the incoming-call notification channel sound +
+ * the lockscreen IncomingCallActivity provide the ringer there. The
+ * Svelte IncomingCallOverlay is also gated off on Android, so this
+ * code path should not normally be reached on the Android build, but
+ * the guard makes that explicit.
  */
 export function startIncomingRingtone(): void {
+    if (Capacitor.getPlatform() === 'android') return;
     stopRingtone();
     playRingBurst();
     ringtoneInterval = setInterval(playRingBurst, 3000);
@@ -23,8 +32,13 @@ export function startIncomingRingtone(): void {
 /**
  * Play a repeating ringback tone for outgoing calls.
  * Single tone burst every 4 seconds (like a phone ringing on the other end).
+ *
+ * No-op on Android: the native {@code VoiceCallForegroundService}
+ * plays a {@code ToneGenerator} ringback that is fully decoupled
+ * from WebView lifecycle.
  */
 export function startOutgoingRingback(): void {
+    if (Capacitor.getPlatform() === 'android') return;
     stopRingtone();
     playRingbackBurst();
     ringtoneInterval = setInterval(playRingbackBurst, 4000);

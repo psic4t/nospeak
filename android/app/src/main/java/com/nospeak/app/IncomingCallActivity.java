@@ -58,6 +58,20 @@ public class IncomingCallActivity extends Activity {
     public static final String ACTION_CALL_CANCELLED =
         "com.nospeak.app.action.INCOMING_CALL_CANCELLED";
 
+    /**
+     * Intent action set by the heads-up CallStyle Accept button on the
+     * incoming-call notification. Auto-runs the same flow as the user
+     * tapping Accept on the visible ringing screen, but skips the
+     * ringing UI bind (the user already chose Accept). Routes to
+     * {@link VoiceCallForegroundService#ACTION_ACCEPT_NATIVE} +
+     * {@link ActiveCallActivity} like a normal Accept tap. Without
+     * this, heads-up Accept used to launch MainActivity, which then
+     * raced the FGS over the {@code nospeak_pending_incoming_call}
+     * SharedPreferences slot.
+     */
+    public static final String ACTION_AUTO_ACCEPT =
+        "com.nospeak.app.voicecall.AUTO_ACCEPT";
+
     private static final long RINGING_TIMEOUT_MS = 60_000L;
 
     private String callId;
@@ -92,12 +106,29 @@ public class IncomingCallActivity extends Activity {
 
         applyShowWhenLockedFlags();
 
+        Intent intent = getIntent();
+        String action = intent != null ? intent.getAction() : null;
+        Log.d(TAG, "onCreate action=" + action);
+
         setContentView(R.layout.activity_incoming_call);
 
-        readExtras(getIntent());
+        readExtras(intent);
+        Log.d(TAG, "onCreate callId=" + callId + " action=" + action);
         if (!hasValidPendingOffer()) {
             Log.d(TAG, "No valid pending offer — finishing immediately");
             finishAndRemoveTask();
+            return;
+        }
+
+        // Auto-accept path: the user tapped Accept on the heads-up
+        // CallStyle notification. Run the same flow as
+        // onAcceptClicked() without first painting the ringing UI.
+        // The activity will be finishAndRemoveTask'd by the launch
+        // runnable inside onAcceptClicked, so we don't bother binding
+        // the ringing UI or arming the ringing timeout.
+        if (ACTION_AUTO_ACCEPT.equals(action)) {
+            Log.d(TAG, "ACTION_AUTO_ACCEPT — invoking accept flow directly");
+            onAcceptClicked();
             return;
         }
 
@@ -242,18 +273,92 @@ public class IncomingCallActivity extends Activity {
         Log.d(TAG, "Accept tapped for callId=" + acceptedCallId);
         timeoutHandler.removeCallbacks(timeoutRunnable);
 
-        final Runnable launchMain = new Runnable() {
+        // Accept goes directly to the native FGS (which builds the peer
+        // connection and sends the kind-25051 Answer) and the native
+        // ActiveCallActivity. MainActivity is NOT on the critical path
+        // for accept — the WebView only comes up later if the user
+        // navigates to chat or settings. The previous
+        // enableNativeCalls flag has been removed; native is the only
+        // Android voice-call path.
+        final Runnable launch = new Runnable() {
             @Override
             public void run() {
-                Intent i = new Intent(IncomingCallActivity.this, MainActivity.class)
-                    .setAction(Intent.ACTION_VIEW)
+                // Detect a missing in-memory signing secret. We need a
+                // fully-loaded signing context to author the kind-25051
+                // Answer. NBMS should be alive (it just decrypted the
+                // offer that triggered this Activity), but the local
+                // secret may not have been paged into memory yet on a
+                // cold-start nsec configuration. reloadLocalSecretFromStore
+                // is a cheap, encryption-only recovery; it succeeds for
+                // any user whose secret is in the EncryptedSharedPreferences
+                // store (i.e. unless they're entirely PIN-gated).
+                NativeBackgroundMessagingService nbms =
+                    NativeBackgroundMessagingService.getInstance();
+                boolean needsUnlock;
+                if (nbms == null) {
+                    // Should not happen — NBMS posted the FSI that
+                    // launched us — but guard for it anyway.
+                    needsUnlock = true;
+                } else if ("nsec".equalsIgnoreCase(nbms.getCurrentMode())) {
+                    if (nbms.hasLocalSecretLoaded()) {
+                        needsUnlock = false;
+                    } else {
+                        needsUnlock = !nbms.reloadLocalSecretFromStore();
+                    }
+                } else {
+                    // Amber mode signs through ContentResolver; no
+                    // in-memory secret to load.
+                    needsUnlock = false;
+                }
+                if (needsUnlock) {
+                    persistPendingUnlockIntent(acceptedCallId);
+                    // Start the FGS in await-unlock mode so it's alive
+                    // (and registered for ACTION_UNLOCK_COMPLETE) by the
+                    // time the user enters their PIN. Also arms the 30s
+                    // unlock timeout.
+                    Intent awaitSvc = new Intent(IncomingCallActivity.this, VoiceCallForegroundService.class)
+                        .setAction(VoiceCallForegroundService.ACTION_AWAIT_UNLOCK)
+                        .putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, acceptedCallId)
+                        .putExtra(VoiceCallForegroundService.EXTRA_PEER_NAME,
+                            peerName != null ? peerName : "");
+                    try {
+                        androidx.core.content.ContextCompat.startForegroundService(
+                            IncomingCallActivity.this, awaitSvc);
+                    } catch (Exception e) {
+                        Log.w(TAG, "AWAIT_UNLOCK startForegroundService failed", e);
+                    }
+                    Intent unlockIntent = new Intent(IncomingCallActivity.this, MainActivity.class)
+                        .setAction(Intent.ACTION_VIEW)
+                        .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(VoiceCallIntentContract.EXTRA_UNLOCK_FOR_CALL, acceptedCallId)
+                        .putExtra("nospeak_route_kind", "voice-call-unlock");
+                    startActivity(unlockIntent);
+                    finishAndRemoveTask();
+                    return;
+                }
+                // Start FGS with ACCEPT — the FGS reads the offer from
+                // SharedPreferences and drives NativeVoiceCallManager.
+                Intent svc = new Intent(IncomingCallActivity.this, VoiceCallForegroundService.class)
+                    .setAction(VoiceCallForegroundService.ACTION_ACCEPT_NATIVE)
+                    .putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, acceptedCallId)
+                    .putExtra(VoiceCallForegroundService.EXTRA_PEER_NAME,
+                        peerName != null ? peerName : "");
+                try {
+                    androidx.core.content.ContextCompat.startForegroundService(
+                        IncomingCallActivity.this, svc);
+                } catch (Exception e) {
+                    Log.w(TAG, "ACCEPT_NATIVE startForegroundService failed", e);
+                }
+                // Launch the native active-call surface.
+                Intent active = new Intent(IncomingCallActivity.this, ActiveCallActivity.class)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("accept_pending_call", true)
-                    .putExtra("call_id", acceptedCallId)
-                    .putExtra("nospeak_route_kind", "voice-call-accept");
-                startActivity(i);
+                    .putExtra(ActiveCallActivity.EXTRA_CALL_ID, acceptedCallId)
+                    .putExtra(ActiveCallActivity.EXTRA_PEER_NAME, peerName != null ? peerName : "");
+                startActivity(active);
                 finishAndRemoveTask();
             }
         };
@@ -264,8 +369,8 @@ public class IncomingCallActivity extends Activity {
             km.requestDismissKeyguard(this, new KeyguardManager.KeyguardDismissCallback() {
                 @Override
                 public void onDismissSucceeded() {
-                    Log.d(TAG, "Keyguard dismissed — launching MainActivity");
-                    launchMain.run();
+                    Log.d(TAG, "Keyguard dismissed — launching native FGS");
+                    launch.run();
                 }
 
                 @Override
@@ -286,12 +391,34 @@ public class IncomingCallActivity extends Activity {
 
                 @Override
                 public void onDismissError() {
-                    Log.w(TAG, "Keyguard dismiss error — falling through to launch MainActivity");
-                    launchMain.run();
+                    Log.w(TAG, "Keyguard dismiss error — falling through to launch");
+                    launch.run();
                 }
             });
         } else {
-            launchMain.run();
+            launch.run();
+        }
+    }
+
+    /**
+     * Persist the pending accept payload (callId + a timestamp) for the
+     * native call manager to resume after the user enters their PIN.
+     * The actual offer SDP is already in {@code nospeak_pending_incoming_call}
+     * (written by NativeBackgroundMessagingService); we only stash the
+     * callId here so the unlock-complete handler knows which call to
+     * resume.
+     */
+    private void persistPendingUnlockIntent(String acceptedCallId) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(
+                VoiceCallIntentContract.PREFS_FILE, MODE_PRIVATE);
+            prefs.edit()
+                .putString(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK, acceptedCallId)
+                .putLong(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK + ":ts",
+                    System.currentTimeMillis())
+                .apply();
+        } catch (Exception e) {
+            Log.w(TAG, "persistPendingUnlockIntent failed", e);
         }
     }
 

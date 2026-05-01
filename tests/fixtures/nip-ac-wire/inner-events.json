@@ -1,0 +1,73 @@
+{
+    "_doc": "Wire-format parity fixtures for NIP-AC inner events. The expectedId for each case was computed via nostr-tools' getEventHash on the canonical NIP-01 serialization. Both the JS-side parity test (src/lib/core/voiceCall/wireParity.test.ts) and the Java-side test (NativeNipAcSenderTest) MUST produce the same id from the same inputs. If you change inputs, regenerate ids by running the nostr-tools script in PR description, do NOT hand-edit ids.",
+    "sender": "1111111111111111111111111111111111111111111111111111111111111111",
+    "recipient": "2222222222222222222222222222222222222222222222222222222222222222",
+    "callId": "aabbccddeeff00112233445566778899",
+    "createdAt": 1700000000,
+    "cases": [
+        {
+            "name": "offer",
+            "kind": 25050,
+            "content": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n",
+            "altText": "WebRTC call offer",
+            "extraTags": [["call-type", "voice"]],
+            "expectedId": "108c506005122da1c77839d3d5ba0ddf3b43f7ad1f97407d0f57501b8d577a0e"
+        },
+        {
+            "name": "answer",
+            "kind": 25051,
+            "content": "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n",
+            "altText": "WebRTC call answer",
+            "extraTags": [],
+            "expectedId": "98fa817590951e4e497489f779b03113a74f2ed3bdc6287eb4b8da653ef26dcf"
+        },
+        {
+            "name": "ice (string mid + numeric index)",
+            "kind": 25052,
+            "content": "{\"candidate\":\"candidate:1 1 UDP 1 192.0.2.1 1234 typ host\",\"sdpMid\":\"0\",\"sdpMLineIndex\":0}",
+            "altText": "WebRTC ICE candidate",
+            "extraTags": [],
+            "expectedId": "57894db3e8d3afeb847fc99061bdadbf0cbb8969fd971b5ebb5cfc95088aefda"
+        },
+        {
+            "name": "ice (null mid + null index)",
+            "kind": 25052,
+            "content": "{\"candidate\":\"candidate:2 1 UDP 2 198.51.100.1 5678 typ srflx\",\"sdpMid\":null,\"sdpMLineIndex\":null}",
+            "altText": "WebRTC ICE candidate (null mid/index)",
+            "extraTags": [],
+            "expectedId": "a7ac2f24a894980a91e764d712496f1be04f494941805de2269af449d0d3dc85"
+        },
+        {
+            "name": "hangup (no reason)",
+            "kind": 25053,
+            "content": "",
+            "altText": "WebRTC call hangup",
+            "extraTags": [],
+            "expectedId": "ec95591924a17cb72309c9bc8ba5c28b13f3dab598acd187e44184ac9c14e6b4"
+        },
+        {
+            "name": "hangup (with reason)",
+            "kind": 25053,
+            "content": "user-initiated",
+            "altText": "WebRTC call hangup",
+            "extraTags": [],
+            "expectedId": "fd95b7d3d62c76242ee4e9723ef89c2563874364a203dc6b011fd449f1df9e95"
+        },
+        {
+            "name": "reject (no reason)",
+            "kind": 25054,
+            "content": "",
+            "altText": "WebRTC call rejection",
+            "extraTags": [],
+            "expectedId": "41b6277b66c3dde233709e5fe1ba259e79e371d8328c7548b4fdedccd814f964"
+        },
+        {
+            "name": "reject (busy)",
+            "kind": 25054,
+            "content": "busy",
+            "altText": "WebRTC call rejection",
+            "extraTags": [],
+            "expectedId": "5fefbade44ab1bb15c87a44754c4cbda4ae22f6cdd5ff03dba48ad325dc8e6da"
+        }
+    ]
+}

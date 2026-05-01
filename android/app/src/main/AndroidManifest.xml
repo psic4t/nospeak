@@ -41,6 +41,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required for FGS type 'phoneCall' on Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Also required for FGS type 'phoneCall' on Android 14+. Without this,
+         startForeground(.., FOREGROUND_SERVICE_TYPE_PHONE_CALL) throws
+         SecurityException at runtime: Android requires the caller to either
+         declare MANAGE_OWN_CALLS or hold the ROLE_DIALER role. We use it as
+         a self-managed call app (NIP-AC over Nostr, no ConnectionService).
+         Normal-protection permission; granted at install. See
+         https://developer.android.com/about/versions/14/changes/fgs-types-required#phone-call -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <!-- Required to launch the activity over the keyguard for incoming calls (Android 14+ runtime grant) -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
  
@@ -140,6 +148,25 @@
             android:name=".IncomingCallActivity"
             android:exported="false"
             android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.IncomingCall"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode|navigation|density" />
+
+        <!-- Active-call screen for the native voice-call stack. Phase 2 of
+             the add-native-voice-calls change. Reused theme + lockscreen
+             flags from IncomingCallActivity so the visual transition from
+             ringing to active is seamless. singleTask launchMode (rather
+             than singleInstance) so the activity keeps its task affinity
+             with MainActivity — useful so the user can swipe back to the
+             chat after the call ends. -->
+        <activity
+            android:name=".ActiveCallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/Theme.IncomingCall"

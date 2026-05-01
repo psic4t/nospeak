@@ -1,20 +1,35 @@
 package com.nospeak.app;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.media.AudioManager;
+import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+import org.webrtc.PeerConnection;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Foreground service hosting the active voice call.
@@ -38,19 +53,129 @@ public class VoiceCallForegroundService extends Service {
     public static final String ACTION_STOP = "com.nospeak.app.voicecall.STOP";
     public static final String ACTION_HANGUP = "com.nospeak.app.voicecall.HANGUP";
 
+    /**
+     * Native-call actions for {@link NativeVoiceCallManager}. The
+     * legacy {@link #ACTION_START} action is retained for backwards
+     * compatibility with the old JS-driven path on the web build, but
+     * on Android the FGS is always driven through these native
+     * actions.
+     */
+    public static final String ACTION_INITIATE_NATIVE = "com.nospeak.app.voicecall.INITIATE_NATIVE";
+    public static final String ACTION_ACCEPT_NATIVE = "com.nospeak.app.voicecall.ACCEPT_NATIVE";
+    public static final String ACTION_HANGUP_NATIVE = "com.nospeak.app.voicecall.HANGUP_NATIVE";
+    /**
+     * Bring the FGS up in a holding state while the JS unlock screen
+     * collects the user's PIN. The FGS arms the 30s unlock timeout and
+     * waits for ACTION_UNLOCK_COMPLETE; on receipt it transitions to
+     * ACTION_ACCEPT_NATIVE. Started by IncomingCallActivity right
+     * before launching MainActivity with EXTRA_UNLOCK_FOR_CALL.
+     */
+    public static final String ACTION_AWAIT_UNLOCK = "com.nospeak.app.voicecall.AWAIT_UNLOCK";
+
     public static final String EXTRA_CALL_ID = "callId";
     public static final String EXTRA_PEER_NPUB = "peerNpub";
     public static final String EXTRA_PEER_NAME = "peerName";
     public static final String EXTRA_ROLE = "role";
+    public static final String EXTRA_PEER_HEX = "peerHex";
 
     private PowerManager.WakeLock wakeLock;
     private AudioManager audioManager;
     private int previousAudioMode = AudioManager.MODE_NORMAL;
     private boolean audioModeApplied = false;
 
+    /**
+     * Phase 1 native voice-call manager. Lazily created on first
+     * native action ({@link #ACTION_INITIATE_NATIVE} or
+     * {@link #ACTION_ACCEPT_NATIVE}). Null when the FGS is hosting
+     * only the legacy JS-driven session.
+     */
+    private NativeVoiceCallManager nativeManager;
+    /**
+     * Phase 3 outgoing-call ringback tone. Started when the manager
+     * transitions to OUTGOING_RINGING; stopped on the first transition
+     * out of that state.
+     */
+    private final VoiceCallRingback ringback = new VoiceCallRingback();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    /**
+     * Process-wide static reference so {@link AndroidVoiceCallPlugin}
+     * (and ActiveCallActivity in Phase 2) can reach the running
+     * manager without binder boilerplate. Cleared in {@link #onDestroy}.
+     */
+    private static volatile VoiceCallForegroundService sInstance;
+
+    /** @return the running FGS instance, or {@code null}. */
+    public static VoiceCallForegroundService getInstance() {
+        return sInstance;
+    }
+
+    /**
+     * Convenience: returns the {@link NativeVoiceCallManager} when the
+     * FGS is running and a native session has been started; otherwise
+     * {@code null}. Safe to call from any thread.
+     */
+    public static NativeVoiceCallManager getNativeManager() {
+        VoiceCallForegroundService svc = sInstance;
+        return svc == null ? null : svc.nativeManager;
+    }
+
+    /** Local binder for ActiveCallActivity (Phase 2) to bind into. */
+    public class LocalBinder extends Binder {
+        public VoiceCallForegroundService getService() {
+            return VoiceCallForegroundService.this;
+        }
+    }
+    private final IBinder binder = new LocalBinder();
+
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        // Bound by ActiveCallActivity (Phase 2). Other callers get null.
+        return binder;
+    }
+
+    /**
+     * Listens for the {@link VoiceCallIntentContract#ACTION_UNLOCK_COMPLETE}
+     * broadcast emitted by the JS unlock screen (via the
+     * {@code AndroidVoiceCall.notifyUnlockComplete} plugin method) when
+     * the user has unlocked a previously-locked nsec. Resumes a pending
+     * call accept by reloading the secret and starting the FGS in
+     * ACCEPT_NATIVE mode.
+     */
+    private final BroadcastReceiver unlockReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null) return;
+            String callId = intent.getStringExtra(VoiceCallIntentContract.EXTRA_CALL_ID);
+            Log.d(TAG, "ACTION_UNLOCK_COMPLETE received callId=" + callId);
+            mainHandler.post(() -> resumePendingAcceptAfterUnlock(callId));
+        }
+    };
+    private boolean unlockReceiverRegistered = false;
+
+    /**
+     * Pending unlock-for-call timeout. If 30s pass after persisting the
+     * unlock-pending payload without an ACTION_UNLOCK_COMPLETE, the
+     * native call manager sends a kind-25054 reject + records a
+     * missed-call rumor and aborts.
+     */
+    private Runnable unlockTimeoutRunnable;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        sInstance = this;
+        // Register the unlock-complete listener for the lifetime of
+        // the FGS. LocalBroadcastManager is used so the broadcast
+        // never leaves the process.
+        try {
+            LocalBroadcastManager.getInstance(this).registerReceiver(
+                unlockReceiver,
+                new IntentFilter(VoiceCallIntentContract.ACTION_UNLOCK_COMPLETE));
+            unlockReceiverRegistered = true;
+        } catch (Throwable t) {
+            Log.w(TAG, "register unlock receiver failed", t);
+        }
     }
 
     @Override
@@ -64,6 +189,26 @@ public class VoiceCallForegroundService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+
+        // Native-call actions: start the manager and route the action.
+        if (ACTION_INITIATE_NATIVE.equals(action)
+            || ACTION_ACCEPT_NATIVE.equals(action)
+            || ACTION_HANGUP_NATIVE.equals(action)) {
+            return handleNativeAction(intent, action);
+        }
+
+        // Holding state: wait for the JS unlock screen to broadcast
+        // ACTION_UNLOCK_COMPLETE. Promote to foreground (so we don't get
+        // killed by the OS while the user types their PIN) and arm the
+        // 30s timeout.
+        if (ACTION_AWAIT_UNLOCK.equals(action)) {
+            String callId = intent.getStringExtra(EXTRA_CALL_ID);
+            String peerName = intent.getStringExtra(EXTRA_PEER_NAME);
+            promoteToForeground(callId, peerName, "incoming");
+            scheduleUnlockTimeoutIfNeeded();
+            return START_NOT_STICKY;
+        }
+
         if (!ACTION_START.equals(action)) {
             stopSelf();
             return START_NOT_STICKY;
@@ -73,6 +218,26 @@ public class VoiceCallForegroundService extends Service {
         String peerName = intent.getStringExtra(EXTRA_PEER_NAME);
         String role = intent.getStringExtra(EXTRA_ROLE);
 
+        promoteToForeground(callId, peerName, role);
+        return START_NOT_STICKY;
+    }
+
+    /**
+     * Runs the foreground promotion (notification, FGS type, audio
+     * mode, wake lock) shared by both the legacy JS-driven path
+     * ({@link #ACTION_START}) and the native path
+     * ({@link #ACTION_INITIATE_NATIVE} / {@link #ACTION_ACCEPT_NATIVE}).
+     * Idempotent — safe to invoke multiple times during a single call.
+     *
+     * @return {@code true} if the FGS is now in the foreground state and
+     *         it is safe to proceed with call setup; {@code false} if
+     *         {@code startForeground} threw (typically Android's
+     *         per-FGS-type permission policy on Android 14+). On
+     *         {@code false} the caller MUST short-circuit any
+     *         further work — the service has already invoked
+     *         {@code stopSelf()} and is on its way to {@code onDestroy}.
+     */
+    private boolean promoteToForeground(String callId, String peerName, String role) {
         createChannelIfNeeded();
         Notification notif = buildOngoingNotification(callId, peerName, role);
 
@@ -86,7 +251,7 @@ public class VoiceCallForegroundService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "startForeground failed", e);
             stopSelf();
-            return START_NOT_STICKY;
+            return false;
         }
 
         // Cancel any incoming-call notification once we're hosting an active call.
@@ -97,9 +262,264 @@ public class VoiceCallForegroundService extends Service {
             }
         } catch (Exception ignored) {}
 
-        acquireWakeLock();
-        configureAudioMode();
+        if (wakeLock == null) acquireWakeLock();
+        if (!audioModeApplied) configureAudioMode();
+        return true;
+    }
+
+    /**
+     * Handle a native-call action (initiate / accept / hangup). Lazily
+     * creates the {@link NativeVoiceCallManager} on first call and
+     * routes the action into it. The manager runs entirely on the
+     * main thread per its contract.
+     */
+    private int handleNativeAction(Intent intent, String action) {
+        String callId = intent.getStringExtra(EXTRA_CALL_ID);
+        String peerHex = intent.getStringExtra(EXTRA_PEER_HEX);
+        String peerName = intent.getStringExtra(EXTRA_PEER_NAME);
+        String role = ACTION_INITIATE_NATIVE.equals(action) ? "outgoing" : "incoming";
+        Log.d(TAG, "handleNativeAction action=" + action + " callId=" + callId);
+
+        // Always promote — the native call manager needs the FGS up
+        // before any media work begins. If startForeground throws (most
+        // commonly Android's per-FGS-type permission policy on Android
+        // 14+ — phoneCall requires MANAGE_OWN_CALLS or ROLE_DIALER),
+        // surface a clean callError to the JS layer instead of silently
+        // proceeding with a doomed call setup.
+        if (!promoteToForeground(callId, peerName, role)) {
+            AndroidVoiceCallPlugin.emitCallError(callId, "fgs-failed",
+                "Foreground service could not start (Android 14+ requires "
+                + "MANAGE_OWN_CALLS for phoneCall foreground services)");
+            AndroidVoiceCallPlugin.emitCallStateChanged(callId, "ended", "fgs-failed");
+            try {
+                getSharedPreferences("nospeak_pending_incoming_call", MODE_PRIVATE)
+                    .edit().clear().apply();
+            } catch (Throwable ignored) {}
+            try { IncomingCallNotification.cancel(this); } catch (Throwable ignored) {}
+            return START_NOT_STICKY;
+        }
+
+        // RECORD_AUDIO is required by stream-webrtc-android's AudioRecord
+        // capture. Without it, the peer connection will silently capture
+        // silence — the callee hears nothing. Fail loudly here so the
+        // user gets a clear callError event instead of a one-way call.
+        // The JS-foreground initiate / accept paths request this
+        // permission via AndroidMicrophone before invoking the FGS, so
+        // this check only fires on cold-start lockscreen-accept paths
+        // when the user has never granted RECORD_AUDIO at runtime.
+        if ((ACTION_INITIATE_NATIVE.equals(action) || ACTION_ACCEPT_NATIVE.equals(action))
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "RECORD_AUDIO not granted; aborting " + action + " callId=" + callId);
+            AndroidVoiceCallPlugin.emitCallError(callId, "permission-denied",
+                "Microphone permission required");
+            AndroidVoiceCallPlugin.emitCallStateChanged(callId, "ended", "permission-denied");
+            // Clear the pending offer so a stale slot doesn't keep
+            // blocking subsequent accepts.
+            try {
+                getSharedPreferences("nospeak_pending_incoming_call", MODE_PRIVATE)
+                    .edit().clear().apply();
+            } catch (Throwable ignored) {}
+            try { IncomingCallNotification.cancel(this); } catch (Throwable ignored) {}
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
+        // Build the manager on first use.
+        if (nativeManager == null) {
+            mainHandler.post(this::ensureNativeManager);
+        }
+
+        if (ACTION_INITIATE_NATIVE.equals(action)) {
+            final String fCallId = callId;
+            final String fPeerHex = peerHex;
+            final String fPeerName = peerName;
+            mainHandler.post(() -> {
+                if (nativeManager == null) ensureNativeManager();
+                if (nativeManager == null || fCallId == null || fPeerHex == null) {
+                    Log.w(TAG, "INITIATE_NATIVE: missing manager/callId/peerHex");
+                    return;
+                }
+                Log.d(TAG, "INITIATE_NATIVE: dispatching to manager callId=" + fCallId);
+                nativeManager.initiateCall(fCallId, fPeerHex.toLowerCase());
+                // Surface the active-call UI for outgoing calls. For
+                // incoming calls IncomingCallActivity handles the
+                // ActiveCallActivity launch directly so the lockscreen
+                // transition is seamless.
+                Intent active = new Intent(VoiceCallForegroundService.this, ActiveCallActivity.class)
+                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(ActiveCallActivity.EXTRA_CALL_ID, fCallId)
+                    .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
+                        fPeerName != null ? fPeerName : "");
+                try { startActivity(active); } catch (Exception ignored) {}
+            });
+        } else if (ACTION_ACCEPT_NATIVE.equals(action)) {
+            final String fCallId = callId;
+            mainHandler.post(() -> {
+                if (nativeManager == null) ensureNativeManager();
+                if (nativeManager == null) return;
+                // Read the persisted offer SDP from SharedPreferences —
+                // the same slot IncomingCallNotification posts to. The
+                // FGS now owns the slot lifecycle (clears after read);
+                // the previous JS clearPendingIncomingCall code path
+                // is unreachable since heads-up Accept routes through
+                // IncomingCallActivity, never MainActivity.
+                SharedPreferences prefs = getSharedPreferences(
+                    "nospeak_pending_incoming_call", MODE_PRIVATE);
+                String pendingCallId = prefs.getString("callId", null);
+                String sdp = prefs.getString("sdp", null);
+                String peerHexRead = prefs.getString("peerHex", null);
+                if (pendingCallId == null || sdp == null || peerHexRead == null
+                    || (fCallId != null && !fCallId.equals(pendingCallId))) {
+                    Log.w(TAG, "ACCEPT_NATIVE: pending offer missing or callId mismatch"
+                        + " (intent=" + fCallId + " prefs=" + pendingCallId + ")");
+                    return;
+                }
+                Log.d(TAG, "ACCEPT_NATIVE: dispatching to manager callId=" + pendingCallId);
+                nativeManager.acceptIncomingCall(
+                    pendingCallId, peerHexRead.toLowerCase(), sdp);
+                // Clear the pending offer slot now that the manager has
+                // consumed it — prevents a stale offer from being
+                // reused by a later spurious Accept tap.
+                try {
+                    prefs.edit().clear().apply();
+                } catch (Throwable ignored) {}
+            });
+        } else if (ACTION_HANGUP_NATIVE.equals(action)) {
+            mainHandler.post(() -> {
+                if (nativeManager != null) nativeManager.hangup();
+            });
+        }
         return START_NOT_STICKY;
+    }
+
+    /**
+     * Lazily build the native call manager. Called on the main thread.
+     * The bridge implementation delegates NIP-AC publishing to
+     * {@link NativeBackgroundMessagingService}'s static instance,
+     * running each call on the messaging service's relay-IO thread
+     * (the background executor used by {@code publishEventToRelayUrls}).
+     */
+    private void ensureNativeManager() {
+        if (nativeManager != null) return;
+        // ICE servers come from the runtime config injected by the JS
+        // layer when starting native calls. Phase 1 reads a default
+        // STUN server so peer connections still complete on most
+        // networks; Phase 2/3 may pass the configured list through
+        // the start intent for parity with the JS getIceServers().
+        List<PeerConnection.IceServer> iceServers = new ArrayList<>();
+        iceServers.add(PeerConnection.IceServer
+            .builder("stun:turn.data.haus:3478").createIceServer());
+
+        NativeVoiceCallManager.MessagingBridge bridge =
+            new NativeVoiceCallManager.MessagingBridge() {
+                @Override
+                public void sendOffer(String recipientHex, String callId, String sdp) {
+                    runOnMessagingExecutor(svc ->
+                        svc.sendVoiceCallOffer(recipientHex, callId, sdp));
+                }
+
+                @Override
+                public void sendAnswer(String recipientHex, String callId, String sdp) {
+                    runOnMessagingExecutor(svc ->
+                        svc.sendVoiceCallAnswer(recipientHex, callId, sdp));
+                }
+
+                @Override
+                public void sendIce(String recipientHex, String callId,
+                                    String candidate, String sdpMid, Integer sdpMLineIndex) {
+                    runOnMessagingExecutor(svc ->
+                        svc.sendVoiceCallIce(recipientHex, callId, candidate, sdpMid, sdpMLineIndex));
+                }
+
+                @Override
+                public void sendHangup(String recipientHex, String callId, String reason) {
+                    runOnMessagingExecutor(svc ->
+                        svc.sendVoiceCallHangup(recipientHex, callId, reason));
+                }
+
+                @Override
+                public void sendReject(String recipientHex, String callId) {
+                    runOnMessagingExecutor(svc ->
+                        svc.sendVoiceCallReject(recipientHex, callId));
+                }
+
+                @Override
+                public void sendCallHistoryRumor(
+                        String recipientHex,
+                        String type,
+                        int durationSec,
+                        String callId,
+                        String initiatorHex) {
+                    // Phase 4 of add-native-voice-calls: all gift-wrapped
+                    // history rumor types (declined / ended / no-answer /
+                    // failed / busy) are authored fully natively via the
+                    // parameterized helper. The JS callHistoryRumorRequested
+                    // bridge is no longer fired from the native path; the
+                    // event remains in the plugin shape for forwards
+                    // compatibility but is dormant on Android.
+                    runOnMessagingExecutor(svc -> svc.sendVoiceCallHistoryRumor(
+                        recipientHex, type, durationSec, callId, initiatorHex));
+                }
+            };
+
+        nativeManager = new NativeVoiceCallManager(
+            getApplicationContext(), bridge, iceServers);
+
+        // Wire the FGS-internal ringback player. Distinct from the
+        // ActiveCallActivity's UiListener so the two callbacks don't
+        // compete for the single uiListener slot. Plays only while
+        // the manager is in OUTGOING_RINGING — the first transition
+        // out of that state stops it.
+        nativeManager.setServiceListener(new NativeVoiceCallManager.UiListener() {
+            @Override
+            public void onStatusChanged(NativeVoiceCallManager.CallStatus status, String reason) {
+                if (status == NativeVoiceCallManager.CallStatus.OUTGOING_RINGING) {
+                    ringback.start();
+                } else {
+                    // Any non-outgoing-ringing state — connecting,
+                    // active, ended, or even a stray idle — stops
+                    // the tone. Idempotent.
+                    ringback.stop();
+                }
+            }
+
+            @Override
+            public void onDurationTick(int seconds) { /* no-op */ }
+
+            @Override
+            public void onMuteChanged(boolean muted) { /* no-op */ }
+        });
+    }
+
+    /**
+     * Hand work off to the messaging service. NIP-AC publishing must
+     * NOT run on the main thread (Amber's NIP-55 ContentResolver query
+     * is synchronous and the WebSocket sends should not block UI). The
+     * messaging service exposes a static instance accessor; if it
+     * returns null the work is dropped (logged) since publishing
+     * without an authenticated user is a no-op.
+     */
+    private interface MessagingTask {
+        void run(NativeBackgroundMessagingService svc);
+    }
+    private void runOnMessagingExecutor(MessagingTask task) {
+        NativeBackgroundMessagingService svc =
+            NativeBackgroundMessagingService.getInstance();
+        if (svc == null) {
+            Log.w(TAG, "messaging service not running; dropping NIP-AC publish");
+            return;
+        }
+        // The messaging service's existing publish path is thread-safe
+        // (uses synchronized blocks around the relay socket map). We
+        // dispatch via a new background thread per call to keep the
+        // main thread free; volumes are low (~5 events per call).
+        new Thread(() -> {
+            try { task.run(svc); }
+            catch (Throwable t) { Log.w(TAG, "messaging task failed", t); }
+        }, "nospeak-voicecall-publish").start();
     }
 
     private void acquireWakeLock() {
@@ -143,9 +563,145 @@ public class VoiceCallForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        // Stop the ringback tone first — it has its own ToneGenerator
+        // resource that should be released before the system audio mode
+        // is restored, otherwise the tone briefly bleeds into the
+        // restored ringer/music stream.
+        try { ringback.stop(); } catch (Throwable ignored) {}
+        // Tear down the native call manager FIRST so its dispose() runs
+        // while the audio mode and wake lock are still in their call-
+        // optimized state. The manager itself does not touch wake lock
+        // or audio mode.
+        if (nativeManager != null) {
+            try { nativeManager.dispose(); } catch (Throwable t) {
+                Log.w(TAG, "nativeManager.dispose failed", t);
+            }
+            nativeManager = null;
+        }
+        cancelUnlockTimeout();
+        if (unlockReceiverRegistered) {
+            try {
+                LocalBroadcastManager.getInstance(this).unregisterReceiver(unlockReceiver);
+            } catch (Throwable ignored) {}
+            unlockReceiverRegistered = false;
+        }
         restoreAudioMode();
         releaseWakeLock();
+        if (sInstance == this) sInstance = null;
         super.onDestroy();
+    }
+
+    /**
+     * Resume a call accept that was paused for PIN unlock. Called when
+     * either ACTION_UNLOCK_COMPLETE fires or the pending-unlock
+     * SharedPreferences slot is detected on FGS start.
+     */
+    private void resumePendingAcceptAfterUnlock(String callId) {
+        cancelUnlockTimeout();
+        SharedPreferences prefs = getSharedPreferences(
+            VoiceCallIntentContract.PREFS_FILE, MODE_PRIVATE);
+        String pending = prefs.getString(
+            VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK, null);
+        if (pending == null) {
+            Log.d(TAG, "resumePendingAcceptAfterUnlock: no pending unlock; ignoring");
+            return;
+        }
+        // Tolerate slot/callId mismatch by preferring the broadcast's
+        // callId. The two should always match (we only ever persist one
+        // pending unlock at a time), but the broadcast is authoritative.
+        final String acceptedCallId = callId != null ? callId : pending;
+        prefs.edit().remove(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK)
+            .remove(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK + ":ts")
+            .apply();
+
+        NativeBackgroundMessagingService nbms =
+            NativeBackgroundMessagingService.getInstance();
+        if (nbms != null && !nbms.reloadLocalSecretFromStore()) {
+            Log.w(TAG, "resumePendingAcceptAfterUnlock: secret reload failed");
+            // Without a key we still can't sign Answer; bail rather than
+            // silently failing. The user will see a missed-call entry
+            // via the offer's normal expiry flow.
+            return;
+        }
+        // Fire the same accept path as if the user had tapped Accept on
+        // an unlocked device. The FGS reads the offer SDP from the
+        // pending-incoming-call SharedPrefs slot.
+        Intent svc = new Intent(this, VoiceCallForegroundService.class)
+            .setAction(ACTION_ACCEPT_NATIVE)
+            .putExtra(EXTRA_CALL_ID, acceptedCallId);
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(this, svc);
+        } catch (Exception e) {
+            Log.w(TAG, "resumePendingAcceptAfterUnlock: startForegroundService failed", e);
+            return;
+        }
+        // Bring up the native active-call surface.
+        Intent active = new Intent(this, ActiveCallActivity.class)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(ActiveCallActivity.EXTRA_CALL_ID, acceptedCallId);
+        try { startActivity(active); } catch (Exception ignored) {}
+    }
+
+    /**
+     * Schedule the 30s unlock-timeout: if the user dismisses MainActivity
+     * without entering their PIN we send a reject + record a missed
+     * call so the caller doesn't sit waiting indefinitely.
+     */
+    public void scheduleUnlockTimeoutIfNeeded() {
+        SharedPreferences prefs = getSharedPreferences(
+            VoiceCallIntentContract.PREFS_FILE, MODE_PRIVATE);
+        if (prefs.getString(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK, null) == null) {
+            return;
+        }
+        cancelUnlockTimeout();
+        unlockTimeoutRunnable = () -> {
+            SharedPreferences p = getSharedPreferences(
+                VoiceCallIntentContract.PREFS_FILE, MODE_PRIVATE);
+            String pending = p.getString(
+                VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK, null);
+            if (pending == null) return; // already resumed or aborted
+            // Pull the offer-receipt context from the pending-incoming-call slot.
+            SharedPreferences offerPrefs = getSharedPreferences(
+                "nospeak_pending_incoming_call", MODE_PRIVATE);
+            String peerHex = offerPrefs.getString("peerHex", null);
+            String offerCallId = offerPrefs.getString("callId", null);
+            if (peerHex != null && offerCallId != null && offerCallId.equals(pending)) {
+                NativeBackgroundMessagingService nbms =
+                    NativeBackgroundMessagingService.getInstance();
+                if (nbms != null) {
+                    final NativeBackgroundMessagingService fNbms = nbms;
+                    final String fPeerHex = peerHex.toLowerCase();
+                    final String fCallId = pending;
+                    new Thread(() -> {
+                        try {
+                            fNbms.sendVoiceCallReject(fPeerHex, fCallId);
+                        } catch (Throwable t) {
+                            Log.w(TAG, "unlock timeout: sendVoiceCallReject failed", t);
+                        }
+                    }, "nospeak-unlock-timeout-reject").start();
+                }
+            }
+            // Clear pending unlock slot and ringer state.
+            p.edit().remove(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK)
+                .remove(VoiceCallIntentContract.PREF_PENDING_CALL_UNLOCK + ":ts")
+                .apply();
+            try { offerPrefs.edit().clear().apply(); } catch (Throwable ignored) {}
+            try { IncomingCallNotification.cancel(VoiceCallForegroundService.this); }
+            catch (Throwable ignored) {}
+            // Stop ourselves — the call is dead.
+            stopSelf();
+        };
+        mainHandler.postDelayed(unlockTimeoutRunnable,
+            VoiceCallIntentContract.UNLOCK_TIMEOUT_MS);
+    }
+
+    private void cancelUnlockTimeout() {
+        if (unlockTimeoutRunnable != null) {
+            mainHandler.removeCallbacks(unlockTimeoutRunnable);
+            unlockTimeoutRunnable = null;
+        }
     }
 
     private Notification buildOngoingNotification(String callId, String peerName, String role) {

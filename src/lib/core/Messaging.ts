@@ -482,15 +482,25 @@ export type AuthoredCallEventType =
         }
       }
 
-      // On Android, the native FSI is the authoritative ringing UI for
-      // incoming offers from a closed/backgrounded app. Skip dispatch
-      // here so the JS state machine doesn't enter incoming-ringing
-      // with no overlay to clear it. Other kinds and the cold-start
-      // accept path bypass this check.
-      if (kind === NIP_AC_KIND_OFFER && isAndroidNative()) {
+      // On Android, the native NativeBackgroundMessagingService is the
+      // authoritative dispatcher for ALL NIP-AC inner kinds (offer /
+      // answer / ICE / hangup / reject). Skip the JS dispatch here so
+      // we don't double-handle (which would inject duplicate ICE
+      // candidates into the peer connection and corrupt the state
+      // machine), and so the JS state machine doesn't enter
+      // incoming-ringing with no overlay to clear it.
+      if (
+        isAndroidNative() &&
+        (kind === NIP_AC_KIND_OFFER ||
+          kind === NIP_AC_KIND_ANSWER ||
+          kind === NIP_AC_KIND_ICE ||
+          kind === NIP_AC_KIND_HANGUP ||
+          kind === NIP_AC_KIND_REJECT)
+      ) {
         if (this.debug) {
           console.log(
-            '[NIP-AC] skip offer dispatch on Android (native UI authoritative)'
+            '[NIP-AC] skip JS dispatch on Android (native authoritative)',
+            { kind }
           );
         }
         return;

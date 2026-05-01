@@ -56,8 +56,14 @@
   let isInitialized = $state(false);
   let showProfileRefreshBanner = $state(false);
   let profileRefreshMessage = $state("");
-  let isAndroidApp = $state(isAndroidNative());
-  let hadUser = false;
+   let isAndroidApp = $state(isAndroidNative());
+   /**
+    * True on Android: the native ActiveCallActivity is the
+    * authoritative active-call UI there, and we suppress the JS-side
+    * ActiveCallOverlay to avoid two overlapping surfaces.
+    */
+   let nativeCallsActive = $state(isAndroidNative());
+   let hadUser = false;
 
   const webManifestLinkTag = pwaInfo?.webManifest.linkTag ?? "";
 
@@ -235,6 +241,27 @@
               // The ActiveCallOverlay is already mounted in the root layout.
               // No navigation needed — just mark routed-from-notification.
               routedFromNotification = true;
+              return;
+          }
+
+          if (payload.kind === 'voice-call-unlock') {
+              // Phase 2 of add-native-voice-calls: lockscreen accept
+              // landed on a PIN-locked nsec. The JS layer has been
+              // launched specifically to give the user the unlock UI;
+              // once they pass the PIN gate (and currentUser becomes
+              // available), notify the native FGS so it can resume the
+              // accept and send the kind-25051 Answer.
+              const callId = payload.callId;
+              if (!callId) return;
+              try {
+                  const { handleVoiceCallUnlockRoute } = await import(
+                      '$lib/core/voiceCall/incomingCallUnlockHandler'
+                  );
+                  await handleVoiceCallUnlockRoute(callId);
+                  routedFromNotification = true;
+              } catch (e) {
+                  console.error('Failed to handle voice-call-unlock route:', e);
+              }
               return;
           }
 
@@ -652,11 +679,17 @@
            IncomingCallActivity is the authoritative incoming-call UI there.
            Showing the Svelte overlay too would spuriously appear after the
            user declined natively, when the queued offer was replayed on
-           foreground. The active-call overlay still shows on all platforms. -->
+           foreground. -->
       {#if !isAndroidApp}
           <IncomingCallOverlay />
       {/if}
-      <ActiveCallOverlay />
+      <!-- The active-call overlay is suppressed when native voice calls
+           are enabled on Android: ActiveCallActivity is the authoritative
+           active-call UI there. Web/PWA and Android with the legacy JS
+           path keep the Svelte overlay. Phase 2 of add-native-voice-calls. -->
+      {#if !nativeCallsActive}
+          <ActiveCallOverlay />
+      {/if}
 
       <!-- PIN Setup Modal - above all other modals -->
       <PinSetupModal

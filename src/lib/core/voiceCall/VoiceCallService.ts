@@ -26,76 +26,39 @@ import {
     NIP_AC_KIND_REJECT
 } from './constants';
 
-/**
- * Persisted call-event types authored on terminal call transitions. Mirrors
- * the union in Messaging.createCallEventMessage and the renderer in
- * CallEventMessage.svelte. Legacy values 'outgoing'/'incoming' are NOT in
- * this set — new code SHALL NOT author them.
- */
-export type AuthoredCallEventType =
-    | 'missed'
-    | 'ended'
-    | 'no-answer'
-    | 'declined'
-    | 'busy'
-    | 'failed'
-    | 'cancelled';
+// Backend-facing public types (NipAcSenders, CallEventCreator,
+// LocalCallEventCreator, AuthoredCallEventType, VoiceCallBackend) live
+// in `./types.ts` so VoiceCallServiceNative can implement the same
+// interface without circular imports back into this file. Re-exported
+// here for backwards compatibility with existing importers.
+import type {
+    AuthoredCallEventType,
+    CallEventCreator,
+    LocalCallEventCreator,
+    NipAcSenders,
+    VoiceCallBackend
+} from './types';
+export type {
+    AuthoredCallEventType,
+    CallEventCreator,
+    LocalCallEventCreator,
+    NipAcSenders,
+    VoiceCallBackend
+};
 
 /**
- * Authoring callback for call-event types that should appear in BOTH peers'
- * chat history (`ended`, `no-answer`, `declined`, `busy`, `failed`).
- * Implemented by Messaging.createCallEventMessage — gift-wraps the rumor to
- * the peer and self-wraps for the sender.
+ * JavaScript / web implementation of {@link VoiceCallBackend}. Owns an
+ * {@code RTCPeerConnection} in the JavaScript runtime and routes NIP-AC
+ * signaling through {@code Messaging.ts}'s registered senders. Used on
+ * the web/PWA build, and on Android until the native voice-calling
+ * stack ships in Phase 1+ of {@code add-native-voice-calls}.
  *
- * `initiatorNpub` (optional, bech32) SHALL be the original WebRTC call
- * initiator. Defaults to the local user when omitted; callee-authored
- * types MUST pass the caller's npub explicitly so the persisted
- * `call-initiator` tag points to the actual initiator (not the rumor
- * author) and the renderer can pick role-aware copy.
+ * Exported under the legacy name {@code VoiceCallService} so existing
+ * importers keep working; an alias {@link VoiceCallServiceWeb} is also
+ * exported below to make the platform-specificity explicit at new call
+ * sites.
  */
-type CallEventCreator = (
-    recipientNpub: string,
-    type: AuthoredCallEventType,
-    duration?: number,
-    callId?: string,
-    initiatorNpub?: string
-) => Promise<void>;
-
-/**
- * Authoring callback for call-event types that are LOCAL-ONLY — only the
- * authoring side ever has a row (`missed`, `cancelled`). Implemented by
- * Messaging.createLocalCallEventMessage — saves to the local DB without any
- * relay publish or gift-wrap. The peer will not receive this rumor.
- */
-type LocalCallEventCreator = (
-    recipientNpub: string,
-    type: AuthoredCallEventType,
-    callId?: string,
-    initiatorNpub?: string
-) => Promise<void>;
-
-/**
- * Typed NIP-AC senders registered by Messaging.ts. One per inner-event
- * kind. Each helper signs the inner event with the user's signer, wraps
- * it in a kind-21059 ephemeral gift wrap, and publishes to connected
- * relays. `sendAnswer` and `sendReject` additionally publish a
- * self-wrap for multi-device "answered/rejected elsewhere".
- */
-export interface NipAcSenders {
-    sendOffer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
-    sendAnswer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
-    sendIceCandidate: (
-        recipientNpub: string,
-        callId: string,
-        candidate: string,
-        sdpMid: string | null,
-        sdpMLineIndex: number | null
-    ) => Promise<void>;
-    sendHangup: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
-    sendReject: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
-}
-
-export class VoiceCallService {
+export class VoiceCallService implements VoiceCallBackend {
     private peerConnection: RTCPeerConnection | null = null;
     private localStream: MediaStream | null = null;
     private remoteStream: MediaStream | null = null;
@@ -378,6 +341,18 @@ export class VoiceCallService {
             });
         }
         storeMute();
+    }
+
+    /**
+     * Speaker toggle. Web implementation is a no-op — browsers do not
+     * expose a speakerphone routing primitive (the platform decides the
+     * output device). Kept so the {@link VoiceCallBackend} interface
+     * has a uniform method on both implementations; the active-call
+     * UI's speaker button is therefore a placeholder on web today
+     * (matching pre-migration behavior).
+     */
+    public toggleSpeaker(): void {
+        // intentional no-op on web
     }
 
     public getRemoteStream(): MediaStream | null {
@@ -760,4 +735,25 @@ export class VoiceCallService {
     }
 }
 
-export const voiceCallService = new VoiceCallService();
+/**
+ * Explicit alias for the JS / web implementation of the
+ * {@link VoiceCallBackend} interface. New call sites SHOULD prefer
+ * importing this name to make the platform-specificity clear; the
+ * legacy {@link VoiceCallService} export is kept for backwards
+ * compatibility with existing importers and is identical to this
+ * type.
+ */
+export { VoiceCallService as VoiceCallServiceWeb };
+
+/**
+ * Singleton {@link VoiceCallBackend} used throughout the app. The
+ * factory in {@code ./factory.ts} returns
+ * {@code VoiceCallServiceNative} on Android (which proxies to the
+ * native peer connection) and {@link VoiceCallService} on web/PWA.
+ *
+ * Importers SHALL NOT depend on the concrete class — only on the
+ * {@link VoiceCallBackend} interface — so the platform swap stays
+ * transparent to consumers.
+ */
+import { createVoiceCallBackend } from './factory';
+export const voiceCallService: VoiceCallBackend = createVoiceCallBackend();

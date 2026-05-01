@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Background for the active-call mute and speaker toggle buttons.
+    Translucent white circle that pops against the dark call
+    background but is visually softer than the bright accept-green or
+    decline-red used for ringing actions. Phase 2 of
+    add-native-voice-calls.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#33FFFFFF" />
+</shape>

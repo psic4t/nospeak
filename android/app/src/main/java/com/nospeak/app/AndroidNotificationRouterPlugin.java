@@ -72,8 +72,12 @@ public class AndroidNotificationRouterPlugin extends Plugin {
         }
 
         // Voice-call routes carry callId, not conversationId. Allow them through
-        // even when conversationId is absent.
-        if ("voice-call-accept".equals(kind) || "voice-call-active".equals(kind)) {
+        // even when conversationId is absent. The 'voice-call-unlock' kind is
+        // sent by IncomingCallActivity when a PIN-locked nsec must be unlocked
+        // before a call accept can complete (Phase 2 of add-native-voice-calls).
+        if ("voice-call-accept".equals(kind)
+                || "voice-call-active".equals(kind)
+                || "voice-call-unlock".equals(kind)) {
             JSObject payload = new JSObject();
             payload.put("kind", kind);
             payload.put("callId", callId != null ? callId : "");

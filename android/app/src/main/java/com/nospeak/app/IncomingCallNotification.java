@@ -26,8 +26,15 @@ import androidx.core.graphics.drawable.IconCompat;
  * via {@link NotificationCompat.CallStyle#forIncomingCall(Person, PendingIntent, PendingIntent)},
  * giving system-styled green Accept / red Decline buttons and the caller's avatar.
  *
- * <p>The Accept action launches MainActivity with {@code accept_pending_call=true};
- * the Decline action broadcasts to {@link IncomingCallActionReceiver}.
+ * <p>The Accept action launches {@link IncomingCallActivity} with
+ * {@link IncomingCallActivity#ACTION_AUTO_ACCEPT}, which runs the same accept
+ * flow as the user tapping Accept on the visible ringing screen (start FGS
+ * with ACTION_ACCEPT_NATIVE + launch ActiveCallActivity). Routing through
+ * the activity (rather than MainActivity) keeps a single accept code path
+ * and avoids races with the JS layer over the
+ * {@code nospeak_pending_incoming_call} SharedPreferences slot.
+ *
+ * <p>The Decline action broadcasts to {@link IncomingCallActionReceiver}.
  *
  * <p>On Android the JS-side {@code IncomingCallOverlay.svelte} no longer renders
  * (the native ringing activity is the authoritative incoming-call UI), so the
@@ -83,15 +90,23 @@ public final class IncomingCallNotification {
             context, 2, ringingIntent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
-        // Accept tap → MainActivity with accept_pending_call=true and the
-        // voice-call-accept route extras.
-        Intent acceptIntent = new Intent(context, MainActivity.class)
-            .setAction(Intent.ACTION_VIEW)
-            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // Accept tap → IncomingCallActivity with ACTION_AUTO_ACCEPT.
+        // The activity runs the same flow as the user tapping Accept on
+        // the visible ringing screen (PIN-locked-nsec detection, FGS
+        // ACTION_ACCEPT_NATIVE, ActiveCallActivity launch). Single
+        // accept code path means no SharedPrefs race with the JS layer.
+        Intent acceptIntent = new Intent(context, IncomingCallActivity.class)
+            .setAction(IncomingCallActivity.ACTION_AUTO_ACCEPT)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
                     | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra("accept_pending_call", true)
-            .putExtra("call_id", callId)
-            .putExtra("nospeak_route_kind", "voice-call-accept");
+            .putExtra(IncomingCallActivity.EXTRA_CALL_ID, callId)
+            .putExtra(IncomingCallActivity.EXTRA_PEER_NAME, peerName)
+            .putExtra(IncomingCallActivity.EXTRA_SENDER_NPUB, senderNpub)
+            .putExtra(IncomingCallActivity.EXTRA_SENDER_PUBKEY_HEX, senderPubkeyHex);
+        if (avatarPath != null) {
+            acceptIntent.putExtra(IncomingCallActivity.EXTRA_AVATAR_PATH, avatarPath);
+        }
         PendingIntent acceptPi = PendingIntent.getActivity(
             context, 0, acceptIntent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);

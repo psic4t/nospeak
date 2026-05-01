@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -228,6 +230,319 @@ public class AndroidVoiceCallPlugin extends Plugin {
             return;
         }
         call.resolve();
+    }
+
+    // ===================================================================
+    //  Native voice-call plugin methods. The Android build always
+    //  uses the native voice-call stack (NativeVoiceCallManager hosted
+    //  by VoiceCallForegroundService); the previous enableNativeCalls
+    //  flag has been removed and these methods are unconditionally
+    //  available on Android.
+    // ===================================================================
+
+    /**
+     * Begin a native outgoing call. Starts {@link VoiceCallForegroundService}
+     * with {@link VoiceCallForegroundService#ACTION_INITIATE_NATIVE} and
+     * passes the recipient hex pubkey + callId; the FGS lazily builds
+     * the {@link NativeVoiceCallManager} and handles the rest.
+     *
+     * <p>Args: {@code { callId, peerHex, peerName? }}.
+     */
+    @PluginMethod
+    public void initiateCall(PluginCall call) {
+        String callId = call.getString("callId");
+        String peerHex = call.getString("peerHex");
+        String peerName = call.getString("peerName");
+        if (callId == null || peerHex == null) {
+            call.reject("missing required arguments: callId, peerHex");
+            return;
+        }
+        Intent svc = new Intent(getContext(), VoiceCallForegroundService.class)
+            .setAction(VoiceCallForegroundService.ACTION_INITIATE_NATIVE)
+            .putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, callId)
+            .putExtra(VoiceCallForegroundService.EXTRA_PEER_HEX, peerHex)
+            .putExtra(VoiceCallForegroundService.EXTRA_PEER_NAME,
+                peerName != null ? peerName : "");
+        try {
+            ContextCompat.startForegroundService(getContext(), svc);
+        } catch (Exception e) {
+            Log.e(TAG, "initiateCall: startForegroundService failed", e);
+            call.reject("could not start native voice call");
+            return;
+        }
+        call.resolve();
+    }
+
+    /**
+     * Accept the pending incoming call. Reads the persisted offer SDP
+     * from {@code nospeak_pending_incoming_call} SharedPreferences
+     * (the same slot {@link NativeBackgroundMessagingService} writes
+     * when it decrypts an offer wrap).
+     */
+    @PluginMethod
+    public void acceptCall(PluginCall call) {
+        String callId = call.getString("callId");
+        Intent svc = new Intent(getContext(), VoiceCallForegroundService.class)
+            .setAction(VoiceCallForegroundService.ACTION_ACCEPT_NATIVE);
+        if (callId != null) {
+            svc.putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, callId);
+        }
+        try {
+            ContextCompat.startForegroundService(getContext(), svc);
+        } catch (Exception e) {
+            Log.e(TAG, "acceptCall: startForegroundService failed", e);
+            call.reject("could not start native voice call accept");
+            return;
+        }
+        call.resolve();
+    }
+
+    /**
+     * Decline the in-progress incoming call. Routes to the manager so
+     * the kind-25054 reject is sent and the local state transitions to
+     * ended. The lockscreen Decline button has its own path
+     * ({@link IncomingCallActionReceiver}); this method is the
+     * in-app overlay equivalent for the foreground-app scenario.
+     */
+    @PluginMethod
+    public void declineCall(PluginCall call) {
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.decline();
+        });
+        call.resolve();
+    }
+
+    /**
+     * Hang up the active or in-progress native call from the JS layer.
+     */
+    @PluginMethod
+    public void hangup(PluginCall call) {
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.hangup();
+        });
+        call.resolve();
+    }
+
+    /**
+     * Toggle local microphone mute. Args: {@code { muted: boolean }}.
+     * Idempotent; setting to the current value is a no-op.
+     */
+    @PluginMethod
+    public void toggleMute(PluginCall call) {
+        Boolean muted = call.getBoolean("muted");
+        if (muted == null) {
+            call.reject("missing required argument: muted");
+            return;
+        }
+        final boolean fMuted = muted;
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.setMuted(fMuted);
+        });
+        call.resolve();
+    }
+
+    /**
+     * Called by the JavaScript unlock screen after the user has
+     * successfully entered their PIN to unlock a previously-locked
+     * nsec while a call accept was pending. Emits the
+     * {@link VoiceCallIntentContract#ACTION_UNLOCK_COMPLETE} local
+     * broadcast that the active foreground service listens for, so
+     * the call accept can resume natively (signing the kind-25051
+     * Answer with the just-unlocked secret).
+     *
+     * <p>Args: {@code { callId: string }}. Best-effort; if no FGS is
+     * running for this call, the broadcast is a no-op.
+     *
+     * <p>Phase 2 of {@code add-native-voice-calls}.
+     */
+    @PluginMethod
+    public void notifyUnlockComplete(PluginCall call) {
+        String callId = call.getString("callId");
+        if (callId == null) {
+            call.reject("missing required argument: callId");
+            return;
+        }
+        try {
+            Intent broadcast = new Intent(VoiceCallIntentContract.ACTION_UNLOCK_COMPLETE)
+                .putExtra(VoiceCallIntentContract.EXTRA_CALL_ID, callId)
+                .setPackage(getContext().getPackageName());
+            androidx.localbroadcastmanager.content.LocalBroadcastManager
+                .getInstance(getContext())
+                .sendBroadcast(broadcast);
+        } catch (Throwable t) {
+            Log.w(TAG, "notifyUnlockComplete: broadcast failed", t);
+        }
+        call.resolve();
+    }
+
+    /**
+     * Toggle speakerphone routing through the system AudioManager.
+     * Args: {@code { on: boolean }}.
+     */
+    @PluginMethod
+    public void toggleSpeaker(PluginCall call) {
+        Boolean on = call.getBoolean("on");
+        if (on == null) {
+            call.reject("missing required argument: on");
+            return;
+        }
+        final boolean fOn = on;
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.setSpeakerOn(fOn);
+        });
+        call.resolve();
+    }
+
+    private static void runOnMain(Runnable r) {
+        new Handler(Looper.getMainLooper()).post(r);
+    }
+
+    // ===================================================================
+    //  Native voice-call event emitters. Invoked by
+    //  NativeVoiceCallManager (or its bridge) from the main thread.
+    //  Each safely returns when no plugin instance is registered (the
+    //  WebView is dead) so background callers never crash.
+    // ===================================================================
+
+    /**
+     * Emit a {@code callStateChanged} event when the native call
+     * manager transitions between states.
+     */
+    public static void emitCallStateChanged(String callId, String status, String reason) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("status", status != null ? status : "idle");
+        if (reason != null) data.put("reason", reason);
+        try {
+            p.notifyListeners("callStateChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitCallStateChanged failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code durationTick} event once per second while the
+     * call status is ACTIVE.
+     */
+    public static void emitDurationTick(String callId, int seconds) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("seconds", seconds);
+        try {
+            p.notifyListeners("durationTick", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitDurationTick failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code callError} event when the native call manager
+     * encounters an unrecoverable error.
+     */
+    public static void emitCallError(String callId, String code, String message) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("code", code != null ? code : "unknown");
+        data.put("message", message != null ? message : "");
+        try {
+            p.notifyListeners("callError", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitCallError failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code muteStateChanged} event after a mute toggle.
+     */
+    public static void emitMuteStateChanged(String callId, boolean muted) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("muted", muted);
+        try {
+            p.notifyListeners("muteStateChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitMuteStateChanged failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code callHistoryWriteRequested} event when the native
+     * call manager needs the JS layer to author a LOCAL-ONLY chat-
+     * history rumor (types: {@code missed} or {@code cancelled}). The
+     * JS handler is expected to call {@code messageRepo.saveMessage}
+     * via the existing {@code Messaging.createLocalCallEventMessage}
+     * pipeline.
+     *
+     * <p>{@code peerHex} is the remote peer's pubkey hex (the JS layer
+     * converts to npub for {@code messageRepo}). {@code initiatorHex}
+     * is the original WebRTC initiator's pubkey hex; pass {@code null}
+     * if the local user is the initiator. {@code durationSec} is
+     * passed as -1 when not applicable.
+     */
+    public static void emitCallHistoryWriteRequested(
+            String callId,
+            String type,
+            String peerHex,
+            String initiatorHex,
+            int durationSec) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("type", type != null ? type : "");
+        data.put("peerHex", peerHex != null ? peerHex : "");
+        if (initiatorHex != null) data.put("initiatorHex", initiatorHex);
+        if (durationSec >= 0) data.put("durationSec", durationSec);
+        try {
+            p.notifyListeners("callHistoryWriteRequested", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitCallHistoryWriteRequested failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code callHistoryRumorRequested} event when the native
+     * call manager wants the JS layer to author a GIFT-WRAPPED chat-
+     * history rumor (types: {@code ended}, {@code no-answer},
+     * {@code failed}, {@code busy}). The JS handler is expected to
+     * call {@code Messaging.createCallEventMessage}, which gift-wraps
+     * the kind-1405 rumor to both the peer and the local user.
+     *
+     * <p>This is a Phase 1 stopgap; Phase 4 reimplements these types
+     * natively by extending {@code sendVoiceCallDeclinedEvent} into
+     * a parameterized helper.
+     */
+    public static void emitCallHistoryRumorRequested(
+            String callId,
+            String type,
+            String peerHex,
+            String initiatorHex,
+            int durationSec) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("type", type != null ? type : "");
+        data.put("peerHex", peerHex != null ? peerHex : "");
+        if (initiatorHex != null) data.put("initiatorHex", initiatorHex);
+        if (durationSec >= 0) data.put("durationSec", durationSec);
+        try {
+            p.notifyListeners("callHistoryRumorRequested", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitCallHistoryRumorRequested failed", e);
+        }
     }
 
     /**

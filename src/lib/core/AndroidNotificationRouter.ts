@@ -1,6 +1,10 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-export type AndroidNotificationRouteKind = 'chat' | 'voice-call-accept' | 'voice-call-active';
+export type AndroidNotificationRouteKind =
+    | 'chat'
+    | 'voice-call-accept'
+    | 'voice-call-active'
+    | 'voice-call-unlock';
 
 export interface AndroidNotificationChatRoutePayload {
     kind: 'chat';
@@ -17,10 +21,25 @@ export interface AndroidNotificationVoiceCallActivePayload {
     callId: string;
 }
 
+/**
+ * Phase 2 of {@code add-native-voice-calls}: emitted when the user taps
+ * Accept on the lockscreen incoming-call activity but the local nsec is
+ * PIN-locked. The JS handler is expected to surface the existing
+ * unlock screen; on successful PIN entry the JS layer calls
+ * {@code AndroidVoiceCall.notifyUnlockComplete({ callId })} which in
+ * turn fires the {@code nospeak.ACTION_UNLOCK_COMPLETE} broadcast that
+ * resumes the native accept.
+ */
+export interface AndroidNotificationVoiceCallUnlockPayload {
+    kind: 'voice-call-unlock';
+    callId: string;
+}
+
 export type AndroidNotificationRoutePayload =
     | AndroidNotificationChatRoutePayload
     | AndroidNotificationVoiceCallAcceptPayload
-    | AndroidNotificationVoiceCallActivePayload;
+    | AndroidNotificationVoiceCallActivePayload
+    | AndroidNotificationVoiceCallUnlockPayload;
 
 export interface AndroidNotificationRouterPlugin {
     getInitialRoute(): Promise<AndroidNotificationRoutePayload | null>;

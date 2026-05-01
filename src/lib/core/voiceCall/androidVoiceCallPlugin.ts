@@ -26,6 +26,57 @@ export interface PendingIncomingCall {
     createdAt: number;
 }
 
+/**
+ * Lifecycle / state union mirroring the JS-side {@link VoiceCallStatus}.
+ * The {@code callStateChanged} event payload uses these as kebab-case
+ * strings (see {@code NativeVoiceCallManager.CallStatus.wireName}).
+ */
+export type NativeCallStatus =
+    | 'idle'
+    | 'outgoing-ringing'
+    | 'incoming-ringing'
+    | 'connecting'
+    | 'active'
+    | 'ended';
+
+/**
+ * Payload of the {@code callHistoryWriteRequested} plugin event.
+ * Emitted by the native call manager when a LOCAL-ONLY chat-history
+ * rumor is required ({@code missed} or {@code cancelled}).
+ *
+ * The JS handler is expected to author the rumor through
+ * {@code Messaging.createLocalCallEventMessage}.
+ */
+export interface CallHistoryWriteRequest {
+    callId: string;
+    type: 'missed' | 'cancelled';
+    /** Remote peer's pubkey hex. Convert to npub for the messageRepo write. */
+    peerHex: string;
+    /** Original WebRTC initiator's pubkey hex; absent if the local user. */
+    initiatorHex?: string;
+    /** Always absent for local-only types — kept as optional for shape parity. */
+    durationSec?: number;
+}
+
+/**
+ * Payload of the {@code callHistoryRumorRequested} plugin event.
+ * Emitted by the native call manager when a GIFT-WRAPPED chat-history
+ * rumor is required ({@code ended}, {@code no-answer}, {@code failed},
+ * {@code busy}). The JS handler is expected to author the rumor
+ * through {@code Messaging.createCallEventMessage}, which gift-wraps
+ * to both the peer and the local user (NIP-59 self-wrap).
+ *
+ * <p>Phase 1 stopgap; Phase 4 reimplements these types fully natively.
+ */
+export interface CallHistoryRumorRequest {
+    callId: string;
+    type: 'ended' | 'no-answer' | 'failed' | 'busy';
+    peerHex: string;
+    initiatorHex?: string;
+    /** Present iff {@code type === 'ended'}. */
+    durationSec?: number;
+}
+
 export interface AndroidVoiceCallPluginShape {
     startCallSession(opts: {
         callId: string;
@@ -53,6 +104,43 @@ export interface AndroidVoiceCallPluginShape {
 
     requestFullScreenIntentPermission(): Promise<void>;
 
+    // ===================================================================
+    //  Native voice-call methods. The Android build always uses the
+    //  native call stack; the web build never invokes these (the JS
+    //  factory returns VoiceCallServiceWeb on non-Android platforms).
+    // ===================================================================
+
+    /** Begin a native outgoing call. */
+    initiateCall(opts: {
+        callId: string;
+        peerHex: string;
+        peerName?: string;
+    }): Promise<void>;
+
+    /** Accept the pending incoming call (reads SDP from SharedPreferences). */
+    acceptCall(opts?: { callId?: string }): Promise<void>;
+
+    /** Decline the in-progress incoming call. */
+    declineCall(): Promise<void>;
+
+    /** Hang up the active or in-progress native call. */
+    hangup(): Promise<void>;
+
+    /** Toggle local microphone mute. */
+    toggleMute(opts: { muted: boolean }): Promise<void>;
+
+    /** Toggle speakerphone routing through AudioManager. */
+    toggleSpeaker(opts: { on: boolean }): Promise<void>;
+
+    /**
+     * Phase 2 of add-native-voice-calls: emit the
+     * {@code nospeak.ACTION_UNLOCK_COMPLETE} local broadcast that the
+     * active foreground service listens for. Called by the JS unlock
+     * route handler ({@code incomingCallUnlockHandler.ts}) once the
+     * user has unlocked a previously-locked nsec. Best-effort.
+     */
+    notifyUnlockComplete(opts: { callId: string }): Promise<void>;
+
     addListener(
         eventName: 'hangupRequested',
         cb: (data: { callId: string }) => void
@@ -61,6 +149,40 @@ export interface AndroidVoiceCallPluginShape {
     addListener(
         eventName: 'pendingCallAvailable',
         cb: (data: { callId: string }) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'callStateChanged',
+        cb: (data: {
+            callId: string;
+            status: NativeCallStatus;
+            reason?: string;
+        }) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'durationTick',
+        cb: (data: { callId: string; seconds: number }) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'callError',
+        cb: (data: { callId: string; code: string; message: string }) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'muteStateChanged',
+        cb: (data: { callId: string; muted: boolean }) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'callHistoryWriteRequested',
+        cb: (data: CallHistoryWriteRequest) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'callHistoryRumorRequested',
+        cb: (data: CallHistoryRumorRequest) => void
     ): Promise<PluginListenerHandle>;
 }
 

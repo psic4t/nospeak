@@ -102,6 +102,50 @@ public class NativeBackgroundMessagingService extends Service {
         return sInstance;
     }
 
+    /**
+     * @return current signing mode ({@code "amber"} / {@code "nsec"})
+     *         or {@code null} if the service is not running. Used by
+     *         the native voice-call accept path to detect PIN-locked
+     *         nsec (mode == "nsec" + getLocalSecretKey() == null).
+     */
+    public String getCurrentMode() {
+        return currentMode;
+    }
+
+    /**
+     * @return whether the in-memory local secret key is loaded.
+     *         {@code true} for amber mode (signing happens off-device);
+     *         {@code true} for nsec mode after a successful unlock;
+     *         {@code false} for nsec mode while the user has not yet
+     *         entered their PIN.
+     */
+    public boolean hasLocalSecretLoaded() {
+        if ("amber".equalsIgnoreCase(currentMode)) return true;
+        return localSecretKey != null && localSecretKey.length == 32;
+    }
+
+    /**
+     * Reload the local nsec from the encrypted SharedPreferences store.
+     * Called by the voice-call manager after a successful PIN unlock
+     * broadcast resumes a pending accept. No-op for amber mode.
+     *
+     * @return true if a 32-byte secret was loaded; false otherwise.
+     */
+    public boolean reloadLocalSecretFromStore() {
+        if (!"nsec".equalsIgnoreCase(currentMode)) return true;
+        try {
+            String hex = AndroidLocalSecretStore.getSecretKeyHex(getApplicationContext());
+            if (hex == null || hex.length() != 64) return false;
+            byte[] sk = hexToBytes(hex);
+            if (sk == null || sk.length != 32) return false;
+            localSecretKey = sk;
+            return true;
+        } catch (Throwable t) {
+            Log.w(LOG_TAG, "[VoiceCall] reloadLocalSecretFromStore failed", t);
+            return false;
+        }
+    }
+
     private static final String LOG_TAG = "NativeBgMsgService";
 
     public static final String ACTION_START = "com.nospeak.app.NATIVE_BG_MSG_START";
@@ -3207,6 +3251,27 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        // BIP-340 Schnorr signature verification of the inner event.
+        // The native layer is the only line of defense when the
+        // WebView is dead, so we verify here unconditionally. A
+        // failure drops the event silently — invalid signatures are
+        // forged and have no business reaching any handler.
+        try {
+            String innerSig = inner.optString("sig", null);
+            byte[] innerIdBytes = hexToBytes(innerEventId);
+            if (innerSig == null || innerIdBytes == null
+                    || !SchnorrCrypto.verify(innerIdBytes, innerSig, innerSenderHex)) {
+                if (isDebugBuild()) {
+                    Log.d(LOG_TAG, "[NIP-AC] drop inner with invalid signature kind="
+                        + innerKind + " inner=" + innerEventId);
+                }
+                return;
+            }
+        } catch (Throwable t) {
+            Log.w(LOG_TAG, "[NIP-AC] Schnorr verify exception (drop)", t);
+            return;
+        }
+
         // 60s staleness check.
         long nowSec = System.currentTimeMillis() / 1000L;
         if (nowSec - innerCreatedAt > 60L) {
@@ -3234,7 +3299,81 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        // ===============================================================
+        // Native call manager dispatch path. When a
+        // NativeVoiceCallManager is hosting an active session, route
+        // inbound NIP-AC inner kinds 25051/25052/25053/25054 directly
+        // to the manager. Hangup (25053) and Reject (25054) also keep
+        // their existing FSI-dismiss side effect via
+        // handleRemoteCallCancellation; the manager dispatch is
+        // additive.
+        // ===============================================================
+        NativeVoiceCallManager nativeMgr = VoiceCallForegroundService.getNativeManager();
+        if (nativeMgr != null) {
+            final NativeVoiceCallManager fMgr = nativeMgr;
+            final String fCallId = callId;
+            final String fInnerContent = innerContent;
+            switch (innerKind) {
+                case 25051: { // answer
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.handleRemoteAnswer(fCallId, fInnerContent));
+                    return;
+                }
+                case 25052: { // ICE candidate
+                    // Inner content is JSON: {candidate, sdpMid, sdpMLineIndex}.
+                    String candidate = null;
+                    String sdpMid = null;
+                    Integer sdpMLineIndex = null;
+                    try {
+                        JSONObject icePayload = new JSONObject(innerContent);
+                        candidate = icePayload.optString("candidate", "");
+                        if (!icePayload.isNull("sdpMid")) {
+                            sdpMid = icePayload.optString("sdpMid", null);
+                        }
+                        if (!icePayload.isNull("sdpMLineIndex")) {
+                            sdpMLineIndex = icePayload.optInt("sdpMLineIndex", 0);
+                        }
+                    } catch (JSONException e) {
+                        Log.w(LOG_TAG, "[NIP-AC] ice payload parse failed", e);
+                        return;
+                    }
+                    final String fCand = candidate;
+                    final String fSdpMid = sdpMid;
+                    final Integer fSdpMLineIndex = sdpMLineIndex;
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.handleRemoteIceCandidate(fCallId, fCand, fSdpMid, fSdpMLineIndex));
+                    return;
+                }
+                case 25053: { // hangup
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.handleRemoteHangup(fCallId, fInnerContent));
+                    // Keep the legacy FSI-dismiss side effect for the
+                    // case where the hangup arrives while the user
+                    // hasn't yet accepted (manager is in
+                    // INCOMING_RINGING with no SharedPrefs cleared).
+                    handleRemoteCallCancellation(callId);
+                    return;
+                }
+                case 25054: { // reject
+                    final String fReason = innerContent;
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.handleRemoteReject(fCallId, fReason));
+                    handleRemoteCallCancellation(callId);
+                    return;
+                }
+                default:
+                    // 25050 (offer) falls through to the legacy
+                    // notification path below — the offer is the only
+                    // kind that needs to bootstrap a session.
+                    break;
+            }
+        }
+
         // Hangup / Reject of a currently-ringing call: dismiss the FSI.
+        // Reached when the FGS / native manager isn't running yet
+        // (e.g. the offer arrived before any NativeVoiceCallManager
+        // has been instantiated for this call). The native dispatch
+        // above handles the in-session case.
         if (innerKind == 25053 || innerKind == 25054) {
             handleRemoteCallCancellation(callId);
             return;
@@ -3429,6 +3568,277 @@ public class NativeBackgroundMessagingService extends Service {
         }
     }
 
+    // ===================================================================
+    // Native NIP-AC senders for kinds 25050/25051/25052/25053
+    // (Phase 0 plumbing for the add-native-voice-calls change).
+    //
+    // These senders mirror the JavaScript helpers in Messaging.ts
+    // (sendCallOffer / sendCallAnswer / sendIceCandidate / sendCallHangup).
+    // The JSON shape MUST stay byte-equivalent to the JS path so that
+    // remote NIP-AC peers (which may be web nospeak or any third-party
+    // client) interoperate with both source codepaths.
+    //
+    // None of these senders are wired into call signaling yet — they are
+    // dormant infrastructure for Phase 1 when NativeVoiceCallManager
+    // begins driving call signaling natively. Tests in
+    // NativeNipAcSenderTest exercise the inner-event builder shape.
+    // ===================================================================
+
+    /**
+     * NIP-AC kind 25050 Call Offer. {@code sdp} becomes the inner event's
+     * raw {@code content}. No self-wrap (offers are caller-only). The
+     * inner event includes a {@code call-type=voice} tag, matching the
+     * JS sender.
+     *
+     * <p>Best-effort: returns silently on any failure (logged at WARN).
+     * Must be called from a background thread.
+     */
+    public void sendVoiceCallOffer(String recipientPubkeyHex, String callId, String sdp) {
+        if (sdp == null) sdp = "";
+        JSONArray extraTags = new JSONArray();
+        try {
+            JSONArray callTypeTag = new JSONArray();
+            callTypeTag.put("call-type");
+            callTypeTag.put("voice");
+            extraTags.put(callTypeTag);
+        } catch (Exception ignored) {
+            // JSONArray.put never throws for these argument types.
+        }
+        publishNipAcInner(recipientPubkeyHex, callId, 25050, sdp,
+            "WebRTC call offer", extraTags, /* selfWrap= */ false, "offer");
+    }
+
+    /**
+     * NIP-AC kind 25051 Call Answer. {@code sdp} becomes the inner
+     * event's raw {@code content}. SELF-WRAPPED for multi-device
+     * "answered elsewhere".
+     *
+     * <p>Best-effort: returns silently on any failure (logged at WARN).
+     * Must be called from a background thread.
+     */
+    public void sendVoiceCallAnswer(String recipientPubkeyHex, String callId, String sdp) {
+        if (sdp == null) sdp = "";
+        publishNipAcInner(recipientPubkeyHex, callId, 25051, sdp,
+            "WebRTC call answer", null, /* selfWrap= */ true, "answer");
+    }
+
+    /**
+     * NIP-AC kind 25052 ICE Candidate. {@code content} is a JSON object
+     * with shape {@code {candidate, sdpMid, sdpMLineIndex}} — property
+     * insertion order matters for byte equivalence with the JS sender,
+     * which uses {@code JSON.stringify} on a literal object whose keys
+     * are declared in that order. No self-wrap.
+     *
+     * <p>Publishes only via already-connected sockets (per
+     * {@code publishEventToRelayUrls}), making this safe to call from
+     * an ICE candidate trickle without opening transient connections.
+     *
+     * <p>Best-effort: returns silently on any failure (logged at WARN).
+     */
+    public void sendVoiceCallIce(
+            String recipientPubkeyHex,
+            String callId,
+            String candidate,
+            String sdpMid,
+            Integer sdpMLineIndex) {
+        try {
+            // JSON.stringify in JS preserves property insertion order.
+            // org.json.JSONObject does the same on Android (LinkedHashMap
+            // backing as of API 19+), so put() in {candidate, sdpMid,
+            // sdpMLineIndex} order yields the same string. Use null for
+            // missing optional fields — JSON.stringify renders null as
+            // "null" (NOT undefined / omission), and the JS payload
+            // always includes both sdpMid and sdpMLineIndex even when
+            // they are null.
+            JSONObject payload = new JSONObject();
+            payload.put("candidate", candidate == null ? "" : candidate);
+            if (sdpMid == null) {
+                payload.put("sdpMid", JSONObject.NULL);
+            } else {
+                payload.put("sdpMid", sdpMid);
+            }
+            if (sdpMLineIndex == null) {
+                payload.put("sdpMLineIndex", JSONObject.NULL);
+            } else {
+                payload.put("sdpMLineIndex", sdpMLineIndex.intValue());
+            }
+            String content = payload.toString();
+            publishNipAcInner(recipientPubkeyHex, callId, 25052, content,
+                "WebRTC ICE candidate", null, /* selfWrap= */ false, "ice");
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] sendVoiceCallIce failed", e);
+        }
+    }
+
+    /**
+     * NIP-AC kind 25053 Call Hangup. {@code reason} (if non-null) is
+     * placed in the inner event's {@code content} field; the JS sender
+     * stores the bare reason string, not a JSON wrapper. No self-wrap.
+     *
+     * <p>Best-effort: returns silently on any failure (logged at WARN).
+     */
+    public void sendVoiceCallHangup(String recipientPubkeyHex, String callId, String reason) {
+        publishNipAcInner(recipientPubkeyHex, callId, 25053,
+            reason == null ? "" : reason,
+            "WebRTC call hangup", null, /* selfWrap= */ false, "hangup");
+    }
+
+    /**
+     * Shared helper for the new NIP-AC senders. Builds the inner event,
+     * signs it, wraps as kind 21059, and publishes to the recipient (and
+     * optionally a self-wrap copy). Mirrors {@code sendVoiceCallReject}.
+     *
+     * @param logTag short tag like "offer" / "answer" used in log lines.
+     */
+    private void publishNipAcInner(
+            String recipientPubkeyHex,
+            String callId,
+            int kind,
+            String content,
+            String altText,
+            JSONArray extraTags,
+            boolean selfWrap,
+            String logTag) {
+        if (recipientPubkeyHex == null || recipientPubkeyHex.isEmpty()
+            || callId == null || callId.isEmpty()
+            || currentPubkeyHex == null || currentPubkeyHex.isEmpty()) {
+            Log.w(LOG_TAG, "[NIP-AC] " + logTag + ": missing args; aborting");
+            return;
+        }
+
+        try {
+            long nowSec = System.currentTimeMillis() / 1000L;
+
+            JSONObject inner = new JSONObject();
+            inner.put("kind", kind);
+            inner.put("created_at", nowSec);
+            inner.put("content", content);
+            inner.put("pubkey", currentPubkeyHex);
+
+            // Tag order MUST match Messaging.ts buildSignedNipAcInner:
+            //   [['p', recipient], ['call-id', callId], ['alt', altText],
+            //    ...extraTags]
+            JSONArray innerTags = new JSONArray();
+            JSONArray pTag = new JSONArray();
+            pTag.put("p");
+            pTag.put(recipientPubkeyHex);
+            innerTags.put(pTag);
+            JSONArray callIdTag = new JSONArray();
+            callIdTag.put("call-id");
+            callIdTag.put(callId);
+            innerTags.put(callIdTag);
+            JSONArray altTag = new JSONArray();
+            altTag.put("alt");
+            altTag.put(altText);
+            innerTags.put(altTag);
+            if (extraTags != null) {
+                for (int i = 0; i < extraTags.length(); i++) {
+                    innerTags.put(extraTags.get(i));
+                }
+            }
+            inner.put("tags", innerTags);
+
+            String innerSerialized = serializeEventForId(inner);
+            byte[] innerIdBytes = sha256Bytes(innerSerialized.getBytes(StandardCharsets.UTF_8));
+            if (innerIdBytes == null) {
+                Log.w(LOG_TAG, "[NIP-AC] " + logTag + ": inner id hash failed");
+                return;
+            }
+            inner.put("id", bytesToHex(innerIdBytes));
+
+            String signedInnerJson = signEvent(inner.toString());
+            if (signedInnerJson == null) {
+                Log.w(LOG_TAG, "[NIP-AC] " + logTag + ": sign inner failed");
+                return;
+            }
+
+            // Recipient wrap.
+            String recipientWrapJson = buildNipAcWrap(signedInnerJson, recipientPubkeyHex, nowSec);
+            if (recipientWrapJson == null) return;
+            List<String> recipientRelays = resolveRecipientRelays(recipientPubkeyHex);
+            int sentRecipient = publishEventToRelayUrls(recipientWrapJson, recipientRelays);
+            Log.d(LOG_TAG, "[NIP-AC] " + logTag + ": published recipient wrap "
+                + sentRecipient + "/" + recipientRelays.size());
+
+            if (selfWrap) {
+                String selfWrapJson = buildNipAcWrap(signedInnerJson, currentPubkeyHex, nowSec);
+                if (selfWrapJson != null) {
+                    List<String> selfRelays = resolveRecipientRelays(currentPubkeyHex);
+                    int sentSelf = publishEventToRelayUrls(selfWrapJson, selfRelays);
+                    Log.d(LOG_TAG, "[NIP-AC] " + logTag + ": published self-wrap "
+                        + sentSelf + "/" + selfRelays.size());
+                }
+            }
+
+            Log.d(LOG_TAG, "[NIP-AC] " + logTag + " DONE callId=" + callId);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] publishNipAcInner failed kind=" + kind, e);
+        }
+    }
+
+    /**
+     * Test-only entrypoint: build the canonical inner-event JSON for a
+     * given NIP-AC kind without signing or publishing. Returns the JSON
+     * string for byte-comparison against fixtures (Phase 0 wire-format
+     * parity tests).
+     *
+     * <p>Notes:
+     * <ul>
+     *   <li>The {@code id} field is included (sha256 of the serialized
+     *       NIP-01 array form).</li>
+     *   <li>{@code sig} is NOT included because signing is non-
+     *       deterministic in nsec mode (random aux_rand) and out of
+     *       scope for parity (the JS path's signature is also non-
+     *       deterministic).</li>
+     *   <li>{@code created_at} is taken from the {@code overrideTimestampSec}
+     *       arg so the fixture is reproducible.</li>
+     *   <li>The caller's pubkey is taken from {@code overrideSenderPubkeyHex}
+     *       so the fixture does not depend on the user's installation.</li>
+     * </ul>
+     */
+    static String buildNipAcInnerForTest(
+            String senderPubkeyHex,
+            String recipientPubkeyHex,
+            String callId,
+            int kind,
+            String content,
+            String altText,
+            JSONArray extraTags,
+            long createdAtSec) throws JSONException {
+        JSONObject inner = new JSONObject();
+        inner.put("kind", kind);
+        inner.put("created_at", createdAtSec);
+        inner.put("content", content == null ? "" : content);
+        inner.put("pubkey", senderPubkeyHex);
+
+        JSONArray innerTags = new JSONArray();
+        JSONArray pTag = new JSONArray();
+        pTag.put("p");
+        pTag.put(recipientPubkeyHex);
+        innerTags.put(pTag);
+        JSONArray callIdTag = new JSONArray();
+        callIdTag.put("call-id");
+        callIdTag.put(callId);
+        innerTags.put(callIdTag);
+        JSONArray altTag = new JSONArray();
+        altTag.put("alt");
+        altTag.put(altText);
+        innerTags.put(altTag);
+        if (extraTags != null) {
+            for (int i = 0; i < extraTags.length(); i++) {
+                innerTags.put(extraTags.get(i));
+            }
+        }
+        inner.put("tags", innerTags);
+
+        String innerSerialized = serializeEventForId(inner);
+        byte[] innerIdBytes = sha256Bytes(innerSerialized.getBytes(StandardCharsets.UTF_8));
+        if (innerIdBytes != null) {
+            inner.put("id", bytesToHex(innerIdBytes));
+        }
+        return inner.toString();
+    }
+
     /**
      * Build a signed NIP-AC kind-21059 ephemeral gift wrap around an
      * already-signed inner event JSON, addressed to the given recipient
@@ -3518,17 +3928,101 @@ public class NativeBackgroundMessagingService extends Service {
      * + WebSocket sends).
      */
     public void sendVoiceCallDeclinedEvent(String callerPubkeyHex, String callId) {
-        if (callerPubkeyHex == null || callerPubkeyHex.isEmpty()
+        // Decline is callee-authored; the original WebRTC initiator IS
+        // the caller. Delegate to the parameterized helper. This
+        // method retained for back-compat with IncomingCallActionReceiver.
+        sendVoiceCallHistoryRumor(
+            callerPubkeyHex,    // recipient = caller
+            "declined",
+            /* durationSec= */ -1,
+            callId,
+            callerPubkeyHex     // initiator = caller
+        );
+    }
+
+    /**
+     * Author and publish a NIP-17 gift-wrapped Kind {@value #CALL_HISTORY_KIND}
+     * call-history event for any of the gift-wrapped types: {@code declined},
+     * {@code ended}, {@code no-answer}, {@code failed}, {@code busy}.
+     * Phase 4 of the {@code add-native-voice-calls} OpenSpec change —
+     * generalises the existing {@link #sendVoiceCallDeclinedEvent} so the
+     * native call manager can author the full set of gift-wrapped history
+     * rumors without bouncing through the JavaScript layer.
+     *
+     * <p>Local-only types ({@code missed} / {@code cancelled}) are NOT
+     * served by this helper — they have no gift-wrap and live only in
+     * the local message DB; they are bridged via the
+     * {@code callHistoryWriteRequested} plugin event so the JS layer
+     * can write to {@code messageRepo} directly.
+     *
+     * <p>Tag layout matches {@code Messaging.buildCallEventTags}:
+     * <pre>
+     *   ['p', recipientPubkeyHex]
+     *   ['type', 'call-event']
+     *   ['call-event-type', &lt;type&gt;]
+     *   ['call-initiator', initiatorPubkeyHex]
+     *   ['call-duration', String(durationSec)]   // only when durationSec >= 0
+     *   ['call-id', callId]
+     * </pre>
+     *
+     * <p>Best-effort: any failure logs and returns silently. Must run on
+     * a background thread (Amber NIP-55 ContentResolver + WebSocket
+     * sends).
+     *
+     * @param recipientPubkeyHex remote peer (the "other side" of the call)
+     * @param type               one of {@code declined / ended / no-answer / failed / busy}
+     * @param durationSec        for {@code ended}, the call's active-state
+     *                           duration in seconds; pass {@code -1} for
+     *                           types that have no duration
+     * @param callId             NIP-AC call identifier
+     * @param initiatorPubkeyHex pubkey of the original WebRTC call
+     *                           initiator (caller). Pass the local user's
+     *                           pubkey if WE initiated; the remote peer's
+     *                           pubkey if THEY initiated. Used by the
+     *                           renderer's role-aware copy.
+     */
+    public void sendVoiceCallHistoryRumor(
+            String recipientPubkeyHex,
+            String type,
+            int durationSec,
+            String callId,
+            String initiatorPubkeyHex) {
+        if (recipientPubkeyHex == null || recipientPubkeyHex.isEmpty()
+            || type == null || type.isEmpty()
             || callId == null || callId.isEmpty()
             || currentPubkeyHex == null || currentPubkeyHex.isEmpty()) {
-            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallDeclinedEvent: missing args; aborting");
+            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallHistoryRumor: missing args; aborting");
             return;
         }
+        if (initiatorPubkeyHex == null || initiatorPubkeyHex.isEmpty()) {
+            // Default to the local user when no explicit initiator is
+            // provided — matches Messaging.createCallEventMessage's
+            // default branch.
+            initiatorPubkeyHex = currentPubkeyHex;
+        }
 
-        Log.d(LOG_TAG, "[VoiceCall] declined-event: starting callId=" + callId
-            + " caller=" + (callerPubkeyHex.length() >= 8
-                ? callerPubkeyHex.substring(0, 8) + ".." : callerPubkeyHex)
+        Log.d(LOG_TAG, "[VoiceCall] history-event: starting callId=" + callId
+            + " type=" + type
+            + " durationSec=" + durationSec
+            + " recipient=" + (recipientPubkeyHex.length() >= 8
+                ? recipientPubkeyHex.substring(0, 8) + ".." : recipientPubkeyHex)
             + " mode=" + currentMode);
+
+        sendVoiceCallHistoryRumorInternal(
+            recipientPubkeyHex, type, durationSec, callId, initiatorPubkeyHex);
+    }
+
+    /**
+     * Internal implementation of {@link #sendVoiceCallHistoryRumor} that
+     * builds the rumor + seal + gift-wrap pipeline. Kept private so the
+     * public surface is the single parameterized method above.
+     */
+    private void sendVoiceCallHistoryRumorInternal(
+            String recipientPubkeyHex,
+            String type,
+            int durationSec,
+            String callId,
+            String initiatorPubkeyHex) {
 
         try {
             long nowSec = System.currentTimeMillis() / 1000L;
@@ -3542,9 +4036,16 @@ public class NativeBackgroundMessagingService extends Service {
             rumor.put("pubkey", currentPubkeyHex);
             JSONArray rumorTags = new JSONArray();
 
+            // Tag order MUST match Messaging.buildCallEventTags:
+            //   ['p', recipient]
+            //   ['type', 'call-event']
+            //   ['call-event-type', <type>]
+            //   ['call-initiator', <initiator>]
+            //   ['call-duration', String(durationSec)]   // optional, only when durationSec >= 0
+            //   ['call-id', callId]
             JSONArray pTag = new JSONArray();
             pTag.put("p");
-            pTag.put(callerPubkeyHex);
+            pTag.put(recipientPubkeyHex);
             rumorTags.put(pTag);
 
             JSONArray typeTag = new JSONArray();
@@ -3554,16 +4055,20 @@ public class NativeBackgroundMessagingService extends Service {
 
             JSONArray eventTypeTag = new JSONArray();
             eventTypeTag.put("call-event-type");
-            eventTypeTag.put("declined");
+            eventTypeTag.put(type);
             rumorTags.put(eventTypeTag);
 
-            // call-initiator MUST be the caller (original WebRTC initiator),
-            // NOT the local user. Without this the renderer would invert
-            // role-aware copy on both peers.
             JSONArray initiatorTag = new JSONArray();
             initiatorTag.put("call-initiator");
-            initiatorTag.put(callerPubkeyHex);
+            initiatorTag.put(initiatorPubkeyHex);
             rumorTags.put(initiatorTag);
+
+            if (durationSec >= 0) {
+                JSONArray durTag = new JSONArray();
+                durTag.put("call-duration");
+                durTag.put(String.valueOf(durationSec));
+                rumorTags.put(durTag);
+            }
 
             JSONArray callIdTag = new JSONArray();
             callIdTag.put("call-id");
@@ -3575,7 +4080,7 @@ public class NativeBackgroundMessagingService extends Service {
             String rumorSerialized = serializeEventForId(rumor);
             byte[] rumorIdBytes = sha256Bytes(rumorSerialized.getBytes(StandardCharsets.UTF_8));
             if (rumorIdBytes == null) {
-                Log.w(LOG_TAG, "[VoiceCall] declined-event: rumor id hash failed");
+                Log.w(LOG_TAG, "[VoiceCall] history-event: rumor id hash failed");
                 return;
             }
             rumor.put("id", bytesToHex(rumorIdBytes));
@@ -3586,11 +4091,11 @@ public class NativeBackgroundMessagingService extends Service {
             //    is symmetric (NIP-44 derives the conversation key from the user
             //    private key + recipient pubkey), so the seal must be re-encrypted
             //    per recipient. We therefore build TWO sealed events below — one
-            //    encrypted to the caller and one self-encrypted.
+            //    encrypted to the recipient and one self-encrypted.
 
-            // 3. Encrypt + sign + wrap + publish for the caller.
-            int caller_sent = encryptSealAndPublishGiftWrap(
-                rumor, callerPubkeyHex, nowSec, "caller");
+            // 3. Encrypt + sign + wrap + publish for the recipient.
+            int recipient_sent = encryptSealAndPublishGiftWrap(
+                rumor, recipientPubkeyHex, nowSec, "peer");
 
             // 4. Encrypt + sign + wrap + publish for the local user (self-wrap).
             //    This is what brings the rumor back into the local chat history
@@ -3598,10 +4103,11 @@ public class NativeBackgroundMessagingService extends Service {
             int self_sent = encryptSealAndPublishGiftWrap(
                 rumor, currentPubkeyHex, nowSec, "self");
 
-            Log.d(LOG_TAG, "[VoiceCall] declined-event DONE callId=" + callId
-                + " caller_sent=" + caller_sent + " self_sent=" + self_sent);
+            Log.d(LOG_TAG, "[VoiceCall] history-event DONE callId=" + callId
+                + " type=" + type
+                + " peer_sent=" + recipient_sent + " self_sent=" + self_sent);
         } catch (Exception e) {
-            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallDeclinedEvent failed", e);
+            Log.w(LOG_TAG, "[VoiceCall] sendVoiceCallHistoryRumorInternal failed", e);
         }
     }
 
