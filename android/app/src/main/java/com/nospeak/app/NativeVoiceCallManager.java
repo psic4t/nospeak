@@ -913,19 +913,28 @@ public class NativeVoiceCallManager {
      * (640x480 @ 30fps). Idempotent.
      */
     private void attachLocalVideoTrack() {
-        if (localVideoTrack != null) return;
+        if (localVideoTrack != null) {
+            Log.d(TAG, "attachLocalVideoTrack: already attached, skipping");
+            return;
+        }
         if (rootEglBase == null) {
             // Should have been created in ensureFactory(VIDEO); guard
             // against an unusual call order (e.g. direct unit tests).
+            Log.w(TAG, "attachLocalVideoTrack: rootEglBase null at entry; lazy-creating");
             rootEglBase = EglBase.create();
         }
 
         CameraEnumerator enumerator = new Camera2Enumerator(appContext);
+        String[] deviceNames = enumerator.getDeviceNames();
+        Log.d(TAG, "attachLocalVideoTrack: camera devices="
+            + (deviceNames != null ? deviceNames.length : 0));
         String cameraName = chooseCameraName(enumerator, /* front= */ isFrontCamera);
         if (cameraName == null) {
             Log.w(TAG, "attachLocalVideoTrack: no camera available");
             return;
         }
+        Log.d(TAG, "attachLocalVideoTrack: using camera=" + cameraName
+            + " front=" + isFrontCamera);
         CameraVideoCapturer capturer =
             (CameraVideoCapturer) enumerator.createCapturer(cameraName, null);
         if (capturer == null) {
@@ -941,7 +950,12 @@ public class NativeVoiceCallManager {
             surfaceTextureHelper, appContext, videoSource.getCapturerObserver());
         try {
             videoCapturer.startCapture(640, 480, 30);
+            Log.d(TAG, "attachLocalVideoTrack: startCapture ok (640x480 @ 30fps)");
         } catch (Throwable t) {
+            // On Android 14+ this is the most likely failure mode if
+            // the FGS type bitmask doesn't include
+            // FOREGROUND_SERVICE_TYPE_CAMERA — the system rejects the
+            // capture request and the user sees no video.
             Log.e(TAG, "videoCapturer.startCapture failed", t);
         }
 
@@ -950,6 +964,8 @@ public class NativeVoiceCallManager {
         List<String> streamIds = new ArrayList<>(1);
         streamIds.add(localStreamId);
         peerConnection.addTrack(localVideoTrack, streamIds);
+        Log.d(TAG, "attachLocalVideoTrack: addTrack ok"
+            + " (uiListener=" + (uiListener != null) + ")");
 
         // Notify listeners so the activity can sink the local track
         // into its self-view renderer.

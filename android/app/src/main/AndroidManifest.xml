@@ -41,6 +41,25 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required for FGS type 'phoneCall' on Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Required for FGS type 'camera' on Android 14+. The voice-call FGS
+         uses the camera-capture WebRTC pipeline (Camera2Enumerator +
+         CameraVideoCapturer in NativeVoiceCallManager) for video calls;
+         without this, startForeground for a video call throws
+         SecurityException / silently fails to deliver frames on
+         Android 14+. The voice-call FGS widens its foregroundServiceType
+         bitmask to include 'camera' only when the active call's kind is
+         'video'. See
+         https://developer.android.com/about/versions/14/changes/fgs-types-required#camera -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- Required for FGS type 'microphone' on Android 14+. Same rationale
+         as FOREGROUND_SERVICE_CAMERA but for the audio capture path.
+         The 'phoneCall' type alone implicitly grants mic access in
+         current Android releases, but pairing it with 'camera' on a
+         video call also requires explicit 'microphone' in the FGS type
+         bitmask on some OEM builds. Declaring this is forward-safe and
+         narrows the system audit surface. See
+         https://developer.android.com/about/versions/14/changes/fgs-types-required#microphone -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Also required for FGS type 'phoneCall' on Android 14+. Without this,
          startForeground(.., FOREGROUND_SERVICE_TYPE_PHONE_CALL) throws
          SecurityException at runtime: Android requires the caller to either
@@ -123,12 +142,22 @@
                   android:value="nostr-dm" />
           </service>
 
-        <!-- Foreground service hosting the active voice call -->
+        <!-- Foreground service hosting the active voice or video call.
+             The type bitmask declared here is the SUPERSET — the runtime
+             promoteToForeground() picks the right narrower bitmask per
+             call:
+               * voice call  → FOREGROUND_SERVICE_TYPE_PHONE_CALL
+               * video call  → FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                             | FOREGROUND_SERVICE_TYPE_CAMERA
+                             | FOREGROUND_SERVICE_TYPE_MICROPHONE
+             On Android 14+ the camera|microphone bits are required for
+             the FGS to capture from the camera / mic; without them the
+             system silently refuses to deliver frames. -->
         <service
             android:name=".VoiceCallForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="phoneCall" />
+            android:foregroundServiceType="phoneCall|camera|microphone" />
 
         <!-- Hang up action from the active-call notification -->
         <receiver

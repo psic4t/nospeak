@@ -88,6 +88,9 @@ public class ActiveCallActivity extends Activity {
     private ImageButton cameraFlipButton;
     private SurfaceViewRenderer remoteVideoRenderer;
     private SurfaceViewRenderer localVideoRenderer;
+    private View rootLayout;
+    private View topScrim;
+    private View bottomScrim;
 
     private String avatarPath;
     private String peerHex;
@@ -230,6 +233,9 @@ public class ActiveCallActivity extends Activity {
         cameraFlipButton = findViewById(R.id.active_call_camera_flip);
         remoteVideoRenderer = findViewById(R.id.active_call_remote_video);
         localVideoRenderer = findViewById(R.id.active_call_local_video);
+        rootLayout = findViewById(R.id.active_call_root);
+        topScrim = findViewById(R.id.active_call_top_scrim);
+        bottomScrim = findViewById(R.id.active_call_bottom_scrim);
 
         readExtras(intent);
         applyKindVisibility();
@@ -319,9 +325,12 @@ public class ActiveCallActivity extends Activity {
 
     /**
      * Toggle visibility of the video-only views based on
-     * {@link #isVideoCall}. The voice layout (avatar + name big in
-     * the centre) stays visible underneath the renderers when the
-     * call is voice; the renderers cover the avatar when video.
+     * {@link #isVideoCall}, and crucially clear the FrameLayout root's
+     * opaque background drawable on video so the underlay
+     * SurfaceView (the remote renderer) shows through. Without this
+     * the system's hole-punch composition keeps the camera frames
+     * hidden behind the activity's solid colour fill — the user sees
+     * nothing even though frames are arriving.
      */
     private void applyKindVisibility() {
         int videoVis = isVideoCall ? View.VISIBLE : View.GONE;
@@ -329,9 +338,23 @@ public class ActiveCallActivity extends Activity {
         if (localVideoRenderer != null) localVideoRenderer.setVisibility(videoVis);
         if (cameraOffButton != null) cameraOffButton.setVisibility(videoVis);
         if (cameraFlipButton != null) cameraFlipButton.setVisibility(videoVis);
+        if (topScrim != null) topScrim.setVisibility(videoVis);
+        if (bottomScrim != null) bottomScrim.setVisibility(videoVis);
         // Hide the centre avatar on video calls — the renderers cover it.
         if (avatarView != null) {
             avatarView.setVisibility(isVideoCall ? View.GONE : View.VISIBLE);
+        }
+        // Clear / restore the activity background. SurfaceView lives in
+        // the underlay window; an opaque foreground (root) background
+        // keeps the underlay from being composited into the user-visible
+        // result. We restore the bg_incoming_call drawable for voice
+        // calls so the existing visual is preserved.
+        if (rootLayout != null) {
+            if (isVideoCall) {
+                rootLayout.setBackground(null);
+            } else {
+                rootLayout.setBackgroundResource(R.drawable.bg_incoming_call);
+            }
         }
     }
 
@@ -415,16 +438,50 @@ public class ActiveCallActivity extends Activity {
     private void initRenderersIfNeeded(NativeVoiceCallManager mgr) {
         if (renderersInitialized) return;
         EglBase eglBase = mgr.getRootEglBase();
-        if (eglBase == null) return; // Voice call (no GL context).
+        if (eglBase == null) {
+            Log.w(TAG, "initRenderersIfNeeded: rootEglBase is null"
+                + " (kind=" + mgr.getCallKind() + ")");
+            return;
+        }
         try {
+            // RendererEvents callback fires when the first frame is
+            // actually drawn into the SurfaceView. Useful diagnostic
+            // for "no video at all" symptoms — a missing log here
+            // means frames never made it through the encode/decode
+            // pipeline, even though the track was attached.
+            RendererCommon.RendererEvents remoteEvents =
+                new RendererCommon.RendererEvents() {
+                    @Override
+                    public void onFirstFrameRendered() {
+                        Log.d(TAG, "remoteVideoRenderer: first frame rendered");
+                    }
+                    @Override
+                    public void onFrameResolutionChanged(int videoWidth, int videoHeight, int rotation) {
+                        Log.d(TAG, "remoteVideoRenderer: resolution=" + videoWidth + "x"
+                            + videoHeight + " rot=" + rotation);
+                    }
+                };
+            RendererCommon.RendererEvents localEvents =
+                new RendererCommon.RendererEvents() {
+                    @Override
+                    public void onFirstFrameRendered() {
+                        Log.d(TAG, "localVideoRenderer: first frame rendered");
+                    }
+                    @Override
+                    public void onFrameResolutionChanged(int videoWidth, int videoHeight, int rotation) {
+                        Log.d(TAG, "localVideoRenderer: resolution=" + videoWidth + "x"
+                            + videoHeight + " rot=" + rotation);
+                    }
+                };
             if (remoteVideoRenderer != null) {
-                remoteVideoRenderer.init(eglBase.getEglBaseContext(), null);
+                remoteVideoRenderer.init(eglBase.getEglBaseContext(), remoteEvents);
                 remoteVideoRenderer.setScalingType(
                     RendererCommon.ScalingType.SCALE_ASPECT_FILL);
                 remoteVideoRenderer.setEnableHardwareScaler(true);
+                Log.d(TAG, "remoteVideoRenderer: init done");
             }
             if (localVideoRenderer != null) {
-                localVideoRenderer.init(eglBase.getEglBaseContext(), null);
+                localVideoRenderer.init(eglBase.getEglBaseContext(), localEvents);
                 localVideoRenderer.setScalingType(
                     RendererCommon.ScalingType.SCALE_ASPECT_FILL);
                 localVideoRenderer.setEnableHardwareScaler(true);
@@ -433,6 +490,7 @@ public class ActiveCallActivity extends Activity {
                 localVideoRenderer.setZOrderMediaOverlay(true);
                 // Mirror initially since we default to the front camera.
                 localVideoRenderer.setMirror(true);
+                Log.d(TAG, "localVideoRenderer: init done");
             }
             renderersInitialized = true;
         } catch (Throwable t) {
@@ -441,23 +499,37 @@ public class ActiveCallActivity extends Activity {
     }
 
     private void attachLocalVideoSink(VideoTrack track) {
-        if (track == null || localVideoRenderer == null) return;
+        if (track == null || localVideoRenderer == null) {
+            Log.d(TAG, "attachLocalVideoSink: skip"
+                + " (track=" + (track != null) + " renderer=" + (localVideoRenderer != null) + ")");
+            return;
+        }
         if (!renderersInitialized) {
             NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
             if (mgr != null) initRenderersIfNeeded(mgr);
         }
-        try { track.addSink(localVideoRenderer); } catch (Throwable t) {
+        try {
+            track.addSink(localVideoRenderer);
+            Log.d(TAG, "attachLocalVideoSink: addSink ok");
+        } catch (Throwable t) {
             Log.w(TAG, "addSink local failed", t);
         }
     }
 
     private void attachRemoteVideoSink(VideoTrack track) {
-        if (track == null || remoteVideoRenderer == null) return;
+        if (track == null || remoteVideoRenderer == null) {
+            Log.d(TAG, "attachRemoteVideoSink: skip"
+                + " (track=" + (track != null) + " renderer=" + (remoteVideoRenderer != null) + ")");
+            return;
+        }
         if (!renderersInitialized) {
             NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
             if (mgr != null) initRenderersIfNeeded(mgr);
         }
-        try { track.addSink(remoteVideoRenderer); } catch (Throwable t) {
+        try {
+            track.addSink(remoteVideoRenderer);
+            Log.d(TAG, "attachRemoteVideoSink: addSink ok");
+        } catch (Throwable t) {
             Log.w(TAG, "addSink remote failed", t);
         }
     }

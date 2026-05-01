@@ -1,0 +1,15 @@
+<!--
+    Top scrim for the video-call active surface. Vertical gradient
+    from semi-transparent black at the top down to fully transparent.
+    Provides legibility for the peer name + status text overlaid on
+    bright camera frames. Visible only on video calls — voice calls
+    rely on @drawable/bg_incoming_call's solid colour.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#99000000"
+        android:endColor="#00000000"
+        android:type="linear" />
+</shape>

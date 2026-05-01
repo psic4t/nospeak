@@ -245,13 +245,33 @@ public class VoiceCallForegroundService extends Service {
      *         {@code stopSelf()} and is on its way to {@code onDestroy}.
      */
     private boolean promoteToForeground(String callId, String peerName, String role) {
+        return promoteToForeground(callId, peerName, role, /* isVideoCall= */ false);
+    }
+
+    /**
+     * Same as the 3-arg overload but with an explicit {@code isVideoCall}
+     * flag. When {@code true}, the FGS type bitmask is widened to include
+     * {@code FOREGROUND_SERVICE_TYPE_CAMERA} and
+     * {@code FOREGROUND_SERVICE_TYPE_MICROPHONE} on Android 14+; without
+     * those bits the system silently refuses to deliver camera frames
+     * through the FGS-hosted {@code Camera2Enumerator} pipeline.
+     */
+    private boolean promoteToForeground(
+            String callId,
+            String peerName,
+            String role,
+            boolean isVideoCall) {
         createChannelIfNeeded();
         Notification notif = buildOngoingNotification(callId, peerName, role);
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, notif,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+                int fgsType = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL;
+                if (isVideoCall) {
+                    fgsType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                             | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+                }
+                startForeground(NOTIFICATION_ID, notif, fgsType);
             } else {
                 startForeground(NOTIFICATION_ID, notif);
             }
@@ -287,13 +307,40 @@ public class VoiceCallForegroundService extends Service {
         String role = ACTION_INITIATE_NATIVE.equals(action) ? "outgoing" : "incoming";
         Log.d(TAG, "handleNativeAction action=" + action + " callId=" + callId);
 
+        // Determine the call kind BEFORE promoting to foreground so we can
+        // pick the right FGS type bitmask. On Android 14+ a video call
+        // needs FOREGROUND_SERVICE_TYPE_CAMERA + _MICROPHONE in the
+        // bitmask; without those bits the camera capture in
+        // NativeVoiceCallManager.attachLocalVideoTrack silently produces
+        // no frames.
+        //   * INITIATE — the kind is on the intent extra (set by
+        //     AndroidVoiceCallPlugin.initiateCall from the JS opts).
+        //   * ACCEPT  — the kind lives in the persisted offer's
+        //     `nospeak_pending_incoming_call` SharedPreferences slot
+        //     (written by NativeBackgroundMessagingService when the
+        //     kind-25050 offer arrived).
+        boolean isVideoCall = false;
+        if (ACTION_INITIATE_NATIVE.equals(action)) {
+            isVideoCall = "video".equals(intent.getStringExtra(EXTRA_CALL_KIND));
+        } else if (ACTION_ACCEPT_NATIVE.equals(action)) {
+            try {
+                SharedPreferences offerPrefs = getSharedPreferences(
+                    "nospeak_pending_incoming_call", MODE_PRIVATE);
+                isVideoCall = "video".equals(offerPrefs.getString("callType", "voice"));
+            } catch (Throwable ignored) {
+                // Default to voice on any read error — no harm; worst
+                // case is the kind-mismatch fallback into ACCEPT_NATIVE
+                // body which already validates the slot.
+            }
+        }
+
         // Always promote — the native call manager needs the FGS up
         // before any media work begins. If startForeground throws (most
         // commonly Android's per-FGS-type permission policy on Android
         // 14+ — phoneCall requires MANAGE_OWN_CALLS or ROLE_DIALER),
         // surface a clean callError to the JS layer instead of silently
         // proceeding with a doomed call setup.
-        if (!promoteToForeground(callId, peerName, role)) {
+        if (!promoteToForeground(callId, peerName, role, isVideoCall)) {
             AndroidVoiceCallPlugin.emitCallError(callId, "fgs-failed",
                 "Foreground service could not start (Android 14+ requires "
                 + "MANAGE_OWN_CALLS for phoneCall foreground services)");

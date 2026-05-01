@@ -3,15 +3,24 @@
     Active-call screen for the native voice/video-call stack.
 
     Layout strategy:
-      - The root is a FrameLayout so video renderers can stack behind
-        the existing voice-call layout.
+      - The root is a FrameLayout. For voice calls it carries the
+        opaque @drawable/bg_incoming_call background; for video calls
+        ActiveCallActivity.applyKindVisibility() clears the root's
+        background to null so the underlay SurfaceView (the remote
+        renderer) shows through.
       - active_call_remote_video fills the whole screen behind
-        everything; visible only on video calls.
+        everything; visible only on video calls. SurfaceView lives
+        in the underlay window — the root's transparent background
+        on video calls lets the system hole-punch through and
+        composite the surface beneath the activity UI.
       - active_call_local_video is a small picture-in-picture in the
         upper-right corner; visible only on video calls.
-      - The original voice layout (avatar + name + status + controls)
-        sits on top, with the avatar hidden on video calls so the
-        renderer shows through.
+        setZOrderMediaOverlay(true) at runtime puts it above the
+        remote underlay but below the regular UI.
+      - The voice-style overlay (avatar + name + status + controls)
+        sits on top, with the avatar hidden on video calls. Two
+        gradient scrims (top/bottom) provide control legibility when
+        the underlay shows bright camera frames.
       - Two new bottom-row buttons (camera-off, flip-camera) are
         gated VISIBLE only on video calls.
 -->
@@ -22,13 +31,16 @@
     android:fitsSystemWindows="true"
     android:background="@drawable/bg_incoming_call">
 
-    <!-- Full-screen remote video (gone for voice calls). -->
+    <!-- Full-screen remote video (gone for voice calls).
+         No XML background: an opaque background here would defeat the
+         SurfaceView hole-punch. Once the first frame renders the
+         renderer covers itself; before that the activity background
+         (transparent on video) shows through. -->
     <org.webrtc.SurfaceViewRenderer
         android:id="@+id/active_call_remote_video"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone"
-        android:background="#000000" />
+        android:visibility="gone" />
 
     <!-- Picture-in-picture self-view (gone for voice calls). -->
     <org.webrtc.SurfaceViewRenderer
@@ -38,11 +50,30 @@
         android:layout_gravity="top|end"
         android:layout_marginTop="48dp"
         android:layout_marginEnd="20dp"
-        android:visibility="gone"
-        android:background="#000000" />
+        android:visibility="gone" />
+
+    <!-- Top scrim for status text legibility on video calls. Hidden on
+         voice calls so the existing background-only chrome is unchanged. -->
+    <View
+        android:id="@+id/active_call_top_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:layout_gravity="top"
+        android:background="@drawable/bg_active_call_scrim_top"
+        android:visibility="gone" />
+
+    <!-- Bottom scrim for controls legibility on video calls. -->
+    <View
+        android:id="@+id/active_call_bottom_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_active_call_scrim_bottom"
+        android:visibility="gone" />
 
     <!-- Existing voice-call layout: avatar + name + status + controls. -->
     <LinearLayout
+        android:id="@+id/active_call_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
