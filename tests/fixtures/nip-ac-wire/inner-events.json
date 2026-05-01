@@ -14,6 +14,22 @@
             "expectedId": "108c506005122da1c77839d3d5ba0ddf3b43f7ad1f97407d0f57501b8d577a0e"
         },
         {
+            "name": "video offer",
+            "kind": 25050,
+            "content": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n",
+            "altText": "WebRTC video call offer",
+            "extraTags": [["call-type", "video"]],
+            "expectedId": "2d5b5f711794b500890406db9e0823032e40989550166cd487a68a6fc2a46422"
+        },
+        {
+            "name": "offer without call-type tag (back-compat)",
+            "kind": 25050,
+            "content": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n",
+            "altText": "WebRTC call offer",
+            "extraTags": [],
+            "expectedId": "b0a8bb77192f164df485b8db570231292e94d3d02127330df15ea65ae96731d1"
+        },
+        {
             "name": "answer",
             "kind": 25051,
             "content": "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n",

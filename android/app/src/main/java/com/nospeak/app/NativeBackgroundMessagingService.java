@@ -3594,18 +3594,38 @@ public class NativeBackgroundMessagingService extends Service {
      * Must be called from a background thread.
      */
     public void sendVoiceCallOffer(String recipientPubkeyHex, String callId, String sdp) {
+        sendVoiceCallOffer(recipientPubkeyHex, callId, sdp, "voice");
+    }
+
+    /**
+     * NIP-AC kind 25050 Call Offer with explicit media kind. {@code callKind}
+     * SHOULD be either {@code "voice"} or {@code "video"}. Receivers default
+     * to {@code "voice"} when the {@code call-type} tag is missing.
+     *
+     * <p>Best-effort: returns silently on any failure (logged at WARN).
+     * Must be called from a background thread.
+     */
+    public void sendVoiceCallOffer(
+            String recipientPubkeyHex,
+            String callId,
+            String sdp,
+            String callKind) {
         if (sdp == null) sdp = "";
+        if (callKind == null || callKind.isEmpty()) callKind = "voice";
+        String altText = "video".equals(callKind)
+            ? "WebRTC video call offer"
+            : "WebRTC call offer";
         JSONArray extraTags = new JSONArray();
         try {
             JSONArray callTypeTag = new JSONArray();
             callTypeTag.put("call-type");
-            callTypeTag.put("voice");
+            callTypeTag.put(callKind);
             extraTags.put(callTypeTag);
         } catch (Exception ignored) {
             // JSONArray.put never throws for these argument types.
         }
         publishNipAcInner(recipientPubkeyHex, callId, 25050, sdp,
-            "WebRTC call offer", extraTags, /* selfWrap= */ false, "offer");
+            altText, extraTags, /* selfWrap= */ false, "offer");
     }
 
     /**

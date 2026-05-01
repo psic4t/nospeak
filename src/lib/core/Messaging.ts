@@ -144,8 +144,8 @@ export type AuthoredCallEventType =
      // sendSignal callback.
      import('$lib/core/voiceCall/VoiceCallService').then(({ voiceCallService }) => {
          voiceCallService.registerNipAcSenders({
-             sendOffer: (npub, callId, sdp) =>
-                 this.sendCallOffer(npub, callId, sdp),
+             sendOffer: (npub, callId, sdp, opts) =>
+                 this.sendCallOffer(npub, callId, sdp, opts),
              sendAnswer: (npub, callId, sdp) =>
                  this.sendCallAnswer(npub, callId, sdp),
              sendIceCandidate: (npub, callId, candidate, sdpMid, sdpMLineIndex) =>
@@ -2373,12 +2373,17 @@ export type AuthoredCallEventType =
   public async sendCallOffer(
     recipientNpub: string,
     callId: string,
-    sdp: string
+    sdp: string,
+    opts?: { callType?: import('$lib/core/voiceCall/types').CallKind }
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
     const senderPubkey = await s.getPublicKey();
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const callType = opts?.callType ?? 'voice';
+    const altText =
+      callType === 'video' ? 'WebRTC video call offer' : 'WebRTC call offer';
 
     const inner = await this.buildSignedNipAcInner({
       s,
@@ -2387,8 +2392,8 @@ export type AuthoredCallEventType =
       kind: NIP_AC_KIND_OFFER,
       content: sdp,
       callId,
-      altText: 'WebRTC call offer',
-      extraTags: [['call-type', 'voice']]
+      altText,
+      extraTags: [['call-type', callType]]
     });
     await this.publishNipAcSignal({
       signedInner: inner,
