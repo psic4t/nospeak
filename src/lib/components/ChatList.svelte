@@ -21,7 +21,8 @@
   import { isAndroidNative } from "$lib/core/NativeDialogs";
   import Button from "$lib/components/ui/Button.svelte";
   import Tab from "$lib/components/ui/Tab.svelte";
-  import { getMediaPreviewLabel, getLocationPreviewLabel } from "$lib/utils/mediaPreview";
+  import { getMediaPreviewLabel, getLocationPreviewLabel, getCallEventPreviewLabel } from "$lib/utils/mediaPreview";
+  import { CALL_HISTORY_KIND } from "$lib/core/voiceCall/constants";
   import { getRelativeTime } from "$lib/utils/time";
   import { overscroll } from "$lib/utils/overscroll";
   import { tabSwipe } from "$lib/utils/tabSwipe";
@@ -203,8 +204,21 @@
     );
 
     let lastMessageText = "";
+    let suppressYouPrefix = false;
     if (lastMsg) {
-      if (lastMsg.fileUrl && lastMsg.fileType) {
+      if (lastMsg.rumorKind === CALL_HISTORY_KIND) {
+        // Call-event row (kind 1405). The localized pill copy already
+        // encodes role (e.g. "Cancelled" implies local user, "Call
+        // declined" implies peer declined our call), so we suppress
+        // the "You: " prefix that normally fires for direction === "sent".
+        lastMessageText = getCallEventPreviewLabel(
+          lastMsg.callEventType,
+          lastMsg.callDuration,
+          lastMsg.callInitiatorNpub,
+          get(currentUser)?.npub,
+        );
+        suppressYouPrefix = true;
+      } else if (lastMsg.fileUrl && lastMsg.fileType) {
         lastMessageText = getMediaPreviewLabel(lastMsg.fileType);
       } else if (lastMsg.location) {
         lastMessageText = getLocationPreviewLabel();
@@ -212,7 +226,7 @@
         lastMessageText = (lastMsg.message || "").replace(/\s+/g, " ").trim();
       }
 
-      if (lastMessageText && lastMsg.direction === "sent") {
+      if (lastMessageText && lastMsg.direction === "sent" && !suppressYouPrefix) {
         lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
       }
     }
@@ -339,8 +353,21 @@
       const lastReceivedTime = (lastMsg && lastMsg.direction === "received") ? lastMsg.sentAt : 0;
 
       let lastMessageText = "";
+      let suppressGroupSenderPrefix = false;
       if (lastMsg) {
-        if (lastMsg.fileUrl && lastMsg.fileType) {
+        if (lastMsg.rumorKind === CALL_HISTORY_KIND) {
+          // Forward-compat: there are no group voice calls today, but
+          // this branch keeps the preview from rendering blank if a
+          // future build lands them. Suppress both the "You: " and
+          // "<sender>: " prefixes since role is already encoded.
+          lastMessageText = getCallEventPreviewLabel(
+            lastMsg.callEventType,
+            lastMsg.callDuration,
+            lastMsg.callInitiatorNpub,
+            get(currentUser)?.npub,
+          );
+          suppressGroupSenderPrefix = true;
+        } else if (lastMsg.fileUrl && lastMsg.fileType) {
           lastMessageText = getMediaPreviewLabel(lastMsg.fileType);
         } else if (lastMsg.location) {
           lastMessageText = getLocationPreviewLabel();
@@ -348,12 +375,14 @@
           lastMessageText = (lastMsg.message || "").replace(/\s+/g, " ").trim();
         }
 
-        if (lastMessageText && lastMsg.direction === "sent") {
-          lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
-        } else if (lastMessageText && lastMsg.senderNpub) {
-          const senderProfile = profileCache.get(lastMsg.senderNpub);
-          const senderName = resolveDisplayName(senderProfile?.metadata, lastMsg.senderNpub);
-          lastMessageText = `${senderName}: ${lastMessageText}`;
+        if (!suppressGroupSenderPrefix) {
+          if (lastMessageText && lastMsg.direction === "sent") {
+            lastMessageText = `${get(t)("contacts.youPrefix") || "You"}: ${lastMessageText}`;
+          } else if (lastMessageText && lastMsg.senderNpub) {
+            const senderProfile = profileCache.get(lastMsg.senderNpub);
+            const senderName = resolveDisplayName(senderProfile?.metadata, lastMsg.senderNpub);
+            lastMessageText = `${senderName}: ${lastMessageText}`;
+          }
         }
       }
 
