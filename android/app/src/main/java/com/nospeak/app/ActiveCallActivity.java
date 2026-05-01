@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -14,6 +15,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 /**
@@ -46,13 +48,30 @@ public class ActiveCallActivity extends Activity {
 
     public static final String EXTRA_CALL_ID = "call_id";
     public static final String EXTRA_PEER_NAME = "peer_name";
+    /**
+     * Optional path to a cached profile-picture PNG for the peer. When
+     * set, {@link CallAvatarLoader} renders it as a circular drawable in
+     * {@link #avatarView}. When null/missing, the loader falls back to a
+     * deterministic identicon derived from {@link #EXTRA_PEER_HEX}.
+     */
+    public static final String EXTRA_AVATAR_PATH = "avatar_path";
+    /**
+     * Peer pubkey hex. Used as the identicon-fallback seed when no
+     * cached profile picture is available. Always populated by the FGS
+     * launch sites; only absent on direct/legacy launches.
+     */
+    public static final String EXTRA_PEER_HEX = "peer_hex";
 
     private TextView statusView;
     private TextView nameView;
     private TextView durationView;
+    private ImageView avatarView;
     private ImageButton muteButton;
     private ImageButton hangupButton;
     private ImageButton speakerButton;
+
+    private String avatarPath;
+    private String peerHex;
 
     private boolean speakerOn = false;
     private boolean muted = false;
@@ -137,11 +156,13 @@ public class ActiveCallActivity extends Activity {
         statusView = findViewById(R.id.active_call_status);
         nameView = findViewById(R.id.active_call_name);
         durationView = findViewById(R.id.active_call_duration);
+        avatarView = findViewById(R.id.active_call_avatar);
         muteButton = findViewById(R.id.active_call_mute);
         hangupButton = findViewById(R.id.active_call_hangup);
         speakerButton = findViewById(R.id.active_call_speaker);
 
         readExtras(intent);
+        bindAvatar();
         wireButtons();
     }
 
@@ -150,6 +171,9 @@ public class ActiveCallActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         readExtras(intent);
+        // A second call replacing the first lands here. Re-bind the
+        // avatar so the new peer's picture (or identicon) shows.
+        bindAvatar();
     }
 
     @Override
@@ -200,6 +224,26 @@ public class ActiveCallActivity extends Activity {
         if (peerName != null && nameView != null) {
             nameView.setText(peerName);
         }
+        avatarPath = intent.getStringExtra(EXTRA_AVATAR_PATH);
+        peerHex = intent.getStringExtra(EXTRA_PEER_HEX);
+    }
+
+    /**
+     * Resolve and apply the peer avatar. Cached profile picture wins;
+     * identicon (derived from {@link #peerHex}) is used as a fallback so
+     * picture-less peers don't get a generic placeholder. Mirrors the
+     * behavior of the heads-up CallStyle notification's caller icon.
+     */
+    private void bindAvatar() {
+        if (avatarView == null) return;
+        Drawable d = CallAvatarLoader.loadCircular(
+            this, avatarPath, peerHex, /*targetPx*/ 192);
+        if (d != null) {
+            avatarView.setImageDrawable(d);
+        }
+        // else: leave the layout's @drawable/ic_call_avatar_placeholder
+        // in place. Only happens when peerHex is absent and no cached
+        // file path was passed (e.g. legacy launch path without extras).
     }
 
     private void wireButtons() {

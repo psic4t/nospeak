@@ -7,8 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -19,9 +18,6 @@ import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
-
-import androidx.core.graphics.drawable.RoundedBitmapDrawable;
-import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
 
 /**
  * Lockscreen ringing screen for incoming voice calls.
@@ -217,13 +213,18 @@ public class IncomingCallActivity extends Activity {
         }
 
         ImageView avatarView = findViewById(R.id.incoming_call_avatar);
-        if (avatarView != null && avatarPath != null && !avatarPath.isEmpty()) {
-            Bitmap bmp = BitmapFactory.decodeFile(avatarPath);
-            if (bmp != null) {
-                RoundedBitmapDrawable d = RoundedBitmapDrawableFactory.create(getResources(), bmp);
-                d.setCircular(true);
-                avatarView.setImageDrawable(d);
+        if (avatarView != null) {
+            // Cached real picture first; identicon fallback when the
+            // peer has no profile picture (or when it isn't cached on
+            // this device yet). Matches the heads-up CallStyle
+            // notification's behavior for picture-less peers.
+            Drawable avatarDrawable = CallAvatarLoader.loadCircular(
+                this, avatarPath, senderPubkeyHex, /*targetPx*/ 192);
+            if (avatarDrawable != null) {
+                avatarView.setImageDrawable(avatarDrawable);
             }
+            // else: leave the layout's @drawable/ic_call_avatar_placeholder
+            // in place — only happens when peerHex is null/invalid.
         }
 
         ImageButton accept = findViewById(R.id.incoming_call_accept);

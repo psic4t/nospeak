@@ -359,13 +359,19 @@ public class VoiceCallForegroundService extends Service {
                         + " (status=" + s + ")");
                     return;
                 }
+                String avatarPath = resolvePeerAvatarPath(fPeerHex);
                 Intent active = new Intent(VoiceCallForegroundService.this, ActiveCallActivity.class)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra(ActiveCallActivity.EXTRA_CALL_ID, fCallId)
                     .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
-                        fPeerName != null ? fPeerName : "");
+                        fPeerName != null ? fPeerName : "")
+                    .putExtra(ActiveCallActivity.EXTRA_PEER_HEX,
+                        fPeerHex != null ? fPeerHex : "");
+                if (avatarPath != null) {
+                    active.putExtra(ActiveCallActivity.EXTRA_AVATAR_PATH, avatarPath);
+                }
                 try {
                     startActivity(active);
                     Log.d(TAG, "INITIATE_NATIVE: ActiveCallActivity launch dispatched");
@@ -428,13 +434,19 @@ public class VoiceCallForegroundService extends Service {
                         + " (status=" + s + ")");
                     return;
                 }
+                String acceptAvatarPath = resolvePeerAvatarPath(peerHexRead);
                 Intent active = new Intent(VoiceCallForegroundService.this, ActiveCallActivity.class)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra(ActiveCallActivity.EXTRA_CALL_ID, pendingCallId)
                     .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
-                        fPeerName != null ? fPeerName : "");
+                        fPeerName != null ? fPeerName : "")
+                    .putExtra(ActiveCallActivity.EXTRA_PEER_HEX,
+                        peerHexRead != null ? peerHexRead : "");
+                if (acceptAvatarPath != null) {
+                    active.putExtra(ActiveCallActivity.EXTRA_AVATAR_PATH, acceptAvatarPath);
+                }
                 try {
                     startActivity(active);
                     Log.d(TAG, "ACCEPT_NATIVE: ActiveCallActivity launch dispatched");
@@ -690,12 +702,26 @@ public class VoiceCallForegroundService extends Service {
             Log.w(TAG, "resumePendingAcceptAfterUnlock: startForegroundService failed", e);
             return;
         }
-        // Bring up the native active-call surface.
+        // Bring up the native active-call surface. The peerHex lives in
+        // the offer SharedPrefs slot (written by NBMS when the offer
+        // wrap was decrypted); look it up so the in-call screen can
+        // resolve a real picture or fall back to an identicon. Best
+        // effort — if the slot was already cleared (rare race) the
+        // activity falls through to the layout's placeholder.
+        SharedPreferences offerPrefs = getSharedPreferences(
+            "nospeak_pending_incoming_call", MODE_PRIVATE);
+        String resumePeerHex = offerPrefs.getString("peerHex", null);
+        String resumeAvatarPath = resolvePeerAvatarPath(resumePeerHex);
         Intent active = new Intent(this, ActiveCallActivity.class)
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra(ActiveCallActivity.EXTRA_CALL_ID, acceptedCallId);
+            .putExtra(ActiveCallActivity.EXTRA_CALL_ID, acceptedCallId)
+            .putExtra(ActiveCallActivity.EXTRA_PEER_HEX,
+                resumePeerHex != null ? resumePeerHex : "");
+        if (resumeAvatarPath != null) {
+            active.putExtra(ActiveCallActivity.EXTRA_AVATAR_PATH, resumeAvatarPath);
+        }
         try { startActivity(active); } catch (Exception ignored) {}
     }
 
@@ -756,6 +782,27 @@ public class VoiceCallForegroundService extends Service {
         if (unlockTimeoutRunnable != null) {
             mainHandler.removeCallbacks(unlockTimeoutRunnable);
             unlockTimeoutRunnable = null;
+        }
+    }
+
+    /**
+     * Look up a cached profile-picture file path for the given peer hex.
+     * Returns the absolute path or {@code null} if the peer's profile
+     * isn't cached or has no picture URL. Identicon fallback is handled
+     * in {@link CallAvatarLoader} on the activity side — we only carry
+     * the real-picture path through the launch intent here.
+     */
+    private String resolvePeerAvatarPath(String peerHex) {
+        if (peerHex == null || peerHex.isEmpty()) return null;
+        try {
+            AndroidProfileCachePrefs.Identity ident =
+                AndroidProfileCachePrefs.get(this, peerHex);
+            if (ident == null) return null;
+            return NativeBackgroundMessagingService.resolveCachedAvatarFilePath(
+                this, ident.pictureUrl);
+        } catch (Throwable t) {
+            Log.d(TAG, "resolvePeerAvatarPath failed", t);
+            return null;
         }
     }
 
