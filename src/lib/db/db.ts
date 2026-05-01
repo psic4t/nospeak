@@ -82,7 +82,20 @@ export interface Conversation {
 export interface Profile {
     npub: string;
     metadata: any; // NIP-01 metadata
+    /**
+     * NIP-17 messaging relays (kind 10050). Source of truth for where this
+     * user receives sealed direct messages. MUST NOT be populated from
+     * NIP-65 (kind 10002) — those are public-note read/write relays and
+     * have unrelated semantics. See `nip65Relays` for that data.
+     */
     messagingRelays: string[];
+    /**
+     * NIP-65 relay list (kind 10002), combined read+write set. Stored
+     * separately from `messagingRelays` so that public-note relay metadata
+     * never leaks into DM routing. May be unused by current consumers; kept
+     * for forward compatibility (e.g. note relay routing).
+     */
+    nip65Relays?: string[];
     mediaServers: string[];
     cachedAt: number;
     expiresAt: number;

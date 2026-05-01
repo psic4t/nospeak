@@ -27,6 +27,21 @@ export class ContactRepository {
 
     public async removeContact(npub: string) {
         await db.contacts.delete(npub);
+
+        // Also invalidate any cached messaging-relay list for this contact.
+        // Without this, a stale list in db.profiles[npub].messagingRelays
+        // (e.g. one written by an older buggy resolver run) would survive
+        // contact deletion and continue to misroute DMs the next time the
+        // contact is re-added. We keep the rest of the profile row so
+        // metadata (name/picture) doesn't vanish if the user re-adds them.
+        try {
+            const existing = await db.profiles.get(npub);
+            if (existing) {
+                await db.profiles.update(npub, { messagingRelays: [] });
+            }
+        } catch (err) {
+            console.warn('[ContactRepository] Failed to clear cached messagingRelays for', npub, err);
+        }
     }
 
     public async getContacts(): Promise<ContactItem[]> {

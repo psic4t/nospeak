@@ -88,6 +88,7 @@ export class ProfileResolver {
         return new Promise<void>((resolve) => {
             let metadata: any = null;
             let messagingRelays: string[] = [];
+            let nip65Relays: string[] = [];
             let mediaServers: string[] = [];
             let foundProfile = false;
             let foundMessagingRelays = false;
@@ -100,7 +101,14 @@ export class ProfileResolver {
                     npub,
                     metadata,
                     {
-                        messagingRelays: (foundMessagingRelays || foundNip65Relays) ? messagingRelays : undefined,
+                        // Only NIP-17 (kind 10050) populates messagingRelays.
+                        // NIP-65 (kind 10002) is intentionally NOT used as a
+                        // fallback here: it describes where the user reads/
+                        // writes public notes, not where they receive sealed
+                        // DMs. Conflating the two routes DMs to the wrong
+                        // relays. See nip65Relays below.
+                        messagingRelays: foundMessagingRelays ? messagingRelays : undefined,
+                        nip65Relays: foundNip65Relays ? nip65Relays : undefined,
                         mediaServers: foundMediaServers ? mediaServers : undefined
                     },
                     nip05Info
@@ -143,13 +151,21 @@ export class ProfileResolver {
                 } else if (event.kind === 10063 && !foundMediaServers) {
                     mediaServers = parseBlossomServerListEvent(event);
                     foundMediaServers = true;
-                } else if (event.kind === 10002 && !foundNip65Relays && !foundMessagingRelays) {
+                } else if (event.kind === 10002 && !foundNip65Relays) {
                     const parsed = this.parseNIP65RelayList(event);
-                    messagingRelays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
+                    // Stored separately from messagingRelays. Combined
+                    // read+write set for forward-compat consumers; not used
+                    // for DM routing.
+                    nip65Relays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
                     foundNip65Relays = true;
                 }
  
-                if (foundProfile && (foundMessagingRelays || foundNip65Relays)) {
+                // Only early-finalize once we have the *correct* DM relay
+                // source (kind 10050). If the user has no kind 10050, we
+                // wait for the timeout and cache no messagingRelays — the
+                // caller (Messaging.getMessagingRelays) will then fall back
+                // to the discovery-relay path in Messaging.ts.
+                if (foundProfile && foundMessagingRelays) {
                     clearTimeout(timeout);
                     cleanup();
                     void finalize();
@@ -200,6 +216,7 @@ export class ProfileResolver {
         interface ProfileData {
             metadata: any;
             messagingRelays: string[];
+            nip65Relays: string[];
             mediaServers: string[];
             foundProfile: boolean;
             foundMessagingRelays: boolean;
@@ -212,6 +229,7 @@ export class ProfileResolver {
             profileDataMap.set(npub, {
                 metadata: null,
                 messagingRelays: [],
+                nip65Relays: [],
                 mediaServers: [],
                 foundProfile: false,
                 foundMessagingRelays: false,
@@ -248,9 +266,12 @@ export class ProfileResolver {
             } else if (event.kind === 10063 && !data.foundMediaServers) {
                 data.mediaServers = parseBlossomServerListEvent(event);
                 data.foundMediaServers = true;
-            } else if (event.kind === 10002 && !data.foundNip65Relays && !data.foundMessagingRelays) {
+            } else if (event.kind === 10002 && !data.foundNip65Relays) {
                 const parsed = this.parseNIP65RelayList(event);
-                data.messagingRelays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
+                // Stored separately from messagingRelays. NIP-65 describes
+                // public-note relays, not DM inbox relays — using it for
+                // messagingRelays would route DMs to the wrong relays.
+                data.nip65Relays = Array.from(new Set([...(parsed.read || []), ...(parsed.write || [])]));
                 data.foundNip65Relays = true;
             }
         }
@@ -264,7 +285,10 @@ export class ProfileResolver {
                     npub,
                     data.metadata,
                     {
-                        messagingRelays: (data.foundMessagingRelays || data.foundNip65Relays) ? data.messagingRelays : undefined,
+                        // Only NIP-17 (kind 10050) populates messagingRelays.
+                        // See note in resolveProfile() above.
+                        messagingRelays: data.foundMessagingRelays ? data.messagingRelays : undefined,
+                        nip65Relays: data.foundNip65Relays ? data.nip65Relays : undefined,
                         mediaServers: data.foundMediaServers ? data.mediaServers : undefined
                     }
                 );

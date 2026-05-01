@@ -33,6 +33,7 @@ export class ProfileRepository {
         options: {
             messagingRelays?: string[];
             mediaServers?: string[];
+            nip65Relays?: string[];
         },
         nip05Info?: {
             status: 'valid' | 'invalid' | 'unknown';
@@ -46,6 +47,7 @@ export class ProfileRepository {
 
         const messagingRelays = options.messagingRelays ?? existing?.messagingRelays ?? [];
         const mediaServers = options.mediaServers ?? (existing as any)?.mediaServers ?? [];
+        const nip65Relays = options.nip65Relays ?? existing?.nip65Relays;
 
         const profile: Profile = {
             npub,
@@ -55,6 +57,10 @@ export class ProfileRepository {
             cachedAt: now,
             expiresAt: now + this.ttl
         };
+
+        if (nip65Relays !== undefined) {
+            profile.nip65Relays = nip65Relays;
+        }
 
         if (nip05Info) {
             profile.nip05Status = nip05Info.status;
