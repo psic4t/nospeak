@@ -23,6 +23,7 @@ import type { PluginListenerHandle } from '@capacitor/core';
 import { nip19, type NostrEvent } from 'nostr-tools';
 
 import { AndroidMicrophone } from '$lib/core/AndroidMicrophone';
+import { AndroidCamera } from '$lib/core/AndroidCamera';
 
 import {
     voiceCallState,
@@ -139,6 +140,13 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
     private currentCallId: string | null = null;
 
     /**
+     * Media kind of the active or most recent call. Set by initiateCall
+     * (outgoing) and by the SharedPreferences pending-offer path
+     * (incoming). Reset to {@code 'voice'} on idle/ended.
+     */
+    private callKind: CallKind = 'voice';
+
+    /**
      * Pending {@code resetCall} timer scheduled when the native call
      * manager transitions to {@code ended}. Mirrors the legacy
      * {@code ActiveCallOverlay.svelte} effect — that overlay is
@@ -231,7 +239,10 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
     //  VoiceCallBackend — user intents
     // -----------------------------------------------------------------
 
-    public async initiateCall(recipientNpub: string): Promise<void> {
+    public async initiateCall(
+        recipientNpub: string,
+        kind: CallKind = 'voice'
+    ): Promise<void> {
         const state = get(voiceCallState);
         if (state.status !== 'idle') {
             console.warn('[VoiceCallNative] not idle, ignoring initiateCall');
@@ -253,16 +264,29 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
             console.warn('[VoiceCallNative] microphone permission denied');
             return;
         }
+        // For video calls we additionally need CAMERA. We do NOT silently
+        // downgrade to a voice call on denial — the caller's UI promised
+        // video, so we abort cleanly instead.
+        if (kind === 'video' && !(await this.ensureCameraPermission())) {
+            console.warn('[VoiceCallNative] camera permission denied');
+            return;
+        }
         const callId = this.generateCallId();
+        this.callKind = kind;
         // Optimistically update the Svelte store so the UI flips to
         // outgoing-ringing without waiting for the native callback round
         // trip. The native manager will emit its own callStateChanged
         // shortly after; the second call is idempotent.
         this.currentPeerNpub = recipientNpub;
         this.currentCallId = callId;
-        setOutgoingRinging(recipientNpub, callId);
+        setOutgoingRinging(recipientNpub, callId, kind);
 
         try {
+            // Phase 5 (Android native video) will extend the plugin
+            // signature with `callKind`. Until then we still call the
+            // single-arg shape — the FGS reads kind from the JS-issued
+            // offer's call-type tag for inbound calls and treats outgoing
+            // as voice-only. Video parity on Android lands in phase 5.
             await AndroidVoiceCall.initiateCall({ callId, peerHex });
         } catch (err) {
             console.error('[VoiceCallNative] initiateCall failed', err);
@@ -281,6 +305,24 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
             // Without mic access we'd have a one-way call. Treat as
             // decline so the caller hears a clean reject rather than
             // a connecting-then-silent surprise.
+            try { await AndroidVoiceCall.declineCall(); } catch (_) { /* ignore */ }
+            return;
+        }
+        // For video calls we additionally need CAMERA. We DO decline
+        // (rather than silently downgrade) on denial because the caller
+        // promised video and the user already chose to accept; a
+        // connecting-then-no-camera surprise is worse than a reject.
+        // Read kind from the store first (set by the live JS path on
+        // platforms where Messaging dispatches NIP-AC into JS) and
+        // fall back to the cached field. Phase 5 will plumb kind from
+        // native callStateChanged events so this branch stops mattering
+        // for Android.
+        const acceptKind: CallKind =
+            state.callKind || this.callKind || 'voice';
+        if (acceptKind === 'video' && !(await this.ensureCameraPermission())) {
+            console.warn(
+                '[VoiceCallNative] camera permission denied; declining video call'
+            );
             try { await AndroidVoiceCall.declineCall(); } catch (_) { /* ignore */ }
             return;
         }
@@ -311,6 +353,27 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         } catch (err) {
             console.warn(
                 '[VoiceCallNative] microphone permission request errored; assuming granted',
+                err
+            );
+            return true;
+        }
+    }
+
+    /**
+     * Ensure the user has granted CAMERA at runtime for a video call.
+     * Returns {@code true} if granted (or already-granted), {@code false}
+     * if denied. Best-effort: if the AndroidCamera plugin is missing
+     * (shouldn't happen on Android) we optimistically return true so
+     * the call doesn't fail purely because we couldn't ask.
+     */
+    private async ensureCameraPermission(): Promise<boolean> {
+        if (!AndroidCamera) return true;
+        try {
+            const { granted } = await AndroidCamera.requestPermission();
+            return granted;
+        } catch (err) {
+            console.warn(
+                '[VoiceCallNative] camera permission request errored; assuming granted',
                 err
             );
             return true;
@@ -374,7 +437,7 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
     // ------------------------------------------------------------------
 
     public getCallKind(): CallKind {
-        return 'voice';
+        return this.callKind;
     }
 
     public getLocalStream(): MediaStream | null {
@@ -496,6 +559,7 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         if (data.status === 'ended') {
             this.currentPeerNpub = null;
             this.currentCallId = null;
+            this.callKind = 'voice';
             if (this.endResetTimer !== null) {
                 clearTimeout(this.endResetTimer);
             }
