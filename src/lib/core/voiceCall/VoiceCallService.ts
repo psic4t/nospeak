@@ -1,5 +1,4 @@
 import { get } from 'svelte/store';
-import { Capacitor } from '@capacitor/core';
 import { nip19, type NostrEvent } from 'nostr-tools';
 import {
     setOutgoingRinging,
@@ -14,7 +13,6 @@ import {
     setEndedRejectedElsewhere
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
-import { AndroidVoiceCall } from '$lib/core/voiceCall/androidVoiceCallPlugin';
 import {
     CALL_OFFER_TIMEOUT_MS,
     ICE_CONNECTION_TIMEOUT_MS,
@@ -137,7 +135,6 @@ export class VoiceCallService implements VoiceCallBackend {
         const callId = this.generateCallId();
         this.isInitiator = true;
         setOutgoingRinging(recipientNpub, callId);
-        await this.startAndroidSession(callId, recipientNpub, 'outgoing');
 
         try {
             console.log('[VoiceCall] Requesting microphone access...');
@@ -230,7 +227,6 @@ export class VoiceCallService implements VoiceCallBackend {
         ) {
             return;
         }
-        await this.dismissAndroidIncoming(callId);
         this.cleanup();
         setEndedAnsweredElsewhere();
     }
@@ -249,7 +245,6 @@ export class VoiceCallService implements VoiceCallBackend {
         ) {
             return;
         }
-        await this.dismissAndroidIncoming(callId);
         this.cleanup();
         setEndedRejectedElsewhere();
     }
@@ -263,7 +258,6 @@ export class VoiceCallService implements VoiceCallBackend {
 
         try {
             setConnecting();
-            await this.startAndroidSession(state.callId, state.peerNpub, 'incoming');
             this.localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
 
             this.localStream.getTracks().forEach(track => {
@@ -687,50 +681,6 @@ export class VoiceCallService implements VoiceCallBackend {
         if (this.peerConnection) {
             this.peerConnection.close();
             this.peerConnection = null;
-        }
-
-        // End the Android foreground service / notification if one is active.
-        // Fire-and-forget: cleanup is sync and we don't want to block on the
-        // bridge round-trip.
-        const stateAtCleanup = get(voiceCallState);
-        if (stateAtCleanup.status !== 'idle' && stateAtCleanup.status !== 'ended') {
-            void this.endAndroidSession();
-        }
-    }
-
-    private async startAndroidSession(callId: string, peerNpub: string, role: 'incoming' | 'outgoing'): Promise<void> {
-        if (Capacitor.getPlatform() !== 'android') return;
-        try {
-            await AndroidVoiceCall.startCallSession({
-                callId,
-                peerNpub,
-                role
-            });
-        } catch (err) {
-            console.warn('[VoiceCall] startCallSession failed', err);
-        }
-    }
-
-    private async endAndroidSession(): Promise<void> {
-        if (Capacitor.getPlatform() !== 'android') return;
-        try {
-            await AndroidVoiceCall.endCallSession();
-        } catch (err) {
-            console.warn('[VoiceCall] endCallSession failed', err);
-        }
-    }
-
-    /**
-     * Cancel the lockscreen FSI ringer on Android when a NIP-AC self-wrap
-     * Answer/Reject for the matching call-id arrives from another device.
-     * Fire-and-forget: no caller cares about the result.
-     */
-    private async dismissAndroidIncoming(callId: string): Promise<void> {
-        if (Capacitor.getPlatform() !== 'android') return;
-        try {
-            await AndroidVoiceCall.dismissIncomingCall({ callId });
-        } catch (err) {
-            console.warn('[VoiceCall] dismissIncomingCall failed', err);
         }
     }
 }

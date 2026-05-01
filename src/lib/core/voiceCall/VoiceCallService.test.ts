@@ -14,33 +14,9 @@ vi.mock('$lib/core/runtimeConfig/store', () => ({
     ])
 }));
 
-const startCallSessionSpy = vi.fn().mockResolvedValue(undefined);
-const endCallSessionSpy = vi.fn().mockResolvedValue(undefined);
-const dismissIncomingCallSpy = vi.fn().mockResolvedValue(undefined);
-
-vi.mock('$lib/core/voiceCall/androidVoiceCallPlugin', () => ({
-    AndroidVoiceCall: {
-        startCallSession: (opts: any) => startCallSessionSpy(opts),
-        endCallSession: () => endCallSessionSpy(),
-        dismissIncomingCall: (opts: any) => dismissIncomingCallSpy(opts),
-        getPendingIncomingCall: vi.fn().mockResolvedValue({ pending: null }),
-        clearPendingIncomingCall: vi.fn().mockResolvedValue(undefined),
-        canUseFullScreenIntent: vi.fn().mockResolvedValue({ granted: true }),
-        requestFullScreenIntentPermission: vi.fn().mockResolvedValue(undefined),
-        addListener: vi.fn().mockResolvedValue({ remove: () => {} })
-    }
-}));
-
-vi.mock('@capacitor/core', async (importOriginal) => {
-    const actual = (await importOriginal()) as any;
-    return {
-        ...actual,
-        Capacitor: {
-            ...actual.Capacitor,
-            getPlatform: vi.fn().mockReturnValue('android')
-        }
-    };
-});
+// AndroidVoiceCall is no longer imported by VoiceCallService (the
+// web/PWA backend after the native voice-call split moved all native
+// session lifecycle plumbing into VoiceCallServiceNative).
 
 import { VoiceCallService, type NipAcSenders } from './VoiceCallService';
 import {
@@ -194,56 +170,6 @@ describe('VoiceCallService', () => {
             const args = (senders.sendReject as any).mock.calls[0];
             expect(args[1]).toBe('call-different');
             expect(args[2]).toBe('busy');
-        });
-    });
-
-    describe('Android session lifecycle', () => {
-        it('startCallSession with role=outgoing on initiateCall', async () => {
-            const senders = noopSenders();
-            service.registerNipAcSenders(senders);
-
-            await service.initiateCall(PEER_NPUB);
-
-            expect(startCallSessionSpy).toHaveBeenCalledTimes(1);
-            const args = startCallSessionSpy.mock.calls[0][0];
-            expect(args.role).toBe('outgoing');
-            expect(args.peerNpub).toBe(PEER_NPUB);
-            expect(args.callId).toBeTruthy();
-        });
-
-        it('startCallSession with role=incoming on acceptCall', async () => {
-            const senders = noopSenders();
-            service.registerNipAcSenders(senders);
-
-            const offer = buildInner({
-                senderHex: PEER_HEX,
-                kind: NIP_AC_KIND_OFFER,
-                callId: 'inc-1',
-                content: 'sdp',
-                callType: 'voice'
-            });
-            await service.handleNipAcEvent(offer);
-            startCallSessionSpy.mockClear();
-
-            await service.acceptCall();
-
-            expect(startCallSessionSpy).toHaveBeenCalledTimes(1);
-            const args = startCallSessionSpy.mock.calls[0][0];
-            expect(args.role).toBe('incoming');
-            expect(args.callId).toBe('inc-1');
-        });
-
-        it('endCallSession invoked on hangup', async () => {
-            const senders = noopSenders();
-            service.registerNipAcSenders(senders);
-
-            await service.initiateCall(PEER_NPUB);
-            startCallSessionSpy.mockClear();
-            endCallSessionSpy.mockClear();
-
-            service.hangup();
-
-            expect(endCallSessionSpy).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -552,7 +478,6 @@ describe('VoiceCallService', () => {
 
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('answered-elsewhere');
-            expect(dismissIncomingCallSpy).toHaveBeenCalledWith({ callId });
         });
 
         it('self Call Reject in incoming-ringing transitions to rejected-elsewhere', async () => {
@@ -571,7 +496,6 @@ describe('VoiceCallService', () => {
 
             expect(get(voiceCallState).status).toBe('ended');
             expect(get(voiceCallState).endReason).toBe('rejected-elsewhere');
-            expect(dismissIncomingCallSpy).toHaveBeenCalledWith({ callId });
         });
 
         it('self Call Answer with mismatched call-id is ignored', async () => {
@@ -588,7 +512,6 @@ describe('VoiceCallService', () => {
             await service.handleSelfAnswer(selfAnswer);
 
             expect(get(voiceCallState).status).toBe('incoming-ringing');
-            expect(dismissIncomingCallSpy).not.toHaveBeenCalled();
         });
 
         it('self Call Answer outside incoming-ringing is ignored', async () => {
@@ -604,7 +527,6 @@ describe('VoiceCallService', () => {
             await service.handleSelfAnswer(selfAnswer);
 
             expect(get(voiceCallState).status).toBe('idle');
-            expect(dismissIncomingCallSpy).not.toHaveBeenCalled();
         });
     });
 });
