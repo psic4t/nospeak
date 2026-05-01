@@ -64,6 +64,16 @@ public class NativeVoiceCallManager {
     /** ICE / SDP timeouts. Match {@code constants.ts}. */
     private static final long CALL_OFFER_TIMEOUT_MS = 60_000L;
     private static final long ICE_CONNECTION_TIMEOUT_MS = 30_000L;
+    /**
+     * Delay between transitioning to ENDED and resetting the manager
+     * back to IDLE so subsequent calls can begin. Matches the JS
+     * {@code CALL_END_DISPLAY_MS} window so ActiveCallActivity has
+     * time to render the ended-reason text before the manager resets.
+     * Without this reset, every call after the first one is rejected
+     * with "not idle" / "not idle/ringing" because finishCall leaves
+     * the manager pinned in ENDED forever.
+     */
+    private static final long IDLE_RESET_DELAY_MS = 1_500L;
 
     /**
      * Optional UI listener interface. Implemented by
@@ -182,6 +192,12 @@ public class NativeVoiceCallManager {
     private Runnable offerTimeoutRunnable;
     private Runnable iceTimeoutRunnable;
     private Runnable durationTickRunnable;
+    /**
+     * Delayed runnable that resets the manager from ENDED back to IDLE
+     * so subsequent calls can begin. Scheduled by finishCall; cleared
+     * when the manager is disposed or a new call starts.
+     */
+    private Runnable idleResetRunnable;
 
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
@@ -212,6 +228,11 @@ public class NativeVoiceCallManager {
         Log.d(TAG, "initiateCall callId=" + callId
             + " peerHex=" + (peerHexLower != null && peerHexLower.length() >= 8
                 ? peerHexLower.substring(0, 8) + ".." : peerHexLower));
+        // Eagerly run the post-ENDED reset so a back-to-back call
+        // (started inside the 1.5s ENDED display window) isn't rejected
+        // for "not idle". Idempotent and a no-op if status is already
+        // IDLE.
+        runIdleResetIfPendingOrEnded();
         if (status != CallStatus.IDLE) {
             Log.w(TAG, "initiateCall: not idle (status=" + status + ")");
             return;
@@ -269,6 +290,9 @@ public class NativeVoiceCallManager {
             + " peerHex=" + (peerHexLower != null && peerHexLower.length() >= 8
                 ? peerHexLower.substring(0, 8) + ".." : peerHexLower)
             + " sdpLen=" + (offerSdp != null ? offerSdp.length() : 0));
+        // Eagerly run the post-ENDED reset so an Accept inside the 1.5s
+        // ENDED display window isn't rejected for "not idle/ringing".
+        runIdleResetIfPendingOrEnded();
         if (status != CallStatus.IDLE && status != CallStatus.INCOMING_RINGING) {
             Log.w(TAG, "acceptIncomingCall: not idle/ringing (status=" + status + ")");
             return;
@@ -309,6 +333,7 @@ public class NativeVoiceCallManager {
     /** Mark the manager as ringing for an incoming call (no media setup yet). */
     public void notifyIncomingRinging(String callId, String peerHexLower) {
         ensureMain();
+        runIdleResetIfPendingOrEnded();
         if (status != CallStatus.IDLE) return;
         this.callId = callId;
         this.peerHex = peerHexLower;
@@ -456,6 +481,19 @@ public class NativeVoiceCallManager {
 
     private void pushInitialState(UiListener listener) {
         if (listener == null) return;
+        // Don't replay ENDED on initial subscribe \u2014 the listener is
+        // attaching AFTER the call finished, which usually means the
+        // activity bound late (manager raced to ENDED before bind). The
+        // activity's onServiceConnected does its own getStatus()==ENDED
+        // check and finishes immediately without showing ENDED text.
+        // Pushing ENDED here would trigger ActiveCallActivity's 1.5s
+        // postDelayed(finishAndRemoveTask) and produce the visible
+        // "flicker" symptom users reported.
+        if (status == CallStatus.ENDED) {
+            Log.d(TAG, "pushInitialState: skipping ENDED replay; listener will finish");
+            return;
+        }
+        Log.d(TAG, "pushInitialState: status=" + status);
         try {
             listener.onStatusChanged(status, null);
             if (status == CallStatus.ACTIVE && durationSec > 0) {
@@ -479,7 +517,18 @@ public class NativeVoiceCallManager {
         }
     }
 
-    /** Current call status. Inspected by FGS for shutdown decisions. */
+    /**
+     * Current state-machine status. Inspected by
+     * {@link VoiceCallForegroundService} after invoking
+     * {@link #initiateCall} / {@link #acceptIncomingCall} to decide
+     * whether to launch {@link ActiveCallActivity} \u2014 if the call
+     * already finished (e.g. mic capture threw and we ran handleFatal),
+     * we must NOT launch the active-call surface, otherwise
+     * ActiveCallActivity's {@code pushInitialState} would observe
+     * ENDED and run the 1.5s postDelayed(finishAndRemoveTask) "flicker"
+     * path. Also inspected by ActiveCallActivity in onServiceConnected
+     * to short-circuit a late bind.
+     */
     public CallStatus getStatus() { return status; }
 
     /** Hex pubkey of the remote peer (or null if no call is active). */
@@ -500,6 +549,7 @@ public class NativeVoiceCallManager {
         serviceListener = null;
         cancelTimeouts();
         cancelDurationTimer();
+        cancelIdleReset();
         try {
             if (peerConnection != null) {
                 peerConnection.close();
@@ -659,6 +709,8 @@ public class NativeVoiceCallManager {
     /** State-machine transition helper. Always emits the corresponding plugin event. */
     private void transitionTo(CallStatus next, String reason) {
         if (status == next) return;
+        Log.d(TAG, "transitionTo: " + status + " -> " + next + " reason=" + reason
+            + " callId=" + callId);
         status = next;
         AndroidVoiceCallPlugin.emitCallStateChanged(callId, next.wireName(), reason);
         if (uiListener != null) {
@@ -736,6 +788,71 @@ public class NativeVoiceCallManager {
         audioSource = null;
 
         transitionTo(CallStatus.ENDED, reason);
+
+        // Schedule the IDLE reset so subsequent calls aren't rejected
+        // with "not idle". The delay matches ActiveCallActivity's
+        // ENDED-display window so the user briefly sees the ended
+        // status before the manager resets. Idempotent: if a new call
+        // starts before this fires (unusual but possible), the reset
+        // observes status != ENDED and skips.
+        scheduleIdleReset();
+    }
+
+    /**
+     * Schedule the post-ENDED reset to IDLE so the next call can
+     * begin. The reset clears callId, peerHex, the initiator flag,
+     * mute state, duration, and the ICE buffer. {@link #status}
+     * silently flips to IDLE (no plugin event \u2014 the JS layer
+     * already received ENDED and runs its own resetCall on the
+     * Svelte store).
+     */
+    private void scheduleIdleReset() {
+        cancelIdleReset();
+        idleResetRunnable = () -> {
+            idleResetRunnable = null;
+            if (status != CallStatus.ENDED || disposed.get()) return;
+            Log.d(TAG, "idleReset: " + status + " -> IDLE (clearing call identity)");
+            status = CallStatus.IDLE;
+            callId = null;
+            peerHex = null;
+            isInitiator = false;
+            isMuted = false;
+            durationSec = 0;
+            callStartedAtMs = 0L;
+            iceTrickleEnabled = false;
+            sessionRemoteDescriptionSet = false;
+            sessionPendingIce.clear();
+        };
+        mainHandler.postDelayed(idleResetRunnable, IDLE_RESET_DELAY_MS);
+    }
+
+    private void cancelIdleReset() {
+        if (idleResetRunnable != null) {
+            mainHandler.removeCallbacks(idleResetRunnable);
+            idleResetRunnable = null;
+        }
+    }
+
+    /**
+     * Run the post-ENDED IDLE reset eagerly so a new call started
+     * inside the 1.5s ENDED display window isn't rejected. Cancels
+     * any pending delayed reset, runs it synchronously, then returns.
+     * No-op when status is anything other than ENDED.
+     */
+    private void runIdleResetIfPendingOrEnded() {
+        if (status != CallStatus.ENDED) return;
+        Log.d(TAG, "runIdleResetIfPendingOrEnded: forcing reset before new call");
+        cancelIdleReset();
+        status = CallStatus.IDLE;
+        callId = null;
+        peerHex = null;
+        isInitiator = false;
+        isMuted = false;
+        durationSec = 0;
+        callStartedAtMs = 0L;
+        iceTrickleEnabled = false;
+        sessionRemoteDescriptionSet = false;
+        sessionPendingIce.clear();
     }
 
     private void authorHistoryEvent(CallStatus prevStatus, String reason) {

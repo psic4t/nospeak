@@ -90,12 +90,28 @@ public class ActiveCallActivity extends Activity {
             NativeVoiceCallManager mgr = boundService != null
                 ? VoiceCallForegroundService.getNativeManager()
                 : null;
-            if (mgr != null) {
-                mgr.setUiListener(uiListener);
-            } else {
+            Log.d(TAG, "onServiceConnected: mgr=" + (mgr != null)
+                + " status=" + (mgr != null ? mgr.getStatus() : "<null>"));
+            if (mgr == null) {
                 Log.w(TAG, "onServiceConnected: no native manager — finishing");
                 finishAndRemoveTask();
+                return;
             }
+            // Defensive: if the manager has already ENDED before our bind
+            // (e.g. mic capture threw, peer rejected immediately, ICE
+            // failed during accept setup), don't paint the ended-state
+            // text + 1.5s flicker. Just close. The user never saw the
+            // active surface, so showing "Call ended" briefly here is
+            // pure noise.
+            NativeVoiceCallManager.CallStatus s = mgr.getStatus();
+            if (s == NativeVoiceCallManager.CallStatus.ENDED
+                || s == NativeVoiceCallManager.CallStatus.IDLE) {
+                Log.w(TAG, "onServiceConnected: manager already in " + s
+                    + " — finishing without showing UI");
+                finishAndRemoveTask();
+                return;
+            }
+            mgr.setUiListener(uiListener);
         }
 
         @Override
@@ -112,6 +128,9 @@ public class ActiveCallActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Intent intent = getIntent();
+        Log.d(TAG, "onCreate intent=" + (intent != null ? intent.getAction() : "<null>")
+            + " callId=" + (intent != null ? intent.getStringExtra(EXTRA_CALL_ID) : "<null>"));
         applyShowWhenLockedFlags();
         setContentView(R.layout.activity_active_call);
 
@@ -122,7 +141,7 @@ public class ActiveCallActivity extends Activity {
         hangupButton = findViewById(R.id.active_call_hangup);
         speakerButton = findViewById(R.id.active_call_speaker);
 
-        readExtras(getIntent());
+        readExtras(intent);
         wireButtons();
     }
 
@@ -136,6 +155,7 @@ public class ActiveCallActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        Log.d(TAG, "onStart bound=" + bound);
         Intent svc = new Intent(this, VoiceCallForegroundService.class);
         try {
             bindService(svc, serviceConnection, Context.BIND_AUTO_CREATE);
@@ -216,6 +236,7 @@ public class ActiveCallActivity extends Activity {
 
     private void applyStatus(NativeVoiceCallManager.CallStatus status, String reason) {
         if (status == null) return;
+        Log.d(TAG, "applyStatus: " + status + " reason=" + reason);
         switch (status) {
             case OUTGOING_RINGING:
                 if (statusView != null) statusView.setText("Calling…");

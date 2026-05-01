@@ -339,7 +339,13 @@ public class IncomingCallActivity extends Activity {
                     return;
                 }
                 // Start FGS with ACCEPT — the FGS reads the offer from
-                // SharedPreferences and drives NativeVoiceCallManager.
+                // SharedPreferences, drives NativeVoiceCallManager, AND
+                // owns the ActiveCallActivity launch. Putting the launch
+                // in the FGS (rather than here) avoids the lockscreen
+                // race where IncomingCallActivity.finishAndRemoveTask()
+                // during keyguard dismissal caused MainActivity's task
+                // to be promoted instead of ActiveCallActivity, leaving
+                // the user on the chat screen with no in-call surface.
                 Intent svc = new Intent(IncomingCallActivity.this, VoiceCallForegroundService.class)
                     .setAction(VoiceCallForegroundService.ACTION_ACCEPT_NATIVE)
                     .putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, acceptedCallId)
@@ -348,17 +354,10 @@ public class IncomingCallActivity extends Activity {
                 try {
                     androidx.core.content.ContextCompat.startForegroundService(
                         IncomingCallActivity.this, svc);
+                    Log.d(TAG, "ACCEPT_NATIVE FGS dispatched callId=" + acceptedCallId);
                 } catch (Exception e) {
                     Log.w(TAG, "ACCEPT_NATIVE startForegroundService failed", e);
                 }
-                // Launch the native active-call surface.
-                Intent active = new Intent(IncomingCallActivity.this, ActiveCallActivity.class)
-                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra(ActiveCallActivity.EXTRA_CALL_ID, acceptedCallId)
-                    .putExtra(ActiveCallActivity.EXTRA_PEER_NAME, peerName != null ? peerName : "");
-                startActivity(active);
                 finishAndRemoveTask();
             }
         };

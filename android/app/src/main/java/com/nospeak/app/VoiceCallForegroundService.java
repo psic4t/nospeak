@@ -341,11 +341,24 @@ public class VoiceCallForegroundService extends Service {
                     return;
                 }
                 Log.d(TAG, "INITIATE_NATIVE: dispatching to manager callId=" + fCallId);
-                nativeManager.initiateCall(fCallId, fPeerHex.toLowerCase());
-                // Surface the active-call UI for outgoing calls. For
-                // incoming calls IncomingCallActivity handles the
-                // ActiveCallActivity launch directly so the lockscreen
-                // transition is seamless.
+                try {
+                    nativeManager.initiateCall(fCallId, fPeerHex.toLowerCase());
+                } catch (Throwable t) {
+                    Log.e(TAG, "INITIATE_NATIVE: initiateCall threw", t);
+                }
+                // Surface the active-call UI for outgoing calls only when
+                // the manager actually entered OUTGOING_RINGING. If
+                // initiateCall went straight to ENDED (e.g. mic capture
+                // threw inside attachLocalAudioTrack), launching the
+                // activity would just paint the brief 1.5s "Call ended"
+                // flicker that users reported.
+                NativeVoiceCallManager.CallStatus s = nativeManager.getStatus();
+                Log.d(TAG, "INITIATE_NATIVE: post-initiate status=" + s);
+                if (s != NativeVoiceCallManager.CallStatus.OUTGOING_RINGING) {
+                    Log.w(TAG, "INITIATE_NATIVE: not launching ActiveCallActivity"
+                        + " (status=" + s + ")");
+                    return;
+                }
                 Intent active = new Intent(VoiceCallForegroundService.this, ActiveCallActivity.class)
                     .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -353,13 +366,22 @@ public class VoiceCallForegroundService extends Service {
                     .putExtra(ActiveCallActivity.EXTRA_CALL_ID, fCallId)
                     .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
                         fPeerName != null ? fPeerName : "");
-                try { startActivity(active); } catch (Exception ignored) {}
+                try {
+                    startActivity(active);
+                    Log.d(TAG, "INITIATE_NATIVE: ActiveCallActivity launch dispatched");
+                } catch (Exception e) {
+                    Log.w(TAG, "INITIATE_NATIVE: startActivity failed", e);
+                }
             });
         } else if (ACTION_ACCEPT_NATIVE.equals(action)) {
             final String fCallId = callId;
+            final String fPeerName = peerName;
             mainHandler.post(() -> {
                 if (nativeManager == null) ensureNativeManager();
-                if (nativeManager == null) return;
+                if (nativeManager == null) {
+                    Log.w(TAG, "ACCEPT_NATIVE: manager null after ensure; aborting");
+                    return;
+                }
                 // Read the persisted offer SDP from SharedPreferences —
                 // the same slot IncomingCallNotification posts to. The
                 // FGS now owns the slot lifecycle (clears after read);
@@ -378,14 +400,47 @@ public class VoiceCallForegroundService extends Service {
                     return;
                 }
                 Log.d(TAG, "ACCEPT_NATIVE: dispatching to manager callId=" + pendingCallId);
-                nativeManager.acceptIncomingCall(
-                    pendingCallId, peerHexRead.toLowerCase(), sdp);
+                try {
+                    nativeManager.acceptIncomingCall(
+                        pendingCallId, peerHexRead.toLowerCase(), sdp);
+                } catch (Throwable t) {
+                    Log.e(TAG, "ACCEPT_NATIVE: acceptIncomingCall threw", t);
+                }
                 // Clear the pending offer slot now that the manager has
                 // consumed it — prevents a stale offer from being
                 // reused by a later spurious Accept tap.
                 try {
                     prefs.edit().clear().apply();
                 } catch (Throwable ignored) {}
+                // Launch the active-call surface from the FGS, not from
+                // IncomingCallActivity. This eliminates the lockscreen
+                // race where IncomingCallActivity.finishAndRemoveTask()
+                // ran during keyguard dismissal, causing MainActivity's
+                // background task to be promoted instead of
+                // ActiveCallActivity. With the FGS owning the launch,
+                // the activity start is decoupled from the keyguard
+                // transition timing.
+                NativeVoiceCallManager.CallStatus s = nativeManager.getStatus();
+                Log.d(TAG, "ACCEPT_NATIVE: post-accept status=" + s);
+                if (s != NativeVoiceCallManager.CallStatus.CONNECTING
+                    && s != NativeVoiceCallManager.CallStatus.ACTIVE) {
+                    Log.w(TAG, "ACCEPT_NATIVE: not launching ActiveCallActivity"
+                        + " (status=" + s + ")");
+                    return;
+                }
+                Intent active = new Intent(VoiceCallForegroundService.this, ActiveCallActivity.class)
+                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(ActiveCallActivity.EXTRA_CALL_ID, pendingCallId)
+                    .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
+                        fPeerName != null ? fPeerName : "");
+                try {
+                    startActivity(active);
+                    Log.d(TAG, "ACCEPT_NATIVE: ActiveCallActivity launch dispatched");
+                } catch (Exception e) {
+                    Log.w(TAG, "ACCEPT_NATIVE: startActivity failed", e);
+                }
             });
         } else if (ACTION_HANGUP_NATIVE.equals(action)) {
             mainHandler.post(() -> {
