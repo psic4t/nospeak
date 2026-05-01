@@ -78,36 +78,68 @@
         }
     });
 
-    // Green phone for the only "successful conversation" outcome; red
-    // strikethrough for every other terminal state (the call did not result
-    // in a connected conversation).
+    // Green for the only "successful conversation" outcome (`ended`); red
+    // for every other terminal state (the call did not result in a
+    // connected conversation). Applied to the directional arrow — the
+    // pill no longer carries a phone icon, so the arrow color carries
+    // the success/failure read.
     const isSuccessful = $derived(message.callEventType === 'ended');
     const iconColor = $derived(isSuccessful ? 'text-green-500' : 'text-red-500');
+
+    /**
+     * Direction of the call relative to the local user, used to render a
+     * small arrow glyph at the start of the pill:
+     *
+     *   - 'outgoing' (arrow up-right) — the local user initiated the call.
+     *   - 'incoming' (arrow down-left) — the peer initiated the call.
+     *   - 'none' — legacy rows with no `call-initiator` tag (or no
+     *     authenticated user); no arrow is rendered to avoid guessing.
+     *
+     * The arrow inherits the success/failure color (green for `ended`,
+     * red otherwise), so a glance at the pill conveys both who started
+     * the call and whether it connected.
+     */
+    const callDirection = $derived.by<'outgoing' | 'incoming' | 'none'>(() => {
+        if (!message.callInitiatorNpub || !$currentUser) return 'none';
+        return iAmInitiator ? 'outgoing' : 'incoming';
+    });
+
+    const directionLabel = $derived(
+        callDirection === 'outgoing'
+            ? $t('voiceCall.pill.directionOutgoing')
+            : callDirection === 'incoming'
+            ? $t('voiceCall.pill.directionIncoming')
+            : ''
+    );
 </script>
 
 <div class="flex justify-center my-2">
     <div class="flex flex-col items-center">
-        <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2">
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="w-4 h-4 {iconColor}"
-            >
-                {#if !isSuccessful}
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
-                    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
-                    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
-                    <path d="M10.71 5.05A16 16 0 0 1 22.56 9"></path>
-                    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
-                {:else}
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                {/if}
-            </svg>
+        <div class="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2">
+            {#if callDirection !== 'none'}
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="w-4 h-4 {iconColor}"
+                    role="img"
+                    aria-label={directionLabel}
+                >
+                    {#if callDirection === 'outgoing'}
+                        <!-- arrow-up-right: line from bottom-left to top-right + arrowhead -->
+                        <line x1="7" y1="17" x2="17" y2="7"></line>
+                        <polyline points="8 7 17 7 17 16"></polyline>
+                    {:else}
+                        <!-- arrow-down-left: line from top-right to bottom-left + arrowhead -->
+                        <line x1="17" y1="7" x2="7" y2="17"></line>
+                        <polyline points="16 17 7 17 7 8"></polyline>
+                    {/if}
+                </svg>
+            {/if}
             <span class="text-sm text-gray-700 dark:text-gray-300">
                 {messageText}
             </span>

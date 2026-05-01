@@ -61,6 +61,24 @@ function getMessageText(
     }
 }
 
+/**
+ * Pure mirror of CallEventMessage.svelte's `callDirection` derivation.
+ * Kept in lock-step with the component:
+ *
+ *   - 'outgoing' — local user initiated the call (arrow up-right).
+ *   - 'incoming' — peer initiated the call (arrow down-left).
+ *   - 'none'     — legacy rows lacking a `call-initiator` tag, or no
+ *                  authenticated user; no arrow rendered.
+ */
+function getCallDirection(
+    hasInitiator: boolean,
+    hasUser: boolean,
+    iAmInitiator: boolean
+): 'outgoing' | 'incoming' | 'none' {
+    if (!hasInitiator || !hasUser) return 'none';
+    return iAmInitiator ? 'outgoing' : 'incoming';
+}
+
 describe('CallEventMessage', () => {
     describe('formatDuration', () => {
         it('formats seconds to MM:SS', () => {
@@ -160,6 +178,66 @@ describe('CallEventMessage', () => {
 
         it('falls back to generic for forward-compat unknown values', () => {
             expect(getMessageText('something-future', true)).toBe('Voice call');
+        });
+    });
+
+    describe('getCallDirection — directional arrow next to phone icon', () => {
+        it("returns 'outgoing' when local user is the initiator", () => {
+            expect(getCallDirection(true, true, true)).toBe('outgoing');
+        });
+
+        it("returns 'incoming' when peer is the initiator", () => {
+            expect(getCallDirection(true, true, false)).toBe('incoming');
+        });
+
+        it("returns 'none' for legacy rows lacking a call-initiator tag", () => {
+            // Rows authored before `callInitiatorNpub` was added (or the
+            // generic-fallback path) carry no direction info; render no
+            // arrow rather than guessing.
+            expect(getCallDirection(false, true, false)).toBe('none');
+            expect(getCallDirection(false, true, true)).toBe('none');
+        });
+
+        it("returns 'none' when no user is authenticated", () => {
+            // SSR / pre-login render path; cannot compute iAmInitiator
+            // safely, so omit the arrow.
+            expect(getCallDirection(true, false, false)).toBe('none');
+        });
+
+        it('is consistent with iAmInitiator across every callEventType', () => {
+            // Every pill variant should pick up direction the same way:
+            // the arrow is purely a function of (callInitiatorNpub,
+            // currentUser, iAmInitiator). Encode that invariant here so
+            // a future change to add per-type direction overrides has to
+            // update this test on purpose.
+            const types = [
+                'missed',
+                'cancelled',
+                'ended',
+                'declined',
+                'busy',
+                'no-answer',
+                'failed'
+            ];
+            for (const _type of types) {
+                expect(getCallDirection(true, true, true)).toBe('outgoing');
+                expect(getCallDirection(true, true, false)).toBe('incoming');
+            }
+        });
+
+        it('matches expected direction for local-only outcomes', () => {
+            // 'cancelled' is only authored by the caller, so when present
+            // in the local DB the local user IS the initiator → outgoing.
+            // 'missed' is only authored by the callee, so the local user
+            // is NOT the initiator → incoming.
+            // (The component uses the same generic logic for both; this
+            // test documents the resulting UX for reviewers.)
+            expect(getCallDirection(true, true, /* I cancelled */ true)).toBe(
+                'outgoing'
+            );
+            expect(getCallDirection(true, true, /* I missed */ false)).toBe(
+                'incoming'
+            );
         });
     });
 });

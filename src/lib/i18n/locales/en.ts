@@ -536,7 +536,14 @@ const en = {
             // (e.g. 'outgoing', 'incoming', 'declined-outgoing',
             // 'declined-incoming' from older schemas, or values introduced
             // by a future client). Keeps the row from rendering blank.
-            generic: 'Voice call'
+            generic: 'Voice call',
+            // Accessibility labels for the directional arrow rendered next
+            // to the phone icon. Direction is derived from the rumor's
+            // `call-initiator` tag relative to the local user (initiator
+            // = outgoing, peer = incoming). Legacy rows lacking the tag
+            // render no arrow, so neither label is used in that case.
+            directionOutgoing: 'Outgoing call',
+            directionIncoming: 'Incoming call'
         }
     }
 };
