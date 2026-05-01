@@ -37,6 +37,21 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **Validation**: ALWAYS run `npm run check` and `npx vitest run` before finishing a task.
 - **Commits**: Use [Conventional Commits](https://www.conventionalcommits.org/) with scope, e.g. `fix(android): description`.
 
+## Voice Calling
+
+Voice calls are signaled over Nostr via NIP-AC (kind 21059 ephemeral gift wraps over inner kinds 25050–25054). The two platforms have intentionally different code paths:
+
+- **Web/PWA**: `VoiceCallServiceWeb` (`src/lib/core/voiceCall/VoiceCallService.ts`) owns the `RTCPeerConnection`, captures audio via `getUserMedia`, sends NIP-AC events through `Messaging.ts`'s typed senders. UI is `ActiveCallOverlay.svelte`.
+- **Android native**: `VoiceCallServiceNative` (`src/lib/core/voiceCall/VoiceCallServiceNative.ts`) is a thin proxy to the `AndroidVoiceCall` Capacitor plugin. The actual peer connection lives in `NativeVoiceCallManager.java`, hosted by `VoiceCallForegroundService.java` (FGS type `phoneCall`). UI is `IncomingCallActivity` (lockscreen ringer) and `ActiveCallActivity` (in-call surface). NIP-AC events are dispatched in `NativeBackgroundMessagingService.java` directly into the manager; `Messaging.ts` skips them on Android.
+
+The factory in `src/lib/core/voiceCall/factory.ts` returns the right backend based on `Capacitor.getPlatform()`. UI components subscribe only to the `voiceCallState` Svelte store and never touch a backend directly.
+
+When changing voice-call behavior:
+- **Always update both** `VoiceCallService.ts` (web) and the Android stack if the change is cross-platform.
+- **NIP-AC wire format** changes must update both the JS senders in `Messaging.ts` AND the Java senders in `NativeBackgroundMessagingService.sendVoiceCall*`. The fixture at `tests/fixtures/nip-ac-wire/inner-events.json` exercises both via `wireParity.test.ts` (JS) and `NativeNipAcSenderTest.java` (Java).
+- **State-machine entry points** in `NativeVoiceCallManager` (`initiateCall` / `acceptIncomingCall` / `notifyIncomingRinging`) must call `runIdleResetIfPendingOrEnded()` first so back-to-back calls work.
+- **OpenSpec**: voice-calling capability lives at `openspec/specs/voice-calling/spec.md`. Material changes to the call lifecycle, NIP-AC wire format, or call-history kinds need a new OpenSpec change proposal.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git commit` succeeds.

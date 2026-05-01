@@ -16,6 +16,14 @@ Install on Android from [F-Droid](https://fdroid.org), [Obtainium](https://githu
 - **Markdown** — Bold, italic, lists, and code formatting in messages
 - **Chat Export** — Export conversation history
 
+### Voice Calls
+- **End-to-End Encrypted Voice Calls** — Peer-to-peer WebRTC voice calls signaled over Nostr via NIP-AC ephemeral gift wraps (kind 21059, inner kinds 25050–25054). Voice-only, 1-on-1.
+- **Native Android Stack** — On Android the entire call lifecycle (WebRTC peer connection, microphone capture, audio routing, signaling, ringback, lockscreen UI) runs in native Java/Kotlin. The JavaScript layer never touches an `RTCPeerConnection` on Android, so calls work even when the WebView is backgrounded or paused.
+- **Lockscreen Accept** — Incoming calls show a full-screen ringer over the keyguard. Accept routes through `IncomingCallActivity` → foreground service → native `ActiveCallActivity` without going through the WebView.
+- **Multi-Device Awareness** — When you accept or decline a call on one device, the kind 25051 / 25054 self-wraps surface "answered elsewhere" / "declined elsewhere" on your other devices and stop their ringers.
+- **Follow-Gated Incoming** — Incoming offers from non-followed pubkeys are dropped before ringing.
+- **Call History** — Each call (ended, missed, declined, no-answer, failed, busy, cancelled) authors a kind 1405 chat-history rumor that renders inline in the conversation.
+
 ### Always-On Notifications
 - **Background Messaging Service (Android)** — A permanent foreground service stays connected to your relays so you never miss a message, even when the app is closed
 - **Survives Reboots** — The service restarts automatically after device reboots or app updates
@@ -107,6 +115,22 @@ src/
 - **AuthService**: Handles user authentication with Nostr keys
 - **ProfileService**: Manages user profiles and metadata
 - **MessageRepository**: Local database storage for messages
+- **VoiceCallBackend** *(`src/lib/core/voiceCall/`)*: Platform-split voice-call backend. The factory in `factory.ts` returns `VoiceCallServiceWeb` (browser-side `RTCPeerConnection` + JS NIP-AC senders) on PWA/desktop or `VoiceCallServiceNative` (thin proxy to the Android plugin) on Android. UI components subscribe to a single Svelte store (`voiceCallState`) regardless of platform.
+
+### Voice Calling on Android (native stack)
+
+On Android the call path is fully native to keep media + signaling alive when the WebView is paused:
+
+- **`VoiceCallForegroundService`** — `phoneCall`-typed FGS that hosts the call. Routes `ACTION_INITIATE_NATIVE` / `ACTION_ACCEPT_NATIVE` / `ACTION_HANGUP_NATIVE` / `ACTION_AWAIT_UNLOCK` to the manager and owns the `ActiveCallActivity` launch.
+- **`NativeVoiceCallManager`** — single-threaded state machine wrapping `org.webrtc.PeerConnection`. Owns the ICE buffer, offer/ICE timeouts, mute/duration tracking, the post-ENDED IDLE reset (so back-to-back calls work), and the call-history decision tree.
+- **`IncomingCallActivity`** — full-screen lockscreen ringer launched by the FSI on `IncomingCallNotification`. Heads-up Accept routes through here via `ACTION_AUTO_ACCEPT` so there's a single accept code path.
+- **`ActiveCallActivity`** — in-call surface (peer name, duration timer, mute / speaker / hangup buttons). `singleTask`, `showWhenLocked`, `turnScreenOn`. Bound to the FGS via a local `IBinder` and subscribes to the manager's `UiListener`.
+- **`NativeBackgroundMessagingService`** — already-existing DM service is the relay socket owner. NIP-AC kinds (25050–25054 wrapped in 21059) are Schnorr-verified and dispatched into the manager directly; the JS `Messaging.ts` skips them on Android.
+- **`AndroidVoiceCallPlugin`** — Capacitor bridge: 7 methods (initiate / accept / decline / hangup / toggleMute / toggleSpeaker / notifyUnlockComplete) and 6 events (callStateChanged, durationTick, callError, muteStateChanged, callHistoryWriteRequested, callHistoryRumorRequested).
+
+PIN-locked nsec users hit a deferred-accept flow: `IncomingCallActivity` persists the pending call, brings the FGS up in await-unlock mode, and routes through `MainActivity` so the JS unlock screen can collect the PIN. After successful unlock the JS layer calls `notifyUnlockComplete`, the FGS broadcasts `nospeak.ACTION_UNLOCK_COMPLETE`, and the call resumes natively.
+
+OpenSpec: voice-calling capability is described in `openspec/specs/voice-calling/spec.md`. The implementation arc is archived under `openspec/changes/archive/2026-05-01-add-native-voice-calls/` and `openspec/changes/archive/2026-05-01-migrate-voice-calling-to-nip-ac/`.
 
 ### Key Technologies
 
@@ -115,6 +139,7 @@ src/
 - **Dexie**: IndexedDB wrapper for local storage
 - **Nostr Tools**: Nostr protocol implementation
 - **Tailwind CSS**: Utility-first CSS framework
+- **Stream WebRTC Android** *(`io.getstream:stream-webrtc-android`)*: WebRTC bindings for the native Android voice-call stack
 
 
 
