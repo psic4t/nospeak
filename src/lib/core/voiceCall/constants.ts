@@ -62,3 +62,24 @@ export const AUDIO_CONSTRAINTS: MediaStreamConstraints = {
     },
     video: false
 };
+
+/**
+ * Media constraints for video calls. Audio constraints match
+ * {@link AUDIO_CONSTRAINTS}. Video resolution targets a conservative
+ * VGA (640×480) at 30 fps to keep CPU/battery/bandwidth low on mobile;
+ * WebRTC's congestion control will scale further down on bad networks.
+ * Initial facing mode is the front (user-facing) camera.
+ */
+export const VIDEO_MEDIA_CONSTRAINTS: MediaStreamConstraints = {
+    audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+    },
+    video: {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 30, max: 30 },
+        facingMode: 'user'
+    }
+};

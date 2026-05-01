@@ -529,4 +529,236 @@ describe('VoiceCallService', () => {
             expect(get(voiceCallState).status).toBe('idle');
         });
     });
+
+    // -----------------------------------------------------------------
+    //  Phase 3: video calling (web/PWA)
+    // -----------------------------------------------------------------
+
+    describe('video calling', () => {
+        function makeVideoStream(label = 'init'): any {
+            // A minimal MediaStream-shaped object exposing getTracks()
+            // with both audio and video tracks. cacheLocalTracks now
+            // walks getTracks() and buckets by kind.
+            const audioTrack = { kind: 'audio', enabled: true, stop: vi.fn() };
+            const videoTrack = {
+                kind: 'video',
+                enabled: true,
+                stop: vi.fn(),
+                _label: label
+            };
+            const tracks = [audioTrack, videoTrack];
+            return {
+                _label: label,
+                getTracks: () => tracks,
+                getAudioTracks: () => [audioTrack],
+                getVideoTracks: () => [videoTrack],
+                addTrack: vi.fn((t: any) => tracks.push(t)),
+                removeTrack: vi.fn((t: any) => {
+                    const i = tracks.indexOf(t);
+                    if (i >= 0) tracks.splice(i, 1);
+                })
+            };
+        }
+
+        function installVideoMedia(): {
+            stream: any;
+            getUserMedia: ReturnType<typeof vi.fn>;
+        } {
+            const stream = makeVideoStream('initial');
+            const getUserMedia = vi.fn().mockImplementation((constraints: any) => {
+                // Camera flip path supplies its own constraints with no
+                // audio key — return a video-only stream-shape with the
+                // requested facing label.
+                if (constraints && !('audio' in constraints) && constraints.video) {
+                    const target =
+                        constraints.video.facingMode === 'environment'
+                            ? 'back'
+                            : 'front';
+                    const flipped = makeVideoStream(target);
+                    return Promise.resolve(flipped);
+                }
+                return Promise.resolve(stream);
+            });
+            (globalThis as any).navigator = {
+                ...((globalThis as any).navigator ?? {}),
+                mediaDevices: { getUserMedia }
+            };
+            return { stream, getUserMedia };
+        }
+
+        it('initiateCall("video") requests video constraints and tags the offer', async () => {
+            const { getUserMedia } = installVideoMedia();
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'video');
+
+            const constraints = getUserMedia.mock.calls[0][0];
+            expect(constraints.audio).toBeTruthy();
+            expect(constraints.video).toBeTruthy();
+            expect(constraints.video.facingMode).toBe('user');
+            // The store reflects the kind.
+            expect(get(voiceCallState).callKind).toBe('video');
+            // The outgoing offer carried the call-type tag.
+            expect(senders.sendOffer).toHaveBeenCalledTimes(1);
+            const args = (senders.sendOffer as any).mock.calls[0];
+            expect(args[3]).toEqual({ callType: 'video' });
+            // getCallKind returns the active kind.
+            expect(service.getCallKind()).toBe('video');
+        });
+
+        it('initiateCall() defaults to voice constraints when no kind is given', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB);
+
+            // The default mock from installWebRtcStubs returns an
+            // audio-only stream; the constraints requested by the
+            // service should not include video.
+            const getUserMedia = (globalThis as any).navigator.mediaDevices
+                .getUserMedia;
+            const constraints = getUserMedia.mock.calls[0][0];
+            expect(constraints.video).toBe(false);
+            expect(get(voiceCallState).callKind).toBe('voice');
+        });
+
+        it('handleOffer with call-type="video" sets store callKind to video', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            const offer = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_OFFER,
+                callId: 'video-call',
+                content: 'sdp',
+                callType: 'video'
+            });
+            await service.handleNipAcEvent(offer);
+
+            expect(get(voiceCallState).callKind).toBe('video');
+            expect(service.getCallKind()).toBe('video');
+            expect(get(voiceCallState).status).toBe('incoming-ringing');
+        });
+
+        it('handleOffer without call-type tag defaults to voice (back-compat)', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            const offer = buildInner({
+                senderHex: PEER_HEX,
+                kind: NIP_AC_KIND_OFFER,
+                callId: 'tagless-call',
+                content: 'sdp'
+                // callType omitted: no `call-type` tag is added
+            });
+            await service.handleNipAcEvent(offer);
+
+            expect(get(voiceCallState).callKind).toBe('voice');
+            expect(get(voiceCallState).status).toBe('incoming-ringing');
+        });
+
+        it('toggleCamera flips the local video track enabled flag', async () => {
+            installVideoMedia();
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'video');
+            expect(service.isCameraOff()).toBe(false);
+
+            await service.toggleCamera();
+            expect(service.isCameraOff()).toBe(true);
+            expect(get(voiceCallState).isCameraOff).toBe(true);
+
+            await service.toggleCamera();
+            expect(service.isCameraOff()).toBe(false);
+            expect(get(voiceCallState).isCameraOff).toBe(false);
+        });
+
+        it('toggleCamera is a no-op on voice calls', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'voice');
+            await service.toggleCamera();
+            expect(service.isCameraOff()).toBe(false);
+            expect(get(voiceCallState).isCameraOff).toBe(false);
+        });
+
+        it('flipCamera replaces the video track via the existing sender', async () => {
+            installVideoMedia();
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'video');
+
+            // Wire a senders array onto the mock peer connection so the
+            // service's flipCamera path can find the video sender.
+            const pc = (globalThis as any).__lastPeerConnection;
+            const replaceTrack = vi.fn().mockResolvedValue(undefined);
+            const audioSender = { track: { kind: 'audio' } };
+            const videoSender = { track: { kind: 'video' }, replaceTrack };
+            pc.getSenders = () => [audioSender, videoSender];
+
+            expect(get(voiceCallState).facingMode).toBe('user');
+
+            await service.flipCamera();
+
+            // The video sender's replaceTrack was called with the new
+            // back-camera video track produced by the stubbed
+            // getUserMedia.
+            expect(replaceTrack).toHaveBeenCalledTimes(1);
+            const newTrack = replaceTrack.mock.calls[0][0];
+            expect(newTrack.kind).toBe('video');
+            // Store mirrors the new facing mode.
+            expect(get(voiceCallState).facingMode).toBe('environment');
+            expect(get(voiceCallState).isCameraFlipping).toBe(false);
+        });
+
+        it('cleanup resets callKind, video track refs, and facingMode', async () => {
+            installVideoMedia();
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'video');
+            expect(service.getCallKind()).toBe('video');
+
+            // Hangup runs cleanup() internally.
+            service.hangup();
+
+            expect(service.getCallKind()).toBe('voice');
+            expect(service.isCameraOff()).toBe(false);
+        });
+
+        it('default speakerphone on when video call goes active', async () => {
+            installVideoMedia();
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'video');
+            const pc = (globalThis as any).__lastPeerConnection;
+
+            expect(get(voiceCallState).isSpeakerOn).toBe(false);
+
+            pc.iceConnectionState = 'connected';
+            pc.oniceconnectionstatechange();
+
+            expect(get(voiceCallState).isSpeakerOn).toBe(true);
+            expect(get(voiceCallState).status).toBe('active');
+        });
+
+        it('voice call does not auto-enable speakerphone on active', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            await service.initiateCall(PEER_NPUB, 'voice');
+            const pc = (globalThis as any).__lastPeerConnection;
+
+            pc.iceConnectionState = 'connected';
+            pc.oniceconnectionstatechange();
+
+            expect(get(voiceCallState).isSpeakerOn).toBe(false);
+            expect(get(voiceCallState).status).toBe('active');
+        });
+    });
 });

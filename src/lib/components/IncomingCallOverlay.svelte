@@ -75,7 +75,11 @@
                     </div>
                 {/if}
                 <span class="text-white md:text-slate-900 md:dark:text-white text-xl font-medium">{profileName}</span>
-                <span class="text-gray-400 md:text-slate-600 md:dark:text-gray-400 text-sm">{$t('voiceCall.incomingCall')}</span>
+                <span class="text-gray-400 md:text-slate-600 md:dark:text-gray-400 text-sm">
+                    {$voiceCallState.callKind === 'video'
+                        ? $t('voiceCall.incomingVideoCall')
+                        : $t('voiceCall.incomingCall')}
+                </span>
             </div>
 
             <!-- Accept / Decline buttons -->

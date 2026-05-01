@@ -10,13 +10,18 @@ import {
     voiceCallState,
     incrementDuration,
     setEndedAnsweredElsewhere,
-    setEndedRejectedElsewhere
+    setEndedRejectedElsewhere,
+    setCameraOff,
+    setCameraFlipping,
+    setFacingMode,
+    setSpeakerOn
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
 import {
     CALL_OFFER_TIMEOUT_MS,
     ICE_CONNECTION_TIMEOUT_MS,
     AUDIO_CONSTRAINTS,
+    VIDEO_MEDIA_CONSTRAINTS,
     NIP_AC_KIND_OFFER,
     NIP_AC_KIND_ANSWER,
     NIP_AC_KIND_ICE,
@@ -93,6 +98,22 @@ export class VoiceCallService implements VoiceCallBackend {
     private callKind: CallKind = 'voice';
 
     /**
+     * Cached references to the local audio and video tracks. Populated by
+     * {@code cacheLocalTracks} after every {@code getUserMedia}. The
+     * audio track drives the mute toggle's {@code enabled} flag (already
+     * implemented for voice calls); the video track drives camera-off
+     * and is replaced on camera flip. Both are cleared in cleanup.
+     */
+    private localAudioTrack: MediaStreamTrack | null = null;
+    private localVideoTrack: MediaStreamTrack | null = null;
+
+    /**
+     * Tracks the currently active camera facing mode for video calls.
+     * Mirrored into the Svelte store for the self-view's mirroring UI.
+     */
+    private currentFacingMode: 'user' | 'environment' = 'user';
+
+    /**
      * NIP-AC ICE candidate buffering — global layer.
      *
      * Holds candidates received before any RTCPeerConnection exists for
@@ -134,7 +155,10 @@ export class VoiceCallService implements VoiceCallBackend {
         return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    public async initiateCall(recipientNpub: string): Promise<void> {
+    public async initiateCall(
+        recipientNpub: string,
+        kind: CallKind = 'voice'
+    ): Promise<void> {
         const state = get(voiceCallState);
         if (state.status !== 'idle') {
             console.warn('[VoiceCall] Cannot initiate call — already in a call');
@@ -143,12 +167,18 @@ export class VoiceCallService implements VoiceCallBackend {
 
         const callId = this.generateCallId();
         this.isInitiator = true;
-        setOutgoingRinging(recipientNpub, callId);
+        this.callKind = kind;
+        setOutgoingRinging(recipientNpub, callId, kind);
 
         try {
-            console.log('[VoiceCall] Requesting microphone access...');
-            this.localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
-            console.log('[VoiceCall] Microphone acquired, creating peer connection...');
+            const constraints =
+                kind === 'video' ? VIDEO_MEDIA_CONSTRAINTS : AUDIO_CONSTRAINTS;
+            console.log(
+                `[VoiceCall] Requesting ${kind === 'video' ? 'mic+camera' : 'microphone'} access...`
+            );
+            this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            this.cacheLocalTracks();
+            console.log('[VoiceCall] Media acquired, creating peer connection...');
             const recipientHex = nip19.decode(recipientNpub).data as string;
             this.createPeerConnection(recipientNpub, recipientHex, callId);
 
@@ -163,7 +193,9 @@ export class VoiceCallService implements VoiceCallBackend {
             console.log('[VoiceCall] Sending offer signal...');
             if (this.senders && offer.sdp) {
                 await this.tryCall(() =>
-                    this.senders!.sendOffer(recipientNpub, callId, offer.sdp!)
+                    this.senders!.sendOffer(recipientNpub, callId, offer.sdp!, {
+                        callType: kind
+                    })
                 );
             }
             console.log('[VoiceCall] Offer sent, waiting for answer...');
@@ -267,7 +299,10 @@ export class VoiceCallService implements VoiceCallBackend {
 
         try {
             setConnecting();
-            this.localStream = await navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS);
+            const constraints =
+                this.callKind === 'video' ? VIDEO_MEDIA_CONSTRAINTS : AUDIO_CONSTRAINTS;
+            this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            this.cacheLocalTracks();
 
             this.localStream.getTracks().forEach(track => {
                 this.peerConnection!.addTrack(track, this.localStream!);
@@ -363,10 +398,7 @@ export class VoiceCallService implements VoiceCallBackend {
     }
 
     // ------------------------------------------------------------------
-    //  VoiceCallBackend — video stubs
-    //
-    //  Phase 1 wires the interface through the type system. Real video
-    //  capture, rendering, and camera controls are added in Phase 3.
+    //  VoiceCallBackend — video controls
     // ------------------------------------------------------------------
 
     public getCallKind(): CallKind {
@@ -377,16 +409,108 @@ export class VoiceCallService implements VoiceCallBackend {
         return this.localStream;
     }
 
+    /**
+     * Toggle the local camera by flipping the video track's {@code enabled}
+     * flag. Per spec, this is a track-level mute (not a renegotiation):
+     * the capturer keeps running, the SDP is unchanged, and the peer
+     * receives black/empty frames while the camera is off.
+     */
     public async toggleCamera(): Promise<void> {
-        // No-op until Phase 3 wires real video tracks.
+        if (this.callKind !== 'video' || !this.localVideoTrack) {
+            return;
+        }
+        this.localVideoTrack.enabled = !this.localVideoTrack.enabled;
+        setCameraOff(!this.localVideoTrack.enabled);
     }
 
+    /**
+     * Switch between front and back cameras during an active video call.
+     * Requests a new video track via {@code getUserMedia} for the opposite
+     * facingMode, then swaps it into the existing video sender via
+     * {@code RTCRtpSender.replaceTrack} — no SDP renegotiation. The old
+     * track is stopped after the swap.
+     */
     public async flipCamera(): Promise<void> {
-        // No-op until Phase 3 wires real video tracks.
+        if (
+            this.callKind !== 'video' ||
+            !this.peerConnection ||
+            !this.localStream ||
+            !this.localVideoTrack
+        ) {
+            return;
+        }
+
+        const target: 'user' | 'environment' =
+            this.currentFacingMode === 'user' ? 'environment' : 'user';
+
+        setCameraFlipping(true);
+        try {
+            const newStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 30, max: 30 },
+                    facingMode: target
+                }
+            });
+            const newVideoTrack = newStream.getVideoTracks()[0];
+            if (!newVideoTrack) {
+                throw new Error('getUserMedia returned no video track');
+            }
+
+            // Preserve the existing camera-off state across the swap.
+            newVideoTrack.enabled = this.localVideoTrack.enabled;
+
+            const sender = this.peerConnection
+                .getSenders()
+                .find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+                await sender.replaceTrack(newVideoTrack);
+            }
+
+            // Swap the track inside our cached stream so getLocalStream()
+            // reflects the new track immediately.
+            const oldVideoTrack = this.localVideoTrack;
+            this.localStream.removeTrack(oldVideoTrack);
+            this.localStream.addTrack(newVideoTrack);
+            oldVideoTrack.stop();
+            this.localVideoTrack = newVideoTrack;
+            this.currentFacingMode = target;
+            setFacingMode(target);
+        } catch (err) {
+            console.error('[VoiceCall] flipCamera failed:', err);
+        } finally {
+            setCameraFlipping(false);
+        }
     }
 
     public isCameraOff(): boolean {
-        return false;
+        if (this.callKind !== 'video' || !this.localVideoTrack) return false;
+        return !this.localVideoTrack.enabled;
+    }
+
+    /**
+     * Cache the audio and video tracks from the active local stream after
+     * every {@code getUserMedia} call. Side-effect free for voice calls
+     * (video track will be {@code null}).
+     */
+    private cacheLocalTracks(): void {
+        if (!this.localStream) {
+            this.localAudioTrack = null;
+            this.localVideoTrack = null;
+            return;
+        }
+        // Defensive: some test mocks return a minimal MediaStream that
+        // implements only getTracks(). Walk getTracks() and bucket by
+        // track.kind rather than relying on getAudio/getVideoTracks.
+        const tracks =
+            typeof this.localStream.getTracks === 'function'
+                ? this.localStream.getTracks()
+                : [];
+        this.localAudioTrack =
+            tracks.find(t => t.kind === 'audio') ?? null;
+        this.localVideoTrack =
+            tracks.find(t => t.kind === 'video') ?? null;
     }
 
     private createPeerConnection(peerNpub: string, peerHex: string, callId: string): void {
@@ -437,6 +561,12 @@ export class VoiceCallService implements VoiceCallBackend {
                 this.iceTrickleEnabled = false;
                 this.clearTimeouts();
                 setActive();
+                // Default to speakerphone on for video calls — users hold
+                // the device away from their face. Voice calls keep the
+                // existing default (off; user-controlled).
+                if (this.callKind === 'video') {
+                    setSpeakerOn(true);
+                }
                 this.startDurationTimer();
             } else if (iceState === 'failed' || iceState === 'disconnected') {
                 this.handleIceFailure();
@@ -707,6 +837,9 @@ export class VoiceCallService implements VoiceCallBackend {
         this.iceTrickleEnabled = false;
         this.isInitiator = false;
         this.callKind = 'voice';
+        this.localAudioTrack = null;
+        this.localVideoTrack = null;
+        this.currentFacingMode = 'user';
         this.sessionRemoteDescriptionSet = false;
         this.sessionPendingIce = [];
         this.globalIceBuffer.clear();
