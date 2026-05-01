@@ -32,6 +32,7 @@ import {
 import type {
     AuthoredCallEventType,
     CallEventCreator,
+    CallKind,
     LocalCallEventCreator,
     NipAcSenders,
     VoiceCallBackend
@@ -39,6 +40,7 @@ import type {
 export type {
     AuthoredCallEventType,
     CallEventCreator,
+    CallKind,
     LocalCallEventCreator,
     NipAcSenders,
     VoiceCallBackend
@@ -82,6 +84,13 @@ export class VoiceCallService implements VoiceCallBackend {
      * reset to false in cleanup().
      */
     private isInitiator = false;
+
+    /**
+     * Media kind of the active or most recent call. Set by initiateCall
+     * (outgoing) and handleOffer (incoming). Fixed for the lifetime of
+     * a single call. Reset to {@code 'voice'} in cleanup.
+     */
+    private callKind: CallKind = 'voice';
 
     /**
      * NIP-AC ICE candidate buffering — global layer.
@@ -353,6 +362,33 @@ export class VoiceCallService implements VoiceCallBackend {
         return this.remoteStream;
     }
 
+    // ------------------------------------------------------------------
+    //  VoiceCallBackend — video stubs
+    //
+    //  Phase 1 wires the interface through the type system. Real video
+    //  capture, rendering, and camera controls are added in Phase 3.
+    // ------------------------------------------------------------------
+
+    public getCallKind(): CallKind {
+        return this.callKind;
+    }
+
+    public getLocalStream(): MediaStream | null {
+        return this.localStream;
+    }
+
+    public async toggleCamera(): Promise<void> {
+        // No-op until Phase 3 wires real video tracks.
+    }
+
+    public async flipCamera(): Promise<void> {
+        // No-op until Phase 3 wires real video tracks.
+    }
+
+    public isCameraOff(): boolean {
+        return false;
+    }
+
     private createPeerConnection(peerNpub: string, peerHex: string, callId: string): void {
         const iceServers = getIceServers();
         this.peerConnection = new RTCPeerConnection({ iceServers });
@@ -462,7 +498,15 @@ export class VoiceCallService implements VoiceCallBackend {
             return;
         }
 
-        setIncomingRinging(senderNpub, callId);
+        // Read media kind off the inner event's `call-type` tag. The
+        // sender SHOULD include `['call-type', 'voice'|'video']` on
+        // every kind-25050 offer, but we default to 'voice' for
+        // back-compat with older builds that omit the tag entirely.
+        const callTypeTag = inner.tags.find(t => t[0] === 'call-type');
+        const kind: CallKind = callTypeTag && callTypeTag[1] === 'video' ? 'video' : 'voice';
+        this.callKind = kind;
+
+        setIncomingRinging(senderNpub, callId, kind);
         this.createPeerConnection(senderNpub, inner.pubkey, callId);
 
         const remoteDesc = new RTCSessionDescription({
@@ -662,6 +706,7 @@ export class VoiceCallService implements VoiceCallBackend {
         this.clearTimeouts();
         this.iceTrickleEnabled = false;
         this.isInitiator = false;
+        this.callKind = 'voice';
         this.sessionRemoteDescriptionSet = false;
         this.sessionPendingIce = [];
         this.globalIceBuffer.clear();

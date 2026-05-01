@@ -44,6 +44,7 @@ import type {
     VoiceCallBackend,
     NipAcSenders,
     CallEventCreator,
+    CallKind,
     LocalCallEventCreator,
     VoiceCallEndReason,
     AuthoredCallEventType
@@ -361,6 +362,40 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         // receives null and is a no-op on Android (the overlay is
         // suppressed in Phase 2 anyway).
         return null;
+    }
+
+    // ------------------------------------------------------------------
+    //  VoiceCallBackend — video stubs
+    //
+    //  Phase 1 wires the interface through the type system. Real video
+    //  capture, rendering, and camera controls are added in Phase 5
+    //  (native Android side) once the AndroidCamera plugin (Phase 4)
+    //  and its host UI are in place.
+    // ------------------------------------------------------------------
+
+    public getCallKind(): CallKind {
+        return 'voice';
+    }
+
+    public getLocalStream(): MediaStream | null {
+        // The native SurfaceViewRenderer subscribes directly to the
+        // VideoTrack inside NativeVoiceCallManager — there is no JS
+        // MediaStream to surface.
+        return null;
+    }
+
+    public async toggleCamera(): Promise<void> {
+        // No-op until Phase 5 wires the AndroidVoiceCall plugin's
+        // toggleCamera method.
+    }
+
+    public async flipCamera(): Promise<void> {
+        // No-op until Phase 5 wires the AndroidVoiceCall plugin's
+        // flipCamera method.
+    }
+
+    public isCameraOff(): boolean {
+        return false;
     }
 
     // -----------------------------------------------------------------

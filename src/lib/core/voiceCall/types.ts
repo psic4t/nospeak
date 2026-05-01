@@ -8,6 +8,13 @@ import type {
 } from './constants';
 
 /**
+ * Media kind of a call. Fixed for the lifetime of a single call —
+ * mid-call upgrade from voice to video is NOT supported in the current
+ * implementation.
+ */
+export type CallKind = 'voice' | 'video';
+
+/**
  * Parsed NIP-AC inner signaling event, discriminated by `kind`. Built by
  * the receive path from a verified inner event, or by the send path
  * before signing/wrapping.
@@ -16,7 +23,7 @@ export type VoiceCallSignal =
     | {
           kind: typeof NIP_AC_KIND_OFFER;
           callId: string;
-          callType: 'voice';
+          callType: CallKind;
           /** Raw SDP offer string. */
           sdp: string;
       }
@@ -77,6 +84,17 @@ export interface VoiceCallState {
     isMuted: boolean;
     isSpeakerOn: boolean;
     endReason: VoiceCallEndReason | null;
+    /**
+     * Media kind of the active or last call. Defaults to `'voice'` when
+     * idle. Fixed for the lifetime of a single call.
+     */
+    callKind: CallKind;
+    /** Whether the local video track is currently disabled (video calls only). */
+    isCameraOff: boolean;
+    /** True while a front/back camera swap is in flight. */
+    isCameraFlipping: boolean;
+    /** Currently active camera facing mode. Meaningful only on video calls. */
+    facingMode: 'user' | 'environment';
 }
 
 /**
@@ -129,7 +147,12 @@ export type LocalCallEventCreator = (
  * elsewhere".
  */
 export interface NipAcSenders {
-    sendOffer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
+    sendOffer: (
+        recipientNpub: string,
+        callId: string,
+        sdp: string,
+        opts?: { callType?: CallKind }
+    ) => Promise<void>;
     sendAnswer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
     sendIceCandidate: (
         recipientNpub: string,
@@ -173,10 +196,11 @@ export interface VoiceCallBackend {
     generateCallId(): string;
 
     /**
-     * Initiate an outgoing call to {@code recipientNpub}. Resolves once
-     * the offer has been sent (or the attempt has been aborted).
+     * Initiate an outgoing call to {@code recipientNpub}. The optional
+     * {@code kind} parameter selects voice (default) or video. Resolves
+     * once the offer has been sent (or the attempt has been aborted).
      */
-    initiateCall(recipientNpub: string): Promise<void>;
+    initiateCall(recipientNpub: string, kind?: CallKind): Promise<void>;
 
     /**
      * Dispatch a verified NIP-AC inner event from Messaging's receive
@@ -225,4 +249,42 @@ export interface VoiceCallBackend {
      * native {@code AudioDeviceModule} directly.
      */
     getRemoteStream(): MediaStream | null;
+
+    /**
+     * Returns the kind of the active or most recently active call.
+     * Returns {@code 'voice'} when idle.
+     */
+    getCallKind(): CallKind;
+
+    /**
+     * Returns the local capture {@code MediaStream} for binding to a
+     * picture-in-picture self-view {@code <video>} element on web.
+     * Returns {@code null} on the native implementation, which renders
+     * the local self-view via a native {@code SurfaceViewRenderer}
+     * subscribed directly to the local {@code VideoTrack}.
+     */
+    getLocalStream(): MediaStream | null;
+
+    /**
+     * Toggles the local video track's {@code enabled} flag. No-op on
+     * voice calls. Does NOT renegotiate SDP, remove the track, or stop
+     * the camera capturer; the peer simply receives black/empty frames
+     * while the camera is off.
+     */
+    toggleCamera(): Promise<void>;
+
+    /**
+     * Switches between the front-facing and back-facing camera during
+     * an active video call. No-op on voice calls. On web this performs
+     * a {@code getUserMedia} + {@code RTCRtpSender.replaceTrack}; on
+     * Android this calls {@code CameraVideoCapturer.switchCamera}. Does
+     * NOT renegotiate SDP.
+     */
+    flipCamera(): Promise<void>;
+
+    /**
+     * Whether the local video track is currently disabled. Always
+     * {@code false} on voice calls.
+     */
+    isCameraOff(): boolean;
 }
