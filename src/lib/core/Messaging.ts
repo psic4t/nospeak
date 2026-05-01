@@ -17,7 +17,7 @@ import { reactionsStore } from '$lib/stores/reactions';
 import { updateReadReceipt } from '$lib/stores/readReceipts';
 import { encryptFileWithAesGcm, type EncryptedFileResult } from './FileEncryption';
 import { uploadToBlossomServers } from './BlossomUpload';
-import { getMediaPreviewLabel, getLocationPreviewLabel } from '$lib/utils/mediaPreview';
+import { getMediaPreviewLabel, getLocationPreviewLabel, getCallEventPreviewLabel } from '$lib/utils/mediaPreview';
 import { contactSyncService } from './ContactSyncService';
 import { conversationRepo, deriveConversationId, isGroupConversationId, generateGroupTitle } from '$lib/db/ConversationRepository';
 import type { Conversation } from '$lib/db/db';
@@ -867,12 +867,22 @@ export type AuthoredCallEventType =
       // Don't show notifications for messages fetched during history sync
       // or for messages sent before the current session started
       if (!this.isFetchingHistory && rumor.created_at >= this.sessionStartedAt) {
-        // Use friendly label for media attachments or location messages
-        const notificationBody = (message.fileUrl && message.fileType)
-          ? getMediaPreviewLabel(message.fileType)
-          : message.location
-            ? getLocationPreviewLabel()
-            : message.message;
+        // Use friendly label for media attachments, location messages, or
+        // call events (kind 1405). Without the call-event branch, missed
+        // / declined call notifications would show an empty body because
+        // the message has no text content.
+        const notificationBody = (message.rumorKind === CALL_HISTORY_KIND)
+          ? getCallEventPreviewLabel(
+              message.callEventType,
+              message.callDuration,
+              message.callInitiatorNpub,
+              user.npub,
+            )
+          : (message.fileUrl && message.fileType)
+            ? getMediaPreviewLabel(message.fileType)
+            : message.location
+              ? getLocationPreviewLabel()
+              : message.message;
         // For group messages, use senderNpub (actual sender); for 1-on-1, recipientNpub is the sender
         const notificationSender = message.senderNpub || message.recipientNpub;
         // Pass conversationId so notification click navigates to correct chat (group or 1-on-1)
