@@ -62,6 +62,14 @@ export interface Message {
     callDuration?: number; // in seconds
     callInitiatorNpub?: string;
     callId?: string; // WebRTC call identifier; carried in the ['call-id', ...] tag
+    /**
+     * Media kind of the call — value of the `call-media-type` tag on the
+     * kind-1405 rumor. Defaults to `'voice'` when absent (rumors written
+     * by older clients that predate add-video-calling do not carry the
+     * tag). Used by the call-history renderer to show a video-camera
+     * affordance for video calls.
+     */
+    callMediaType?: 'voice' | 'video';
 }
 
 export interface Conversation {

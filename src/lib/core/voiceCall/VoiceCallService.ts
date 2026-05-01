@@ -812,7 +812,13 @@ export class VoiceCallService implements VoiceCallBackend {
         const peerNpub = peerNpubOverride ?? get(voiceCallState).peerNpub;
         if (!peerNpub || !this.createCallEventFn) return;
         try {
-            await this.createCallEventFn(peerNpub, type, duration, callId, initiatorNpub);
+            // The active call's kind is captured into the rumor so the
+            // call-history UI can distinguish voice vs video pills.
+            // Reads from the cached field; cleanup resets to 'voice'
+            // post-call so subsequent rumors authored from a stale path
+            // don't carry the wrong kind.
+            await this.createCallEventFn(
+                peerNpub, type, duration, callId, initiatorNpub, this.callKind);
         } catch (err) {
             console.error('[VoiceCall] Failed to create call event:', err);
         }
@@ -826,7 +832,8 @@ export class VoiceCallService implements VoiceCallBackend {
     ): Promise<void> {
         if (!this.localCreateCallEventFn) return;
         try {
-            await this.localCreateCallEventFn(peerNpubOverride, type, callId, initiatorNpub);
+            await this.localCreateCallEventFn(
+                peerNpubOverride, type, callId, initiatorNpub, this.callKind);
         } catch (err) {
             console.error('[VoiceCall] Failed to create local call event:', err);
         }

@@ -174,14 +174,17 @@ public class NativeVoiceCallManager {
          * Author a kind-1405 call-history rumor that should be sent to
          * BOTH peers (via NIP-59 self-wrap). Types in {@code ended,
          * no-answer, declined, busy, failed}. Best-effort; a failure
-         * does not affect the call outcome.
+         * does not affect the call outcome. {@code callMediaType} is
+         * either {@code "voice"} or {@code "video"} and becomes the
+         * {@code call-media-type} tag on the rumor.
          */
         void sendCallHistoryRumor(
             String recipientHex,
             String type,
             int durationSec,
             String callId,
-            String initiatorHex
+            String initiatorHex,
+            String callMediaType
         );
     }
 
@@ -1285,14 +1288,15 @@ public class NativeVoiceCallManager {
         if (peerHex == null || callId == null) return;
         CallHistoryDecision d = CallHistoryDecision.decide(
             prevStatus, reason, isInitiator, peerHex, durationSec);
+        String mediaTypeWire = callKind != null ? callKind.wireName() : "voice";
         switch (d.kind) {
             case GIFT_WRAP:
                 bridge.sendCallHistoryRumor(
-                    peerHex, d.type, d.durationSec, callId, d.initiatorHex);
+                    peerHex, d.type, d.durationSec, callId, d.initiatorHex, mediaTypeWire);
                 break;
             case LOCAL_ONLY:
                 AndroidVoiceCallPlugin.emitCallHistoryWriteRequested(
-                    callId, d.type, peerHex, d.initiatorHex, d.durationSec);
+                    callId, d.type, peerHex, d.initiatorHex, d.durationSec, mediaTypeWire);
                 break;
             case NONE:
             default:

@@ -156,12 +156,14 @@ export type AuthoredCallEventType =
                  this.sendCallReject(npub, callId, reason)
          });
          voiceCallService.registerCallEventCreator(
-             (recipientNpub, type, duration, callId, initiatorPubkeyHex) =>
-                 this.createCallEventMessage(recipientNpub, type, duration, callId, initiatorPubkeyHex)
+             (recipientNpub, type, duration, callId, initiatorPubkeyHex, callMediaType) =>
+                 this.createCallEventMessage(
+                     recipientNpub, type, duration, callId, initiatorPubkeyHex, callMediaType)
          );
          voiceCallService.registerLocalCallEventCreator(
-             (recipientNpub, type, callId, initiatorPubkeyHex) =>
-                 this.createLocalCallEventMessage(recipientNpub, type, callId, initiatorPubkeyHex)
+             (recipientNpub, type, callId, initiatorPubkeyHex, callMediaType) =>
+                 this.createLocalCallEventMessage(
+                     recipientNpub, type, callId, initiatorPubkeyHex, callMediaType)
          );
      });
 
@@ -734,6 +736,11 @@ export type AuthoredCallEventType =
         const callDurationTag = rumor.tags?.find((t: string[]) => t[0] === 'call-duration');
         const callInitiatorTag = rumor.tags?.find((t: string[]) => t[0] === 'call-initiator');
         const callIdTag = rumor.tags?.find((t: string[]) => t[0] === 'call-id');
+        // call-media-type is optional; rumors written by older clients
+        // (predating add-video-calling) omit it. Default to 'voice'.
+        const callMediaTypeTag = rumor.tags?.find((t: string[]) => t[0] === 'call-media-type');
+        const callMediaType: 'voice' | 'video' =
+          callMediaTypeTag?.[1] === 'video' ? 'video' : 'voice';
 
         return {
           recipientNpub: partnerNpub,
@@ -748,6 +755,7 @@ export type AuthoredCallEventType =
           callDuration: callDurationTag ? parseInt(callDurationTag[1]) : undefined,
           callInitiatorNpub: callInitiatorTag ? nip19.npubEncode(callInitiatorTag[1]) : undefined,
           callId: callIdTag?.[1],
+          callMediaType,
           conversationId,
           participants,
           senderNpub
@@ -2122,7 +2130,8 @@ export type AuthoredCallEventType =
     callEventType: AuthoredCallEventType,
     duration?: number,
     callId?: string,
-    initiatorNpub?: string
+    initiatorNpub?: string,
+    callMediaType?: import('$lib/core/voiceCall/types').CallKind
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -2133,8 +2142,10 @@ export type AuthoredCallEventType =
         ? (nip19.decode(initiatorNpub).data as string)
         : pubkey;
     const resolvedInitiatorNpub = initiatorNpub ?? nip19.npubEncode(initiatorPubkey);
+    const resolvedKind = callMediaType ?? 'voice';
 
-    const tags = this.buildCallEventTags(recipientPubkey, callEventType, initiatorPubkey, duration, callId);
+    const tags = this.buildCallEventTags(
+      recipientPubkey, callEventType, initiatorPubkey, duration, callId, resolvedKind);
 
     const rumor: Partial<NostrEvent> = {
         kind: CALL_HISTORY_KIND,
@@ -2151,7 +2162,8 @@ export type AuthoredCallEventType =
             callEventType,
             callDuration: duration,
             callInitiatorNpub: resolvedInitiatorNpub,
-            callId
+            callId,
+            callMediaType: resolvedKind
         }
     });
   }
@@ -2174,7 +2186,8 @@ export type AuthoredCallEventType =
     recipientNpub: string,
     callEventType: AuthoredCallEventType,
     callId?: string,
-    initiatorNpub?: string
+    initiatorNpub?: string,
+    callMediaType?: import('$lib/core/voiceCall/types').CallKind
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -2185,8 +2198,10 @@ export type AuthoredCallEventType =
         ? (nip19.decode(initiatorNpub).data as string)
         : pubkey;
     const resolvedInitiatorNpub = initiatorNpub ?? nip19.npubEncode(initiatorPubkey);
+    const resolvedKind = callMediaType ?? 'voice';
 
-    const tags = this.buildCallEventTags(recipientPubkey, callEventType, initiatorPubkey, undefined, callId);
+    const tags = this.buildCallEventTags(
+      recipientPubkey, callEventType, initiatorPubkey, undefined, callId, resolvedKind);
     const createdAtSec = Math.floor(Date.now() / 1000);
 
     const rumor: Partial<NostrEvent> = {
@@ -2210,7 +2225,8 @@ export type AuthoredCallEventType =
         rumorKind: CALL_HISTORY_KIND,
         callEventType,
         callInitiatorNpub: resolvedInitiatorNpub,
-        callId
+        callId,
+        callMediaType: resolvedKind
     } as any);
   }
 
@@ -2219,13 +2235,15 @@ export type AuthoredCallEventType =
     callEventType: AuthoredCallEventType,
     initiatorPubkey: string,
     duration: number | undefined,
-    callId: string | undefined
+    callId: string | undefined,
+    callMediaType: 'voice' | 'video' = 'voice'
   ): string[][] {
     const tags: string[][] = [
         ['p', recipientPubkey],
         ['type', 'call-event'],
         ['call-event-type', callEventType],
-        ['call-initiator', initiatorPubkey]
+        ['call-initiator', initiatorPubkey],
+        ['call-media-type', callMediaType]
     ];
     if (duration !== undefined) {
         tags.push(['call-duration', String(duration)]);

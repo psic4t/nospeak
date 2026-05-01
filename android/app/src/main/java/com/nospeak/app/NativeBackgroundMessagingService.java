@@ -4007,6 +4007,23 @@ public class NativeBackgroundMessagingService extends Service {
             int durationSec,
             String callId,
             String initiatorPubkeyHex) {
+        sendVoiceCallHistoryRumor(
+            recipientPubkeyHex, type, durationSec, callId, initiatorPubkeyHex, "voice");
+    }
+
+    /**
+     * Same as
+     * {@link #sendVoiceCallHistoryRumor(String, String, int, String, String)}
+     * with an explicit media kind ({@code "voice"} / {@code "video"}).
+     * Becomes the {@code call-media-type} tag on the kind-1405 rumor.
+     */
+    public void sendVoiceCallHistoryRumor(
+            String recipientPubkeyHex,
+            String type,
+            int durationSec,
+            String callId,
+            String initiatorPubkeyHex,
+            String callMediaType) {
         if (recipientPubkeyHex == null || recipientPubkeyHex.isEmpty()
             || type == null || type.isEmpty()
             || callId == null || callId.isEmpty()
@@ -4020,16 +4037,20 @@ public class NativeBackgroundMessagingService extends Service {
             // default branch.
             initiatorPubkeyHex = currentPubkeyHex;
         }
+        if (callMediaType == null || callMediaType.isEmpty()) {
+            callMediaType = "voice";
+        }
 
         Log.d(LOG_TAG, "[VoiceCall] history-event: starting callId=" + callId
             + " type=" + type
             + " durationSec=" + durationSec
+            + " kind=" + callMediaType
             + " recipient=" + (recipientPubkeyHex.length() >= 8
                 ? recipientPubkeyHex.substring(0, 8) + ".." : recipientPubkeyHex)
             + " mode=" + currentMode);
 
         sendVoiceCallHistoryRumorInternal(
-            recipientPubkeyHex, type, durationSec, callId, initiatorPubkeyHex);
+            recipientPubkeyHex, type, durationSec, callId, initiatorPubkeyHex, callMediaType);
     }
 
     /**
@@ -4042,7 +4063,8 @@ public class NativeBackgroundMessagingService extends Service {
             String type,
             int durationSec,
             String callId,
-            String initiatorPubkeyHex) {
+            String initiatorPubkeyHex,
+            String callMediaType) {
 
         try {
             long nowSec = System.currentTimeMillis() / 1000L;
@@ -4061,6 +4083,7 @@ public class NativeBackgroundMessagingService extends Service {
             //   ['type', 'call-event']
             //   ['call-event-type', <type>]
             //   ['call-initiator', <initiator>]
+            //   ['call-media-type', <voice|video>]
             //   ['call-duration', String(durationSec)]   // optional, only when durationSec >= 0
             //   ['call-id', callId]
             JSONArray pTag = new JSONArray();
@@ -4082,6 +4105,11 @@ public class NativeBackgroundMessagingService extends Service {
             initiatorTag.put("call-initiator");
             initiatorTag.put(initiatorPubkeyHex);
             rumorTags.put(initiatorTag);
+
+            JSONArray mediaTypeTag = new JSONArray();
+            mediaTypeTag.put("call-media-type");
+            mediaTypeTag.put(callMediaType);
+            rumorTags.put(mediaTypeTag);
 
             if (durationSec >= 0) {
                 JSONArray durTag = new JSONArray();

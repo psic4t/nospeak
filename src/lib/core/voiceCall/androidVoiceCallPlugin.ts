@@ -56,6 +56,11 @@ export interface CallHistoryWriteRequest {
     initiatorHex?: string;
     /** Always absent for local-only types — kept as optional for shape parity. */
     durationSec?: number;
+    /**
+     * Media kind of the call. Optional; defaults to {@code 'voice'}
+     * when absent (e.g. emitted by an older native build).
+     */
+    callMediaType?: 'voice' | 'video';
 }
 
 /**
@@ -75,6 +80,11 @@ export interface CallHistoryRumorRequest {
     initiatorHex?: string;
     /** Present iff {@code type === 'ended'}. */
     durationSec?: number;
+    /**
+     * Media kind of the call. Optional; defaults to {@code 'voice'}
+     * when absent.
+     */
+    callMediaType?: 'voice' | 'video';
 }
 
 export interface AndroidVoiceCallPluginShape {

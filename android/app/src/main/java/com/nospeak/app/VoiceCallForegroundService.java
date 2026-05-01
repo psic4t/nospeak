@@ -536,7 +536,8 @@ public class VoiceCallForegroundService extends Service {
                         String type,
                         int durationSec,
                         String callId,
-                        String initiatorHex) {
+                        String initiatorHex,
+                        String callMediaType) {
                     // Phase 4 of add-native-voice-calls: all gift-wrapped
                     // history rumor types (declined / ended / no-answer /
                     // failed / busy) are authored fully natively via the
@@ -545,7 +546,7 @@ public class VoiceCallForegroundService extends Service {
                     // event remains in the plugin shape for forwards
                     // compatibility but is dormant on Android.
                     runOnMessagingExecutor(svc -> svc.sendVoiceCallHistoryRumor(
-                        recipientHex, type, durationSec, callId, initiatorHex));
+                        recipientHex, type, durationSec, callId, initiatorHex, callMediaType));
                 }
             };
 

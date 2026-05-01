@@ -658,7 +658,14 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
             const initiatorNpub = data.initiatorHex
                 ? nip19.npubEncode(data.initiatorHex)
                 : undefined;
-            await fn(recipientNpub, data.type as AuthoredCallEventType, data.callId, initiatorNpub);
+            const kind: CallKind = data.callMediaType === 'video' ? 'video' : 'voice';
+            await fn(
+                recipientNpub,
+                data.type as AuthoredCallEventType,
+                data.callId,
+                initiatorNpub,
+                kind
+            );
         } catch (err) {
             console.error(
                 '[VoiceCallNative] callHistoryWriteRequested handler failed',
@@ -682,12 +689,14 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
             const initiatorNpub = data.initiatorHex
                 ? nip19.npubEncode(data.initiatorHex)
                 : undefined;
+            const kind: CallKind = data.callMediaType === 'video' ? 'video' : 'voice';
             await fn(
                 recipientNpub,
                 data.type as AuthoredCallEventType,
                 data.durationSec,
                 data.callId,
-                initiatorNpub
+                initiatorNpub,
+                kind
             );
         } catch (err) {
             console.error(

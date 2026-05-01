@@ -123,7 +123,8 @@ export type CallEventCreator = (
     type: AuthoredCallEventType,
     duration?: number,
     callId?: string,
-    initiatorNpub?: string
+    initiatorNpub?: string,
+    callMediaType?: CallKind
 ) => Promise<void>;
 
 /**
@@ -135,7 +136,8 @@ export type LocalCallEventCreator = (
     recipientNpub: string,
     type: AuthoredCallEventType,
     callId?: string,
-    initiatorNpub?: string
+    initiatorNpub?: string,
+    callMediaType?: CallKind
 ) => Promise<void>;
 
 /**

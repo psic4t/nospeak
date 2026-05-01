@@ -571,6 +571,23 @@ public class AndroidVoiceCallPlugin extends Plugin {
             String peerHex,
             String initiatorHex,
             int durationSec) {
+        emitCallHistoryWriteRequested(
+            callId, type, peerHex, initiatorHex, durationSec, /* callMediaType= */ "voice");
+    }
+
+    /**
+     * Same as {@link #emitCallHistoryWriteRequested(String, String, String, String, int)}
+     * with an explicit media kind ({@code "voice"} / {@code "video"}).
+     * The kind becomes the {@code call-media-type} tag on the
+     * authored kind-1405 rumor.
+     */
+    public static void emitCallHistoryWriteRequested(
+            String callId,
+            String type,
+            String peerHex,
+            String initiatorHex,
+            int durationSec,
+            String callMediaType) {
         AndroidVoiceCallPlugin p = sInstance;
         if (p == null) return;
         JSObject data = new JSObject();
@@ -579,6 +596,8 @@ public class AndroidVoiceCallPlugin extends Plugin {
         data.put("peerHex", peerHex != null ? peerHex : "");
         if (initiatorHex != null) data.put("initiatorHex", initiatorHex);
         if (durationSec >= 0) data.put("durationSec", durationSec);
+        data.put("callMediaType",
+            callMediaType != null && !callMediaType.isEmpty() ? callMediaType : "voice");
         try {
             p.notifyListeners("callHistoryWriteRequested", data, true);
         } catch (Exception e) {
@@ -604,6 +623,22 @@ public class AndroidVoiceCallPlugin extends Plugin {
             String peerHex,
             String initiatorHex,
             int durationSec) {
+        emitCallHistoryRumorRequested(
+            callId, type, peerHex, initiatorHex, durationSec, /* callMediaType= */ "voice");
+    }
+
+    /**
+     * Same as
+     * {@link #emitCallHistoryRumorRequested(String, String, String, String, int)}
+     * with an explicit media kind.
+     */
+    public static void emitCallHistoryRumorRequested(
+            String callId,
+            String type,
+            String peerHex,
+            String initiatorHex,
+            int durationSec,
+            String callMediaType) {
         AndroidVoiceCallPlugin p = sInstance;
         if (p == null) return;
         JSObject data = new JSObject();
@@ -612,6 +647,8 @@ public class AndroidVoiceCallPlugin extends Plugin {
         data.put("peerHex", peerHex != null ? peerHex : "");
         if (initiatorHex != null) data.put("initiatorHex", initiatorHex);
         if (durationSec >= 0) data.put("durationSec", durationSec);
+        data.put("callMediaType",
+            callMediaType != null && !callMediaType.isEmpty() ? callMediaType : "voice");
         try {
             p.notifyListeners("callHistoryRumorRequested", data, true);
         } catch (Exception e) {
