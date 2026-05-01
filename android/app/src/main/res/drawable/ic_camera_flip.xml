@@ -1,0 +1,14 @@
+<!--
+    Camera-flip icon (front/back swap) for the active-call camera-flip
+    button. Material flip_camera_android glyph.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M16,17v-3L9,14v-3h7L16,8l4,4.5 -4,4.5zM20,3L4,3c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2L22,5c0,-1.1 -0.9,-2 -2,-2zM20,19L4,19L4,5h16v14z"/>
+</vector>

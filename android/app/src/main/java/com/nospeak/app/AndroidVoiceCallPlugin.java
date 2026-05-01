@@ -253,6 +253,8 @@ public class AndroidVoiceCallPlugin extends Plugin {
         String callId = call.getString("callId");
         String peerHex = call.getString("peerHex");
         String peerName = call.getString("peerName");
+        String callKind = call.getString("callKind");
+        if (callKind == null || callKind.isEmpty()) callKind = "voice";
         if (callId == null || peerHex == null) {
             call.reject("missing required arguments: callId, peerHex");
             return;
@@ -262,7 +264,8 @@ public class AndroidVoiceCallPlugin extends Plugin {
             .putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, callId)
             .putExtra(VoiceCallForegroundService.EXTRA_PEER_HEX, peerHex)
             .putExtra(VoiceCallForegroundService.EXTRA_PEER_NAME,
-                peerName != null ? peerName : "");
+                peerName != null ? peerName : "")
+            .putExtra(VoiceCallForegroundService.EXTRA_CALL_KIND, callKind);
         try {
             ContextCompat.startForegroundService(getContext(), svc);
         } catch (Exception e) {
@@ -397,6 +400,39 @@ public class AndroidVoiceCallPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * Toggle the local camera on / off (track-level mute, no SDP
+     * renegotiation). Args: {@code { off: boolean }}. No-op when no
+     * native call is active or the active call is voice-only.
+     */
+    @PluginMethod
+    public void toggleCamera(PluginCall call) {
+        Boolean off = call.getBoolean("off");
+        if (off == null) {
+            call.reject("missing required argument: off");
+            return;
+        }
+        final boolean fOff = off;
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.setCameraOff(fOff);
+        });
+        call.resolve();
+    }
+
+    /**
+     * Switch between the front and back camera. No args. No-op when
+     * no native call is active or the active call is voice-only.
+     */
+    @PluginMethod
+    public void flipCamera(PluginCall call) {
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.flipCamera();
+        });
+        call.resolve();
+    }
+
     private static void runOnMain(Runnable r) {
         new Handler(Looper.getMainLooper()).post(r);
     }
@@ -474,6 +510,44 @@ public class AndroidVoiceCallPlugin extends Plugin {
             p.notifyListeners("muteStateChanged", data, true);
         } catch (Exception e) {
             Log.w(TAG, "emitMuteStateChanged failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code cameraStateChanged} event after the local video
+     * track's {@code enabled} flag is flipped (camera-off / on).
+     * Voice calls never emit this event.
+     */
+    public static void emitCameraStateChanged(String callId, boolean cameraOff) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("cameraOff", cameraOff);
+        try {
+            p.notifyListeners("cameraStateChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitCameraStateChanged failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code facingModeChanged} event after a successful camera
+     * flip ({@link CameraVideoCapturer#switchCamera}). The {@code
+     * facing} string matches the JS {@code MediaStreamConstraints}
+     * value: {@code "user"} for the front camera and {@code
+     * "environment"} for the back camera.
+     */
+    public static void emitFacingModeChanged(String callId, String facing) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("facing", facing != null ? facing : "user");
+        try {
+            p.notifyListeners("facingModeChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitFacingModeChanged failed", e);
         }
     }
 

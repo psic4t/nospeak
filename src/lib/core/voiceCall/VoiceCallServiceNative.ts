@@ -37,7 +37,9 @@ import {
     toggleMute as storeToggleMute,
     toggleSpeaker as storeToggleSpeaker,
     setEndedAnsweredElsewhere,
-    setEndedRejectedElsewhere
+    setEndedRejectedElsewhere,
+    setCameraOff,
+    setFacingMode
 } from '$lib/stores/voiceCall';
 import { CALL_END_DISPLAY_MS } from './constants';
 
@@ -200,9 +202,31 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
                         void this.onCallHistoryRumorRequested(data)
                 )
             );
+            this.listeners.push(
+                await AndroidVoiceCall.addListener(
+                    'cameraStateChanged',
+                    (data: { callId: string; cameraOff: boolean }) =>
+                        this.onCameraStateChanged(data)
+                )
+            );
+            this.listeners.push(
+                await AndroidVoiceCall.addListener(
+                    'facingModeChanged',
+                    (data: { callId: string; facing: 'user' | 'environment' }) =>
+                        this.onFacingModeChanged(data)
+                )
+            );
         } catch (err) {
             console.error('[VoiceCallNative] event subscription failed', err);
         }
+    }
+
+    private onCameraStateChanged(data: { callId: string; cameraOff: boolean }): void {
+        setCameraOff(!!data.cameraOff);
+    }
+
+    private onFacingModeChanged(data: { callId: string; facing: 'user' | 'environment' }): void {
+        setFacingMode(data.facing === 'environment' ? 'environment' : 'user');
     }
 
     // -----------------------------------------------------------------
@@ -282,12 +306,11 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         setOutgoingRinging(recipientNpub, callId, kind);
 
         try {
-            // Phase 5 (Android native video) will extend the plugin
-            // signature with `callKind`. Until then we still call the
-            // single-arg shape — the FGS reads kind from the JS-issued
-            // offer's call-type tag for inbound calls and treats outgoing
-            // as voice-only. Video parity on Android lands in phase 5.
-            await AndroidVoiceCall.initiateCall({ callId, peerHex });
+            await AndroidVoiceCall.initiateCall({
+                callId,
+                peerHex,
+                callKind: kind
+            });
         } catch (err) {
             console.error('[VoiceCallNative] initiateCall failed', err);
             endCall('error');
@@ -448,17 +471,31 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
     }
 
     public async toggleCamera(): Promise<void> {
-        // No-op until Phase 5 wires the AndroidVoiceCall plugin's
-        // toggleCamera method.
+        const state = get(voiceCallState);
+        if (state.callKind !== 'video') return;
+        const next = !state.isCameraOff;
+        // Optimistic store flip; native fires cameraStateChanged shortly
+        // after which is idempotent.
+        setCameraOff(next);
+        try {
+            await AndroidVoiceCall.toggleCamera({ off: next });
+        } catch (err) {
+            console.warn('[VoiceCallNative] toggleCamera failed', err);
+        }
     }
 
     public async flipCamera(): Promise<void> {
-        // No-op until Phase 5 wires the AndroidVoiceCall plugin's
-        // flipCamera method.
+        const state = get(voiceCallState);
+        if (state.callKind !== 'video') return;
+        try {
+            await AndroidVoiceCall.flipCamera();
+        } catch (err) {
+            console.warn('[VoiceCallNative] flipCamera failed', err);
+        }
     }
 
     public isCameraOff(): boolean {
-        return false;
+        return get(voiceCallState).isCameraOff;
     }
 
     // -----------------------------------------------------------------

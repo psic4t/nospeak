@@ -77,6 +77,13 @@ public class VoiceCallForegroundService extends Service {
     public static final String EXTRA_PEER_NAME = "peerName";
     public static final String EXTRA_ROLE = "role";
     public static final String EXTRA_PEER_HEX = "peerHex";
+    /**
+     * Optional. Either {@code "voice"} or {@code "video"}; defaults to
+     * {@code "voice"} when absent. Drives the native call manager's
+     * {@link NativeVoiceCallManager.CallKind} parameter on initiate
+     * and accept.
+     */
+    public static final String EXTRA_CALL_KIND = "callKind";
 
     private PowerManager.WakeLock wakeLock;
     private AudioManager audioManager;
@@ -334,15 +341,19 @@ public class VoiceCallForegroundService extends Service {
             final String fCallId = callId;
             final String fPeerHex = peerHex;
             final String fPeerName = peerName;
+            final NativeVoiceCallManager.CallKind fKind =
+                NativeVoiceCallManager.CallKind.fromWireName(
+                    intent.getStringExtra(EXTRA_CALL_KIND));
             mainHandler.post(() -> {
                 if (nativeManager == null) ensureNativeManager();
                 if (nativeManager == null || fCallId == null || fPeerHex == null) {
                     Log.w(TAG, "INITIATE_NATIVE: missing manager/callId/peerHex");
                     return;
                 }
-                Log.d(TAG, "INITIATE_NATIVE: dispatching to manager callId=" + fCallId);
+                Log.d(TAG, "INITIATE_NATIVE: dispatching to manager callId=" + fCallId
+                    + " kind=" + fKind);
                 try {
-                    nativeManager.initiateCall(fCallId, fPeerHex.toLowerCase());
+                    nativeManager.initiateCall(fCallId, fPeerHex.toLowerCase(), fKind);
                 } catch (Throwable t) {
                     Log.e(TAG, "INITIATE_NATIVE: initiateCall threw", t);
                 }
@@ -368,7 +379,8 @@ public class VoiceCallForegroundService extends Service {
                     .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
                         fPeerName != null ? fPeerName : "")
                     .putExtra(ActiveCallActivity.EXTRA_PEER_HEX,
-                        fPeerHex != null ? fPeerHex : "");
+                        fPeerHex != null ? fPeerHex : "")
+                    .putExtra(ActiveCallActivity.EXTRA_CALL_KIND, fKind.wireName());
                 if (avatarPath != null) {
                     active.putExtra(ActiveCallActivity.EXTRA_AVATAR_PATH, avatarPath);
                 }
@@ -399,16 +411,20 @@ public class VoiceCallForegroundService extends Service {
                 String pendingCallId = prefs.getString("callId", null);
                 String sdp = prefs.getString("sdp", null);
                 String peerHexRead = prefs.getString("peerHex", null);
+                String callTypeRead = prefs.getString("callType", "voice");
                 if (pendingCallId == null || sdp == null || peerHexRead == null
                     || (fCallId != null && !fCallId.equals(pendingCallId))) {
                     Log.w(TAG, "ACCEPT_NATIVE: pending offer missing or callId mismatch"
                         + " (intent=" + fCallId + " prefs=" + pendingCallId + ")");
                     return;
                 }
-                Log.d(TAG, "ACCEPT_NATIVE: dispatching to manager callId=" + pendingCallId);
+                NativeVoiceCallManager.CallKind acceptKind =
+                    NativeVoiceCallManager.CallKind.fromWireName(callTypeRead);
+                Log.d(TAG, "ACCEPT_NATIVE: dispatching to manager callId=" + pendingCallId
+                    + " kind=" + acceptKind);
                 try {
                     nativeManager.acceptIncomingCall(
-                        pendingCallId, peerHexRead.toLowerCase(), sdp);
+                        pendingCallId, peerHexRead.toLowerCase(), sdp, acceptKind);
                 } catch (Throwable t) {
                     Log.e(TAG, "ACCEPT_NATIVE: acceptIncomingCall threw", t);
                 }
@@ -443,7 +459,8 @@ public class VoiceCallForegroundService extends Service {
                     .putExtra(ActiveCallActivity.EXTRA_PEER_NAME,
                         fPeerName != null ? fPeerName : "")
                     .putExtra(ActiveCallActivity.EXTRA_PEER_HEX,
-                        peerHexRead != null ? peerHexRead : "");
+                        peerHexRead != null ? peerHexRead : "")
+                    .putExtra(ActiveCallActivity.EXTRA_CALL_KIND, acceptKind.wireName());
                 if (acceptAvatarPath != null) {
                     active.putExtra(ActiveCallActivity.EXTRA_AVATAR_PATH, acceptAvatarPath);
                 }
@@ -711,6 +728,7 @@ public class VoiceCallForegroundService extends Service {
         SharedPreferences offerPrefs = getSharedPreferences(
             "nospeak_pending_incoming_call", MODE_PRIVATE);
         String resumePeerHex = offerPrefs.getString("peerHex", null);
+        String resumeCallType = offerPrefs.getString("callType", "voice");
         String resumeAvatarPath = resolvePeerAvatarPath(resumePeerHex);
         Intent active = new Intent(this, ActiveCallActivity.class)
             .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
@@ -718,7 +736,9 @@ public class VoiceCallForegroundService extends Service {
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(ActiveCallActivity.EXTRA_CALL_ID, acceptedCallId)
             .putExtra(ActiveCallActivity.EXTRA_PEER_HEX,
-                resumePeerHex != null ? resumePeerHex : "");
+                resumePeerHex != null ? resumePeerHex : "")
+            .putExtra(ActiveCallActivity.EXTRA_CALL_KIND,
+                NativeVoiceCallManager.CallKind.fromWireName(resumeCallType).wireName());
         if (resumeAvatarPath != null) {
             active.putExtra(ActiveCallActivity.EXTRA_AVATAR_PATH, resumeAvatarPath);
         }
@@ -822,8 +842,23 @@ public class VoiceCallForegroundService extends Service {
             this, 1, hangupIntent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
+        // Vary the title by the active call's media kind so the
+        // ongoing notification distinguishes voice from video calls.
+        // Reads from the live manager (the FGS owns it for the call's
+        // lifetime). Falls back to "On call" when no manager is
+        // available (rare race during teardown).
+        boolean isVideo = false;
+        try {
+            NativeVoiceCallManager mgr = nativeManager;
+            if (mgr != null
+                && mgr.getCallKind() == NativeVoiceCallManager.CallKind.VIDEO) {
+                isVideo = true;
+            }
+        } catch (Throwable ignored) {}
+        String title = isVideo ? "Video call" : "Voice call";
+
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("On call")
+            .setContentTitle(title)
             .setContentText(peerName != null ? peerName : "")
             .setSmallIcon(R.drawable.ic_stat_nospeak)
             .setContentIntent(contentPi)

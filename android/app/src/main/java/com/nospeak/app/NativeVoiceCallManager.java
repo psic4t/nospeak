@@ -8,7 +8,13 @@ import android.util.Log;
 
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
+import org.webrtc.Camera2Enumerator;
+import org.webrtc.CameraEnumerator;
+import org.webrtc.CameraVideoCapturer;
 import org.webrtc.DataChannel;
+import org.webrtc.DefaultVideoDecoderFactory;
+import org.webrtc.DefaultVideoEncoderFactory;
+import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
 import org.webrtc.MediaConstraints;
 import org.webrtc.MediaStream;
@@ -19,6 +25,10 @@ import org.webrtc.RtpReceiver;
 import org.webrtc.RtpTransceiver;
 import org.webrtc.SdpObserver;
 import org.webrtc.SessionDescription;
+import org.webrtc.SurfaceTextureHelper;
+import org.webrtc.VideoCapturer;
+import org.webrtc.VideoSource;
+import org.webrtc.VideoTrack;
 import org.webrtc.audio.JavaAudioDeviceModule;
 
 import java.util.ArrayDeque;
@@ -100,6 +110,51 @@ public class NativeVoiceCallManager {
          * observe the new state. Mirrors {@link #onMuteChanged}.
          */
         default void onSpeakerChanged(boolean speakerOn) {}
+
+        /**
+         * Called when the local video track has been attached for a
+         * video call (after {@link #attachLocalVideoTrack}). The
+         * activity uses this to {@code addSink} the track to its local
+         * {@code SurfaceViewRenderer}. Default no-op for voice calls
+         * and older listener doubles.
+         */
+        default void onLocalVideoTrack(VideoTrack track) {}
+
+        /**
+         * Called when an inbound video track arrives via
+         * {@link PCObserver#onAddTrack} on a video call. The activity
+         * uses this to {@code addSink} the track to its full-screen
+         * {@code SurfaceViewRenderer}. Default no-op.
+         */
+        default void onRemoteVideoTrack(VideoTrack track) {}
+
+        /**
+         * Called when the local camera-off state flips. Default no-op
+         * for voice calls and older listener doubles.
+         */
+        default void onCameraStateChanged(boolean cameraOff) {}
+
+        /**
+         * Called when the active camera facing mode changes (front /
+         * back swap). The activity uses this to mirror the local
+         * self-view renderer for front cameras only.
+         */
+        default void onFacingModeChanged(boolean isFrontCamera) {}
+    }
+
+    /** Media kind of a call. Mirrors the JS-side {@code CallKind} union. */
+    public enum CallKind {
+        VOICE,
+        VIDEO;
+
+        public String wireName() {
+            return this == VIDEO ? "video" : "voice";
+        }
+
+        public static CallKind fromWireName(String s) {
+            if ("video".equals(s)) return VIDEO;
+            return VOICE;
+        }
     }
 
     /**
@@ -166,12 +221,34 @@ public class NativeVoiceCallManager {
     private AudioTrack localAudioTrack;
     private final String localStreamId = "nospeak-stream-" + UUID.randomUUID();
 
+    /**
+     * Shared OpenGL context for video encode/decode and renderer surfaces.
+     * Created lazily inside {@link #ensureFactory(CallKind)} for video
+     * calls; released in {@link #dispose()}. {@link ActiveCallActivity}
+     * retrieves this via {@link #getRootEglBase()} so the renderers
+     * share the same GL state as the encoder/decoder factories.
+     */
+    private EglBase rootEglBase;
+
+    /** Local camera capture pipeline. Populated by {@link #attachLocalVideoTrack()}. */
+    private VideoSource videoSource;
+    private VideoTrack localVideoTrack;
+    private CameraVideoCapturer videoCapturer;
+    private SurfaceTextureHelper surfaceTextureHelper;
+    /** First inbound video track, if any. Populated by {@link PCObserver#onAddTrack}. */
+    private VideoTrack remoteVideoTrack;
+
     /** Call identity. Set in {@link #initiateCall} / {@link #acceptCall}. */
     private String callId;
     /** Hex pubkey of the remote peer. */
     private String peerHex;
     private CallStatus status = CallStatus.IDLE;
+    private CallKind callKind = CallKind.VOICE;
     private boolean isInitiator;
+    /** Whether the local video track is currently disabled. */
+    private boolean isCameraOff = false;
+    /** Whether the active camera is the front-facing one. */
+    private boolean isFrontCamera = true;
 
     private boolean iceTrickleEnabled = false;
     private boolean sessionRemoteDescriptionSet = false;
@@ -240,10 +317,24 @@ public class NativeVoiceCallManager {
      * <p>Must be called on the main thread.
      */
     public void initiateCall(String callId, String peerHexLower) {
+        initiateCall(callId, peerHexLower, CallKind.VOICE);
+    }
+
+    /**
+     * Begin an outgoing call with an explicit media kind. For
+     * {@link CallKind#VIDEO} the manager additionally captures the
+     * front camera, attaches a video track to the peer connection,
+     * and sets {@code OfferToReceiveVideo=true} on the SDP
+     * constraints.
+     *
+     * <p>Must be called on the main thread.
+     */
+    public void initiateCall(String callId, String peerHexLower, CallKind kind) {
         ensureMain();
         Log.d(TAG, "initiateCall callId=" + callId
             + " peerHex=" + (peerHexLower != null && peerHexLower.length() >= 8
-                ? peerHexLower.substring(0, 8) + ".." : peerHexLower));
+                ? peerHexLower.substring(0, 8) + ".." : peerHexLower)
+            + " kind=" + (kind != null ? kind : CallKind.VOICE));
         // Eagerly run the post-ENDED reset so a back-to-back call
         // (started inside the 1.5s ENDED display window) isn't rejected
         // for "not idle". Idempotent and a no-op if status is already
@@ -255,13 +346,17 @@ public class NativeVoiceCallManager {
         }
         this.callId = callId;
         this.peerHex = peerHexLower;
+        this.callKind = kind != null ? kind : CallKind.VOICE;
         this.isInitiator = true;
         transitionTo(CallStatus.OUTGOING_RINGING, null);
 
         try {
-            ensureFactory();
+            ensureFactory(this.callKind);
             buildPeerConnection();
             attachLocalAudioTrack();
+            if (this.callKind == CallKind.VIDEO) {
+                attachLocalVideoTrack();
+            }
 
             peerConnection.createOffer(new SimpleSdpObserver("createOffer") {
                 @Override
@@ -281,7 +376,7 @@ public class NativeVoiceCallManager {
                         );
                     });
                 }
-            }, audioCallSdpConstraints());
+            }, sdpConstraintsFor(this.callKind));
 
             scheduleOfferTimeout();
         } catch (Throwable t) {
@@ -301,11 +396,25 @@ public class NativeVoiceCallManager {
      * <p>Must be called on the main thread.
      */
     public void acceptIncomingCall(String callId, String peerHexLower, String offerSdp) {
+        acceptIncomingCall(callId, peerHexLower, offerSdp, CallKind.VOICE);
+    }
+
+    /**
+     * Accept the pending incoming call with an explicit kind. For
+     * {@link CallKind#VIDEO} the manager attaches a local camera
+     * track in addition to audio before sending the answer.
+     */
+    public void acceptIncomingCall(
+            String callId,
+            String peerHexLower,
+            String offerSdp,
+            CallKind kind) {
         ensureMain();
         Log.d(TAG, "acceptIncomingCall callId=" + callId
             + " peerHex=" + (peerHexLower != null && peerHexLower.length() >= 8
                 ? peerHexLower.substring(0, 8) + ".." : peerHexLower)
-            + " sdpLen=" + (offerSdp != null ? offerSdp.length() : 0));
+            + " sdpLen=" + (offerSdp != null ? offerSdp.length() : 0)
+            + " kind=" + (kind != null ? kind : CallKind.VOICE));
         // Eagerly run the post-ENDED reset so an Accept inside the 1.5s
         // ENDED display window isn't rejected for "not idle/ringing".
         runIdleResetIfPendingOrEnded();
@@ -315,11 +424,12 @@ public class NativeVoiceCallManager {
         }
         this.callId = callId;
         this.peerHex = peerHexLower;
+        this.callKind = kind != null ? kind : CallKind.VOICE;
         this.isInitiator = false;
         transitionTo(CallStatus.CONNECTING, null);
 
         try {
-            ensureFactory();
+            ensureFactory(this.callKind);
             buildPeerConnection();
 
             SessionDescription remote = new SessionDescription(
@@ -331,6 +441,9 @@ public class NativeVoiceCallManager {
                             sessionRemoteDescriptionSet = true;
                             drainSessionPendingIce();
                             attachLocalAudioTrack();
+                            if (callKind == CallKind.VIDEO) {
+                                attachLocalVideoTrack();
+                            }
                             createAndSendAnswer();
                         });
                     }
@@ -348,11 +461,22 @@ public class NativeVoiceCallManager {
 
     /** Mark the manager as ringing for an incoming call (no media setup yet). */
     public void notifyIncomingRinging(String callId, String peerHexLower) {
+        notifyIncomingRinging(callId, peerHexLower, CallKind.VOICE);
+    }
+
+    /**
+     * Mark the manager as ringing for an incoming call with an explicit
+     * kind. The kind is preserved through accept so the manager
+     * negotiates the correct media constraints when the user taps
+     * accept.
+     */
+    public void notifyIncomingRinging(String callId, String peerHexLower, CallKind kind) {
         ensureMain();
         runIdleResetIfPendingOrEnded();
         if (status != CallStatus.IDLE) return;
         this.callId = callId;
         this.peerHex = peerHexLower;
+        this.callKind = kind != null ? kind : CallKind.VOICE;
         this.isInitiator = false;
         transitionTo(CallStatus.INCOMING_RINGING, null);
     }
@@ -599,6 +723,15 @@ public class NativeVoiceCallManager {
         cancelTimeouts();
         cancelDurationTimer();
         cancelIdleReset();
+        // Stop and dispose the camera capturer first so frames stop
+        // flowing into the (about-to-be-disposed) video source.
+        try {
+            if (videoCapturer != null) {
+                videoCapturer.stopCapture();
+                videoCapturer.dispose();
+            }
+        } catch (Throwable ignored) {}
+        videoCapturer = null;
         try {
             if (peerConnection != null) {
                 peerConnection.close();
@@ -615,9 +748,26 @@ public class NativeVoiceCallManager {
         } catch (Throwable ignored) {}
         audioSource = null;
         try {
+            if (localVideoTrack != null) localVideoTrack.dispose();
+        } catch (Throwable ignored) {}
+        localVideoTrack = null;
+        try {
+            if (videoSource != null) videoSource.dispose();
+        } catch (Throwable ignored) {}
+        videoSource = null;
+        try {
+            if (surfaceTextureHelper != null) surfaceTextureHelper.dispose();
+        } catch (Throwable ignored) {}
+        surfaceTextureHelper = null;
+        remoteVideoTrack = null;
+        try {
             if (factory != null) factory.dispose();
         } catch (Throwable ignored) {}
         factory = null;
+        try {
+            if (rootEglBase != null) rootEglBase.release();
+        } catch (Throwable ignored) {}
+        rootEglBase = null;
     }
 
     // ===================================================================
@@ -644,17 +794,34 @@ public class NativeVoiceCallManager {
         return false;
     }
 
+    /** Backward-compat alias for voice-only callers. */
     private MediaConstraints audioCallSdpConstraints() {
+        return sdpConstraintsFor(CallKind.VOICE);
+    }
+
+    private MediaConstraints sdpConstraintsFor(CallKind kind) {
         MediaConstraints constraints = new MediaConstraints();
         constraints.mandatory.add(new MediaConstraints.KeyValuePair(
             "OfferToReceiveAudio", "true"));
         constraints.mandatory.add(new MediaConstraints.KeyValuePair(
-            "OfferToReceiveVideo", "false"));
+            "OfferToReceiveVideo", kind == CallKind.VIDEO ? "true" : "false"));
         return constraints;
     }
 
+    /** Backward-compat alias for callers that don't yet know the kind. */
     private void ensureFactory() {
-        if (factory != null) return;
+        ensureFactory(CallKind.VOICE);
+    }
+
+    private void ensureFactory(CallKind kind) {
+        if (factory != null) {
+            // If a previous voice call left the factory without a
+            // video encoder/decoder, we'd normally need to dispose and
+            // re-create it. In practice the manager is fully torn down
+            // between calls (finishCall + idleReset, or dispose), so
+            // the factory is always built fresh against the right kind.
+            return;
+        }
         PeerConnectionFactory.InitializationOptions initOptions =
             PeerConnectionFactory.InitializationOptions.builder(appContext)
                 .setEnableInternalTracer(false)
@@ -672,9 +839,26 @@ public class NativeVoiceCallManager {
             .setUseHardwareNoiseSuppressor(true)
             .createAudioDeviceModule();
 
-        factory = PeerConnectionFactory.builder()
-            .setAudioDeviceModule(adm)
-            .createPeerConnectionFactory();
+        PeerConnectionFactory.Builder builder = PeerConnectionFactory.builder()
+            .setAudioDeviceModule(adm);
+
+        if (kind == CallKind.VIDEO) {
+            // EglBase is shared with ActiveCallActivity's renderers
+            // via getRootEglBase(). Encoder/decoder factories must be
+            // initialized with the same context so frames don't have
+            // to be copied between GL contexts.
+            if (rootEglBase == null) {
+                rootEglBase = EglBase.create();
+            }
+            builder.setVideoEncoderFactory(new DefaultVideoEncoderFactory(
+                rootEglBase.getEglBaseContext(),
+                /* enableIntelVp8Encoder= */ true,
+                /* enableH264HighProfile= */ true));
+            builder.setVideoDecoderFactory(new DefaultVideoDecoderFactory(
+                rootEglBase.getEglBaseContext()));
+        }
+
+        factory = builder.createPeerConnectionFactory();
         // The factory takes ownership of the ADM; we don't keep a
         // separate reference. dispose() on the factory cleans it up.
     }
@@ -720,6 +904,171 @@ public class NativeVoiceCallManager {
         peerConnection.addTrack(localAudioTrack, streamIds);
     }
 
+    /**
+     * Capture from the front-facing camera and attach the track to the
+     * peer connection. Mirrors the JS-side video constraints
+     * (640x480 @ 30fps). Idempotent.
+     */
+    private void attachLocalVideoTrack() {
+        if (localVideoTrack != null) return;
+        if (rootEglBase == null) {
+            // Should have been created in ensureFactory(VIDEO); guard
+            // against an unusual call order (e.g. direct unit tests).
+            rootEglBase = EglBase.create();
+        }
+
+        CameraEnumerator enumerator = new Camera2Enumerator(appContext);
+        String cameraName = chooseCameraName(enumerator, /* front= */ isFrontCamera);
+        if (cameraName == null) {
+            Log.w(TAG, "attachLocalVideoTrack: no camera available");
+            return;
+        }
+        CameraVideoCapturer capturer =
+            (CameraVideoCapturer) enumerator.createCapturer(cameraName, null);
+        if (capturer == null) {
+            Log.w(TAG, "attachLocalVideoTrack: createCapturer returned null");
+            return;
+        }
+        videoCapturer = capturer;
+
+        surfaceTextureHelper = SurfaceTextureHelper.create(
+            "VideoCaptureThread", rootEglBase.getEglBaseContext());
+        videoSource = factory.createVideoSource(/* isScreencast= */ false);
+        videoCapturer.initialize(
+            surfaceTextureHelper, appContext, videoSource.getCapturerObserver());
+        try {
+            videoCapturer.startCapture(640, 480, 30);
+        } catch (Throwable t) {
+            Log.e(TAG, "videoCapturer.startCapture failed", t);
+        }
+
+        localVideoTrack = factory.createVideoTrack("nospeak-video", videoSource);
+        localVideoTrack.setEnabled(!isCameraOff);
+        List<String> streamIds = new ArrayList<>(1);
+        streamIds.add(localStreamId);
+        peerConnection.addTrack(localVideoTrack, streamIds);
+
+        // Notify listeners so the activity can sink the local track
+        // into its self-view renderer.
+        deliverLocalVideoTrack(uiListener, localVideoTrack);
+        deliverLocalVideoTrack(serviceListener, localVideoTrack);
+        notifyFacingMode(uiListener);
+        notifyFacingMode(serviceListener);
+    }
+
+    /**
+     * Toggle the local video track's {@code enabled} flag. This is a
+     * track-level mute (no SDP renegotiation, no capturer stop): the
+     * peer simply receives black/empty frames while off.
+     */
+    public void setCameraOff(boolean off) {
+        ensureMain();
+        if (callKind != CallKind.VIDEO) return;
+        if (isCameraOff == off) return;
+        isCameraOff = off;
+        if (localVideoTrack != null) {
+            try { localVideoTrack.setEnabled(!off); } catch (Throwable t) {
+                Log.w(TAG, "setEnabled on localVideoTrack failed", t);
+            }
+        }
+        notifyCameraState(uiListener);
+        notifyCameraState(serviceListener);
+        try {
+            AndroidVoiceCallPlugin.emitCameraStateChanged(callId, off);
+        } catch (Throwable t) {
+            Log.w(TAG, "emitCameraStateChanged failed", t);
+        }
+    }
+
+    public boolean isCameraOff() { return isCameraOff; }
+    public boolean isFrontCamera() { return isFrontCamera; }
+
+    /**
+     * Switch between the front and back camera. Calls
+     * {@link CameraVideoCapturer#switchCamera} which swaps which
+     * physical device feeds the existing {@code VideoSource}/
+     * {@code VideoTrack} — no SDP renegotiation, no track replacement.
+     */
+    public void flipCamera() {
+        ensureMain();
+        if (callKind != CallKind.VIDEO) return;
+        if (videoCapturer == null) return;
+        try {
+            videoCapturer.switchCamera(new CameraVideoCapturer.CameraSwitchHandler() {
+                @Override
+                public void onCameraSwitchDone(boolean isFront) {
+                    runOnMain(() -> {
+                        isFrontCamera = isFront;
+                        notifyFacingMode(uiListener);
+                        notifyFacingMode(serviceListener);
+                        try {
+                            AndroidVoiceCallPlugin.emitFacingModeChanged(
+                                callId, isFront ? "user" : "environment");
+                        } catch (Throwable t) {
+                            Log.w(TAG, "emitFacingModeChanged failed", t);
+                        }
+                    });
+                }
+                @Override
+                public void onCameraSwitchError(String error) {
+                    Log.w(TAG, "switchCamera failed: " + error);
+                }
+            });
+        } catch (Throwable t) {
+            Log.e(TAG, "flipCamera threw", t);
+        }
+    }
+
+    /** Pick the first front- or back-facing camera name from the enumerator. */
+    private static String chooseCameraName(CameraEnumerator enumerator, boolean front) {
+        String[] names = enumerator.getDeviceNames();
+        if (names == null) return null;
+        for (String name : names) {
+            if (front && enumerator.isFrontFacing(name)) return name;
+            if (!front && enumerator.isBackFacing(name)) return name;
+        }
+        // Fallback: any camera at all.
+        if (names.length > 0) return names[0];
+        return null;
+    }
+
+    private static void deliverLocalVideoTrack(UiListener listener, VideoTrack track) {
+        if (listener == null || track == null) return;
+        try { listener.onLocalVideoTrack(track); } catch (Throwable ignored) {}
+    }
+
+    private static void deliverRemoteVideoTrack(UiListener listener, VideoTrack track) {
+        if (listener == null || track == null) return;
+        try { listener.onRemoteVideoTrack(track); } catch (Throwable ignored) {}
+    }
+
+    private void notifyCameraState(UiListener listener) {
+        if (listener == null) return;
+        try { listener.onCameraStateChanged(isCameraOff); } catch (Throwable ignored) {}
+    }
+
+    private void notifyFacingMode(UiListener listener) {
+        if (listener == null) return;
+        try { listener.onFacingModeChanged(isFrontCamera); } catch (Throwable ignored) {}
+    }
+
+    /**
+     * Shared OpenGL context for use by {@link ActiveCallActivity}'s
+     * SurfaceViewRenderers. The activity must NOT release this — the
+     * manager owns its lifecycle and releases it in {@link #dispose()}.
+     * Returns {@code null} for voice calls.
+     */
+    public EglBase getRootEglBase() { return rootEglBase; }
+
+    /** Local video track for self-view rendering. {@code null} on voice calls. */
+    public VideoTrack getLocalVideoTrack() { return localVideoTrack; }
+
+    /** First inbound video track, if any. */
+    public VideoTrack getRemoteVideoTrack() { return remoteVideoTrack; }
+
+    /** Active call kind; {@code VOICE} when idle. */
+    public CallKind getCallKind() { return callKind; }
+
     private void createAndSendAnswer() {
         if (peerConnection == null) return;
         peerConnection.createAnswer(new SimpleSdpObserver("createAnswer") {
@@ -740,7 +1089,7 @@ public class NativeVoiceCallManager {
                     );
                 });
             }
-        }, audioCallSdpConstraints());
+        }, sdpConstraintsFor(callKind));
     }
 
     private void drainSessionPendingIce() {
@@ -820,6 +1169,15 @@ public class NativeVoiceCallManager {
         cancelTimeouts();
         cancelDurationTimer();
         // Tear down WebRTC, but keep callId for the final state event.
+        // Stop the camera capturer first so frames stop flowing before
+        // the video source / track are disposed.
+        try {
+            if (videoCapturer != null) {
+                videoCapturer.stopCapture();
+                videoCapturer.dispose();
+            }
+        } catch (Throwable ignored) {}
+        videoCapturer = null;
         try {
             if (peerConnection != null) {
                 peerConnection.close();
@@ -835,6 +1193,22 @@ public class NativeVoiceCallManager {
             if (audioSource != null) audioSource.dispose();
         } catch (Throwable ignored) {}
         audioSource = null;
+        try {
+            if (localVideoTrack != null) localVideoTrack.dispose();
+        } catch (Throwable ignored) {}
+        localVideoTrack = null;
+        try {
+            if (videoSource != null) videoSource.dispose();
+        } catch (Throwable ignored) {}
+        videoSource = null;
+        try {
+            if (surfaceTextureHelper != null) surfaceTextureHelper.dispose();
+        } catch (Throwable ignored) {}
+        surfaceTextureHelper = null;
+        remoteVideoTrack = null;
+        // Do NOT release rootEglBase here — the manager keeps it for
+        // the lifetime of the FGS so back-to-back video calls reuse
+        // the same GL context. dispose() releases it.
 
         transitionTo(CallStatus.ENDED, reason);
 
@@ -871,6 +1245,9 @@ public class NativeVoiceCallManager {
             iceTrickleEnabled = false;
             sessionRemoteDescriptionSet = false;
             sessionPendingIce.clear();
+            callKind = CallKind.VOICE;
+            isCameraOff = false;
+            isFrontCamera = true;
         };
         mainHandler.postDelayed(idleResetRunnable, IDLE_RESET_DELAY_MS);
     }
@@ -1029,6 +1406,17 @@ public class NativeVoiceCallManager {
                     cancelIceTimeout();
                     if (status != CallStatus.ACTIVE) {
                         transitionTo(CallStatus.ACTIVE, null);
+                        // Default speakerphone on for video calls — users
+                        // hold the device away from their face. Voice
+                        // calls keep the existing default (off; user-
+                        // controlled).
+                        if (callKind == CallKind.VIDEO && !isSpeakerOn) {
+                            try {
+                                setSpeakerOn(true);
+                            } catch (Throwable t) {
+                                Log.w(TAG, "default-speaker-on failed", t);
+                            }
+                        }
                     }
                 } else if (newState == PeerConnection.IceConnectionState.FAILED
                         || newState == PeerConnection.IceConnectionState.DISCONNECTED) {
@@ -1080,10 +1468,19 @@ public class NativeVoiceCallManager {
         @Override
         public void onAddTrack(RtpReceiver receiver, MediaStream[] streams) {
             // Remote audio plays automatically via the AudioDeviceModule.
-            // Nothing to do here — kept for completeness.
-            MediaStreamTrack track = receiver.track();
-            if (track != null) {
-                Log.d(TAG, "onAddTrack: remote " + track.kind() + " track received");
+            // For video we capture the first inbound track and notify
+            // listeners so the active-call activity can attach it to
+            // its full-screen SurfaceViewRenderer.
+            final MediaStreamTrack track = receiver.track();
+            if (track == null) return;
+            Log.d(TAG, "onAddTrack: remote " + track.kind() + " track received");
+            if ("video".equals(track.kind()) && track instanceof VideoTrack) {
+                final VideoTrack videoTrack = (VideoTrack) track;
+                runOnMain(() -> {
+                    remoteVideoTrack = videoTrack;
+                    deliverRemoteVideoTrack(uiListener, videoTrack);
+                    deliverRemoteVideoTrack(serviceListener, videoTrack);
+                });
             }
         }
 

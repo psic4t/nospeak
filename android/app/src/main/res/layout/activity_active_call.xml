@@ -1,139 +1,202 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Active-call screen for the native voice-call stack. Phase 2 of
-    the add-native-voice-calls OpenSpec change.
+    Active-call screen for the native voice/video-call stack.
 
-    Visual style mirrors activity_incoming_call.xml so the user
-    transitions cleanly from ringing to active without a jarring
-    theme change. The buttons differ:
-      - mute toggle (left)
-      - hangup (center, prominent red)
-      - speaker toggle (right)
-
-    The status text doubles as the duration display once the call is
-    active. ActiveCallActivity binds the status TextView to the FGS
-    state and updates it from the durationTick / callStateChanged
-    plugin events (which it observes by binding into the FGS).
+    Layout strategy:
+      - The root is a FrameLayout so video renderers can stack behind
+        the existing voice-call layout.
+      - active_call_remote_video fills the whole screen behind
+        everything; visible only on video calls.
+      - active_call_local_video is a small picture-in-picture in the
+        upper-right corner; visible only on video calls.
+      - The original voice layout (avatar + name + status + controls)
+        sits on top, with the avatar hidden on video calls so the
+        renderer shows through.
+      - Two new bottom-row buttons (camera-off, flip-camera) are
+        gated VISIBLE only on video calls.
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/active_call_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center_horizontal"
-    android:background="@drawable/bg_incoming_call"
     android:fitsSystemWindows="true"
-    android:padding="24dp">
+    android:background="@drawable/bg_incoming_call">
 
-    <View
+    <!-- Full-screen remote video (gone for voice calls). -->
+    <org.webrtc.SurfaceViewRenderer
+        android:id="@+id/active_call_remote_video"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#000000" />
 
-    <TextView
-        android:id="@+id/active_call_status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Connecting…"
-        android:textColor="@color/incoming_call_text"
-        android:textSize="16sp"
-        android:alpha="0.85"
-        android:layout_marginBottom="24dp" />
-
-    <ImageView
-        android:id="@+id/active_call_avatar"
+    <!-- Picture-in-picture self-view (gone for voice calls). -->
+    <org.webrtc.SurfaceViewRenderer
+        android:id="@+id/active_call_local_video"
         android:layout_width="120dp"
-        android:layout_height="120dp"
-        android:contentDescription="Peer avatar"
-        android:src="@drawable/ic_call_avatar_placeholder"
-        android:layout_marginBottom="20dp" />
+        android:layout_height="160dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="20dp"
+        android:visibility="gone"
+        android:background="#000000" />
 
-    <TextView
-        android:id="@+id/active_call_name"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:textColor="@color/incoming_call_text"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:singleLine="true"
-        android:ellipsize="end"
-        android:text="" />
-
-    <TextView
-        android:id="@+id/active_call_duration"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="@color/incoming_call_text"
-        android:textSize="18sp"
-        android:alpha="0.85"
-        android:text="" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="2" />
-
+    <!-- Existing voice-call layout: avatar + name + status + controls. -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:layout_marginBottom="48dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="24dp">
 
-        <FrameLayout
-            android:layout_width="0dp"
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/active_call_status"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+            android:text="Connecting…"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="16sp"
+            android:alpha="0.85"
+            android:layout_marginBottom="24dp" />
 
-            <ImageButton
-                android:id="@+id/active_call_mute"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_active_call_button_secondary"
-                android:src="@drawable/ic_mic"
-                android:scaleType="center"
-                android:contentDescription="Toggle microphone mute"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+        <ImageView
+            android:id="@+id/active_call_avatar"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:contentDescription="Peer avatar"
+            android:src="@drawable/ic_call_avatar_placeholder"
+            android:layout_marginBottom="20dp" />
 
-        <FrameLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/active_call_name"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+            android:gravity="center"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="" />
 
-            <ImageButton
-                android:id="@+id/active_call_hangup"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_call_button_decline"
-                android:src="@drawable/ic_call_end"
-                android:scaleType="center"
-                android:contentDescription="Hang up"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
-
-        <FrameLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/active_call_duration"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+            android:layout_marginTop="8dp"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="18sp"
+            android:alpha="0.85"
+            android:text="" />
 
-            <ImageButton
-                android:id="@+id/active_call_speaker"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_active_call_button_secondary"
-                android:src="@drawable/ic_speaker"
-                android:scaleType="center"
-                android:contentDescription="Toggle speakerphone"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="48dp">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/active_call_mute"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_mic"
+                    android:scaleType="center"
+                    android:contentDescription="Toggle microphone mute"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/active_call_camera_off"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_video"
+                    android:scaleType="center"
+                    android:visibility="gone"
+                    android:contentDescription="Toggle camera"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/active_call_hangup"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_call_button_decline"
+                    android:src="@drawable/ic_call_end"
+                    android:scaleType="center"
+                    android:contentDescription="Hang up"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/active_call_camera_flip"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_camera_flip"
+                    android:scaleType="center"
+                    android:visibility="gone"
+                    android:contentDescription="Flip camera"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/active_call_speaker"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_speaker"
+                    android:scaleType="center"
+                    android:contentDescription="Toggle speakerphone"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

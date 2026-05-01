@@ -16,7 +16,7 @@ export interface PendingIncomingCall {
     sdp: string;
     /** Sender pubkey, hex-encoded. */
     peerHex: string;
-    /** NIP-AC `call-type` tag value, currently always `'voice'`. */
+    /** NIP-AC `call-type` tag value: `'voice'` or `'video'`. */
     callType: 'voice' | 'video';
     /** NIP-AC `alt` tag content. */
     alt: string;
@@ -110,11 +110,18 @@ export interface AndroidVoiceCallPluginShape {
     //  factory returns VoiceCallServiceWeb on non-Android platforms).
     // ===================================================================
 
-    /** Begin a native outgoing call. */
+    /**
+     * Begin a native outgoing call. The optional {@code callKind}
+     * field selects voice ({@code 'voice'}, default) or video
+     * ({@code 'video'}); the FGS reads it off the intent and passes
+     * it to {@code NativeVoiceCallManager.initiateCall(callId, peerHex,
+     * kind)}.
+     */
     initiateCall(opts: {
         callId: string;
         peerHex: string;
         peerName?: string;
+        callKind?: 'voice' | 'video';
     }): Promise<void>;
 
     /** Accept the pending incoming call (reads SDP from SharedPreferences). */
@@ -131,6 +138,17 @@ export interface AndroidVoiceCallPluginShape {
 
     /** Toggle speakerphone routing through AudioManager. */
     toggleSpeaker(opts: { on: boolean }): Promise<void>;
+
+    /**
+     * Toggle the local camera on/off (track-level mute, no SDP
+     * renegotiation). No-op on voice calls.
+     */
+    toggleCamera(opts: { off: boolean }): Promise<void>;
+
+    /**
+     * Switch between the front and back camera. No-op on voice calls.
+     */
+    flipCamera(): Promise<void>;
 
     /**
      * Phase 2 of add-native-voice-calls: emit the
@@ -183,6 +201,16 @@ export interface AndroidVoiceCallPluginShape {
     addListener(
         eventName: 'callHistoryRumorRequested',
         cb: (data: CallHistoryRumorRequest) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'cameraStateChanged',
+        cb: (data: { callId: string; cameraOff: boolean }) => void
+    ): Promise<PluginListenerHandle>;
+
+    addListener(
+        eventName: 'facingModeChanged',
+        cb: (data: { callId: string; facing: 'user' | 'environment' }) => void
     ): Promise<PluginListenerHandle>;
 }
 
