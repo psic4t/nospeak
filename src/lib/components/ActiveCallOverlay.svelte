@@ -172,10 +172,15 @@
             <!-- Hidden audio element. Pre-active fallback / Safari quirks. -->
             <audio bind:this={audioEl} autoplay></audio>
 
-            <!-- Modal card. Full-bleed on mobile; bounded card on md+. -->
+            <!-- Modal card. Full-bleed on mobile; bounded card on md+.
+                 Desktop card is phone-shaped (narrow + tall): max-w-sm
+                 (384 px) keeps the 9:16 video frame from running off
+                 the screen on smaller laptops, and max-h-[90vh] clamps
+                 the card on short windows so the controls stay
+                 reachable. -->
             <div
                 class="relative w-full h-full
-                       md:w-full md:max-w-2xl lg:max-w-3xl xl:max-w-4xl md:h-auto
+                       md:w-full md:max-w-sm md:h-auto md:max-h-[90vh]
                        md:bg-slate-900/95 md:backdrop-blur-xl
                        md:rounded-3xl md:shadow-2xl md:border md:border-white/10
                        md:overflow-hidden flex flex-col"
@@ -188,8 +193,12 @@
 
                 <!-- Remote video frame.
                      Mobile: fills the screen.
-                     Desktop: fixed 16:9 aspect inside the card. -->
-                <div class="relative flex-1 md:flex-none md:aspect-video bg-black overflow-hidden">
+                     Desktop: fixed 9:16 (phone-shaped) aspect inside
+                     the card. min-h-0 lets the aspect-locked container
+                     shrink below its natural size when the card's
+                     max-h-[90vh] clamp kicks in on short windows,
+                     rather than overflow the card. -->
+                <div class="relative flex-1 md:flex-none md:aspect-[9/16] md:min-h-0 bg-black overflow-hidden">
                     <video
                         bind:this={remoteVideoEl}
                         autoplay
@@ -198,15 +207,18 @@
                     ></video>
 
                     <!-- Self-view PiP.
-                         Mobile: top-right of viewport.
-                         Desktop: bottom-right corner of the video rectangle. -->
+                         Mobile: top-right of viewport, portrait sized
+                         to suit the full-bleed video.
+                         Desktop: bottom-right corner of the video
+                         rectangle, portrait (3:4) so it matches the
+                         orientation of the parent 9:16 frame. -->
                     <video
                         bind:this={localVideoEl}
                         autoplay
                         playsinline
                         muted
                         class="absolute top-4 right-4 md:top-auto md:right-3 md:bottom-3
-                               w-28 h-40 md:w-32 md:h-24
+                               w-28 h-40 md:w-24 md:h-32
                                object-cover rounded-2xl border-2 border-white/30 shadow-xl bg-black z-10"
                         class:scale-x-[-1]={$voiceCallState.facingMode === 'user'}
                     ></video>
