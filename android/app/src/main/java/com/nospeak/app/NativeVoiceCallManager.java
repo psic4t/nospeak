@@ -164,7 +164,16 @@ public class NativeVoiceCallManager {
      * spinning up the full messaging stack.
      */
     public interface MessagingBridge {
-        void sendOffer(String recipientHex, String callId, String sdp);
+        /**
+         * Publish a kind-25050 NIP-AC Call Offer. {@code callKind}
+         * MUST be either {@code "voice"} or {@code "video"} and is
+         * emitted as the {@code call-type} tag on the inner event so
+         * the receiving peer can render the correct UI before the SDP
+         * is parsed. Pre-existing 3-arg implementations that hard-coded
+         * {@code "voice"} caused video calls placed from Android to be
+         * downgraded to voice on Web peers.
+         */
+        void sendOffer(String recipientHex, String callId, String sdp, String callKind);
         void sendAnswer(String recipientHex, String callId, String sdp);
         void sendIce(String recipientHex, String callId,
                      String candidate, String sdpMid, Integer sdpMLineIndex);
@@ -371,7 +380,11 @@ public class NativeVoiceCallManager {
                                 @Override public void onSetSuccess() {
                                     runOnMain(() -> {
                                         if (status != CallStatus.OUTGOING_RINGING) return;
-                                        bridge.sendOffer(peerHex, callId, desc.description);
+                                        bridge.sendOffer(
+                                            peerHex,
+                                            callId,
+                                            desc.description,
+                                            callKind != null ? callKind.wireName() : CallKind.VOICE.wireName());
                                     });
                                 }
                             },

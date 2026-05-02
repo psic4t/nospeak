@@ -527,6 +527,99 @@ public class VoiceCallForegroundService extends Service {
     }
 
     /**
+     * Functional surface of the underlying NIP-AC senders, so the
+     * {@link NativeVoiceCallManager.MessagingBridge} construction can
+     * be unit-tested without spinning up the full {@link
+     * NativeBackgroundMessagingService}. Production code wraps the
+     * live service instance; tests pass a recording fake.
+     *
+     * <p>Each method's signature mirrors the corresponding sender on
+     * {@link NativeBackgroundMessagingService}.
+     */
+    interface NipAcSender {
+        void sendVoiceCallOffer(String recipientHex, String callId, String sdp, String callKind);
+        void sendVoiceCallAnswer(String recipientHex, String callId, String sdp);
+        void sendVoiceCallIce(String recipientHex, String callId,
+                              String candidate, String sdpMid, Integer sdpMLineIndex);
+        void sendVoiceCallHangup(String recipientHex, String callId, String reason);
+        void sendVoiceCallReject(String recipientHex, String callId);
+        void sendVoiceCallHistoryRumor(
+            String recipientHex,
+            String type,
+            int durationSec,
+            String callId,
+            String initiatorHex,
+            String callMediaType);
+    }
+
+    /**
+     * Build a {@link NativeVoiceCallManager.MessagingBridge} that
+     * forwards every call to the given {@code sender}. Package-private
+     * so tests can substitute a recording fake; production code calls
+     * this with a sender backed by {@link #runOnMessagingExecutor}.
+     *
+     * <p>Crucially, this factory is the contract that {@link
+     * NativeVoiceCallManager.MessagingBridge#sendOffer} carries the
+     * caller's media kind through to the underlying sender. A
+     * regression here previously caused Android-initiated video calls
+     * to be downgraded to voice on receiving Web peers (the inner
+     * event was emitted with {@code call-type=voice} regardless of the
+     * actual media kind).
+     */
+    static NativeVoiceCallManager.MessagingBridge buildBridge(NipAcSender sender) {
+        return new NativeVoiceCallManager.MessagingBridge() {
+            @Override
+            public void sendOffer(
+                    String recipientHex,
+                    String callId,
+                    String sdp,
+                    String callKind) {
+                sender.sendVoiceCallOffer(recipientHex, callId, sdp, callKind);
+            }
+
+            @Override
+            public void sendAnswer(String recipientHex, String callId, String sdp) {
+                sender.sendVoiceCallAnswer(recipientHex, callId, sdp);
+            }
+
+            @Override
+            public void sendIce(String recipientHex, String callId,
+                                String candidate, String sdpMid, Integer sdpMLineIndex) {
+                sender.sendVoiceCallIce(recipientHex, callId, candidate, sdpMid, sdpMLineIndex);
+            }
+
+            @Override
+            public void sendHangup(String recipientHex, String callId, String reason) {
+                sender.sendVoiceCallHangup(recipientHex, callId, reason);
+            }
+
+            @Override
+            public void sendReject(String recipientHex, String callId) {
+                sender.sendVoiceCallReject(recipientHex, callId);
+            }
+
+            @Override
+            public void sendCallHistoryRumor(
+                    String recipientHex,
+                    String type,
+                    int durationSec,
+                    String callId,
+                    String initiatorHex,
+                    String callMediaType) {
+                // Phase 4 of add-native-voice-calls: all gift-wrapped
+                // history rumor types (declined / ended / no-answer /
+                // failed / busy) are authored fully natively via the
+                // parameterized helper. The JS callHistoryRumorRequested
+                // bridge is no longer fired from the native path; the
+                // event remains in the plugin shape for forwards
+                // compatibility but is dormant on Android.
+                sender.sendVoiceCallHistoryRumor(
+                    recipientHex, type, durationSec, callId, initiatorHex, callMediaType);
+            }
+        };
+    }
+
+    /**
      * Lazily build the native call manager. Called on the main thread.
      * The bridge implementation delegates NIP-AC publishing to
      * {@link NativeBackgroundMessagingService}'s static instance,
@@ -544,58 +637,56 @@ public class VoiceCallForegroundService extends Service {
         iceServers.add(PeerConnection.IceServer
             .builder("stun:turn.data.haus:3478").createIceServer());
 
-        NativeVoiceCallManager.MessagingBridge bridge =
-            new NativeVoiceCallManager.MessagingBridge() {
-                @Override
-                public void sendOffer(String recipientHex, String callId, String sdp) {
-                    runOnMessagingExecutor(svc ->
-                        svc.sendVoiceCallOffer(recipientHex, callId, sdp));
-                }
+        // Production sender: dispatches each call onto the messaging
+        // service's background executor. The two-step indirection
+        // (NipAcSender -> runOnMessagingExecutor -> live service) lets
+        // unit tests substitute the sender without instantiating the
+        // Service subclass.
+        NipAcSender sender = new NipAcSender() {
+            @Override
+            public void sendVoiceCallOffer(
+                    String recipientHex, String callId, String sdp, String callKind) {
+                runOnMessagingExecutor(svc ->
+                    svc.sendVoiceCallOffer(recipientHex, callId, sdp, callKind));
+            }
+            @Override
+            public void sendVoiceCallAnswer(
+                    String recipientHex, String callId, String sdp) {
+                runOnMessagingExecutor(svc ->
+                    svc.sendVoiceCallAnswer(recipientHex, callId, sdp));
+            }
+            @Override
+            public void sendVoiceCallIce(
+                    String recipientHex, String callId,
+                    String candidate, String sdpMid, Integer sdpMLineIndex) {
+                runOnMessagingExecutor(svc ->
+                    svc.sendVoiceCallIce(recipientHex, callId, candidate, sdpMid, sdpMLineIndex));
+            }
+            @Override
+            public void sendVoiceCallHangup(
+                    String recipientHex, String callId, String reason) {
+                runOnMessagingExecutor(svc ->
+                    svc.sendVoiceCallHangup(recipientHex, callId, reason));
+            }
+            @Override
+            public void sendVoiceCallReject(String recipientHex, String callId) {
+                runOnMessagingExecutor(svc ->
+                    svc.sendVoiceCallReject(recipientHex, callId));
+            }
+            @Override
+            public void sendVoiceCallHistoryRumor(
+                    String recipientHex,
+                    String type,
+                    int durationSec,
+                    String callId,
+                    String initiatorHex,
+                    String callMediaType) {
+                runOnMessagingExecutor(svc -> svc.sendVoiceCallHistoryRumor(
+                    recipientHex, type, durationSec, callId, initiatorHex, callMediaType));
+            }
+        };
 
-                @Override
-                public void sendAnswer(String recipientHex, String callId, String sdp) {
-                    runOnMessagingExecutor(svc ->
-                        svc.sendVoiceCallAnswer(recipientHex, callId, sdp));
-                }
-
-                @Override
-                public void sendIce(String recipientHex, String callId,
-                                    String candidate, String sdpMid, Integer sdpMLineIndex) {
-                    runOnMessagingExecutor(svc ->
-                        svc.sendVoiceCallIce(recipientHex, callId, candidate, sdpMid, sdpMLineIndex));
-                }
-
-                @Override
-                public void sendHangup(String recipientHex, String callId, String reason) {
-                    runOnMessagingExecutor(svc ->
-                        svc.sendVoiceCallHangup(recipientHex, callId, reason));
-                }
-
-                @Override
-                public void sendReject(String recipientHex, String callId) {
-                    runOnMessagingExecutor(svc ->
-                        svc.sendVoiceCallReject(recipientHex, callId));
-                }
-
-                @Override
-                public void sendCallHistoryRumor(
-                        String recipientHex,
-                        String type,
-                        int durationSec,
-                        String callId,
-                        String initiatorHex,
-                        String callMediaType) {
-                    // Phase 4 of add-native-voice-calls: all gift-wrapped
-                    // history rumor types (declined / ended / no-answer /
-                    // failed / busy) are authored fully natively via the
-                    // parameterized helper. The JS callHistoryRumorRequested
-                    // bridge is no longer fired from the native path; the
-                    // event remains in the plugin shape for forwards
-                    // compatibility but is dormant on Android.
-                    runOnMessagingExecutor(svc -> svc.sendVoiceCallHistoryRumor(
-                        recipientHex, type, durationSec, callId, initiatorHex, callMediaType));
-                }
-            };
+        NativeVoiceCallManager.MessagingBridge bridge = buildBridge(sender);
 
         nativeManager = new NativeVoiceCallManager(
             getApplicationContext(), bridge, iceServers);

@@ -3585,22 +3585,22 @@ public class NativeBackgroundMessagingService extends Service {
     // ===================================================================
 
     /**
-     * NIP-AC kind 25050 Call Offer. {@code sdp} becomes the inner event's
-     * raw {@code content}. No self-wrap (offers are caller-only). The
-     * inner event includes a {@code call-type=voice} tag, matching the
-     * JS sender.
+     * NIP-AC kind 25050 Call Offer. {@code sdp} becomes the inner
+     * event's raw {@code content}. No self-wrap (offers are
+     * caller-only). The inner event includes a
+     * {@code ['call-type', kind]} tag matching the JS sender.
      *
-     * <p>Best-effort: returns silently on any failure (logged at WARN).
-     * Must be called from a background thread.
-     */
-    public void sendVoiceCallOffer(String recipientPubkeyHex, String callId, String sdp) {
-        sendVoiceCallOffer(recipientPubkeyHex, callId, sdp, "voice");
-    }
-
-    /**
-     * NIP-AC kind 25050 Call Offer with explicit media kind. {@code callKind}
-     * SHOULD be either {@code "voice"} or {@code "video"}. Receivers default
-     * to {@code "voice"} when the {@code call-type} tag is missing.
+     * <p>{@code callKind} MUST be either {@code "voice"} or
+     * {@code "video"}; null / empty falls back to {@code "voice"}
+     * for safety, but production callers MUST pass an explicit value.
+     * Receivers default to {@code "voice"} when the {@code call-type}
+     * tag is missing.
+     *
+     * <p>Historically a 3-arg overload existed that hard-coded
+     * {@code "voice"} for the kind. That overload was removed because
+     * it caused Android-initiated video calls to be downgraded to
+     * voice on receiving Web peers — see the {@code add-video-calling}
+     * OpenSpec change for context.
      *
      * <p>Best-effort: returns silently on any failure (logged at WARN).
      * Must be called from a background thread.
