@@ -179,6 +179,11 @@ public class ActiveCallActivity extends Activity {
             public void onFacingModeChanged(boolean isFront) {
                 mainHandler.post(() -> applyFacing(isFront));
             }
+
+            @Override
+            public void onCameraFlippingChanged(boolean flipping) {
+                mainHandler.post(() -> applyCameraFlipping(flipping));
+            }
         };
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
@@ -733,8 +738,45 @@ public class ActiveCallActivity extends Activity {
     }
 
     private void applyFacing(boolean isFront) {
-        if (localVideoRenderer != null) {
-            localVideoRenderer.setMirror(isFront);
+        if (localVideoRenderer == null) return;
+        // Brief fade across the camera swap so the user gets a clear
+        // visual cue that the cameras switched. Without this, the
+        // only feedback is the mirroring flip — which on a static
+        // scene can be near-invisible. Total ~240ms (120ms fade out
+        // + 120ms fade in), tied to the actual switchCamera-completed
+        // event so the new mirror state is applied during the
+        // imperceptible-frame window.
+        localVideoRenderer.animate()
+            .alpha(0f)
+            .setDuration(120)
+            .withEndAction(() -> {
+                if (localVideoRenderer == null) return;
+                localVideoRenderer.setMirror(isFront);
+                localVideoRenderer.animate()
+                    .alpha(1f)
+                    .setDuration(120)
+                    .start();
+            })
+            .start();
+    }
+
+    /**
+     * Dim and disable the flip-camera buttons while a
+     * {@code switchCamera} is in flight. Mirrors the web's
+     * {@code disabled={isCameraFlipping}} + {@code disabled:opacity-50}
+     * treatment on the same control. Affects both the voice-mode
+     * button (hidden on video calls but kept in sync defensively) and
+     * the bottom-scrim video-mode button that's actually visible.
+     */
+    private void applyCameraFlipping(boolean flipping) {
+        float alpha = flipping ? 0.5f : 1.0f;
+        if (cameraFlipButton != null) {
+            cameraFlipButton.setEnabled(!flipping);
+            cameraFlipButton.setAlpha(alpha);
+        }
+        if (cameraFlipButtonVideo != null) {
+            cameraFlipButtonVideo.setEnabled(!flipping);
+            cameraFlipButtonVideo.setAlpha(alpha);
         }
     }
 

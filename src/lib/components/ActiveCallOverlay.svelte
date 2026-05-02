@@ -299,6 +299,14 @@
                                     aria-label={$t('voiceCall.flipCamera')}
                                 >
                                     <div class="w-12 h-12 rounded-full flex items-center justify-center bg-white/20 backdrop-blur">
+                                        <!--
+                                            Twin-arrow refresh-loop glyph (Lucide-family).
+                                            Geometry mirrored on Android in
+                                            android/app/src/main/res/drawable/ic_camera_flip.xml
+                                            so the button reads the same on Web/PWA and Android.
+                                            Stroke-based to match the rest of the icon set in
+                                            this control bar (mute, camera-off, hangup).
+                                        -->
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-white">
                                             <path d="M23 4v6h-6"></path>
                                             <path d="M1 20v-6h6"></path>
@@ -371,22 +379,15 @@
                             </div>
                         </button>
 
-                        <!-- Flip camera -->
-                        <button
-                            onclick={handleFlipCamera}
-                            disabled={$voiceCallState.isCameraFlipping}
-                            class="flex flex-col items-center gap-2 disabled:opacity-50"
-                            aria-label={$t('voiceCall.flipCamera')}
-                        >
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center bg-white/20 backdrop-blur">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-white">
-                                    <path d="M23 4v6h-6"></path>
-                                    <path d="M1 20v-6h6"></path>
-                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
-                                    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
-                                </svg>
-                            </div>
-                        </button>
+                        <!--
+                            No flip-camera button on desktop: laptops/desktops
+                            virtually never expose a second physical camera the
+                            user would meaningfully swap to, and showing a
+                            disabled-looking control just clutters the bar.
+                            The mobile-overlay branch above keeps the button
+                            for phone-form-factor PWAs, where front/back
+                            switching is the normal expectation.
+                        -->
                     </div>
                 {/if}
             </div>

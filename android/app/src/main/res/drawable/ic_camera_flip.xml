@@ -1,6 +1,20 @@
 <!--
     Camera-flip icon (front/back swap) for the active-call camera-flip
-    button. Material flip_camera_android glyph.
+    button. Twin-arrow refresh-loop glyph (Lucide-family), matching the
+    web/PWA `ActiveCallOverlay.svelte` flip-camera button geometry
+    one-for-one so the same icon shows on both platforms.
+
+    Stroke-based <path> rendering: VectorDrawable supports
+    strokeColor + strokeWidth + transparent fillColor. Each <path>
+    here corresponds 1:1 to one of the four <path d="..."> elements
+    in the SvelteKit component. Comma separators inside the elliptical-
+    arc commands are required by the AAPT pathData parser; the SVG
+    spec accepts spaces, AAPT does not always.
+
+    The activity already applies an external tint
+    (android:tint="@color/incoming_call_text") on the ImageButton, so
+    the strokeColor here is white and the visible colour is overridden
+    at runtime — same behaviour as the previous Material glyph.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -8,7 +22,40 @@
     android:viewportWidth="24"
     android:viewportHeight="24"
     android:tint="?attr/colorControlNormal">
+
+    <!-- Top-right arrow head: M23 4 v6 h-6 -->
     <path
-        android:fillColor="@android:color/white"
-        android:pathData="M16,17v-3L9,14v-3h7L16,8l4,4.5 -4,4.5zM20,3L4,3c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2L22,5c0,-1.1 -0.9,-2 -2,-2zM20,19L4,19L4,5h16v14z"/>
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M23,4 v6 h-6" />
+
+    <!-- Bottom-left arrow head: M1 20 v-6 h6 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M1,20 v-6 h6" />
+
+    <!-- Top arc: M3.51 9 a9 9 0 0 1 14.85 -3.36 L23 10 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M3.51,9 a9,9 0 0 1 14.85,-3.36 L23,10" />
+
+    <!-- Bottom arc: M20.49 15 a9 9 0 0 1 -14.85 3.36 L1 14 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M20.49,15 a9,9 0 0 1 -14.85,3.36 L1,14" />
 </vector>

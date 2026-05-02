@@ -140,6 +140,17 @@ public class NativeVoiceCallManager {
          * self-view renderer for front cameras only.
          */
         default void onFacingModeChanged(boolean isFrontCamera) {}
+
+        /**
+         * Called when a camera flip ({@link CameraVideoCapturer#switchCamera})
+         * starts and again when it finishes (success or error). The
+         * activity uses this to disable + dim the flip button while the
+         * swap is in flight, matching the web's
+         * {@code disabled={isCameraFlipping}} treatment so the user
+         * gets immediate visual feedback that the tap registered.
+         * Default no-op.
+         */
+        default void onCameraFlippingChanged(boolean flipping) {}
     }
 
     /** Media kind of a call. Mirrors the JS-side {@code CallKind} union. */
@@ -261,6 +272,15 @@ public class NativeVoiceCallManager {
     private boolean isCameraOff = false;
     /** Whether the active camera is the front-facing one. */
     private boolean isFrontCamera = true;
+    /**
+     * True while a {@link CameraVideoCapturer#switchCamera} is in
+     * flight. Set before the call, cleared in both the success and
+     * error handlers, and pushed to listeners so the active-call UI
+     * can dim/disable the flip button — matching the web's
+     * {@code isCameraFlipping} flag and preventing rapid double taps
+     * from queuing a second switch on top of an unfinished one.
+     */
+    private boolean isCameraFlipping = false;
 
     private boolean iceTrickleEnabled = false;
     private boolean sessionRemoteDescriptionSet = false;
@@ -671,6 +691,10 @@ public class NativeVoiceCallManager {
             }
             listener.onMuteChanged(isMuted);
             listener.onSpeakerChanged(isSpeakerOn);
+            // Replay flip-in-flight state too so a late bind (rotation,
+            // return-from-background) doesn't leave the UI looking
+            // tappable while a switchCamera is still running.
+            listener.onCameraFlippingChanged(isCameraFlipping);
         } catch (Throwable t) {
             Log.w(TAG, "initial listener push failed", t);
         }
@@ -1014,6 +1038,7 @@ public class NativeVoiceCallManager {
 
     public boolean isCameraOff() { return isCameraOff; }
     public boolean isFrontCamera() { return isFrontCamera; }
+    public boolean isCameraFlipping() { return isCameraFlipping; }
 
     /**
      * Switch between the front and back camera. Calls
@@ -1025,14 +1050,28 @@ public class NativeVoiceCallManager {
         ensureMain();
         if (callKind != CallKind.VIDEO) return;
         if (videoCapturer == null) return;
+        // Drop redundant taps so we don't stack a second switchCamera
+        // on top of one that hasn't completed. The button is disabled
+        // in the UI while flipping, but a service-side caller could
+        // still hit this path.
+        if (isCameraFlipping) {
+            Log.d(TAG, "flipCamera: already flipping, ignoring");
+            return;
+        }
+        isCameraFlipping = true;
+        notifyCameraFlipping(uiListener);
+        notifyCameraFlipping(serviceListener);
         try {
             videoCapturer.switchCamera(new CameraVideoCapturer.CameraSwitchHandler() {
                 @Override
                 public void onCameraSwitchDone(boolean isFront) {
                     runOnMain(() -> {
                         isFrontCamera = isFront;
+                        isCameraFlipping = false;
                         notifyFacingMode(uiListener);
                         notifyFacingMode(serviceListener);
+                        notifyCameraFlipping(uiListener);
+                        notifyCameraFlipping(serviceListener);
                         try {
                             AndroidVoiceCallPlugin.emitFacingModeChanged(
                                 callId, isFront ? "user" : "environment");
@@ -1044,10 +1083,23 @@ public class NativeVoiceCallManager {
                 @Override
                 public void onCameraSwitchError(String error) {
                     Log.w(TAG, "switchCamera failed: " + error);
+                    runOnMain(() -> {
+                        // Clear the flag on error too — otherwise the
+                        // UI button would stay disabled forever after a
+                        // single failed swap.
+                        isCameraFlipping = false;
+                        notifyCameraFlipping(uiListener);
+                        notifyCameraFlipping(serviceListener);
+                    });
                 }
             });
         } catch (Throwable t) {
             Log.e(TAG, "flipCamera threw", t);
+            // Synchronous throw before switchCamera even starts —
+            // make sure we don't leave the flag latched.
+            isCameraFlipping = false;
+            notifyCameraFlipping(uiListener);
+            notifyCameraFlipping(serviceListener);
         }
     }
 
@@ -1082,6 +1134,11 @@ public class NativeVoiceCallManager {
     private void notifyFacingMode(UiListener listener) {
         if (listener == null) return;
         try { listener.onFacingModeChanged(isFrontCamera); } catch (Throwable ignored) {}
+    }
+
+    private void notifyCameraFlipping(UiListener listener) {
+        if (listener == null) return;
+        try { listener.onCameraFlippingChanged(isCameraFlipping); } catch (Throwable ignored) {}
     }
 
     /**
@@ -1280,6 +1337,7 @@ public class NativeVoiceCallManager {
             callKind = CallKind.VOICE;
             isCameraOff = false;
             isFrontCamera = true;
+            isCameraFlipping = false;
         };
         mainHandler.postDelayed(idleResetRunnable, IDLE_RESET_DELAY_MS);
     }
