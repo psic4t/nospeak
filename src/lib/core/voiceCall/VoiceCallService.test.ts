@@ -23,6 +23,8 @@ import {
     resetCall,
     setIncomingRinging,
     setActive as storeSetActive,
+    setOutgoingRinging,
+    setRenegotiationState,
     incrementDuration,
     voiceCallState
 } from '$lib/stores/voiceCall';
@@ -30,7 +32,9 @@ import {
     NIP_AC_KIND_OFFER,
     NIP_AC_KIND_ANSWER,
     NIP_AC_KIND_HANGUP,
-    NIP_AC_KIND_REJECT
+    NIP_AC_KIND_REJECT,
+    NIP_AC_KIND_RENEGOTIATE,
+    RENEGOTIATION_TIMEOUT_MS
 } from './constants';
 import { get } from 'svelte/store';
 
@@ -43,7 +47,8 @@ function noopSenders(): NipAcSenders {
         sendAnswer: vi.fn().mockResolvedValue(undefined),
         sendIceCandidate: vi.fn().mockResolvedValue(undefined),
         sendHangup: vi.fn().mockResolvedValue(undefined),
-        sendReject: vi.fn().mockResolvedValue(undefined)
+        sendReject: vi.fn().mockResolvedValue(undefined),
+        sendRenegotiate: vi.fn().mockResolvedValue(undefined)
     };
 }
 
@@ -237,7 +242,8 @@ describe('VoiceCallService', () => {
                     if (hangupHangs) return new Promise(() => {});
                     return Promise.resolve();
                 }),
-                sendReject: vi.fn().mockResolvedValue(undefined)
+                sendReject: vi.fn().mockResolvedValue(undefined),
+                sendRenegotiate: vi.fn().mockResolvedValue(undefined)
             };
             service.registerNipAcSenders(senders);
 
@@ -260,7 +266,8 @@ describe('VoiceCallService', () => {
                 sendAnswer: vi.fn(),
                 sendIceCandidate: vi.fn(),
                 sendHangup: vi.fn(),
-                sendReject: hangingReject
+                sendReject: hangingReject,
+                sendRenegotiate: vi.fn()
             });
 
             setIncomingRinging(PEER_NPUB, 'call-decline');
@@ -759,6 +766,508 @@ describe('VoiceCallService', () => {
 
             expect(get(voiceCallState).isSpeakerOn).toBe(false);
             expect(get(voiceCallState).status).toBe('active');
+        });
+    });
+
+    // ------------------------------------------------------------------
+    //  NIP-AC kind 25055 Call Renegotiate (mid-call SDP change)
+    //
+    //  Covers:
+    //   - handleRenegotiate accepted/rejected per status
+    //   - call-id mismatch silently dropped
+    //   - glare resolution: lowercase-hex pubkey lex compare; higher
+    //     wins (drops peer offer); lower loses (rolls back, accepts)
+    //   - voice→video flip on incoming upgrade
+    //   - requestVideoUpgrade happy path / not-eligible / camera-denied
+    //   - timeout rolls back the local offer
+    // ------------------------------------------------------------------
+    describe('renegotiation (NIP-AC kind 25055)', () => {
+        // We share a peer hex so we can construct deterministic glare
+        // inputs by varying SELF_HEX (the recipient `p` tag in inner
+        // events) above or below PEER_HEX.
+        const PEER_HEX_LOW = '0'.repeat(64);
+        const PEER_HEX_HIGH = 'f'.repeat(64);
+
+        function makeVideoStream(label = 'init'): any {
+            const audioTrack = {
+                stop: vi.fn(),
+                kind: 'audio',
+                enabled: true,
+                label: 'audio-' + label
+            };
+            const videoTrack = {
+                stop: vi.fn(),
+                kind: 'video',
+                enabled: true,
+                label: 'video-' + label
+            };
+            const tracks: any[] = [audioTrack, videoTrack];
+            return {
+                getTracks: () => tracks,
+                getAudioTracks: () => [audioTrack],
+                getVideoTracks: () => [videoTrack],
+                addTrack: vi.fn((t: any) => tracks.push(t)),
+                removeTrack: vi.fn((t: any) => {
+                    const i = tracks.indexOf(t);
+                    if (i >= 0) tracks.splice(i, 1);
+                })
+            };
+        }
+
+        /**
+         * Stub mediaDevices.getUserMedia to return a stream that has
+         * a video track (for renegotiation tests where the upgrade path
+         * needs a video track to attach). The default `installWebRtcStubs`
+         * stream is audio-only. Returns the underlying mock so callers
+         * can introspect or fail it on demand.
+         */
+        function installVideoMedia(opts?: { fail?: boolean }): {
+            stream: any;
+            getUserMedia: ReturnType<typeof vi.fn>;
+        } {
+            const stream = makeVideoStream('initial');
+            const getUserMedia = vi.fn().mockImplementation(() =>
+                opts?.fail
+                    ? Promise.reject(new Error('NotAllowedError'))
+                    : Promise.resolve(stream)
+            );
+            (globalThis as any).navigator = {
+                ...((globalThis as any).navigator ?? {}),
+                mediaDevices: { getUserMedia }
+            };
+            return { stream, getUserMedia };
+        }
+
+        /**
+         * Patch a mock RTCPeerConnection produced by installWebRtcStubs
+         * with renegotiation-relevant surface area: signalingState,
+         * getSenders(), removeTrack().
+         */
+        function patchPcForRenegotiation(pc: any): {
+            removeTrack: ReturnType<typeof vi.fn>;
+            getSenders: () => any[];
+            senders: any[];
+        } {
+            const senders: any[] = [];
+            pc.getSenders = vi.fn(() => senders);
+            const origAddTrack = pc.addTrack;
+            pc.addTrack = vi.fn((track: any, stream: any) => {
+                senders.push({ track });
+                if (typeof origAddTrack === 'function') {
+                    return origAddTrack.call(pc, track, stream);
+                }
+                return undefined;
+            });
+            const removeTrack = vi.fn((sender: any) => {
+                const i = senders.indexOf(sender);
+                if (i >= 0) senders.splice(i, 1);
+            });
+            pc.removeTrack = removeTrack;
+            // Default to a non-glare state. Tests that exercise glare
+            // override this before invoking handleRenegotiate.
+            pc.signalingState = 'stable';
+            return { removeTrack, getSenders: () => senders, senders };
+        }
+
+        /**
+         * Build a kind-25055 inner event addressed to `selfHex` from
+         * `peerHex`. The `p` tag carries `selfHex` so the receive-side
+         * code can resolve the local pubkey for glare comparisons.
+         */
+        function buildRenegotiateInner(opts: {
+            peerHex: string;
+            selfHex: string;
+            callId: string;
+            sdp?: string;
+        }): NostrEvent {
+            return {
+                kind: NIP_AC_KIND_RENEGOTIATE,
+                pubkey: opts.peerHex,
+                created_at: Math.floor(Date.now() / 1000),
+                content:
+                    opts.sdp ??
+                    'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n',
+                tags: [
+                    ['p', opts.selfHex],
+                    ['call-id', opts.callId],
+                    ['alt', 'WebRTC call renegotiation']
+                ],
+                id: 'inner-25055-' + opts.callId,
+                sig: ''
+            };
+        }
+
+        /**
+         * Place the service into an active voice-call session with a
+         * primed peer connection. Returns the pc and the peer hex used
+         * so tests can craft renegotiate events targeting it.
+         */
+        async function bringUpActiveVoiceCall(senders: NipAcSenders): Promise<{
+            pc: any;
+            peerHex: string;
+            selfHex: string;
+            callId: string;
+        }> {
+            const peerHex = PEER_HEX;
+            // The local user's hex is whatever `inner.tags[p]` carries
+            // — for this helper we don't simulate inbound events, so
+            // we pick a deterministic value tests can lex-compare. Use
+            // a string between PEER_HEX_LOW and PEER_HEX_HIGH so
+            // tests can choose glare directions explicitly when they
+            // craft inner events.
+            const selfHex = '5'.repeat(64);
+            service.registerNipAcSenders(senders);
+            await service.initiateCall(nip19.npubEncode(peerHex), 'voice');
+            const pc = (globalThis as any).__lastPeerConnection;
+            patchPcForRenegotiation(pc);
+
+            // Apply a fake answer to transition outgoing-ringing →
+            // connecting → active.
+            const answerInner: NostrEvent = {
+                kind: NIP_AC_KIND_ANSWER,
+                pubkey: peerHex,
+                created_at: Math.floor(Date.now() / 1000),
+                content: 'sdp-answer',
+                tags: [
+                    ['p', selfHex],
+                    ['call-id', get(voiceCallState).callId!],
+                    ['alt', 'WebRTC call answer']
+                ],
+                id: 'inner-answer',
+                sig: ''
+            };
+            await service.handleNipAcEvent(answerInner);
+            pc.iceConnectionState = 'connected';
+            pc.oniceconnectionstatechange();
+
+            const callId = get(voiceCallState).callId!;
+            return { pc, peerHex, selfHex, callId };
+        }
+
+        it('handleRenegotiate accepted in active state publishes a kind-25051 answer', async () => {
+            const senders = noopSenders();
+            const { peerHex, selfHex, callId } = await bringUpActiveVoiceCall(senders);
+
+            const inner = buildRenegotiateInner({ peerHex, selfHex, callId });
+            await service.handleNipAcEvent(inner);
+
+            expect(senders.sendAnswer).toHaveBeenCalledTimes(1);
+            const args = (senders.sendAnswer as any).mock.calls[0];
+            expect(args[1]).toBe(callId);
+            // Status remains active throughout.
+            expect(get(voiceCallState).status).toBe('active');
+            // Renegotiation state cycles back to idle.
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+        });
+
+        it('handleRenegotiate accepted in connecting state publishes a kind-25051 answer', async () => {
+            const senders = noopSenders();
+            const { peerHex, selfHex, callId } = await bringUpActiveVoiceCall(senders);
+            // Force status back to connecting to exercise that branch.
+            const pc = (globalThis as any).__lastPeerConnection;
+            // We cannot easily move back to connecting via store APIs
+            // without breaking other invariants; instead end the call
+            // and bring it up again, stopping just before active.
+            // The helper transitions through connecting then to active
+            // — for this test we just verify connecting status is also
+            // accepted by manually flipping the store.
+            voiceCallState.update(s => ({ ...s, status: 'connecting' }));
+
+            const inner = buildRenegotiateInner({ peerHex, selfHex, callId });
+            await service.handleNipAcEvent(inner);
+
+            expect(senders.sendAnswer).toHaveBeenCalledTimes(1);
+            // Status was preserved at connecting.
+            expect(get(voiceCallState).status).toBe('connecting');
+            void pc;
+        });
+
+        it.each(['idle', 'outgoing-ringing', 'incoming-ringing', 'ended'] as const)(
+            'handleRenegotiate dropped in %s status without publishing an answer',
+            async (status) => {
+                const senders = noopSenders();
+                service.registerNipAcSenders(senders);
+                if (status === 'outgoing-ringing') {
+                    setOutgoingRinging(PEER_NPUB, 'call-x');
+                } else if (status === 'incoming-ringing') {
+                    setIncomingRinging(PEER_NPUB, 'call-x');
+                } else if (status === 'ended') {
+                    setOutgoingRinging(PEER_NPUB, 'call-x');
+                    voiceCallState.update(s => ({ ...s, status: 'ended' }));
+                }
+                // For 'idle' we leave the resetCall() value in place.
+
+                const inner = buildRenegotiateInner({
+                    peerHex: PEER_HEX,
+                    selfHex: '5'.repeat(64),
+                    callId: 'call-x'
+                });
+                await service.handleNipAcEvent(inner);
+
+                expect(senders.sendAnswer).not.toHaveBeenCalled();
+            }
+        );
+
+        it('handleRenegotiate with mismatched call-id is dropped silently', async () => {
+            const senders = noopSenders();
+            const { peerHex, selfHex } = await bringUpActiveVoiceCall(senders);
+            (senders.sendAnswer as any).mockClear();
+
+            const inner = buildRenegotiateInner({
+                peerHex,
+                selfHex,
+                callId: 'wrong-call-id'
+            });
+            await service.handleNipAcEvent(inner);
+
+            expect(senders.sendAnswer).not.toHaveBeenCalled();
+        });
+
+        it('glare: WIN keeps outgoing offer and ignores peer renegotiate (our hex > theirs)', async () => {
+            const senders = noopSenders();
+            const { pc, callId } = await bringUpActiveVoiceCall(senders);
+            (senders.sendAnswer as any).mockClear();
+
+            // Simulate a pending local offer.
+            pc.signalingState = 'have-local-offer';
+            const setLocalDescription = pc.setLocalDescription;
+            setLocalDescription.mockClear();
+
+            // Our hex > theirs.
+            const ourHex = 'f'.repeat(64);
+            const theirHex = PEER_HEX_LOW;
+            const inner = buildRenegotiateInner({
+                peerHex: theirHex,
+                selfHex: ourHex,
+                callId
+            });
+            await service.handleNipAcEvent(inner);
+
+            // No answer published, no rollback called.
+            expect(senders.sendAnswer).not.toHaveBeenCalled();
+            expect(setLocalDescription).not.toHaveBeenCalled();
+            // Glare state was set for diagnostics.
+            expect(get(voiceCallState).renegotiationState).toBe('glare');
+        });
+
+        it('glare: LOSE rolls back our offer and accepts peer renegotiate (our hex < theirs)', async () => {
+            const senders = noopSenders();
+            const { pc, callId } = await bringUpActiveVoiceCall(senders);
+            (senders.sendAnswer as any).mockClear();
+
+            pc.signalingState = 'have-local-offer';
+
+            // Our hex < theirs.
+            const ourHex = '0'.repeat(64);
+            const theirHex = PEER_HEX_HIGH;
+            const inner = buildRenegotiateInner({
+                peerHex: theirHex,
+                selfHex: ourHex,
+                callId
+            });
+            await service.handleNipAcEvent(inner);
+
+            // Rollback was called and we then sent a kind-25051 answer.
+            const rollbackCall = (pc.setLocalDescription as any).mock.calls.find(
+                (c: any[]) => c[0] && c[0].type === 'rollback'
+            );
+            expect(rollbackCall).toBeTruthy();
+            expect(senders.sendAnswer).toHaveBeenCalledTimes(1);
+        });
+
+        it('handleRenegotiate flips callKind to video when SDP carries video m-line', async () => {
+            const senders = noopSenders();
+            installVideoMedia(); // for the camera-acquire branch
+            const { peerHex, selfHex, callId } = await bringUpActiveVoiceCall(senders);
+
+            // The default mock createAnswer returns { type:'answer', sdp:'sdp-answer' }
+            // which has no 'a=inactive', so the upgrade is treated as
+            // accepted on our side. Provide a video offer SDP.
+            const inner = buildRenegotiateInner({
+                peerHex,
+                selfHex,
+                callId,
+                sdp: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n'
+            });
+            await service.handleNipAcEvent(inner);
+
+            expect(get(voiceCallState).callKind).toBe('video');
+            // Speaker auto-on for video.
+            expect(get(voiceCallState).isSpeakerOn).toBe(true);
+        });
+
+        it('requestVideoUpgrade publishes kind-25055 with a fresh SDP offer', async () => {
+            const senders = noopSenders();
+            installVideoMedia();
+            const { pc, callId } = await bringUpActiveVoiceCall(senders);
+            (senders.sendOffer as any).mockClear();
+
+            await service.requestVideoUpgrade();
+
+            expect(senders.sendRenegotiate).toHaveBeenCalledTimes(1);
+            const args = (senders.sendRenegotiate as any).mock.calls[0];
+            expect(args[1]).toBe(callId);
+            expect(get(voiceCallState).renegotiationState).toBe('outgoing');
+            expect(pc.createOffer).toHaveBeenCalled();
+            expect(pc.setLocalDescription).toHaveBeenCalled();
+        });
+
+        it('requestVideoUpgrade flips callKind to video on receiving the kind-25051 answer', async () => {
+            const senders = noopSenders();
+            installVideoMedia();
+            const { peerHex, selfHex, callId } = await bringUpActiveVoiceCall(senders);
+            await service.requestVideoUpgrade();
+
+            const answer: NostrEvent = {
+                kind: NIP_AC_KIND_ANSWER,
+                pubkey: peerHex,
+                created_at: Math.floor(Date.now() / 1000),
+                content:
+                    'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=sendrecv\r\n',
+                tags: [
+                    ['p', selfHex],
+                    ['call-id', callId],
+                    ['alt', 'WebRTC call answer']
+                ],
+                id: 'inner-25051-renegotiation',
+                sig: ''
+            };
+            await service.handleNipAcEvent(answer);
+
+            expect(get(voiceCallState).callKind).toBe('video');
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+            expect(get(voiceCallState).isSpeakerOn).toBe(true);
+        });
+
+        it('requestVideoUpgrade reverts state when camera permission is denied', async () => {
+            const senders = noopSenders();
+            installVideoMedia({ fail: true });
+            await bringUpActiveVoiceCall(senders);
+
+            await service.requestVideoUpgrade();
+
+            expect(senders.sendRenegotiate).not.toHaveBeenCalled();
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+            expect(get(voiceCallState).callKind).toBe('voice');
+        });
+
+        it('requestVideoUpgrade rejected while another renegotiation is pending', async () => {
+            const senders = noopSenders();
+            installVideoMedia();
+            await bringUpActiveVoiceCall(senders);
+            // Force renegotiation state to outgoing to simulate an
+            // already-pending upgrade.
+            setRenegotiationState('outgoing');
+
+            await service.requestVideoUpgrade();
+
+            expect(senders.sendRenegotiate).not.toHaveBeenCalled();
+        });
+
+        it('requestVideoUpgrade rolls back on timeout', async () => {
+            vi.useFakeTimers();
+            try {
+                const senders = noopSenders();
+                installVideoMedia();
+                const { pc } = await bringUpActiveVoiceCall(senders);
+
+                await service.requestVideoUpgrade();
+                // setLocalDescription was called once for the outgoing
+                // offer; clear before checking for the rollback call.
+                (pc.setLocalDescription as any).mockClear();
+
+                // Have-local-offer is required for the rollback branch
+                // to actually invoke setLocalDescription({rollback}).
+                pc.signalingState = 'have-local-offer';
+
+                vi.advanceTimersByTime(RENEGOTIATION_TIMEOUT_MS + 100);
+                // Allow the queued promise inside the timeout body to resolve.
+                await Promise.resolve();
+                await Promise.resolve();
+
+                const rollbackCall = (pc.setLocalDescription as any).mock.calls.find(
+                    (c: any[]) => c[0] && c[0].type === 'rollback'
+                );
+                expect(rollbackCall).toBeTruthy();
+                expect(get(voiceCallState).renegotiationState).toBe('idle');
+                // The underlying call survives.
+                expect(get(voiceCallState).status).toBe('active');
+                expect(get(voiceCallState).callKind).toBe('voice');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it("upgraded voice→video call's history rumor carries call-media-type=video", async () => {
+            // Spec coverage for the "Call History via Kind 1405 Events"
+            // requirement (modified by add-video-calling): the
+            // call-media-type tag MUST reflect the call's *latest*
+            // media kind at hangup time, not the original kind. After
+            // a successful voice→video upgrade, an `ended` rumor must
+            // be authored with callMediaType='video'.
+            const createCallEventSpy = vi.fn().mockResolvedValue(undefined);
+            const senders = noopSenders();
+            installVideoMedia();
+            service.registerCallEventCreator(createCallEventSpy);
+            const { peerHex, selfHex, callId } = await bringUpActiveVoiceCall(senders);
+
+            // The call's kind is voice at this point.
+            expect(get(voiceCallState).callKind).toBe('voice');
+
+            // Trigger the voice→video upgrade.
+            await service.requestVideoUpgrade();
+            // Apply the matching kind-25051 with a video m-line so the
+            // upgrade is treated as accepted.
+            const renegAnswer: NostrEvent = {
+                kind: NIP_AC_KIND_ANSWER,
+                pubkey: peerHex,
+                created_at: Math.floor(Date.now() / 1000),
+                content:
+                    'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=sendrecv\r\n',
+                tags: [
+                    ['p', selfHex],
+                    ['call-id', callId],
+                    ['alt', 'WebRTC call answer']
+                ],
+                id: 'inner-25051-upgrade-history',
+                sig: ''
+            };
+            await service.handleNipAcEvent(renegAnswer);
+            expect(get(voiceCallState).callKind).toBe('video');
+            createCallEventSpy.mockClear();
+
+            // Now hang up — the resulting `ended` rumor should be
+            // authored with callMediaType='video'.
+            service.hangup();
+
+            expect(createCallEventSpy).toHaveBeenCalledTimes(1);
+            const args = createCallEventSpy.mock.calls[0];
+            // signature: (recipientNpub, type, duration, callId, initiatorNpub, callMediaType)
+            expect(args[1]).toBe('ended');
+            expect(args[5]).toBe('video');
+        });
+
+        it('self-renegotiate ignored regardless of status (handled in Messaging.ts)', async () => {
+            // The self-event filter lives in Messaging.handleNipAcWrap;
+            // VoiceCallService.handleNipAcEvent should never see a
+            // self-renegotiate. This test documents the contract: if
+            // somehow a self-renegotiate reaches us, the kind-specific
+            // status guard alone would still drop it because
+            // pubkey-equality with self is irrelevant here. We simulate
+            // by checking that handleRenegotiate's normal status guard
+            // applies independently of pubkey identity.
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+
+            const inner = buildRenegotiateInner({
+                peerHex: PEER_HEX,
+                selfHex: '5'.repeat(64),
+                callId: 'no-active-call'
+            });
+            // Status is idle (no bringUpActiveVoiceCall).
+            await service.handleNipAcEvent(inner);
+
+            expect(senders.sendAnswer).not.toHaveBeenCalled();
         });
     });
 });

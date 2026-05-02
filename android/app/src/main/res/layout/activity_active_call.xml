@@ -388,6 +388,33 @@
                     android:contentDescription="Toggle speakerphone"
                     android:tint="@color/incoming_call_text" />
             </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <!--
+                    "Add video" — voice→video mid-call upgrade button.
+                    NIP-AC kind 25055. Visible only on a voice call
+                    when status==active and renegotiationState==idle;
+                    hidden by default to avoid layout jump while the
+                    activity binds. ActiveCallActivity flips visibility
+                    in applyKindVisibility / onRenegotiationStateChanged.
+                -->
+                <ImageButton
+                    android:id="@+id/active_call_add_video"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_video"
+                    android:scaleType="center"
+                    android:visibility="gone"
+                    android:contentDescription="Add video"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

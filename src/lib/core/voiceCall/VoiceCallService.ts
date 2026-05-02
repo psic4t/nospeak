@@ -11,22 +11,26 @@ import {
     incrementDuration,
     setEndedAnsweredElsewhere,
     setEndedRejectedElsewhere,
+    setCallKind,
     setCameraOff,
     setCameraFlipping,
     setFacingMode,
-    setSpeakerOn
+    setSpeakerOn,
+    setRenegotiationState
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
 import {
     CALL_OFFER_TIMEOUT_MS,
     ICE_CONNECTION_TIMEOUT_MS,
+    RENEGOTIATION_TIMEOUT_MS,
     AUDIO_CONSTRAINTS,
     VIDEO_MEDIA_CONSTRAINTS,
     NIP_AC_KIND_OFFER,
     NIP_AC_KIND_ANSWER,
     NIP_AC_KIND_ICE,
     NIP_AC_KIND_HANGUP,
-    NIP_AC_KIND_REJECT
+    NIP_AC_KIND_REJECT,
+    NIP_AC_KIND_RENEGOTIATE
 } from './constants';
 
 // Backend-facing public types (NipAcSenders, CallEventCreator,
@@ -40,6 +44,7 @@ import type {
     CallKind,
     LocalCallEventCreator,
     NipAcSenders,
+    RenegotiationState,
     VoiceCallBackend
 } from './types';
 export type {
@@ -48,6 +53,7 @@ export type {
     CallKind,
     LocalCallEventCreator,
     NipAcSenders,
+    RenegotiationState,
     VoiceCallBackend
 };
 
@@ -136,6 +142,34 @@ export class VoiceCallService implements VoiceCallBackend {
 
     /** True after setRemoteDescription resolves on the active session. */
     private sessionRemoteDescriptionSet = false;
+
+    /**
+     * Cached hex pubkey of the remote peer for the active call. Set by
+     * {@link createPeerConnection}. Used during renegotiation glare
+     * resolution to lex-compare against the local user's pubkey.
+     */
+    private currentPeerHex: string | null = null;
+
+    /**
+     * Cached hex pubkey of the local user for the active call. Resolved
+     * lazily on the first send/receive that needs it (initiateCall,
+     * handleRenegotiate). Cleared on cleanup.
+     */
+    private currentSelfHex: string | null = null;
+
+    /**
+     * Active outgoing-renegotiation timeout id. Set by
+     * {@link requestVideoUpgrade}; cleared by the matching answer or by
+     * {@link rollbackOutgoingRenegotiation}.
+     */
+    private renegotiationTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * Track that was attached to the peer connection as part of an
+     * outgoing voice→video upgrade. Captured here so a rollback path
+     * (timeout, glare loss, error) can remove it cleanly.
+     */
+    private renegotiationPendingVideoTrack: MediaStreamTrack | null = null;
 
     public registerNipAcSenders(senders: NipAcSenders): void {
         this.senders = senders;
@@ -248,6 +282,9 @@ export class VoiceCallService implements VoiceCallBackend {
             case NIP_AC_KIND_REJECT:
                 this.handleReject(inner, callId);
                 break;
+            case NIP_AC_KIND_RENEGOTIATE:
+                await this.handleRenegotiate(inner, callId);
+                break;
             default:
                 console.warn('[VoiceCall][Recv] unsupported kind', inner.kind);
         }
@@ -357,15 +394,25 @@ export class VoiceCallService implements VoiceCallBackend {
 
         const { peerNpub, callId, status, duration } = state;
         const wasInitiator = this.isInitiator;
+        // Capture the call's current media kind BEFORE cleanup() resets
+        // it. A call that was upgraded voice→video mid-flight must
+        // emit its history rumor with `call-media-type=video`, not the
+        // pre-cleanup default. cleanup() runs synchronously inline and
+        // would otherwise clobber `this.callKind` to 'voice' before
+        // createCallEvent reads it.
+        const callKindAtHangup = this.callKind;
 
         this.cleanup();
         endCall('hangup');
 
         if (status === 'active') {
             const initiatorNpub = wasInitiator ? undefined : peerNpub;
-            void this.createCallEvent('ended', duration, peerNpub, callId, initiatorNpub);
+            void this.createCallEvent(
+                'ended', duration, peerNpub, callId, initiatorNpub,
+                callKindAtHangup);
         } else if (status === 'outgoing-ringing') {
-            void this.createLocalCallEvent('cancelled', peerNpub, callId);
+            void this.createLocalCallEvent(
+                'cancelled', peerNpub, callId, undefined, callKindAtHangup);
         }
         if (this.senders) {
             void this.tryCall(() => this.senders!.sendHangup(peerNpub, callId));
@@ -489,6 +536,20 @@ export class VoiceCallService implements VoiceCallBackend {
         return !this.localVideoTrack.enabled;
     }
 
+    // ------------------------------------------------------------------
+    //  VoiceCallBackend — call renegotiation (NIP-AC kind 25055)
+    //
+    //  Implementations live further down in this file (handleRenegotiate
+    //  for the receive side, requestVideoUpgrade plus its rollback
+    //  helpers for the send side, and the glare branch shared between
+    //  them). The accessors below expose the renegotiation state to
+    //  UI subscribers; the Svelte store is the source of truth.
+    // ------------------------------------------------------------------
+
+    public getRenegotiationState(): RenegotiationState {
+        return get(voiceCallState).renegotiationState;
+    }
+
     /**
      * Cache the audio and video tracks from the active local stream after
      * every {@code getUserMedia} call. Side-effect free for voice calls
@@ -519,6 +580,7 @@ export class VoiceCallService implements VoiceCallBackend {
         this.iceTrickleEnabled = true;
         this.sessionRemoteDescriptionSet = false;
         this.sessionPendingIce = [];
+        this.currentPeerHex = peerHex.toLowerCase();
 
         // NIP-AC: drain the global buffer for this peer into the session
         // buffer. Candidates accumulated while ringing must not be lost
@@ -647,17 +709,62 @@ export class VoiceCallService implements VoiceCallBackend {
         await this.flushPerSessionIce();
     }
 
+    /**
+     * Inbound NIP-AC kind-25051 Call Answer. Two distinct flows share
+     * this kind:
+     *
+     * 1. **Initial answer** — the callee accepted the original
+     *    kind-25050 offer. Local status is `outgoing-ringing`. We
+     *    `setRemoteDescription`, transition to `connecting`, and let
+     *    ICE establish the call.
+     * 2. **Renegotiation answer** — the callee accepted a kind-25055
+     *    Call Renegotiate we sent during an active call. Local
+     *    `renegotiationState` is `'outgoing'`. We `setRemoteDescription`
+     *    (which completes the in-flight renegotiation) without
+     *    changing the call's status. If the renegotiated SDP added a
+     *    video m-line, we flip {@code callKind} and re-emit
+     *    {@link setActive} so the UI switches to the video layout.
+     *
+     * Other states drop the answer silently. Wrong `call-id` drops
+     * silently.
+     */
     private async handleAnswer(inner: NostrEvent, callId: string): Promise<void> {
         const state = get(voiceCallState);
         if (state.callId !== callId || !this.peerConnection) return;
-
-        this.clearTimeouts();
-        setConnecting();
 
         const remoteDesc = new RTCSessionDescription({
             type: 'answer',
             sdp: inner.content
         });
+
+        // Renegotiation answer path: a previously-sent kind-25055 just
+        // got its kind-25051 reply. Apply without touching the call
+        // status; the underlying call is still `connecting` or `active`.
+        if (state.renegotiationState === 'outgoing') {
+            try {
+                await this.peerConnection.setRemoteDescription(remoteDesc);
+                this.completeOutgoingRenegotiation(inner.content);
+            } catch (err) {
+                console.error(
+                    '[VoiceCall] renegotiation answer apply failed; rolling back',
+                    err
+                );
+                await this.rollbackOutgoingRenegotiation('error');
+            }
+            return;
+        }
+
+        // Initial answer path (the original NIP-AC offer/answer
+        // exchange that establishes the call).
+        if (state.status !== 'outgoing-ringing') {
+            // Stray answer (e.g., we already moved past connecting).
+            // Drop silently.
+            return;
+        }
+
+        this.clearTimeouts();
+        setConnecting();
+
         await this.peerConnection.setRemoteDescription(remoteDesc);
         await this.flushPerSessionIce();
     }
@@ -772,6 +879,358 @@ export class VoiceCallService implements VoiceCallBackend {
         }
     }
 
+    // ------------------------------------------------------------------
+    //  NIP-AC kind 25055 Call Renegotiate (mid-call SDP change)
+    //
+    //  See openspec/changes/add-call-renegotiation/specs/voice-calling/
+    //  spec.md for the authoritative requirements. Summary:
+    //
+    //  - Accepted only in `connecting` or `active` with matching call-id.
+    //  - Glare resolution: if `signalingState === 'have-local-offer'`,
+    //    lowercase-hex pubkey lex compare; HIGHER pubkey wins.
+    //  - Loser performs `setLocalDescription({type: 'rollback'})` and
+    //    accepts the winner's offer normally.
+    //  - Response SHALL be a kind-25051 Call Answer with no `call-type`
+    //    tag (an ordinary answer reusing the existing call-id).
+    //  - On video m-line presence, `callKind` flips to `'video'` and
+    //    `setActive` is re-emitted so the UI re-renders.
+    // ------------------------------------------------------------------
+
+    /**
+     * Inbound NIP-AC kind-25055 Call Renegotiate.
+     */
+    private async handleRenegotiate(inner: NostrEvent, callId: string): Promise<void> {
+        const state = get(voiceCallState);
+        // Status guard — renegotiation has nothing to apply when we're
+        // not in a live media session.
+        if (state.status !== 'connecting' && state.status !== 'active') {
+            console.warn(
+                '[VoiceCall][Recv] handleRenegotiate: dropping; status=' + state.status
+            );
+            return;
+        }
+        if (state.callId !== callId) {
+            console.warn(
+                '[VoiceCall][Recv] handleRenegotiate: callId MISMATCH — dropping'
+            );
+            return;
+        }
+        if (!this.peerConnection) {
+            console.warn(
+                '[VoiceCall][Recv] handleRenegotiate: no peer connection — dropping'
+            );
+            return;
+        }
+
+        // Glare detection: an incoming renegotiate while we already
+        // have a pending outgoing offer. Resolve by hex pubkey lex
+        // compare — higher wins. (Per NIP-AC §"Renegotiation glare
+        // handling".)
+        if (this.peerConnection.signalingState === 'have-local-offer') {
+            const ourHex = this.resolveSelfHexFromInnerEvent(inner);
+            const theirHex = inner.pubkey.toLowerCase();
+            if (ourHex !== null && ourHex > theirHex) {
+                // We win. Drop their offer; keep waiting for their
+                // kind-25051 to ours.
+                console.log(
+                    '[VoiceCall][Glare] WIN — keeping outgoing offer; dropping peer 25055'
+                );
+                setRenegotiationState('glare');
+                return;
+            }
+            // We lose (or pubkeys equal — pathological self-call). Roll
+            // back our pending offer, remove any artifacts we attached
+            // for the upgrade, and accept theirs.
+            console.log(
+                '[VoiceCall][Glare] LOSE — rolling back outgoing offer; accepting peer 25055'
+            );
+            try {
+                await this.peerConnection.setLocalDescription({
+                    type: 'rollback'
+                } as RTCSessionDescriptionInit);
+            } catch (err) {
+                console.error(
+                    '[VoiceCall][Glare] rollback failed; ending call with error',
+                    err
+                );
+                this.cleanup();
+                endCall('error');
+                return;
+            }
+            this.discardOutgoingRenegotiationArtifacts();
+        }
+
+        setRenegotiationState('incoming');
+
+        try {
+            const remoteDesc = new RTCSessionDescription({
+                type: 'offer',
+                sdp: inner.content
+            });
+            await this.peerConnection.setRemoteDescription(remoteDesc);
+
+            // If the peer is adding a video m-line and we have no
+            // local video yet, opportunistically acquire the camera.
+            // Permission denial is non-fatal — we still answer with the
+            // video transceiver in `recvonly` so the peer's renegotiation
+            // completes and we render their video.
+            const sdpHasVideo = /\nm=video[ \t]/i.test(inner.content || '');
+            if (sdpHasVideo && !this.localVideoTrack) {
+                await this.acquireLocalVideoForIncomingUpgrade();
+            }
+
+            const answer = await this.peerConnection.createAnswer();
+            await this.peerConnection.setLocalDescription(answer);
+
+            if (this.senders && answer.sdp && state.peerNpub) {
+                await this.tryCall(() =>
+                    this.senders!.sendAnswer(state.peerNpub!, callId, answer.sdp!)
+                );
+            }
+
+            // If the resulting SDP carries a video m-line, the call's
+            // media kind has changed. Flip the cached field AND the
+            // store's `callKind` so subscribers re-render against the
+            // new kind. The call's status is preserved — renegotiation
+            // does not transition between connecting/active.
+            // Voice→video upgrades are the primary user-facing case.
+            if (this.didCallBecomeVideo(answer.sdp ?? '', inner.content)) {
+                this.callKind = 'video';
+                setCallKind('video');
+                // Default speaker on for video so the user doesn't have
+                // to fiddle while phone-to-ear.
+                setSpeakerOn(true);
+            }
+        } catch (err) {
+            console.error('[VoiceCall][Recv] handleRenegotiate failed', err);
+        } finally {
+            setRenegotiationState('idle');
+        }
+    }
+
+    /**
+     * Acquire camera (best effort) to attach a local video track during
+     * an incoming voice→video upgrade. On permission denial we
+     * intentionally proceed — the peer still gets their kind-25051 and
+     * we render their video; only our self-view is degraded.
+     */
+    private async acquireLocalVideoForIncomingUpgrade(): Promise<void> {
+        if (!this.peerConnection || !this.localStream) return;
+        try {
+            const camStream = await navigator.mediaDevices.getUserMedia({
+                video: VIDEO_MEDIA_CONSTRAINTS.video
+            });
+            const videoTrack = camStream.getVideoTracks()[0];
+            if (!videoTrack) return;
+            this.localStream.addTrack(videoTrack);
+            this.localVideoTrack = videoTrack;
+            this.peerConnection.addTrack(videoTrack, this.localStream);
+        } catch (err) {
+            console.warn(
+                '[VoiceCall] camera permission denied / unavailable during upgrade',
+                err
+            );
+            // No-op: we'll still answer; the peer's video transceiver
+            // will be sendrecv on their side and recvonly on ours.
+        }
+    }
+
+    /**
+     * User-facing entry point. Initiates a voice→video upgrade by
+     * acquiring the camera, attaching a video track to the existing
+     * peer connection, creating a new SDP offer, and publishing it as
+     * kind 25055. Guarded — silently no-ops when the call is not
+     * eligible.
+     */
+    public async requestVideoUpgrade(): Promise<void> {
+        const state = get(voiceCallState);
+        if (state.status !== 'active') {
+            console.warn(
+                '[VoiceCall] requestVideoUpgrade: not active (status=' + state.status + ')'
+            );
+            return;
+        }
+        if (this.callKind !== 'voice') {
+            console.warn('[VoiceCall] requestVideoUpgrade: already video');
+            return;
+        }
+        if (state.renegotiationState !== 'idle') {
+            console.warn(
+                '[VoiceCall] requestVideoUpgrade: already renegotiating ('
+                    + state.renegotiationState + ')'
+            );
+            return;
+        }
+        if (!this.peerConnection || !this.localStream || !state.peerNpub || !state.callId) {
+            console.warn('[VoiceCall] requestVideoUpgrade: missing session state');
+            return;
+        }
+
+        setRenegotiationState('outgoing');
+
+        // Acquire camera.
+        let videoTrack: MediaStreamTrack;
+        try {
+            const camStream = await navigator.mediaDevices.getUserMedia({
+                video: VIDEO_MEDIA_CONSTRAINTS.video
+            });
+            const t = camStream.getVideoTracks()[0];
+            if (!t) throw new Error('getUserMedia returned no video track');
+            videoTrack = t;
+        } catch (err) {
+            console.warn('[VoiceCall] camera permission denied for upgrade', err);
+            setRenegotiationState('idle');
+            return;
+        }
+
+        try {
+            this.localStream.addTrack(videoTrack);
+            this.localVideoTrack = videoTrack;
+            this.peerConnection.addTrack(videoTrack, this.localStream);
+            this.renegotiationPendingVideoTrack = videoTrack;
+
+            const offer = await this.peerConnection.createOffer();
+            await this.peerConnection.setLocalDescription(offer);
+
+            if (this.senders && offer.sdp) {
+                await this.tryCall(() =>
+                    this.senders!.sendRenegotiate(state.peerNpub!, state.callId!, offer.sdp!)
+                );
+            }
+
+            // Arm the timeout. If no kind-25051 arrives within
+            // RENEGOTIATION_TIMEOUT_MS we roll back.
+            this.renegotiationTimeoutId = setTimeout(() => {
+                void this.rollbackOutgoingRenegotiation('timeout');
+            }, RENEGOTIATION_TIMEOUT_MS);
+        } catch (err) {
+            console.error('[VoiceCall] requestVideoUpgrade failed', err);
+            await this.rollbackOutgoingRenegotiation('error');
+        }
+    }
+
+    /**
+     * Successful outgoing renegotiation: the peer's kind-25051 has
+     * been applied. Clear the timeout, flip {@code callKind} if the
+     * SDP indicates video, and reset the renegotiation state.
+     */
+    private completeOutgoingRenegotiation(remoteAnswerSdp: string): void {
+        if (this.renegotiationTimeoutId) {
+            clearTimeout(this.renegotiationTimeoutId);
+            this.renegotiationTimeoutId = null;
+        }
+        // Once the answer has been applied we no longer need to track
+        // the just-attached video track for rollback purposes.
+        this.renegotiationPendingVideoTrack = null;
+
+        // Reflect the new media kind. The peer's answer SDP carries a
+        // video m-line iff they accepted the upgrade (a true decline
+        // would either omit the m-line or mark it inactive). The
+        // call's status is unchanged — renegotiation does not move
+        // between `connecting` and `active`.
+        const peerAcceptedVideo =
+            /\nm=video[ \t]/i.test(remoteAnswerSdp || '') &&
+            !/\na=inactive/i.test(remoteAnswerSdp || '');
+        if (peerAcceptedVideo) {
+            this.callKind = 'video';
+            setCallKind('video');
+            setSpeakerOn(true);
+        } else {
+            // Peer declined the video upgrade; remove the local track
+            // we attached so we're not capturing pointlessly.
+            this.discardOutgoingRenegotiationArtifacts();
+        }
+        setRenegotiationState('idle');
+    }
+
+    /**
+     * Roll back an in-flight outgoing renegotiation. Called on timeout,
+     * glare-loss, error, or peer-decline. Restores the peer connection
+     * to its pre-renegotiation SDP state (best effort) and removes the
+     * video track we attached. Leaves the underlying call active.
+     */
+    private async rollbackOutgoingRenegotiation(reason: string): Promise<void> {
+        if (this.renegotiationTimeoutId) {
+            clearTimeout(this.renegotiationTimeoutId);
+            this.renegotiationTimeoutId = null;
+        }
+        if (
+            this.peerConnection &&
+            this.peerConnection.signalingState === 'have-local-offer'
+        ) {
+            try {
+                await this.peerConnection.setLocalDescription({
+                    type: 'rollback'
+                } as RTCSessionDescriptionInit);
+            } catch (err) {
+                console.warn(
+                    '[VoiceCall] rollbackOutgoingRenegotiation: setLocalDescription(rollback) failed',
+                    err
+                );
+            }
+        }
+        this.discardOutgoingRenegotiationArtifacts();
+        console.log('[VoiceCall] outgoing renegotiation rolled back; reason=' + reason);
+        setRenegotiationState('idle');
+    }
+
+    /**
+     * Tear down the local video track and sender that were attached
+     * during an outgoing voice→video upgrade. No-op when no upgrade
+     * artifacts are present.
+     */
+    private discardOutgoingRenegotiationArtifacts(): void {
+        const track = this.renegotiationPendingVideoTrack;
+        this.renegotiationPendingVideoTrack = null;
+        if (!track) return;
+        try {
+            track.stop();
+        } catch (_) { /* ignore */ }
+        if (this.localStream) {
+            try { this.localStream.removeTrack(track); } catch (_) { /* ignore */ }
+        }
+        if (this.peerConnection) {
+            const sender = this.peerConnection
+                .getSenders()
+                .find(s => s.track === track || (s.track && s.track.kind === 'video'));
+            if (sender) {
+                try { this.peerConnection.removeTrack(sender); } catch (_) { /* ignore */ }
+            }
+        }
+        if (this.localVideoTrack === track) {
+            this.localVideoTrack = null;
+        }
+    }
+
+    /**
+     * Returns true iff the renegotiated SDP exchange transitions the
+     * call from voice-only to video-bearing. Inspects both the
+     * remote-offer and the local-answer (or vice versa) for a video
+     * m-line that is not declared {@code inactive} on the answer side.
+     */
+    private didCallBecomeVideo(answerSdp: string, offerSdp: string): boolean {
+        if (this.callKind === 'video') return false; // already video
+        const offerHasVideo = /\nm=video[ \t]/i.test(offerSdp || '');
+        if (!offerHasVideo) return false;
+        // Treat the answer as accepting video unless explicitly inactive.
+        return !/\na=inactive/i.test(answerSdp || '');
+    }
+
+    /**
+     * Locate the local user's hex pubkey from the receive-side inner
+     * event. Every NIP-AC inner event addressed to us carries our
+     * pubkey in a `['p', <hex>]` tag. Used during glare resolution
+     * (we MUST compare lowercase hex strings deterministically on both
+     * sides).
+     */
+    private resolveSelfHexFromInnerEvent(inner: NostrEvent): string | null {
+        const pTag = inner.tags.find(t => Array.isArray(t) && t[0] === 'p');
+        if (!pTag || typeof pTag[1] !== 'string') return null;
+        const hex = pTag[1].toLowerCase();
+        this.currentSelfHex = hex;
+        return hex;
+    }
+
     private async tryCall(fn: () => Promise<void>): Promise<void> {
         try {
             await fn();
@@ -807,18 +1266,23 @@ export class VoiceCallService implements VoiceCallBackend {
         duration?: number,
         peerNpubOverride?: string,
         callId?: string,
-        initiatorNpub?: string
+        initiatorNpub?: string,
+        callKindOverride?: CallKind
     ): Promise<void> {
         const peerNpub = peerNpubOverride ?? get(voiceCallState).peerNpub;
         if (!peerNpub || !this.createCallEventFn) return;
         try {
             // The active call's kind is captured into the rumor so the
             // call-history UI can distinguish voice vs video pills.
-            // Reads from the cached field; cleanup resets to 'voice'
-            // post-call so subsequent rumors authored from a stale path
-            // don't carry the wrong kind.
+            // Callers MAY pass {@code callKindOverride} when the rumor
+            // is authored AFTER cleanup() has reset {@code this.callKind}
+            // (the standard hangup path captures the kind before cleanup
+            // and forwards it here). When omitted we fall back to the
+            // current cached kind, which is correct for the
+            // "still-in-progress" callsites.
+            const kind = callKindOverride ?? this.callKind;
             await this.createCallEventFn(
-                peerNpub, type, duration, callId, initiatorNpub, this.callKind);
+                peerNpub, type, duration, callId, initiatorNpub, kind);
         } catch (err) {
             console.error('[VoiceCall] Failed to create call event:', err);
         }
@@ -828,12 +1292,14 @@ export class VoiceCallService implements VoiceCallBackend {
         type: AuthoredCallEventType,
         peerNpubOverride: string,
         callId: string,
-        initiatorNpub?: string
+        initiatorNpub?: string,
+        callKindOverride?: CallKind
     ): Promise<void> {
         if (!this.localCreateCallEventFn) return;
         try {
+            const kind = callKindOverride ?? this.callKind;
             await this.localCreateCallEventFn(
-                peerNpubOverride, type, callId, initiatorNpub, this.callKind);
+                peerNpubOverride, type, callId, initiatorNpub, kind);
         } catch (err) {
             console.error('[VoiceCall] Failed to create local call event:', err);
         }
@@ -850,6 +1316,17 @@ export class VoiceCallService implements VoiceCallBackend {
         this.sessionRemoteDescriptionSet = false;
         this.sessionPendingIce = [];
         this.globalIceBuffer.clear();
+        this.currentPeerHex = null;
+        this.currentSelfHex = null;
+
+        // Renegotiation cleanup. The store's renegotiationState is
+        // reset to 'idle' by endCall / resetCall on the store side; we
+        // clear the local timer and pending video-track reference here.
+        if (this.renegotiationTimeoutId) {
+            clearTimeout(this.renegotiationTimeoutId);
+            this.renegotiationTimeoutId = null;
+        }
+        this.renegotiationPendingVideoTrack = null;
 
         if (this.durationIntervalId) {
             clearInterval(this.durationIntervalId);

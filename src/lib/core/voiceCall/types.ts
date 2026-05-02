@@ -4,7 +4,8 @@ import type {
     NIP_AC_KIND_ANSWER,
     NIP_AC_KIND_ICE,
     NIP_AC_KIND_HANGUP,
-    NIP_AC_KIND_REJECT
+    NIP_AC_KIND_REJECT,
+    NIP_AC_KIND_RENEGOTIATE
 } from './constants';
 
 /**
@@ -51,6 +52,12 @@ export type VoiceCallSignal =
           callId: string;
           /** `'busy'` for auto-reject from a non-idle state, otherwise optional reason. */
           reason?: string;
+      }
+    | {
+          kind: typeof NIP_AC_KIND_RENEGOTIATE;
+          callId: string;
+          /** Raw SDP offer string for a mid-call media change. */
+          sdp: string;
       };
 
 export type VoiceCallStatus =
@@ -76,6 +83,24 @@ export type VoiceCallEndReason =
     | 'answered-elsewhere'
     | 'rejected-elsewhere';
 
+/**
+ * State of any in-flight NIP-AC kind-25055 (Call Renegotiate)
+ * exchange. Mid-call SDP changes never alter the call's `status` —
+ * `connecting` / `active` is preserved — but they do alter what the
+ * "Add video" button is allowed to do, and tests need a stable handle
+ * on the lifecycle. Resets to `'idle'` on every call-status reset
+ * and on every successful or failed renegotiation completion.
+ *
+ * - `'idle'`: no renegotiation in flight.
+ * - `'outgoing'`: we sent a kind 25055 and are awaiting the peer's
+ *   matching kind 25051.
+ * - `'incoming'`: we are processing a kind 25055 received from the
+ *   peer (or have just dispatched its kind-25051 answer).
+ * - `'glare'`: transient on the *winning* side of glare resolution
+ *   (we kept our outgoing offer; the loser is rolling back).
+ */
+export type RenegotiationState = 'idle' | 'outgoing' | 'incoming' | 'glare';
+
 export interface VoiceCallState {
     status: VoiceCallStatus;
     peerNpub: string | null;
@@ -95,6 +120,12 @@ export interface VoiceCallState {
     isCameraFlipping: boolean;
     /** Currently active camera facing mode. Meaningful only on video calls. */
     facingMode: 'user' | 'environment';
+    /**
+     * State of any in-flight NIP-AC kind-25055 renegotiation. See
+     * {@link RenegotiationState}. Always `'idle'` while the call's
+     * `status` is `'idle'` or `'ended'`.
+     */
+    renegotiationState: RenegotiationState;
 }
 
 /**
@@ -165,6 +196,13 @@ export interface NipAcSenders {
     ) => Promise<void>;
     sendHangup: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
     sendReject: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
+    /**
+     * Publish a kind-25055 Call Renegotiate. Wire shape mirrors the
+     * Call Offer (kind 25050) helper EXCEPT no `call-type` tag is
+     * attached and no self-wrap is published. The peer responds with
+     * an ordinary kind-25051 Call Answer.
+     */
+    sendRenegotiate: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
 }
 
 /**
@@ -289,4 +327,26 @@ export interface VoiceCallBackend {
      * {@code false} on voice calls.
      */
     isCameraOff(): boolean;
+
+    /**
+     * User-facing entry point for the voice→video mid-call upgrade.
+     * Acquires camera permission, attaches a local video track to the
+     * existing peer connection, creates a new SDP offer, and publishes
+     * it as kind 25055 (Call Renegotiate). The peer responds with a
+     * kind-25051 Call Answer; on receipt the local {@code callKind}
+     * flips to {@code 'video'}.
+     *
+     * Guarded — callers MAY invoke this freely; the implementation
+     * silently no-ops when the call is not eligible
+     * ({@code status !== 'active'}, {@code callKind !== 'voice'}, or
+     * {@code renegotiationState !== 'idle'}).
+     */
+    requestVideoUpgrade(): Promise<void>;
+
+    /**
+     * Returns the current renegotiation state. Used by UI gating and
+     * by tests. Always {@code 'idle'} on a backend that has no active
+     * call.
+     */
+    getRenegotiationState(): RenegotiationState;
 }

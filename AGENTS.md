@@ -39,17 +39,20 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Voice Calling
 
-Voice calls are signaled over Nostr via NIP-AC (kind 21059 ephemeral gift wraps over inner kinds 25050–25054). The two platforms have intentionally different code paths:
+Voice and video calls are signaled over Nostr via NIP-AC (kind 21059 ephemeral gift wraps over inner kinds 25050–25055). The two platforms have intentionally different code paths:
 
-- **Web/PWA**: `VoiceCallServiceWeb` (`src/lib/core/voiceCall/VoiceCallService.ts`) owns the `RTCPeerConnection`, captures audio via `getUserMedia`, sends NIP-AC events through `Messaging.ts`'s typed senders. UI is `ActiveCallOverlay.svelte`.
+- **Web/PWA**: `VoiceCallServiceWeb` (`src/lib/core/voiceCall/VoiceCallService.ts`) owns the `RTCPeerConnection`, captures audio (and optionally video) via `getUserMedia`, sends NIP-AC events through `Messaging.ts`'s typed senders. UI is `ActiveCallOverlay.svelte`.
 - **Android native**: `VoiceCallServiceNative` (`src/lib/core/voiceCall/VoiceCallServiceNative.ts`) is a thin proxy to the `AndroidVoiceCall` Capacitor plugin. The actual peer connection lives in `NativeVoiceCallManager.java`, hosted by `VoiceCallForegroundService.java` (FGS type `phoneCall`). UI is `IncomingCallActivity` (lockscreen ringer) and `ActiveCallActivity` (in-call surface). NIP-AC events are dispatched in `NativeBackgroundMessagingService.java` directly into the manager; `Messaging.ts` skips them on Android.
 
 The factory in `src/lib/core/voiceCall/factory.ts` returns the right backend based on `Capacitor.getPlatform()`. UI components subscribe only to the `voiceCallState` Svelte store and never touch a backend directly.
+
+**NIP-AC inner kinds**: 25050 Call Offer, 25051 Call Answer, 25052 ICE Candidate, 25053 Call Hangup, 25054 Call Reject, **25055 Call Renegotiate** (mid-call SDP changes — voice→video upgrade is the only outbound flow today). Renegotiation logic in `VoiceCallService.handleRenegotiate` / `requestVideoUpgrade` (web) and `NativeVoiceCallManager.handleRemoteRenegotiate` / `requestVideoUpgrade` (Android). Glare resolves by lowercase-hex pubkey lex compare — higher pubkey wins, loser uses `setLocalDescription({type:'rollback'})` and accepts the winner's offer.
 
 When changing voice-call behavior:
 - **Always update both** `VoiceCallService.ts` (web) and the Android stack if the change is cross-platform.
 - **NIP-AC wire format** changes must update both the JS senders in `Messaging.ts` AND the Java senders in `NativeBackgroundMessagingService.sendVoiceCall*`. The fixture at `tests/fixtures/nip-ac-wire/inner-events.json` exercises both via `wireParity.test.ts` (JS) and `NativeNipAcSenderTest.java` (Java).
 - **State-machine entry points** in `NativeVoiceCallManager` (`initiateCall` / `acceptIncomingCall` / `notifyIncomingRinging`) must call `runIdleResetIfPendingOrEnded()` first so back-to-back calls work.
+- **Renegotiation state** is mirrored in the `voiceCallState.renegotiationState` Svelte store (`'idle' | 'outgoing' | 'incoming' | 'glare'`). The Android side pushes via the `renegotiationStateChanged` plugin event. Mid-call media-kind changes use the dedicated `callKindChanged` plugin event so the `callStateChanged` event isn't overloaded.
 - **OpenSpec**: voice-calling capability lives at `openspec/specs/voice-calling/spec.md`. Material changes to the call lifecycle, NIP-AC wire format, or call-history kinds need a new OpenSpec change proposal.
 
 ## Landing the Plane (Session Completion)

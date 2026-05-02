@@ -29,6 +29,7 @@ import {
     NIP_AC_KIND_ICE,
     NIP_AC_KIND_HANGUP,
     NIP_AC_KIND_REJECT,
+    NIP_AC_KIND_RENEGOTIATE,
     NIP_AC_STALENESS_SECONDS,
     NIP_AC_PROCESSED_ID_CAPACITY
 } from '$lib/core/voiceCall/constants';
@@ -142,7 +143,7 @@ export type AuthoredCallEventType =
      // After the NIP-AC migration, VoiceCallService receives typed senders
      // (one per inner-event kind) instead of a single JSON-serialising
      // sendSignal callback.
-     import('$lib/core/voiceCall/VoiceCallService').then(({ voiceCallService }) => {
+      import('$lib/core/voiceCall/VoiceCallService').then(({ voiceCallService }) => {
          voiceCallService.registerNipAcSenders({
              sendOffer: (npub, callId, sdp, opts) =>
                  this.sendCallOffer(npub, callId, sdp, opts),
@@ -153,7 +154,9 @@ export type AuthoredCallEventType =
              sendHangup: (npub, callId, reason) =>
                  this.sendCallHangup(npub, callId, reason),
              sendReject: (npub, callId, reason) =>
-                 this.sendCallReject(npub, callId, reason)
+                 this.sendCallReject(npub, callId, reason),
+             sendRenegotiate: (npub, callId, sdp) =>
+                 this.sendCallRenegotiate(npub, callId, sdp)
          });
          voiceCallService.registerCallEventCreator(
              (recipientNpub, type, duration, callId, initiatorPubkeyHex, callMediaType) =>
@@ -413,15 +416,18 @@ export type AuthoredCallEventType =
         if (evicted) this.nipAcProcessedIdSet.delete(evicted);
       }
 
-      // Validate kind range. NIP-AC defines 25050-25055; this scope
-      // supports 25050-25054 (no renegotiation). Drop unknown kinds.
+      // Validate kind range. NIP-AC defines 25050-25055 inclusive. Drop
+      // unknown kinds. The renegotiation kind 25055 was added by the
+      // `add-call-renegotiation` change to support mid-call SDP changes
+      // (e.g., voice→video upgrade).
       const kind = inner.kind;
       if (
         kind !== NIP_AC_KIND_OFFER &&
         kind !== NIP_AC_KIND_ANSWER &&
         kind !== NIP_AC_KIND_ICE &&
         kind !== NIP_AC_KIND_HANGUP &&
-        kind !== NIP_AC_KIND_REJECT
+        kind !== NIP_AC_KIND_REJECT &&
+        kind !== NIP_AC_KIND_RENEGOTIATE
       ) {
         if (this.debug) {
           console.log('[NIP-AC] drop unsupported inner kind', { kind });
@@ -433,12 +439,16 @@ export type AuthoredCallEventType =
       const isSelf = inner.pubkey === myPubkey;
 
       // Self-event filter (NIP-AC §"Self-Event Filtering"):
-      //   - Self ICE / Hangup → always ignore
+      //   - Self ICE / Hangup / Renegotiate → always ignore
       //   - Self Answer / Reject → ignored unless local status is
       //     'incoming-ringing' AND call-id matches; in that case
       //     transition to answered-elsewhere / rejected-elsewhere.
       if (isSelf) {
-        if (kind === NIP_AC_KIND_ICE || kind === NIP_AC_KIND_HANGUP) {
+        if (
+          kind === NIP_AC_KIND_ICE ||
+          kind === NIP_AC_KIND_HANGUP ||
+          kind === NIP_AC_KIND_RENEGOTIATE
+        ) {
           return;
         }
         if (kind === NIP_AC_KIND_ANSWER || kind === NIP_AC_KIND_REJECT) {
@@ -486,10 +496,10 @@ export type AuthoredCallEventType =
 
       // On Android, the native NativeBackgroundMessagingService is the
       // authoritative dispatcher for ALL NIP-AC inner kinds (offer /
-      // answer / ICE / hangup / reject). Skip the JS dispatch here so
-      // we don't double-handle (which would inject duplicate ICE
-      // candidates into the peer connection and corrupt the state
-      // machine), and so the JS state machine doesn't enter
+      // answer / ICE / hangup / reject / renegotiate). Skip the JS
+      // dispatch here so we don't double-handle (which would inject
+      // duplicate ICE candidates into the peer connection and corrupt
+      // the state machine), and so the JS state machine doesn't enter
       // incoming-ringing with no overlay to clear it.
       if (
         isAndroidNative() &&
@@ -497,7 +507,8 @@ export type AuthoredCallEventType =
           kind === NIP_AC_KIND_ANSWER ||
           kind === NIP_AC_KIND_ICE ||
           kind === NIP_AC_KIND_HANGUP ||
-          kind === NIP_AC_KIND_REJECT)
+          kind === NIP_AC_KIND_REJECT ||
+          kind === NIP_AC_KIND_RENEGOTIATE)
       ) {
         if (this.debug) {
           console.log(
@@ -2556,6 +2567,48 @@ export type AuthoredCallEventType =
       recipientPubkey,
       senderPubkey,
       selfWrap: true
+    });
+  }
+
+  /**
+   * NIP-AC kind 25055 Call Renegotiate. Wire shape mirrors
+   * {@link sendCallOffer} EXCEPT no `call-type` tag is emitted (the
+   * original kind-25050 offer owns the call type) and there is NO
+   * self-wrap. The peer responds with an ordinary kind-25051 Call
+   * Answer carrying the same `call-id`.
+   *
+   * Used by the voice→video mid-call upgrade flow and by any future
+   * mid-call SDP changes (codec swap, m-line add/remove). Callers MUST
+   * pass the call's existing `call-id`; renegotiations never mint a
+   * new call-id.
+   */
+  public async sendCallRenegotiate(
+    recipientNpub: string,
+    callId: string,
+    sdp: string
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+    const senderPubkey = await s.getPublicKey();
+    const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const inner = await this.buildSignedNipAcInner({
+      s,
+      senderPubkey,
+      recipientPubkey,
+      kind: NIP_AC_KIND_RENEGOTIATE,
+      content: sdp,
+      callId,
+      altText: 'WebRTC call renegotiation'
+      // Deliberately no `extraTags`: per the NIP-AC spec the
+      // renegotiation event MUST NOT carry a `call-type` tag.
+    });
+    await this.publishNipAcSignal({
+      signedInner: inner,
+      recipientNpub,
+      recipientPubkey,
+      senderPubkey,
+      selfWrap: false
     });
   }
 

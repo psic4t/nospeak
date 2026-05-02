@@ -31,6 +31,22 @@ export const NIP_AC_KIND_ANSWER = 25051;
 export const NIP_AC_KIND_ICE = 25052;
 export const NIP_AC_KIND_HANGUP = 25053;
 export const NIP_AC_KIND_REJECT = 25054;
+/**
+ * NIP-AC kind 25055 — Call Renegotiate. Sent during an active call to
+ * change media (e.g., voice→video upgrade). Wire shape mirrors a kind
+ * 25050 Call Offer EXCEPT it carries no `call-type` tag (the original
+ * 25050 already established the call type) and is NOT self-wrapped.
+ * The recipient responds with an ordinary kind 25051 Call Answer.
+ */
+export const NIP_AC_KIND_RENEGOTIATE = 25055;
+
+/**
+ * Outgoing-renegotiation timeout. If we publish a kind-25055 and the
+ * matching kind-25051 answer does not arrive within this many
+ * milliseconds, we roll back the local offer, remove the just-attached
+ * media artifacts, and resume the underlying call as it was.
+ */
+export const RENEGOTIATION_TIMEOUT_MS = 30_000;
 
 /**
  * Receive-path staleness window for NIP-AC inner signaling events.

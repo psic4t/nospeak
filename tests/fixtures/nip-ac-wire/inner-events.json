@@ -84,6 +84,14 @@
             "altText": "WebRTC call rejection",
             "extraTags": [],
             "expectedId": "5fefbade44ab1bb15c87a44754c4cbda4ae22f6cdd5ff03dba48ad325dc8e6da"
+        },
+        {
+            "name": "renegotiate (voice -> video upgrade)",
+            "kind": 25055,
+            "content": "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n",
+            "altText": "WebRTC call renegotiation",
+            "extraTags": [],
+            "expectedId": "48e33d9eb9f5323e91c5cbedfe35087cfbbb9e6ef404c5fd0e47cc3be55e6d2a"
         }
     ]
 }

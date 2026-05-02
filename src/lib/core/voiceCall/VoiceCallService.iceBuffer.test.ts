@@ -133,7 +133,8 @@ describe('NIP-AC ICE candidate buffering', () => {
             sendAnswer: vi.fn().mockResolvedValue(undefined),
             sendIceCandidate: vi.fn().mockResolvedValue(undefined),
             sendHangup: vi.fn().mockResolvedValue(undefined),
-            sendReject: vi.fn().mockResolvedValue(undefined)
+            sendReject: vi.fn().mockResolvedValue(undefined),
+            sendRenegotiate: vi.fn().mockResolvedValue(undefined)
         });
     });
 

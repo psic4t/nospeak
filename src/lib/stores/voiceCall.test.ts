@@ -7,6 +7,8 @@ import {
     setConnecting,
     setActive,
     endCall,
+    setEndedAnsweredElsewhere,
+    setEndedRejectedElsewhere,
     toggleMute,
     toggleSpeaker,
     incrementDuration,
@@ -15,7 +17,8 @@ import {
     setCameraOff,
     setCameraFlipping,
     setFacingMode,
-    setSpeakerOn
+    setSpeakerOn,
+    setRenegotiationState
 } from './voiceCall';
 
 describe('voiceCall store', () => {
@@ -36,6 +39,7 @@ describe('voiceCall store', () => {
         expect(state.isCameraOff).toBe(false);
         expect(state.isCameraFlipping).toBe(false);
         expect(state.facingMode).toBe('user');
+        expect(state.renegotiationState).toBe('idle');
     });
 
     it('should transition to outgoing-ringing', () => {
@@ -197,6 +201,59 @@ describe('voiceCall store', () => {
             expect(get(voiceCallState).isSpeakerOn).toBe(true);
             setSpeakerOn(false);
             expect(get(voiceCallState).isSpeakerOn).toBe(false);
+        });
+    });
+
+    describe('renegotiationState', () => {
+        it('cycles through outgoing, incoming, glare, idle', () => {
+            setRenegotiationState('outgoing');
+            expect(get(voiceCallState).renegotiationState).toBe('outgoing');
+            setRenegotiationState('incoming');
+            expect(get(voiceCallState).renegotiationState).toBe('incoming');
+            setRenegotiationState('glare');
+            expect(get(voiceCallState).renegotiationState).toBe('glare');
+            setRenegotiationState('idle');
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+        });
+
+        it('resetCall clears renegotiationState back to idle', () => {
+            setOutgoingRinging('npub1abc', 'call-1');
+            setRenegotiationState('outgoing');
+            resetCall();
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+        });
+
+        it('endCall resets renegotiationState to idle', () => {
+            setOutgoingRinging('npub1abc', 'call-1');
+            setRenegotiationState('outgoing');
+            endCall('hangup');
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+        });
+
+        it('setEndedAnsweredElsewhere resets renegotiationState to idle', () => {
+            setIncomingRinging('npub1abc', 'call-1');
+            setRenegotiationState('incoming');
+            setEndedAnsweredElsewhere();
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+        });
+
+        it('setEndedRejectedElsewhere resets renegotiationState to idle', () => {
+            setIncomingRinging('npub1abc', 'call-1');
+            setRenegotiationState('incoming');
+            setEndedRejectedElsewhere();
+            expect(get(voiceCallState).renegotiationState).toBe('idle');
+        });
+
+        it('setRenegotiationState does not perturb other fields', () => {
+            setOutgoingRinging('npub1abc', 'call-1', 'video');
+            setConnecting();
+            setRenegotiationState('outgoing');
+            const state = get(voiceCallState);
+            expect(state.status).toBe('connecting');
+            expect(state.peerNpub).toBe('npub1abc');
+            expect(state.callId).toBe('call-1');
+            expect(state.callKind).toBe('video');
+            expect(state.renegotiationState).toBe('outgoing');
         });
     });
 });

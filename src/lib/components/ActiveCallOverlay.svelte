@@ -144,6 +144,33 @@
         await voiceCallService.flipCamera();
     }
 
+    async function handleRequestVideoUpgrade() {
+        await voiceCallService.requestVideoUpgrade();
+    }
+
+    /**
+     * Visibility predicate for the "Add video" button. The button is
+     * shown only on an active voice call when no other renegotiation
+     * is in flight. After a successful upgrade `callKind` flips to
+     * `'video'` and the predicate returns false (the user-facing
+     * button collapses; the video layout takes over).
+     */
+    const canAddVideo = $derived(
+        $voiceCallState.callKind === 'voice' &&
+        $voiceCallState.status === 'active' &&
+        $voiceCallState.renegotiationState === 'idle'
+    );
+
+    /**
+     * True while we are mid-upgrade. UI uses this to disable the button
+     * and show the in-flight label without removing it (which would
+     * cause layout jump).
+     */
+    const isUpgradingToVideo = $derived(
+        $voiceCallState.callKind === 'voice' &&
+        $voiceCallState.renegotiationState === 'outgoing'
+    );
+
     onDestroy(() => {
         stopRingtone();
         if (endResetTimeout) clearTimeout(endResetTimeout);
@@ -474,6 +501,42 @@
                             </div>
                             <span class="text-white md:text-[rgb(var(--color-text-rgb))] text-xs">{$t('voiceCall.speaker')}</span>
                         </button>
+
+                        <!--
+                            Add Video — voice→video mid-call upgrade
+                            (NIP-AC kind 25055). Visible only on an
+                            active voice call when no other renegotiation
+                            is in flight. Activating the button calls
+                            requestVideoUpgrade, which acquires the
+                            camera, attaches a video track to the
+                            existing peer connection, and publishes a
+                            kind-25055. On success the parent layout
+                            switches to the video chrome (callKind flips
+                            to video).
+                        -->
+                        {#if canAddVideo || isUpgradingToVideo}
+                            <button
+                                onclick={handleRequestVideoUpgrade}
+                                disabled={!canAddVideo || isUpgradingToVideo}
+                                class="flex flex-col items-center gap-2 disabled:opacity-50"
+                                aria-label={isUpgradingToVideo
+                                    ? $t('voiceCall.addVideoUpgrading')
+                                    : $t('voiceCall.addVideo')}
+                            >
+                                <div class="w-14 h-14 rounded-full flex items-center justify-center bg-gray-700 md:bg-[rgb(var(--color-surface0-rgb))] md:dark:bg-[rgb(var(--color-surface1-rgb))]">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-white md:text-[rgb(var(--color-text-rgb))]">
+                                        <!-- Camcorder + small "+" badge in lower-right -->
+                                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                                    </svg>
+                                </div>
+                                <span class="text-white md:text-[rgb(var(--color-text-rgb))] text-xs">
+                                    {isUpgradingToVideo
+                                        ? $t('voiceCall.addVideoUpgrading')
+                                        : $t('voiceCall.addVideo')}
+                                </span>
+                            </button>
+                        {/if}
                     </div>
                 {/if}
             </div>

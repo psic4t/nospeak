@@ -93,6 +93,13 @@ public class ActiveCallActivity extends Activity {
     private ImageButton speakerButton;
     private ImageButton cameraOffButton;
     private ImageButton cameraFlipButton;
+    /**
+     * "Add video" button on the voice control row. Visible only when
+     * the call is voice + active + renegotiationState=idle. Tap fires
+     * {@link NativeVoiceCallManager#requestVideoUpgrade()} (NIP-AC
+     * kind 25055 voice→video upgrade).
+     */
+    private ImageButton addVideoButton;
     /** Video-chrome buttons (live in active_call_video_controls). */
     private ImageButton muteButtonVideo;
     private ImageButton hangupButtonVideo;
@@ -169,6 +176,12 @@ public class ActiveCallActivity extends Activity {
      */
     private NativeVoiceCallManager.CallStatus latestStatus =
         NativeVoiceCallManager.CallStatus.IDLE;
+    /**
+     * Latest in-flight renegotiation state. Drives "Add video" button
+     * visibility / enabled state.
+     */
+    private NativeVoiceCallManager.RenegotiationState latestRenegotiationState =
+        NativeVoiceCallManager.RenegotiationState.IDLE;
     private final Runnable hideChromeRunnable = this::hideChrome;
     private AccessibilityManager.TouchExplorationStateChangeListener a11yListener;
 
@@ -217,6 +230,12 @@ public class ActiveCallActivity extends Activity {
             @Override
             public void onCameraFlippingChanged(boolean flipping) {
                 mainHandler.post(() -> applyCameraFlipping(flipping));
+            }
+
+            @Override
+            public void onRenegotiationStateChanged(
+                    NativeVoiceCallManager.RenegotiationState state) {
+                mainHandler.post(() -> applyRenegotiationState(state));
             }
         };
 
@@ -296,6 +315,7 @@ public class ActiveCallActivity extends Activity {
         speakerButton = findViewById(R.id.active_call_speaker);
         cameraOffButton = findViewById(R.id.active_call_camera_off);
         cameraFlipButton = findViewById(R.id.active_call_camera_flip);
+        addVideoButton = findViewById(R.id.active_call_add_video);
         muteButtonVideo = findViewById(R.id.active_call_mute_video);
         hangupButtonVideo = findViewById(R.id.active_call_hangup_video);
         speakerButtonVideo = findViewById(R.id.active_call_speaker_video);
@@ -543,6 +563,10 @@ public class ActiveCallActivity extends Activity {
             mainHandler.removeCallbacks(hideChromeRunnable);
             chromeVisible = true;
         }
+        // The "Add video" button only exists on voice. Refresh after
+        // a kind change (notably a successful voice→video upgrade
+        // re-enters this method to hide it).
+        refreshAddVideoButton();
     }
 
     /**
@@ -715,12 +739,19 @@ public class ActiveCallActivity extends Activity {
                 if (mgr != null) mgr.flipCamera();
             }
         };
+        View.OnClickListener addVideoClick = new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+                if (mgr != null) mgr.requestVideoUpgrade();
+            }
+        };
         // Voice-mode buttons (centered overlay).
         if (muteButton != null) muteButton.setOnClickListener(muteClick);
         if (hangupButton != null) hangupButton.setOnClickListener(hangupClick);
         if (speakerButton != null) speakerButton.setOnClickListener(speakerClick);
         if (cameraOffButton != null) cameraOffButton.setOnClickListener(cameraOffClick);
         if (cameraFlipButton != null) cameraFlipButton.setOnClickListener(cameraFlipClick);
+        if (addVideoButton != null) addVideoButton.setOnClickListener(addVideoClick);
         // Video-mode buttons (bottom scrim row). These mirror the
         // voice-mode buttons exactly — same actions, same listeners
         // — but live in the scrim-backed video controls container so
@@ -814,6 +845,17 @@ public class ActiveCallActivity extends Activity {
                 + " (track=" + (track != null) + " renderer=" + (localVideoRenderer != null) + ")");
             return;
         }
+        // A local video track arriving while the activity thinks it's
+        // on a voice call means a NIP-AC kind-25055 voice→video
+        // upgrade just succeeded. Promote the activity's kind state,
+        // re-apply visibility (which initializes renderers and shows
+        // the video chrome), and continue with the addSink below.
+        if (!isVideoCall) {
+            Log.i(TAG, "local video track arrived during voice call — "
+                + "promoting activity to video (mid-call upgrade)");
+            isVideoCall = true;
+            applyKindVisibility();
+        }
         if (!renderersInitialized) {
             NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
             if (mgr != null) initRenderersIfNeeded(mgr);
@@ -831,6 +873,15 @@ public class ActiveCallActivity extends Activity {
             Log.d(TAG, "attachRemoteVideoSink: skip"
                 + " (track=" + (track != null) + " renderer=" + (remoteVideoRenderer != null) + ")");
             return;
+        }
+        // Same mid-call upgrade promotion as attachLocalVideoSink — a
+        // peer-initiated voice→video upgrade delivers the remote
+        // video track first.
+        if (!isVideoCall) {
+            Log.i(TAG, "remote video track arrived during voice call — "
+                + "promoting activity to video (mid-call upgrade)");
+            isVideoCall = true;
+            applyKindVisibility();
         }
         if (!renderersInitialized) {
             NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
@@ -908,6 +959,54 @@ public class ActiveCallActivity extends Activity {
         }
     }
 
+    /**
+     * Update {@link #latestRenegotiationState} and refresh the "Add
+     * video" button visibility / enabled state. Idempotent.
+     */
+    private void applyRenegotiationState(
+            NativeVoiceCallManager.RenegotiationState state) {
+        if (state == null) {
+            latestRenegotiationState =
+                NativeVoiceCallManager.RenegotiationState.IDLE;
+        } else {
+            latestRenegotiationState = state;
+        }
+        refreshAddVideoButton();
+    }
+
+    /**
+     * Show the "Add video" button only when the call is voice +
+     * active + renegotiationState=idle. While a renegotiation is in
+     * flight we keep the button visible but dim and disabled, matching
+     * the web's "Adding video…" affordance — this avoids a layout
+     * jump when the user taps and gives them visual confirmation that
+     * the tap registered.
+     */
+    private void refreshAddVideoButton() {
+        if (addVideoButton == null) return;
+        boolean isActiveVoice =
+            !isVideoCall
+                && latestStatus == NativeVoiceCallManager.CallStatus.ACTIVE;
+        boolean idle =
+            latestRenegotiationState
+                == NativeVoiceCallManager.RenegotiationState.IDLE;
+        if (!isActiveVoice) {
+            addVideoButton.setVisibility(View.GONE);
+            return;
+        }
+        if (idle) {
+            addVideoButton.setVisibility(View.VISIBLE);
+            addVideoButton.setEnabled(true);
+            addVideoButton.setAlpha(1.0f);
+        } else {
+            // Mid-upgrade: keep visible to avoid jump but make the
+            // disabled state obvious.
+            addVideoButton.setVisibility(View.VISIBLE);
+            addVideoButton.setEnabled(false);
+            addVideoButton.setAlpha(0.5f);
+        }
+    }
+
     private void applyStatus(NativeVoiceCallManager.CallStatus status, String reason) {
         if (status == null) return;
         Log.d(TAG, "applyStatus: " + status + " reason=" + reason);
@@ -939,6 +1038,9 @@ public class ActiveCallActivity extends Activity {
             // ended state, matching the JS overlay's CALL_END_DISPLAY_MS.
             mainHandler.postDelayed(this::finishAndRemoveTask, 1500L);
         }
+        // The "Add video" button visibility depends on status; refresh
+        // whenever status changes.
+        refreshAddVideoButton();
     }
 
     private void updateDuration(int seconds) {

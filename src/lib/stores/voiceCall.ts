@@ -1,5 +1,10 @@
 import { writable } from 'svelte/store';
-import type { VoiceCallState, VoiceCallEndReason, CallKind } from '$lib/core/voiceCall/types';
+import type {
+    VoiceCallState,
+    VoiceCallEndReason,
+    CallKind,
+    RenegotiationState
+} from '$lib/core/voiceCall/types';
 
 const INITIAL_STATE: VoiceCallState = {
     status: 'idle',
@@ -12,7 +17,8 @@ const INITIAL_STATE: VoiceCallState = {
     callKind: 'voice',
     isCameraOff: false,
     isCameraFlipping: false,
-    facingMode: 'user'
+    facingMode: 'user',
+    renegotiationState: 'idle'
 };
 
 export const voiceCallState = writable<VoiceCallState>({ ...INITIAL_STATE });
@@ -54,7 +60,14 @@ export function setActive(): void {
 }
 
 export function endCall(reason: VoiceCallEndReason): void {
-    voiceCallState.update(s => ({ ...s, status: 'ended', endReason: reason }));
+    voiceCallState.update(s => ({
+        ...s,
+        status: 'ended',
+        endReason: reason,
+        // Per spec: any in-flight renegotiation is implicitly cancelled
+        // when the underlying call ends.
+        renegotiationState: 'idle'
+    }));
 }
 
 /**
@@ -66,7 +79,8 @@ export function setEndedAnsweredElsewhere(): void {
     voiceCallState.update(s => ({
         ...s,
         status: 'ended',
-        endReason: 'answered-elsewhere'
+        endReason: 'answered-elsewhere',
+        renegotiationState: 'idle'
     }));
 }
 
@@ -78,7 +92,8 @@ export function setEndedRejectedElsewhere(): void {
     voiceCallState.update(s => ({
         ...s,
         status: 'ended',
-        endReason: 'rejected-elsewhere'
+        endReason: 'rejected-elsewhere',
+        renegotiationState: 'idle'
     }));
 }
 
@@ -137,4 +152,13 @@ export function setFacingMode(mode: 'user' | 'environment'): void {
  */
 export function setSpeakerOn(on: boolean): void {
     voiceCallState.update(s => ({ ...s, isSpeakerOn: on }));
+}
+
+/**
+ * Set the in-flight NIP-AC kind-25055 renegotiation state. Drives
+ * "Add video" button gating and is observable by tests. The store
+ * does not enforce transitions — backends are the source of truth.
+ */
+export function setRenegotiationState(state: RenegotiationState): void {
+    voiceCallState.update(s => ({ ...s, renegotiationState: state }));
 }

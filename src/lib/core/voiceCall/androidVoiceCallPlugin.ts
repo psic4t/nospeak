@@ -161,6 +161,16 @@ export interface AndroidVoiceCallPluginShape {
     flipCamera(): Promise<void>;
 
     /**
+     * NIP-AC kind-25055 voice→video mid-call upgrade. Idempotent and
+     * guarded — the native side silently no-ops when the call is not
+     * eligible (status != active, callKind already video, or another
+     * renegotiation is already in flight). On success the call's
+     * `callKind` flips to `'video'` and a {@code callStateChanged}
+     * event is re-emitted with the upgraded kind.
+     */
+    requestVideoUpgrade(): Promise<void>;
+
+    /**
      * Phase 2 of add-native-voice-calls: emit the
      * {@code nospeak.ACTION_UNLOCK_COMPLETE} local broadcast that the
      * active foreground service listens for. Called by the JS unlock
@@ -221,6 +231,32 @@ export interface AndroidVoiceCallPluginShape {
     addListener(
         eventName: 'facingModeChanged',
         cb: (data: { callId: string; facing: 'user' | 'environment' }) => void
+    ): Promise<PluginListenerHandle>;
+
+    /**
+     * Mirror the in-flight NIP-AC kind-25055 renegotiation state. The
+     * JS layer copies this value into the
+     * {@code voiceCallState.renegotiationState} store so UI predicates
+     * such as the "Add video" button visibility can subscribe without
+     * platform branching.
+     */
+    addListener(
+        eventName: 'renegotiationStateChanged',
+        cb: (data: {
+            callId: string;
+            state: 'idle' | 'outgoing' | 'incoming' | 'glare';
+        }) => void
+    ): Promise<PluginListenerHandle>;
+
+    /**
+     * Mid-call media-kind change (e.g., voice→video upgrade after a
+     * successful kind-25055 renegotiation). The JS layer mirrors the
+     * value into {@code voiceCallState.callKind} so the active-call
+     * UI re-renders against the new kind.
+     */
+    addListener(
+        eventName: 'callKindChanged',
+        cb: (data: { callId: string; kind: 'voice' | 'video' }) => void
     ): Promise<PluginListenerHandle>;
 }
 

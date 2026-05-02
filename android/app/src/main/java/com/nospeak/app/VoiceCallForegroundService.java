@@ -543,6 +543,12 @@ public class VoiceCallForegroundService extends Service {
                               String candidate, String sdpMid, Integer sdpMLineIndex);
         void sendVoiceCallHangup(String recipientHex, String callId, String reason);
         void sendVoiceCallReject(String recipientHex, String callId);
+        /**
+         * NIP-AC kind 25055 Call Renegotiate. Mid-call SDP change. No
+         * {@code call-type} tag, no self-wrap; the receiving peer
+         * responds with an ordinary kind-25051 answer.
+         */
+        void sendVoiceCallRenegotiate(String recipientHex, String callId, String sdp);
         void sendVoiceCallHistoryRumor(
             String recipientHex,
             String type,
@@ -596,6 +602,11 @@ public class VoiceCallForegroundService extends Service {
             @Override
             public void sendReject(String recipientHex, String callId) {
                 sender.sendVoiceCallReject(recipientHex, callId);
+            }
+
+            @Override
+            public void sendRenegotiate(String recipientHex, String callId, String sdp) {
+                sender.sendVoiceCallRenegotiate(recipientHex, callId, sdp);
             }
 
             @Override
@@ -672,6 +683,12 @@ public class VoiceCallForegroundService extends Service {
             public void sendVoiceCallReject(String recipientHex, String callId) {
                 runOnMessagingExecutor(svc ->
                     svc.sendVoiceCallReject(recipientHex, callId));
+            }
+            @Override
+            public void sendVoiceCallRenegotiate(
+                    String recipientHex, String callId, String sdp) {
+                runOnMessagingExecutor(svc ->
+                    svc.sendVoiceCallRenegotiate(recipientHex, callId, sdp));
             }
             @Override
             public void sendVoiceCallHistoryRumor(

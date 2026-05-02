@@ -103,6 +103,18 @@ public class NativeBackgroundMessagingService extends Service {
     }
 
     /**
+     * Returns the lowercase hex pubkey of the currently logged-in
+     * user, or {@code null} when the service is not running or has
+     * not yet received its bootstrap intent. Used by
+     * {@link NativeVoiceCallManager} for renegotiation glare
+     * resolution (lex-compare against the peer's pubkey).
+     */
+    public static String getCurrentPubkeyHex() {
+        NativeBackgroundMessagingService svc = sInstance;
+        return svc != null ? svc.currentPubkeyHex : null;
+    }
+
+    /**
      * @return current signing mode ({@code "amber"} / {@code "nsec"})
      *         or {@code null} if the service is not running. Used by
      *         the native voice-call accept path to detect PIN-locked
@@ -3302,11 +3314,12 @@ public class NativeBackgroundMessagingService extends Service {
         // ===============================================================
         // Native call manager dispatch path. When a
         // NativeVoiceCallManager is hosting an active session, route
-        // inbound NIP-AC inner kinds 25051/25052/25053/25054 directly
-        // to the manager. Hangup (25053) and Reject (25054) also keep
-        // their existing FSI-dismiss side effect via
+        // inbound NIP-AC inner kinds 25051/25052/25053/25054/25055
+        // directly to the manager. Hangup (25053) and Reject (25054)
+        // also keep their existing FSI-dismiss side effect via
         // handleRemoteCallCancellation; the manager dispatch is
-        // additive.
+        // additive. Renegotiate (25055) is dispatched only when a
+        // session exists — it has no use otherwise.
         // ===============================================================
         NativeVoiceCallManager nativeMgr = VoiceCallForegroundService.getNativeManager();
         if (nativeMgr != null) {
@@ -3361,6 +3374,11 @@ public class NativeBackgroundMessagingService extends Service {
                     handleRemoteCallCancellation(callId);
                     return;
                 }
+                case 25055: { // renegotiate (mid-call SDP change)
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.handleRemoteRenegotiate(fCallId, fInnerContent));
+                    return;
+                }
                 default:
                     // 25050 (offer) falls through to the legacy
                     // notification path below — the offer is the only
@@ -3380,7 +3398,8 @@ public class NativeBackgroundMessagingService extends Service {
         }
 
         // Only Call Offer (25050) produces a notification while the app
-        // is closed. Answer/ICE are useless without a JS call session.
+        // is closed. Answer/ICE/Renegotiate are useless without an
+        // active call session.
         if (innerKind != 25050) {
             if (isDebugBuild()) {
                 Log.d(LOG_TAG, "[NIP-AC] drop non-offer kind while app closed: " + innerKind);
@@ -3701,6 +3720,20 @@ public class NativeBackgroundMessagingService extends Service {
         publishNipAcInner(recipientPubkeyHex, callId, 25053,
             reason == null ? "" : reason,
             "WebRTC call hangup", null, /* selfWrap= */ false, "hangup");
+    }
+
+    /**
+     * NIP-AC kind 25055 Call Renegotiate. {@code sdp} becomes the inner
+     * event's raw {@code content}. NO {@code call-type} tag (the
+     * original kind-25050 offer owns that). NO self-wrap. Used for
+     * mid-call SDP changes such as voice→video upgrade.
+     *
+     * <p>Best-effort: returns silently on any failure (logged at WARN).
+     */
+    public void sendVoiceCallRenegotiate(String recipientPubkeyHex, String callId, String sdp) {
+        if (sdp == null) sdp = "";
+        publishNipAcInner(recipientPubkeyHex, callId, 25055, sdp,
+            "WebRTC call renegotiation", null, /* selfWrap= */ false, "renegotiate");
     }
 
     /**

@@ -433,6 +433,21 @@ public class AndroidVoiceCallPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * NIP-AC kind-25055 voice→video upgrade. No args. Idempotent and
+     * guarded — silently no-ops when the call is not eligible
+     * (status != active, callKind already video, or another
+     * renegotiation already in flight).
+     */
+    @PluginMethod
+    public void requestVideoUpgrade(PluginCall call) {
+        runOnMain(() -> {
+            NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+            if (mgr != null) mgr.requestVideoUpgrade();
+        });
+        call.resolve();
+    }
+
     private static void runOnMain(Runnable r) {
         new Handler(Looper.getMainLooper()).post(r);
     }
@@ -548,6 +563,49 @@ public class AndroidVoiceCallPlugin extends Plugin {
             p.notifyListeners("facingModeChanged", data, true);
         } catch (Exception e) {
             Log.w(TAG, "emitFacingModeChanged failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code renegotiationStateChanged} event when the in-flight
+     * NIP-AC kind-25055 renegotiation transitions between IDLE,
+     * OUTGOING, INCOMING, or GLARE. The JS layer mirrors the value
+     * into the {@code voiceCallState.renegotiationState} store so
+     * UI subscribers (e.g., the "Add video" button visibility
+     * predicate on the active-call surface) re-render against it.
+     */
+    public static void emitRenegotiationStateChanged(String callId, String state) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("state", state != null ? state : "idle");
+        try {
+            p.notifyListeners("renegotiationStateChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitRenegotiationStateChanged failed", e);
+        }
+    }
+
+    /**
+     * Emit a {@code callKindChanged} event when the active call's
+     * media kind changes mid-call (e.g., voice→video upgrade via a
+     * successful kind-25055 renegotiation). The JS layer mirrors the
+     * value into the {@code voiceCallState.callKind} store so the
+     * active-call UI re-renders against the new kind without
+     * re-emitting {@code callStateChanged} (which would shake other
+     * subscribers expecting a status change).
+     */
+    public static void emitCallKindChanged(String callId, String kind) {
+        AndroidVoiceCallPlugin p = sInstance;
+        if (p == null) return;
+        JSObject data = new JSObject();
+        data.put("callId", callId != null ? callId : "");
+        data.put("kind", kind != null ? kind : "voice");
+        try {
+            p.notifyListeners("callKindChanged", data, true);
+        } catch (Exception e) {
+            Log.w(TAG, "emitCallKindChanged failed", e);
         }
     }
 

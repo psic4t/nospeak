@@ -75,6 +75,13 @@ public class NativeVoiceCallManager {
     private static final long CALL_OFFER_TIMEOUT_MS = 60_000L;
     private static final long ICE_CONNECTION_TIMEOUT_MS = 30_000L;
     /**
+     * Outgoing-renegotiation timeout. If the matching kind-25051 answer
+     * does not arrive within this window we roll back the local offer,
+     * remove just-attached upgrade artifacts, and surface a non-fatal
+     * error. Mirrors the JS {@code RENEGOTIATION_TIMEOUT_MS}.
+     */
+    private static final long RENEGOTIATION_TIMEOUT_MS = 30_000L;
+    /**
      * Delay between transitioning to ENDED and resetting the manager
      * back to IDLE so subsequent calls can begin. Matches the JS
      * {@code CALL_END_DISPLAY_MS} window so ActiveCallActivity has
@@ -146,11 +153,19 @@ public class NativeVoiceCallManager {
          * starts and again when it finishes (success or error). The
          * activity uses this to disable + dim the flip button while the
          * swap is in flight, matching the web's
-         * {@code disabled={isCameraFlipping}} treatment so the user
-         * gets immediate visual feedback that the tap registered.
+         * {@code isCameraFlipping} flag and preventing rapid double taps
+         * from queuing a second switch on top of an unfinished one.
          * Default no-op.
          */
         default void onCameraFlippingChanged(boolean flipping) {}
+
+        /**
+         * Called when the in-flight NIP-AC kind-25055 renegotiation
+         * state changes. UI uses this to disable/hide the "Add video"
+         * button while a renegotiation is pending. Default no-op for
+         * older listener doubles.
+         */
+        default void onRenegotiationStateChanged(RenegotiationState state) {}
     }
 
     /** Media kind of a call. Mirrors the JS-side {@code CallKind} union. */
@@ -165,6 +180,29 @@ public class NativeVoiceCallManager {
         public static CallKind fromWireName(String s) {
             if ("video".equals(s)) return VIDEO;
             return VOICE;
+        }
+    }
+
+    /**
+     * State of any in-flight NIP-AC kind-25055 (Call Renegotiate)
+     * exchange. Mirrors the JS-side {@code RenegotiationState} union.
+     * Resets to {@link #IDLE} on every successful or failed
+     * renegotiation completion and on call termination.
+     */
+    public enum RenegotiationState {
+        IDLE,
+        OUTGOING,
+        INCOMING,
+        GLARE;
+
+        public String wireName() {
+            switch (this) {
+                case OUTGOING: return "outgoing";
+                case INCOMING: return "incoming";
+                case GLARE:    return "glare";
+                case IDLE:
+                default:       return "idle";
+            }
         }
     }
 
@@ -190,6 +228,16 @@ public class NativeVoiceCallManager {
                      String candidate, String sdpMid, Integer sdpMLineIndex);
         void sendHangup(String recipientHex, String callId, String reason);
         void sendReject(String recipientHex, String callId);
+        /**
+         * Publish a kind-25055 NIP-AC Call Renegotiate. Wire shape
+         * mirrors the Call Offer except no {@code call-type} tag is
+         * emitted (the original 25050 owns that) and there is no
+         * self-wrap. Used for mid-call SDP changes such as voice→video
+         * upgrade. Phase 3 of the {@code add-call-renegotiation}
+         * change adds this method to the bridge; Phase 5 wires the
+         * outgoing flow from {@link NativeVoiceCallManager}.
+         */
+        void sendRenegotiate(String recipientHex, String callId, String sdp);
         /**
          * Author a kind-1405 call-history rumor that should be sent to
          * BOTH peers (via NIP-59 self-wrap). Types in {@code ended,
@@ -285,6 +333,32 @@ public class NativeVoiceCallManager {
     private boolean iceTrickleEnabled = false;
     private boolean sessionRemoteDescriptionSet = false;
     private final Deque<IceCandidate> sessionPendingIce = new ArrayDeque<>();
+
+    /**
+     * Current state of any in-flight NIP-AC kind-25055 renegotiation.
+     * IDLE outside of a renegotiation; OUTGOING after we publish a
+     * 25055 and before the matching 25051 arrives; INCOMING while we
+     * apply a peer's 25055 and publish the answer; GLARE on the
+     * winning side after detecting glare while we wait for our
+     * outgoing answer.
+     */
+    private RenegotiationState renegotiationState = RenegotiationState.IDLE;
+
+    /**
+     * Pending {@code Runnable} that fires after
+     * {@link #RENEGOTIATION_TIMEOUT_MS} if our outgoing renegotiation
+     * never receives an answer. Triggers the rollback path. Cleared
+     * by a successful renegotiation answer or by manual rollback.
+     */
+    private Runnable renegotiationTimeoutRunnable;
+
+    /**
+     * Video track attached to the peer connection as part of an
+     * outgoing voice→video upgrade. Captured here so the rollback
+     * path can stop and remove it cleanly when the renegotiation
+     * fails (timeout, glare loss, error, peer decline).
+     */
+    private VideoTrack renegotiationPendingVideoTrack;
 
     /**
      * Optional UI listener. Set by ActiveCallActivity in onStart and
@@ -517,10 +591,47 @@ public class NativeVoiceCallManager {
         transitionTo(CallStatus.INCOMING_RINGING, null);
     }
 
-    /** Inbound NIP-AC kind-25051 (Answer) for our outgoing call. */
+    /**
+     * Inbound NIP-AC kind-25051 (Answer). Handles two distinct flows
+     * sharing the kind:
+     *
+     * <ol>
+     *   <li>Initial answer to our original kind-25050 offer. Status is
+     *       {@link CallStatus#OUTGOING_RINGING} → transition to
+     *       {@link CallStatus#CONNECTING}.</li>
+     *   <li>Renegotiation answer to a kind-25055 we sent during an
+     *       active call. {@link #renegotiationState} is
+     *       {@link RenegotiationState#OUTGOING} → apply the SDP
+     *       without touching the call status; flip {@link #callKind}
+     *       to {@link CallKind#VIDEO} if the answer accepted the
+     *       upgraded video m-line.</li>
+     * </ol>
+     *
+     * <p>Other states drop silently. Wrong call-id drops silently.
+     */
     public void handleRemoteAnswer(String incomingCallId, String sdp) {
         ensureMain();
         if (callMismatch(incomingCallId) || peerConnection == null) return;
+
+        // Renegotiation answer path.
+        if (renegotiationState == RenegotiationState.OUTGOING) {
+            final String answerSdp = sdp != null ? sdp : "";
+            SessionDescription remote = new SessionDescription(
+                SessionDescription.Type.ANSWER, answerSdp);
+            peerConnection.setRemoteDescription(
+                new SimpleSdpObserver("setRemote(reneg-answer)") {
+                    @Override public void onSetSuccess() {
+                        runOnMain(() -> completeOutgoingRenegotiation(answerSdp));
+                    }
+                    @Override public void onSetFailure(String error) {
+                        runOnMain(() -> rollbackOutgoingRenegotiation("error"));
+                    }
+                },
+                remote
+            );
+            return;
+        }
+
         if (status != CallStatus.OUTGOING_RINGING && status != CallStatus.CONNECTING) {
             Log.w(TAG, "handleRemoteAnswer: unexpected status=" + status);
             return;
@@ -581,6 +692,233 @@ public class NativeVoiceCallManager {
         // other reason is treated as a generic 'rejected'.
         String endReason = "busy".equalsIgnoreCase(reason) ? "busy" : "rejected";
         finishCall(endReason, /* sendHangup= */ false);
+    }
+
+    /**
+     * Inbound NIP-AC kind-25055 (Call Renegotiate). Mid-call SDP change
+     * from the peer (e.g., voice→video upgrade).
+     *
+     * <p>Status guard: only applied in {@link CallStatus#CONNECTING} or
+     * {@link CallStatus#ACTIVE}. Other statuses drop silently.
+     *
+     * <p>Glare: if the local peer connection's signaling state is
+     * HAVE_LOCAL_OFFER, we have a pending outgoing renegotiation. The
+     * NIP-AC spec resolves glare by lowercase-hex pubkey lex compare
+     * — the higher pubkey wins. If we win, drop the peer's offer and
+     * keep waiting for our answer. If we lose, roll back the local
+     * offer, discard our outgoing-upgrade artifacts, and accept the
+     * peer's offer as a normal incoming renegotiation.
+     */
+    public void handleRemoteRenegotiate(String incomingCallId, String sdp) {
+        ensureMain();
+        if (callMismatch(incomingCallId)) return;
+        if (status != CallStatus.CONNECTING && status != CallStatus.ACTIVE) {
+            Log.w(TAG, "handleRemoteRenegotiate: dropping; status=" + status);
+            return;
+        }
+        if (peerConnection == null) {
+            Log.w(TAG, "handleRemoteRenegotiate: no peer connection — dropping");
+            return;
+        }
+
+        final String offerSdp = sdp != null ? sdp : "";
+
+        // Glare detection.
+        PeerConnection.SignalingState signalingState;
+        try {
+            signalingState = peerConnection.signalingState();
+        } catch (Throwable t) {
+            Log.w(TAG, "handleRemoteRenegotiate: signalingState() threw", t);
+            return;
+        }
+        if (signalingState == PeerConnection.SignalingState.HAVE_LOCAL_OFFER) {
+            // Determine our local pubkey hex. The native messaging
+            // service knows the local user's pubkey; the manager itself
+            // does not have a direct handle on it, but can fetch it via
+            // NativeBackgroundMessagingService.getCurrentPubkeyHex if
+            // available.
+            String selfHex = resolveSelfHexLowercase();
+            String theirHex = peerHex != null ? peerHex.toLowerCase() : "";
+            if (selfHex != null && selfHex.compareTo(theirHex) > 0) {
+                // We win. Drop their offer; keep waiting for theirs.
+                Log.i(TAG, "[Glare] WIN — keeping outgoing offer; dropping peer 25055");
+                setRenegotiationState(RenegotiationState.GLARE);
+                return;
+            }
+            // We lose. Roll back local offer, discard upgrade artifacts,
+            // then accept theirs.
+            Log.i(TAG, "[Glare] LOSE — rolling back local offer; accepting peer 25055");
+            try {
+                // Stream-WebRTC supports rollback via SessionDescription.Type.ROLLBACK.
+                peerConnection.setLocalDescription(
+                    new SimpleSdpObserver("setLocal(rollback)") {},
+                    new SessionDescription(SessionDescription.Type.ROLLBACK, "")
+                );
+            } catch (Throwable t) {
+                Log.e(TAG, "[Glare] rollback failed; finishing call", t);
+                handleFatal("error");
+                return;
+            }
+            discardOutgoingRenegotiationArtifacts();
+        }
+
+        setRenegotiationState(RenegotiationState.INCOMING);
+
+        SessionDescription remote = new SessionDescription(
+            SessionDescription.Type.OFFER, offerSdp);
+        final boolean offerHasVideo = sdpHasVideo(offerSdp);
+        peerConnection.setRemoteDescription(
+            new SimpleSdpObserver("setRemote(reneg-offer)") {
+                @Override public void onSetSuccess() {
+                    runOnMain(() -> {
+                        // If the renegotiate adds a video m-line and we
+                        // have no local video yet, opportunistically
+                        // attach the camera. Failure is non-fatal: we
+                        // still publish the answer; only our self-view
+                        // is degraded.
+                        if (offerHasVideo && localVideoTrack == null
+                                && callKind != CallKind.VIDEO) {
+                            try {
+                                if (rootEglBase == null) {
+                                    rootEglBase = EglBase.create();
+                                }
+                                attachLocalVideoTrack();
+                            } catch (Throwable t) {
+                                Log.w(TAG,
+                                    "renegotiate: attachLocalVideoTrack failed",
+                                    t);
+                            }
+                        }
+                        createAndSendRenegotiationAnswer(offerHasVideo);
+                    });
+                }
+
+                @Override public void onSetFailure(String error) {
+                    runOnMain(() -> {
+                        Log.e(TAG, "setRemote(reneg-offer) failed: " + error);
+                        setRenegotiationState(RenegotiationState.IDLE);
+                    });
+                }
+            },
+            remote
+        );
+    }
+
+    /**
+     * User-facing entry point for the voice→video mid-call upgrade.
+     * Acquires the camera, attaches a video track to the existing
+     * peer connection, creates a new SDP offer, and publishes it as
+     * kind 25055. Guarded — silently no-ops when the call is not
+     * eligible.
+     *
+     * <p>The matching kind-25051 Call Answer is handled by
+     * {@link #handleRemoteAnswer}'s renegotiation branch. Until that
+     * answer arrives we keep the upgrade artifacts (video track,
+     * sender, capturer) attached so the rollback path can clean them
+     * up cleanly on timeout / error.
+     */
+    public void requestVideoUpgrade() {
+        ensureMain();
+        if (status != CallStatus.ACTIVE) {
+            Log.w(TAG, "requestVideoUpgrade: not active (status=" + status + ")");
+            return;
+        }
+        if (callKind != CallKind.VOICE) {
+            Log.w(TAG, "requestVideoUpgrade: already video");
+            return;
+        }
+        if (renegotiationState != RenegotiationState.IDLE) {
+            Log.w(TAG, "requestVideoUpgrade: already renegotiating ("
+                + renegotiationState + ")");
+            return;
+        }
+        if (peerConnection == null || peerHex == null || callId == null) {
+            Log.w(TAG, "requestVideoUpgrade: missing session state");
+            return;
+        }
+
+        setRenegotiationState(RenegotiationState.OUTGOING);
+
+        // Lazily widen the factory so the next createPeerConnection /
+        // encoder use video paths. ensureFactory short-circuits when
+        // factory is non-null, so for a call that started as voice
+        // we cannot change the encoder factory — but the existing
+        // factory was built with a software audio-only encoder. To
+        // keep the implementation simple (and to match the JS path
+        // which reuses the same RTCPeerConnection without any factory
+        // swap), we proceed without rebuilding the factory: the video
+        // track will use the default H.264/VP8 encoders that are
+        // available in the WebRTC library even when the factory was
+        // initialized voice-only.
+        if (rootEglBase == null) {
+            rootEglBase = EglBase.create();
+        }
+
+        try {
+            attachLocalVideoTrack();
+            renegotiationPendingVideoTrack = localVideoTrack;
+        } catch (Throwable t) {
+            Log.e(TAG, "requestVideoUpgrade: attachLocalVideoTrack failed", t);
+            rollbackOutgoingRenegotiation("error");
+            return;
+        }
+
+        try {
+            peerConnection.createOffer(new SimpleSdpObserver("createOffer(reneg)") {
+                @Override
+                public void onCreateSuccess(final SessionDescription desc) {
+                    runOnMain(() -> {
+                        if (peerConnection == null) {
+                            rollbackOutgoingRenegotiation("error");
+                            return;
+                        }
+                        peerConnection.setLocalDescription(
+                            new SimpleSdpObserver("setLocal(reneg-offer)") {
+                                @Override public void onSetSuccess() {
+                                    runOnMain(() -> {
+                                        if (peerHex == null || callId == null) return;
+                                        try {
+                                            bridge.sendRenegotiate(
+                                                peerHex, callId, desc.description);
+                                        } catch (Throwable t) {
+                                            Log.w(TAG,
+                                                "bridge.sendRenegotiate failed",
+                                                t);
+                                        }
+                                        scheduleRenegotiationTimeout();
+                                    });
+                                }
+
+                                @Override public void onSetFailure(String error) {
+                                    runOnMain(() -> {
+                                        Log.e(TAG,
+                                            "setLocal(reneg-offer) failed: "
+                                                + error);
+                                        rollbackOutgoingRenegotiation("error");
+                                    });
+                                }
+                            },
+                            desc
+                        );
+                    });
+                }
+
+                @Override public void onCreateFailure(String error) {
+                    runOnMain(() -> {
+                        Log.e(TAG, "createOffer(reneg) failed: " + error);
+                        rollbackOutgoingRenegotiation("error");
+                    });
+                }
+            }, sdpConstraintsFor(CallKind.VIDEO));
+        } catch (Throwable t) {
+            Log.e(TAG, "requestVideoUpgrade failed", t);
+            rollbackOutgoingRenegotiation("error");
+        }
+    }
+
+    /** Current renegotiation state. Used by ActiveCallActivity on bind. */
+    public RenegotiationState getRenegotiationState() {
+        return renegotiationState;
     }
 
     /** User-initiated hangup from the active-call UI. */
@@ -645,6 +983,21 @@ public class NativeVoiceCallManager {
         }
     }
 
+    /**
+     * Package-private listener-emission helper for the renegotiation
+     * state. See {@link #notifyMuteChanged} — same try/catch contract.
+     * Extracted so unit tests can verify safe behavior without spinning
+     * up a Looper or WebRTC stack.
+     */
+    static void notifyRenegotiationStateChanged(
+            UiListener listener, RenegotiationState state, String label) {
+        if (listener == null) return;
+        try { listener.onRenegotiationStateChanged(state); } catch (Throwable t) {
+            Log.w(TAG, (label != null ? label : "listener")
+                + ".onRenegotiationStateChanged failed", t);
+        }
+    }
+
 
 
     /**
@@ -695,6 +1048,10 @@ public class NativeVoiceCallManager {
             // return-from-background) doesn't leave the UI looking
             // tappable while a switchCamera is still running.
             listener.onCameraFlippingChanged(isCameraFlipping);
+            // Replay renegotiation state so a UI binding mid-upgrade
+            // shows the in-flight chrome immediately rather than
+            // waiting for the next state transition.
+            listener.onRenegotiationStateChanged(renegotiationState);
         } catch (Throwable t) {
             Log.w(TAG, "initial listener push failed", t);
         }
@@ -763,6 +1120,9 @@ public class NativeVoiceCallManager {
         cancelTimeouts();
         cancelDurationTimer();
         cancelIdleReset();
+        clearRenegotiationTimeout();
+        renegotiationPendingVideoTrack = null;
+        renegotiationState = RenegotiationState.IDLE;
         // Stop and dispose the camera capturer first so frames stop
         // flowing into the (about-to-be-disposed) video source.
         try {
@@ -1181,6 +1541,242 @@ public class NativeVoiceCallManager {
         }, sdpConstraintsFor(callKind));
     }
 
+    /**
+     * Renegotiation answer path. Creates an SDP answer for an inbound
+     * kind-25055, publishes it as kind-25051 (no special tags), and
+     * — if the renegotiated SDP carries an accepted video m-line —
+     * flips {@link #callKind} to {@link CallKind#VIDEO} so listeners
+     * (FGS notification, ActiveCallActivity) can re-render against
+     * the new media kind.
+     */
+    private void createAndSendRenegotiationAnswer(final boolean offerHasVideo) {
+        if (peerConnection == null) {
+            setRenegotiationState(RenegotiationState.IDLE);
+            return;
+        }
+        peerConnection.createAnswer(
+            new SimpleSdpObserver("createAnswer(reneg)") {
+                @Override
+                public void onCreateSuccess(final SessionDescription desc) {
+                    runOnMain(() -> {
+                        if (peerConnection == null) {
+                            setRenegotiationState(RenegotiationState.IDLE);
+                            return;
+                        }
+                        peerConnection.setLocalDescription(
+                            new SimpleSdpObserver("setLocal(reneg-answer)") {
+                                @Override public void onSetSuccess() {
+                                    runOnMain(() -> {
+                                        if (peerHex != null && callId != null) {
+                                            try {
+                                                bridge.sendAnswer(
+                                                    peerHex, callId, desc.description);
+                                            } catch (Throwable t) {
+                                                Log.w(TAG,
+                                                    "bridge.sendAnswer (reneg) failed",
+                                                    t);
+                                            }
+                                        }
+                                        // Flip callKind if the upgrade
+                                        // succeeded on our side (our
+                                        // answer carries an accepted
+                                        // video m-line).
+                                        boolean answerHasVideo = sdpHasVideo(desc.description);
+                                        if (offerHasVideo && answerHasVideo
+                                                && callKind == CallKind.VOICE) {
+                                            promoteCallKindToVideo();
+                                        }
+                                        setRenegotiationState(RenegotiationState.IDLE);
+                                    });
+                                }
+                                @Override public void onSetFailure(String error) {
+                                    runOnMain(() -> {
+                                        Log.e(TAG,
+                                            "setLocal(reneg-answer) failed: " + error);
+                                        setRenegotiationState(RenegotiationState.IDLE);
+                                    });
+                                }
+                            },
+                            desc
+                        );
+                    });
+                }
+                @Override public void onCreateFailure(String error) {
+                    runOnMain(() -> {
+                        Log.e(TAG, "createAnswer(reneg) failed: " + error);
+                        setRenegotiationState(RenegotiationState.IDLE);
+                    });
+                }
+            },
+            sdpConstraintsFor(offerHasVideo ? CallKind.VIDEO : callKind)
+        );
+    }
+
+    /**
+     * Successful outgoing renegotiation: the peer's kind-25051 has
+     * been applied. Clears the timeout, flips {@link #callKind} if
+     * the answer accepted the upgraded video m-line, and resets the
+     * renegotiation state.
+     */
+    private void completeOutgoingRenegotiation(String remoteAnswerSdp) {
+        clearRenegotiationTimeout();
+        renegotiationPendingVideoTrack = null;
+
+        boolean peerAcceptedVideo = sdpHasVideo(remoteAnswerSdp)
+            && !sdpDeclaresInactive(remoteAnswerSdp);
+        if (peerAcceptedVideo && callKind == CallKind.VOICE) {
+            promoteCallKindToVideo();
+        } else if (!peerAcceptedVideo) {
+            // Peer declined — discard our just-attached upgrade
+            // artifacts so we're not capturing pointlessly.
+            discardOutgoingRenegotiationArtifacts();
+        }
+        setRenegotiationState(RenegotiationState.IDLE);
+    }
+
+    /**
+     * Roll back an in-flight outgoing renegotiation. Called on timeout,
+     * glare-loss-from-the-loser-side, error, or peer-decline.
+     * Restores the peer connection to its pre-renegotiation SDP state
+     * (best effort) and removes the upgrade artifacts. The underlying
+     * call continues unaffected.
+     */
+    private void rollbackOutgoingRenegotiation(String reason) {
+        clearRenegotiationTimeout();
+        if (peerConnection != null) {
+            try {
+                if (peerConnection.signalingState()
+                        == PeerConnection.SignalingState.HAVE_LOCAL_OFFER) {
+                    peerConnection.setLocalDescription(
+                        new SimpleSdpObserver("setLocal(rollback)") {},
+                        new SessionDescription(SessionDescription.Type.ROLLBACK, "")
+                    );
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "rollbackOutgoingRenegotiation: rollback threw", t);
+            }
+        }
+        discardOutgoingRenegotiationArtifacts();
+        Log.i(TAG, "outgoing renegotiation rolled back; reason=" + reason);
+        setRenegotiationState(RenegotiationState.IDLE);
+    }
+
+    /**
+     * Tear down the local video track and capturer attached during an
+     * outgoing voice→video upgrade. No-op when no upgrade artifacts
+     * are present (a successful upgrade null-ed the field already).
+     */
+    private void discardOutgoingRenegotiationArtifacts() {
+        VideoTrack track = renegotiationPendingVideoTrack;
+        renegotiationPendingVideoTrack = null;
+        if (track == null) return;
+        try { track.setEnabled(false); } catch (Throwable ignored) {}
+
+        if (videoCapturer != null) {
+            try { videoCapturer.stopCapture(); } catch (Throwable ignored) {}
+            try { videoCapturer.dispose(); } catch (Throwable ignored) {}
+            videoCapturer = null;
+        }
+        if (videoSource != null) {
+            try { videoSource.dispose(); } catch (Throwable ignored) {}
+            videoSource = null;
+        }
+        if (surfaceTextureHelper != null) {
+            try { surfaceTextureHelper.dispose(); } catch (Throwable ignored) {}
+            surfaceTextureHelper = null;
+        }
+        if (track == localVideoTrack) {
+            localVideoTrack = null;
+        }
+    }
+
+    /**
+     * Promote the call from VOICE to VIDEO after a successful
+     * voice→video upgrade. Updates the cached field, emits the
+     * status event so the FGS notification re-renders, and notifies
+     * UI listeners.
+     */
+    private void promoteCallKindToVideo() {
+        if (callKind == CallKind.VIDEO) return;
+        callKind = CallKind.VIDEO;
+        // Notify the JS layer via a dedicated callKindChanged event so
+        // subscribers (VoiceCallServiceNative.onCallKindChanged) can
+        // mirror the new kind into the Svelte store. The status itself
+        // doesn't change — we're still ACTIVE — so we don't re-emit
+        // callStateChanged (which would shake other subscribers
+        // expecting a status change).
+        AndroidVoiceCallPlugin.emitCallKindChanged(
+            callId, callKind.wireName());
+        if (uiListener != null) {
+            try { uiListener.onLocalVideoTrack(localVideoTrack); } catch (Throwable ignored) {}
+        }
+    }
+
+    /**
+     * Schedule the outgoing-renegotiation timeout. Idempotent.
+     */
+    private void scheduleRenegotiationTimeout() {
+        clearRenegotiationTimeout();
+        renegotiationTimeoutRunnable = () -> {
+            renegotiationTimeoutRunnable = null;
+            if (renegotiationState == RenegotiationState.OUTGOING) {
+                Log.w(TAG, "renegotiation timeout — rolling back");
+                rollbackOutgoingRenegotiation("timeout");
+            }
+        };
+        mainHandler.postDelayed(renegotiationTimeoutRunnable, RENEGOTIATION_TIMEOUT_MS);
+    }
+
+    private void clearRenegotiationTimeout() {
+        if (renegotiationTimeoutRunnable != null) {
+            mainHandler.removeCallbacks(renegotiationTimeoutRunnable);
+            renegotiationTimeoutRunnable = null;
+        }
+    }
+
+    /**
+     * Set {@link #renegotiationState} and notify listeners + the JS
+     * layer. Idempotent transitions (same → same) are a no-op.
+     */
+    private void setRenegotiationState(RenegotiationState next) {
+        if (renegotiationState == next) return;
+        renegotiationState = next;
+        AndroidVoiceCallPlugin.emitRenegotiationStateChanged(callId, next.wireName());
+        notifyRenegotiationStateChanged(uiListener, next, "uiListener");
+        notifyRenegotiationStateChanged(serviceListener, next, "serviceListener");
+    }
+
+    /**
+     * Resolve the local user's lowercase hex pubkey for glare
+     * comparison. The native messaging service knows it; we cache it
+     * lazily here. Returns {@code null} if the messaging service
+     * isn't available (in which case glare resolution falls through
+     * to the loser path, which is the safer default — accepting the
+     * peer's offer rather than dropping it).
+     */
+    private String resolveSelfHexLowercase() {
+        try {
+            String hex = NativeBackgroundMessagingService.getCurrentPubkeyHex();
+            if (hex != null && !hex.isEmpty()) {
+                return hex.toLowerCase();
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "resolveSelfHexLowercase: lookup failed", t);
+        }
+        return null;
+    }
+
+    private static boolean sdpHasVideo(String sdp) {
+        if (sdp == null) return false;
+        // Match `\nm=video[ \t]` like the JS detector.
+        return sdp.contains("\nm=video ") || sdp.contains("\nm=video\t");
+    }
+
+    private static boolean sdpDeclaresInactive(String sdp) {
+        if (sdp == null) return false;
+        return sdp.contains("\na=inactive");
+    }
+
     private void drainSessionPendingIce() {
         if (peerConnection == null) return;
         while (!sessionPendingIce.isEmpty()) {
@@ -1369,6 +1965,9 @@ public class NativeVoiceCallManager {
         iceTrickleEnabled = false;
         sessionRemoteDescriptionSet = false;
         sessionPendingIce.clear();
+        clearRenegotiationTimeout();
+        renegotiationPendingVideoTrack = null;
+        renegotiationState = RenegotiationState.IDLE;
     }
 
     private void authorHistoryEvent(CallStatus prevStatus, String reason) {

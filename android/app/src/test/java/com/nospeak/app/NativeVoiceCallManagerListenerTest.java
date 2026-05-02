@@ -44,6 +44,8 @@ public class NativeVoiceCallManagerListenerTest {
         final List<Integer> ticks = new ArrayList<>();
         final List<Boolean> mutes = new ArrayList<>();
         final List<Boolean> speakers = new ArrayList<>();
+        final List<NativeVoiceCallManager.RenegotiationState> renegotiations =
+            new ArrayList<>();
 
         @Override public void onStatusChanged(
                 NativeVoiceCallManager.CallStatus status, String reason) {
@@ -53,6 +55,10 @@ public class NativeVoiceCallManagerListenerTest {
         @Override public void onMuteChanged(boolean muted) { mutes.add(muted); }
         @Override public void onSpeakerChanged(boolean speakerOn) {
             speakers.add(speakerOn);
+        }
+        @Override public void onRenegotiationStateChanged(
+                NativeVoiceCallManager.RenegotiationState state) {
+            renegotiations.add(state);
         }
     }
 
@@ -148,5 +154,39 @@ public class NativeVoiceCallManagerListenerTest {
         // the interface during the speaker addition.
         NativeVoiceCallManager.notifyMuteChanged(legacy, true, "test");
         assertTrue(legacy.muteFired);
+    }
+
+    @Test
+    public void notifyRenegotiationStateChanged_dispatchesToNonNullListener() {
+        RecordingListener listener = new RecordingListener();
+        NativeVoiceCallManager.notifyRenegotiationStateChanged(
+            listener, NativeVoiceCallManager.RenegotiationState.OUTGOING, "test");
+        NativeVoiceCallManager.notifyRenegotiationStateChanged(
+            listener, NativeVoiceCallManager.RenegotiationState.IDLE, "test");
+        assertEquals(2, listener.renegotiations.size());
+        assertEquals(
+            NativeVoiceCallManager.RenegotiationState.OUTGOING,
+            listener.renegotiations.get(0));
+        assertEquals(
+            NativeVoiceCallManager.RenegotiationState.IDLE,
+            listener.renegotiations.get(1));
+    }
+
+    @Test
+    public void notifyRenegotiationStateChanged_isNoOpWhenListenerNull() {
+        NativeVoiceCallManager.notifyRenegotiationStateChanged(
+            null, NativeVoiceCallManager.RenegotiationState.OUTGOING, "test");
+    }
+
+    @Test
+    public void uiListener_onRenegotiationStateChangedDefaultIsNoOp() {
+        // Same back-compat contract as onSpeakerChanged: a listener
+        // that pre-dates the renegotiation listener method must still
+        // compile and run without overriding it.
+        LegacyListener legacy = new LegacyListener();
+        NativeVoiceCallManager.notifyRenegotiationStateChanged(
+            legacy, NativeVoiceCallManager.RenegotiationState.OUTGOING, "test");
+        NativeVoiceCallManager.notifyRenegotiationStateChanged(
+            legacy, NativeVoiceCallManager.RenegotiationState.IDLE, "test");
     }
 }

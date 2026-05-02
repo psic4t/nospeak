@@ -42,6 +42,7 @@ public class VoiceCallBridgeTest {
         final List<Object[]> ices = new ArrayList<>();
         final List<Object[]> hangups = new ArrayList<>();
         final List<Object[]> rejects = new ArrayList<>();
+        final List<Object[]> renegotiates = new ArrayList<>();
         final List<Object[]> historyRumors = new ArrayList<>();
 
         @Override
@@ -69,6 +70,11 @@ public class VoiceCallBridgeTest {
         @Override
         public void sendVoiceCallReject(String recipientHex, String callId) {
             rejects.add(new Object[] { recipientHex, callId });
+        }
+        @Override
+        public void sendVoiceCallRenegotiate(
+                String recipientHex, String callId, String sdp) {
+            renegotiates.add(new Object[] { recipientHex, callId, sdp });
         }
         @Override
         public void sendVoiceCallHistoryRumor(
@@ -204,6 +210,20 @@ public class VoiceCallBridgeTest {
     }
 
     @Test
+    public void sendRenegotiate_forwardsArgumentsToSender() {
+        RecordingSender sender = new RecordingSender();
+        NativeVoiceCallManager.MessagingBridge bridge =
+            VoiceCallForegroundService.buildBridge(sender);
+
+        bridge.sendRenegotiate("recipient", "cid", "v=0\r\n");
+        assertEquals(1, sender.renegotiates.size());
+        Object[] args = sender.renegotiates.get(0);
+        assertEquals("recipient", args[0]);
+        assertEquals("cid", args[1]);
+        assertEquals("v=0\r\n", args[2]);
+    }
+
+    @Test
     public void sendCallHistoryRumor_forwardsAllSixArgumentsToSender() {
         // sendCallHistoryRumor was already correct (it has carried
         // callMediaType since it landed) — this assertion locks the
@@ -240,6 +260,7 @@ public class VoiceCallBridgeTest {
         bridge.sendIce("a", "b", "c", "d", 1);
         bridge.sendHangup("a", "b", "c");
         bridge.sendReject("a", "b");
+        bridge.sendRenegotiate("a", "b", "c");
         bridge.sendCallHistoryRumor("a", "b", 0, "c", "d", "voice");
         assertTrue(true); // reached without exception
     }

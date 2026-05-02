@@ -38,8 +38,10 @@ import {
     toggleSpeaker as storeToggleSpeaker,
     setEndedAnsweredElsewhere,
     setEndedRejectedElsewhere,
+    setCallKind,
     setCameraOff,
-    setFacingMode
+    setFacingMode,
+    setRenegotiationState
 } from '$lib/stores/voiceCall';
 import { CALL_END_DISPLAY_MS } from './constants';
 
@@ -49,6 +51,7 @@ import type {
     CallEventCreator,
     CallKind,
     LocalCallEventCreator,
+    RenegotiationState,
     VoiceCallEndReason,
     AuthoredCallEventType
 } from './types';
@@ -216,9 +219,34 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
                         this.onFacingModeChanged(data)
                 )
             );
+            this.listeners.push(
+                await AndroidVoiceCall.addListener(
+                    'renegotiationStateChanged',
+                    (data: {
+                        callId: string;
+                        state: 'idle' | 'outgoing' | 'incoming' | 'glare';
+                    }) => this.onRenegotiationStateChanged(data)
+                )
+            );
+            this.listeners.push(
+                await AndroidVoiceCall.addListener(
+                    'callKindChanged',
+                    (data: { callId: string; kind: 'voice' | 'video' }) =>
+                        this.onCallKindChanged(data)
+                )
+            );
         } catch (err) {
             console.error('[VoiceCallNative] event subscription failed', err);
         }
+    }
+
+    private onCallKindChanged(data: {
+        callId: string;
+        kind: 'voice' | 'video';
+    }): void {
+        const next: CallKind = data.kind === 'video' ? 'video' : 'voice';
+        this.callKind = next;
+        setCallKind(next);
     }
 
     private onCameraStateChanged(data: { callId: string; cameraOff: boolean }): void {
@@ -227,6 +255,26 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
 
     private onFacingModeChanged(data: { callId: string; facing: 'user' | 'environment' }): void {
         setFacingMode(data.facing === 'environment' ? 'environment' : 'user');
+    }
+
+    private onRenegotiationStateChanged(data: {
+        callId: string;
+        state: 'idle' | 'outgoing' | 'incoming' | 'glare';
+    }): void {
+        const next = data.state ?? 'idle';
+        // Defensive: native may emit a value not in the union if the
+        // wire format drifts. Coerce to 'idle' rather than corrupting
+        // the store with an unknown literal.
+        if (
+            next !== 'idle' &&
+            next !== 'outgoing' &&
+            next !== 'incoming' &&
+            next !== 'glare'
+        ) {
+            setRenegotiationState('idle');
+            return;
+        }
+        setRenegotiationState(next);
     }
 
     // -----------------------------------------------------------------
@@ -496,6 +544,40 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
 
     public isCameraOff(): boolean {
         return get(voiceCallState).isCameraOff;
+    }
+
+    // ------------------------------------------------------------------
+    //  VoiceCallBackend — call renegotiation (NIP-AC kind 25055)
+    //
+    //  The JS-side renegotiation API is a thin proxy around the
+    //  AndroidVoiceCall plugin. The native call manager owns the
+    //  state machine, the peer connection, and the timeout — the
+    //  store mirrors the value it pushes via
+    //  {@code renegotiationStateChanged}.
+    // ------------------------------------------------------------------
+
+    public async requestVideoUpgrade(): Promise<void> {
+        // For voice→video upgrade we additionally need CAMERA. The
+        // native side performs its own permission check too, but
+        // requesting from JS here lets the user-facing prompt appear
+        // on the WebView side (consistent with initiateCall('video'))
+        // rather than from the FGS — which would otherwise pop a
+        // dialog over ActiveCallActivity from a background context.
+        if (!(await this.ensureCameraPermission())) {
+            console.warn(
+                '[VoiceCallNative] camera permission denied for video upgrade'
+            );
+            return;
+        }
+        try {
+            await AndroidVoiceCall.requestVideoUpgrade();
+        } catch (err) {
+            console.warn('[VoiceCallNative] requestVideoUpgrade failed', err);
+        }
+    }
+
+    public getRenegotiationState(): RenegotiationState {
+        return get(voiceCallState).renegotiationState;
     }
 
     // -----------------------------------------------------------------
