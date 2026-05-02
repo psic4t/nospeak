@@ -304,6 +304,24 @@
     closeSearch();
   }
 
+  // Close the search overlay when the user taps anywhere in the chat
+  // outside of the search input itself, the 3-dot menu button, or the
+  // portaled chat menu (which lives outside this root).
+  // We use pointerdown without preventDefault so the same gesture can still
+  // focus the input bar, tap a message, etc.
+  function handleChatClickAway(e: PointerEvent) {
+    if (!isSearchOpen) return;
+
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target) return;
+
+    if (target.closest('[data-search-keep="true"]')) {
+      return;
+    }
+
+    closeSearch();
+  }
+
   function openChatMenu(e: MouseEvent) {
     const target = e.currentTarget as HTMLElement | null;
     if (!target) return;
@@ -1963,7 +1981,8 @@
   {/if}
 </svelte:head>
 
-<div bind:this={chatRoot} class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 {blur('sm')}">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div bind:this={chatRoot} role="presentation" onpointerdown={handleChatClickAway} class="relative flex flex-col h-full overflow-hidden bg-white/30 dark:bg-slate-900/30 {blur('sm')}">
   {#if showMediaPreview && pendingMediaFile && pendingMediaType}
     <AttachmentPreviewModal
       isOpen={showMediaPreview}
@@ -2099,7 +2118,7 @@
       {#if (partnerNpub && partnerNpub !== 'ALL') || isGroup}
         <!-- Mobile overlay search input (covers username area) -->
         {#if isSearchOpen}
-          <div class="md:hidden absolute bottom-2 h-11 start-24 end-16 z-30">
+          <div data-search-keep="true" class="md:hidden absolute bottom-2 h-11 start-24 end-16 z-30">
             <input
               bind:value={searchQuery}
               bind:this={mobileSearchInput}
@@ -2114,6 +2133,7 @@
         <div class="flex items-center gap-2 flex-shrink-0">
           <!-- Desktop/tablet inline slide-out -->
           <div
+            data-search-keep="true"
             class={`hidden md:block transition-[max-width,opacity] duration-200 ease-out ${
               isSearchOpen
                 ? 'max-w-56 opacity-100 overflow-visible'
@@ -2153,6 +2173,7 @@
           {/if}
 
           <button
+            data-search-keep="true"
             onclick={(e) => { hapticSelection(); openChatMenu(e); }}
             class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] active:bg-[rgb(var(--color-lavender-rgb)/0.24)] focus-visible:bg-[rgb(var(--color-lavender-rgb)/0.18)] focus:outline-none transition-colors relative z-40 {chatMenu.isOpen ? 'bg-[rgb(var(--color-lavender-rgb)/0.20)]' : ''}"
             aria-label="Chat menu"
