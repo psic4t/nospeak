@@ -15,12 +15,18 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import org.webrtc.EglBase;
 import org.webrtc.RendererCommon;
@@ -86,11 +92,30 @@ public class ActiveCallActivity extends Activity {
     private ImageButton speakerButton;
     private ImageButton cameraOffButton;
     private ImageButton cameraFlipButton;
+    /** Video-chrome buttons (live in active_call_video_controls). */
+    private ImageButton muteButtonVideo;
+    private ImageButton hangupButtonVideo;
+    private ImageButton speakerButtonVideo;
+    private ImageButton cameraOffButtonVideo;
+    private ImageButton cameraFlipButtonVideo;
+    /** Video-chrome text views (live in active_call_video_header). */
+    private TextView statusViewVideo;
+    private TextView nameViewVideo;
+    private TextView durationViewVideo;
     private SurfaceViewRenderer remoteVideoRenderer;
     private SurfaceViewRenderer localVideoRenderer;
     private View rootLayout;
-    private View topScrim;
-    private View bottomScrim;
+    private View videoHeader;
+    private View videoControls;
+    private View overlayLayout;
+    /**
+     * Default top margin for the local self-view PiP (matches the
+     * fallback in activity_active_call.xml). The actual margin is
+     * recomputed when system-bar / display-cutout insets arrive so the
+     * PiP clears the status bar and any camera cutout.
+     */
+    private static final int LOCAL_PIP_DEFAULT_TOP_MARGIN_DP = 48;
+    private static final int LOCAL_PIP_INSET_GAP_DP = 16;
 
     private String avatarPath;
     private String peerHex;
@@ -220,6 +245,7 @@ public class ActiveCallActivity extends Activity {
         Log.d(TAG, "onCreate intent=" + (intent != null ? intent.getAction() : "<null>")
             + " callId=" + (intent != null ? intent.getStringExtra(EXTRA_CALL_ID) : "<null>"));
         applyShowWhenLockedFlags();
+        applyEdgeToEdge();
         setContentView(R.layout.activity_active_call);
 
         statusView = findViewById(R.id.active_call_status);
@@ -231,12 +257,22 @@ public class ActiveCallActivity extends Activity {
         speakerButton = findViewById(R.id.active_call_speaker);
         cameraOffButton = findViewById(R.id.active_call_camera_off);
         cameraFlipButton = findViewById(R.id.active_call_camera_flip);
+        muteButtonVideo = findViewById(R.id.active_call_mute_video);
+        hangupButtonVideo = findViewById(R.id.active_call_hangup_video);
+        speakerButtonVideo = findViewById(R.id.active_call_speaker_video);
+        cameraOffButtonVideo = findViewById(R.id.active_call_camera_off_video);
+        cameraFlipButtonVideo = findViewById(R.id.active_call_camera_flip_video);
+        statusViewVideo = findViewById(R.id.active_call_video_status);
+        nameViewVideo = findViewById(R.id.active_call_video_name);
+        durationViewVideo = findViewById(R.id.active_call_video_duration);
         remoteVideoRenderer = findViewById(R.id.active_call_remote_video);
         localVideoRenderer = findViewById(R.id.active_call_local_video);
         rootLayout = findViewById(R.id.active_call_root);
-        topScrim = findViewById(R.id.active_call_top_scrim);
-        bottomScrim = findViewById(R.id.active_call_bottom_scrim);
+        videoHeader = findViewById(R.id.active_call_video_header);
+        videoControls = findViewById(R.id.active_call_video_controls);
+        overlayLayout = findViewById(R.id.active_call_overlay);
 
+        installWindowInsetsListener();
         readExtras(intent);
         applyKindVisibility();
         bindAvatar();
@@ -314,8 +350,12 @@ public class ActiveCallActivity extends Activity {
     private void readExtras(Intent intent) {
         if (intent == null) return;
         String peerName = intent.getStringExtra(EXTRA_PEER_NAME);
-        if (peerName != null && nameView != null) {
-            nameView.setText(peerName);
+        if (peerName != null) {
+            if (nameView != null) nameView.setText(peerName);
+            // Mirror the peer name into the video-mode header so the
+            // active video chrome shows the same identity as the
+            // voice-mode centered layout.
+            if (nameViewVideo != null) nameViewVideo.setText(peerName);
         }
         avatarPath = intent.getStringExtra(EXTRA_AVATAR_PATH);
         peerHex = intent.getStringExtra(EXTRA_PEER_HEX);
@@ -324,23 +364,43 @@ public class ActiveCallActivity extends Activity {
     }
 
     /**
-     * Toggle visibility of the video-only views based on
+     * Toggle visibility of mode-specific views based on
      * {@link #isVideoCall}, and crucially clear the FrameLayout root's
      * opaque background drawable on video so the underlay
      * SurfaceView (the remote renderer) shows through. Without this
      * the system's hole-punch composition keeps the camera frames
      * hidden behind the activity's solid colour fill — the user sees
      * nothing even though frames are arriving.
+     *
+     * <p>On video calls the remote renderer is full-screen (edge-to-
+     * edge, behind the transparent system bars) and the call chrome
+     * lives in two scrim-backed containers — {@code video_header} at
+     * the top (status / name / duration) and {@code video_controls}
+     * at the bottom (5-button row). The centered voice-style overlay
+     * is hidden so it doesn't occlude the camera frame. On voice
+     * calls the existing centered layout (avatar + name + status +
+     * duration + controls) is shown and the video chrome is hidden.
      */
     private void applyKindVisibility() {
         int videoVis = isVideoCall ? View.VISIBLE : View.GONE;
+        int voiceVis = isVideoCall ? View.GONE : View.VISIBLE;
         if (remoteVideoRenderer != null) remoteVideoRenderer.setVisibility(videoVis);
         if (localVideoRenderer != null) localVideoRenderer.setVisibility(videoVis);
-        if (cameraOffButton != null) cameraOffButton.setVisibility(videoVis);
-        if (cameraFlipButton != null) cameraFlipButton.setVisibility(videoVis);
-        if (topScrim != null) topScrim.setVisibility(videoVis);
-        if (bottomScrim != null) bottomScrim.setVisibility(videoVis);
-        // Hide the centre avatar on video calls — the renderers cover it.
+        if (videoHeader != null) videoHeader.setVisibility(videoVis);
+        if (videoControls != null) videoControls.setVisibility(videoVis);
+        // The centered overlay is the entire voice-call surface
+        // (avatar + name + status + duration + control row). On video
+        // calls hide it wholesale so the camera frame is unobstructed.
+        if (overlayLayout != null) overlayLayout.setVisibility(voiceVis);
+        // Voice-mode camera buttons live inside active_call_overlay
+        // and are gone for voice calls. They remain gone in video
+        // mode too — the visible video controls live in
+        // active_call_video_controls. Belt-and-braces:
+        if (cameraOffButton != null) cameraOffButton.setVisibility(View.GONE);
+        if (cameraFlipButton != null) cameraFlipButton.setVisibility(View.GONE);
+        // Avatar lives inside the voice overlay; explicit null guard
+        // is no longer strictly necessary (overlay visibility already
+        // controls it) but kept for clarity.
         if (avatarView != null) {
             avatarView.setVisibility(isVideoCall ? View.GONE : View.VISIBLE);
         }
@@ -356,6 +416,117 @@ public class ActiveCallActivity extends Activity {
                 rootLayout.setBackgroundResource(R.drawable.bg_incoming_call);
             }
         }
+    }
+
+    /**
+     * Switch the activity to edge-to-edge layout so the remote video
+     * renderer (which is {@code match_parent}) extends behind the
+     * status and navigation bars. Bars themselves remain visible —
+     * we don't enter immersive mode for calls — but their colors are
+     * forced to transparent so the camera frame shows through.
+     *
+     * <p>System-bar icon contrast is set to light-on-dark since the
+     * call surface is always rendered against a dark scrim or dark
+     * camera frame. The status-bar / cutout / nav-bar insets are
+     * applied to the video header, video controls, voice overlay
+     * and local self-view PiP via {@link #installWindowInsetsListener()}.
+     */
+    private void applyEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        // Hint the system that we draw our own protection (scrims) so
+        // gesture-nav contrast scrim isn't doubled on top of ours.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
+        WindowInsetsControllerCompat controller =
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (controller != null) {
+            // White icons against the dark call surface.
+            controller.setAppearanceLightStatusBars(false);
+            controller.setAppearanceLightNavigationBars(false);
+        }
+    }
+
+    /**
+     * Apply system-bar / display-cutout insets to the call chrome so
+     * nothing sits under the status bar, camera notch, or gesture
+     * pill once edge-to-edge is active.
+     *
+     * <ul>
+     *   <li>{@code video_header} gets {@code paddingTop = inset.top}
+     *       (preserving its built-in padding for breathing room) so
+     *       the status / name text sit below the status bar.</li>
+     *   <li>{@code video_controls} gets {@code paddingBottom =
+     *       inset.bottom} so the button row is not occluded by the
+     *       gesture pill.</li>
+     *   <li>The centered voice {@code overlay} gets matching
+     *       top + bottom padding so the avatar / name / duration /
+     *       controls don't sit under bars on voice calls (which
+     *       previously relied on {@code fitsSystemWindows="true"}
+     *       on the root, now disabled).</li>
+     *   <li>The local self-view PiP's top margin is set to
+     *       {@code inset.top + 16dp} so it clears the status bar
+     *       and any camera cutout.</li>
+     * </ul>
+     */
+    private void installWindowInsetsListener() {
+        if (rootLayout == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout, (v, insets) -> {
+            Insets bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            // Re-apply each container's built-in design padding plus
+            // the system inset, so we never collapse the visual
+            // breathing room defined in the layout XML.
+            if (videoHeader != null) {
+                int basePadTop = dpToPx(16);
+                int basePadBottom = dpToPx(32);
+                int basePadX = dpToPx(24);
+                videoHeader.setPadding(
+                    basePadX, basePadTop + bars.top, basePadX, basePadBottom);
+            }
+            if (videoControls != null) {
+                int basePadTop = dpToPx(48);
+                int basePadBottom = dpToPx(24);
+                int basePadX = dpToPx(16);
+                videoControls.setPadding(
+                    basePadX, basePadTop, basePadX, basePadBottom + bars.bottom);
+            }
+            if (overlayLayout != null) {
+                int basePadX = dpToPx(24);
+                int basePadY = dpToPx(24);
+                overlayLayout.setPadding(
+                    basePadX, basePadY + bars.top, basePadX, basePadY + bars.bottom);
+            }
+            if (localVideoRenderer != null) {
+                ViewGroup.LayoutParams lp = localVideoRenderer.getLayoutParams();
+                if (lp instanceof android.widget.FrameLayout.LayoutParams) {
+                    android.widget.FrameLayout.LayoutParams flp =
+                        (android.widget.FrameLayout.LayoutParams) lp;
+                    int desiredTop = bars.top + dpToPx(LOCAL_PIP_INSET_GAP_DP);
+                    if (desiredTop < dpToPx(LOCAL_PIP_DEFAULT_TOP_MARGIN_DP)) {
+                        // On older devices / emulators with no status
+                        // bar inset, keep the design default rather
+                        // than slamming the PiP to the very top.
+                        desiredTop = dpToPx(LOCAL_PIP_DEFAULT_TOP_MARGIN_DP);
+                    }
+                    if (flp.topMargin != desiredTop) {
+                        flp.topMargin = desiredTop;
+                        localVideoRenderer.setLayoutParams(flp);
+                    }
+                }
+            }
+            // Don't consume — let children that may want insets get them.
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(rootLayout);
+    }
+
+    private int dpToPx(int dp) {
+        float density = getResources().getDisplayMetrics().density;
+        return Math.round(dp * density);
     }
 
     /**
@@ -377,56 +548,62 @@ public class ActiveCallActivity extends Activity {
     }
 
     private void wireButtons() {
-        if (muteButton != null) {
-            muteButton.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
-                    if (mgr == null) return;
-                    // Ask the manager for the current state instead of
-                    // reading the local cache so back-to-back taps
-                    // before the listener fires can't double-toggle.
-                    mgr.setMuted(!mgr.isMuted());
-                }
-            });
-        }
-        if (hangupButton != null) {
-            hangupButton.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
-                    if (mgr != null) mgr.hangup();
-                }
-            });
-        }
-        if (speakerButton != null) {
-            speakerButton.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
-                    if (mgr == null) return;
-                    // The visual update happens via the manager's
-                    // onSpeakerChanged callback, mirroring the mute
-                    // path. Keeps the activity's view state strictly
-                    // a function of the manager's authoritative state.
-                    mgr.setSpeakerOn(!mgr.isSpeakerOn());
-                }
-            });
-        }
-        if (cameraOffButton != null) {
-            cameraOffButton.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
-                    if (mgr == null) return;
-                    mgr.setCameraOff(!mgr.isCameraOff());
-                }
-            });
-        }
-        if (cameraFlipButton != null) {
-            cameraFlipButton.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
-                    if (mgr != null) mgr.flipCamera();
-                }
-            });
-        }
+        View.OnClickListener muteClick = new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+                if (mgr == null) return;
+                // Ask the manager for the current state instead of
+                // reading the local cache so back-to-back taps
+                // before the listener fires can't double-toggle.
+                mgr.setMuted(!mgr.isMuted());
+            }
+        };
+        View.OnClickListener hangupClick = new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+                if (mgr != null) mgr.hangup();
+            }
+        };
+        View.OnClickListener speakerClick = new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+                if (mgr == null) return;
+                // The visual update happens via the manager's
+                // onSpeakerChanged callback, mirroring the mute
+                // path. Keeps the activity's view state strictly
+                // a function of the manager's authoritative state.
+                mgr.setSpeakerOn(!mgr.isSpeakerOn());
+            }
+        };
+        View.OnClickListener cameraOffClick = new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+                if (mgr == null) return;
+                mgr.setCameraOff(!mgr.isCameraOff());
+            }
+        };
+        View.OnClickListener cameraFlipClick = new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
+                if (mgr != null) mgr.flipCamera();
+            }
+        };
+        // Voice-mode buttons (centered overlay).
+        if (muteButton != null) muteButton.setOnClickListener(muteClick);
+        if (hangupButton != null) hangupButton.setOnClickListener(hangupClick);
+        if (speakerButton != null) speakerButton.setOnClickListener(speakerClick);
+        if (cameraOffButton != null) cameraOffButton.setOnClickListener(cameraOffClick);
+        if (cameraFlipButton != null) cameraFlipButton.setOnClickListener(cameraFlipClick);
+        // Video-mode buttons (bottom scrim row). These mirror the
+        // voice-mode buttons exactly — same actions, same listeners
+        // — but live in the scrim-backed video controls container so
+        // the voice overlay can be hidden on video calls without
+        // taking the buttons with it.
+        if (muteButtonVideo != null) muteButtonVideo.setOnClickListener(muteClick);
+        if (hangupButtonVideo != null) hangupButtonVideo.setOnClickListener(hangupClick);
+        if (speakerButtonVideo != null) speakerButtonVideo.setOnClickListener(speakerClick);
+        if (cameraOffButtonVideo != null) cameraOffButtonVideo.setOnClickListener(cameraOffClick);
+        if (cameraFlipButtonVideo != null) cameraFlipButtonVideo.setOnClickListener(cameraFlipClick);
         // Initial paint with the off-state visual so the buttons render
         // correctly before the manager's pushInitialState callback
         // arrives (which happens after onServiceConnected / setUiListener).
@@ -542,6 +719,11 @@ public class ActiveCallActivity extends Activity {
             cameraOff,
             R.drawable.ic_video,
             R.drawable.ic_video_off);
+        applyToggleVisual(
+            cameraOffButtonVideo,
+            cameraOff,
+            R.drawable.ic_video,
+            R.drawable.ic_video_off);
         if (localVideoRenderer != null) {
             // Hide the local self-view when the camera is off so the
             // user sees that they're not transmitting frames.
@@ -559,36 +741,33 @@ public class ActiveCallActivity extends Activity {
     private void applyStatus(NativeVoiceCallManager.CallStatus status, String reason) {
         if (status == null) return;
         Log.d(TAG, "applyStatus: " + status + " reason=" + reason);
+        String text;
         switch (status) {
-            case OUTGOING_RINGING:
-                if (statusView != null) statusView.setText("Calling…");
-                break;
-            case INCOMING_RINGING:
-                if (statusView != null) statusView.setText("Incoming call");
-                break;
-            case CONNECTING:
-                if (statusView != null) statusView.setText("Connecting…");
-                break;
-            case ACTIVE:
-                if (statusView != null) statusView.setText("Active");
-                break;
-            case ENDED:
-                if (statusView != null) statusView.setText(endReasonText(reason));
-                // Defer finishing slightly so the user briefly sees the
-                // ended state, matching the JS overlay's CALL_END_DISPLAY_MS.
-                mainHandler.postDelayed(this::finishAndRemoveTask, 1500L);
-                break;
+            case OUTGOING_RINGING: text = "Calling…"; break;
+            case INCOMING_RINGING: text = "Incoming call"; break;
+            case CONNECTING: text = "Connecting…"; break;
+            case ACTIVE: text = "Active"; break;
+            case ENDED: text = endReasonText(reason); break;
             case IDLE:
-            default:
-                break;
+            default: text = null; break;
+        }
+        if (text != null) {
+            if (statusView != null) statusView.setText(text);
+            if (statusViewVideo != null) statusViewVideo.setText(text);
+        }
+        if (status == NativeVoiceCallManager.CallStatus.ENDED) {
+            // Defer finishing slightly so the user briefly sees the
+            // ended state, matching the JS overlay's CALL_END_DISPLAY_MS.
+            mainHandler.postDelayed(this::finishAndRemoveTask, 1500L);
         }
     }
 
     private void updateDuration(int seconds) {
-        if (durationView == null) return;
         int m = seconds / 60;
         int s = seconds % 60;
-        durationView.setText(String.format("%d:%02d", m, s));
+        String txt = String.format("%d:%02d", m, s);
+        if (durationView != null) durationView.setText(txt);
+        if (durationViewVideo != null) durationViewVideo.setText(txt);
     }
 
     private void applyMute(boolean newMuted) {
@@ -601,6 +780,11 @@ public class ActiveCallActivity extends Activity {
             newMuted,
             R.drawable.ic_mic,
             R.drawable.ic_mic_off);
+        applyToggleVisual(
+            muteButtonVideo,
+            newMuted,
+            R.drawable.ic_mic,
+            R.drawable.ic_mic_off);
     }
 
     private void applySpeaker(boolean newSpeakerOn) {
@@ -609,6 +793,11 @@ public class ActiveCallActivity extends Activity {
         // inversion alone communicates the toggle.
         applyToggleVisual(
             speakerButton,
+            newSpeakerOn,
+            R.drawable.ic_speaker,
+            R.drawable.ic_speaker);
+        applyToggleVisual(
+            speakerButtonVideo,
             newSpeakerOn,
             R.drawable.ic_speaker,
             R.drawable.ic_speaker);

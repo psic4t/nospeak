@@ -9,26 +9,30 @@
         background to null so the underlay SurfaceView (the remote
         renderer) shows through.
       - active_call_remote_video fills the whole screen behind
-        everything; visible only on video calls. SurfaceView lives
-        in the underlay window — the root's transparent background
-        on video calls lets the system hole-punch through and
-        composite the surface beneath the activity UI.
+        everything; visible only on video calls. Edge-to-edge:
+        ActiveCallActivity disables decor-fits-system-windows so the
+        remote video also extends behind the (transparent) status &
+        navigation bars, giving a true full-screen video surface.
       - active_call_local_video is a small picture-in-picture in the
-        upper-right corner; visible only on video calls.
-        setZOrderMediaOverlay(true) at runtime puts it above the
-        remote underlay but below the regular UI.
-      - The voice-style overlay (avatar + name + status + controls)
-        sits on top, with the avatar hidden on video calls. Two
-        gradient scrims (top/bottom) provide control legibility when
-        the underlay shows bright camera frames.
-      - Two new bottom-row buttons (camera-off, flip-camera) are
-        gated VISIBLE only on video calls.
+        upper-right corner; visible only on video calls. Its top
+        margin is adjusted at runtime to respect the status-bar /
+        display-cutout inset.
+      - The voice-style overlay (avatar + name + status + duration +
+        controls) sits on top, used only on voice calls.
+      - On video calls, two distinct chrome containers are used
+        instead: active_call_video_header (top, with the top gradient
+        scrim as its background) holds status / name / duration, and
+        active_call_video_controls (bottom, with the bottom gradient
+        scrim as its background) holds the 5-button control row.
+        The video chrome is moved out of the centered overlay so the
+        remote frame is unobstructed in the middle of the screen,
+        matching the web ActiveCallOverlay.svelte mobile layout.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/active_call_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
+    android:fitsSystemWindows="false"
     android:background="@drawable/bg_incoming_call">
 
     <!-- Full-screen remote video (gone for voice calls).
@@ -42,7 +46,10 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
-    <!-- Picture-in-picture self-view (gone for voice calls). -->
+    <!-- Picture-in-picture self-view (gone for voice calls). The top
+         margin here is a fallback; ActiveCallActivity overrides it
+         from the system-bars + display-cutout inset so the PiP
+         doesn't sit under the status bar / camera notch. -->
     <org.webrtc.SurfaceViewRenderer
         android:id="@+id/active_call_local_video"
         android:layout_width="120dp"
@@ -52,26 +59,179 @@
         android:layout_marginEnd="20dp"
         android:visibility="gone" />
 
-    <!-- Top scrim for status text legibility on video calls. Hidden on
-         voice calls so the existing background-only chrome is unchanged. -->
-    <View
-        android:id="@+id/active_call_top_scrim"
+    <!-- ===== VIDEO-CALL CHROME ===== -->
+
+    <!-- Top header for video calls: status (small), name (large),
+         duration (small). Carries the top gradient scrim as its
+         background so text stays legible against bright camera
+         frames. The activity applies the status-bar / cutout inset
+         as paddingTop so content sits below the system bar.
+
+         Visible only on video calls; gone for voice (which uses the
+         centered active_call_overlay below). -->
+    <LinearLayout
+        android:id="@+id/active_call_video_header"
         android:layout_width="match_parent"
-        android:layout_height="120dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="top"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="32dp"
         android:background="@drawable/bg_active_call_scrim_top"
-        android:visibility="gone" />
+        android:visibility="gone">
 
-    <!-- Bottom scrim for controls legibility on video calls. -->
-    <View
-        android:id="@+id/active_call_bottom_scrim"
+        <TextView
+            android:id="@+id/active_call_video_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connecting…"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="14sp"
+            android:alpha="0.85" />
+
+        <TextView
+            android:id="@+id/active_call_video_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/active_call_video_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="14sp"
+            android:alpha="0.85"
+            android:text="" />
+    </LinearLayout>
+
+    <!-- Bottom controls for video calls: the 5-button control row
+         carrying the bottom gradient scrim as its background. The
+         activity applies the navigation-bar inset as paddingBottom so
+         buttons aren't clipped behind the gesture pill.
+
+         Visible only on video calls; gone for voice (which uses the
+         button row inside active_call_overlay). -->
+    <LinearLayout
+        android:id="@+id/active_call_video_controls"
         android:layout_width="match_parent"
-        android:layout_height="180dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="24dp"
         android:background="@drawable/bg_active_call_scrim_bottom"
-        android:visibility="gone" />
+        android:visibility="gone">
 
-    <!-- Existing voice-call layout: avatar + name + status + controls. -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/active_call_mute_video"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_active_call_button_secondary"
+                android:src="@drawable/ic_mic"
+                android:scaleType="center"
+                android:contentDescription="Toggle microphone mute"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/active_call_camera_off_video"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_active_call_button_secondary"
+                android:src="@drawable/ic_video"
+                android:scaleType="center"
+                android:contentDescription="Toggle camera"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/active_call_hangup_video"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_call_button_decline"
+                android:src="@drawable/ic_call_end"
+                android:scaleType="center"
+                android:contentDescription="Hang up"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/active_call_camera_flip_video"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_active_call_button_secondary"
+                android:src="@drawable/ic_camera_flip"
+                android:scaleType="center"
+                android:contentDescription="Flip camera"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center">
+
+            <ImageButton
+                android:id="@+id/active_call_speaker_video"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_active_call_button_secondary"
+                android:src="@drawable/ic_speaker"
+                android:scaleType="center"
+                android:contentDescription="Toggle speakerphone"
+                android:tint="@color/incoming_call_text" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- ===== VOICE-CALL CHROME =====
+
+         Existing voice-call layout: avatar + name + status + duration
+         + control row, all centered. Hidden for video calls. -->
     <LinearLayout
         android:id="@+id/active_call_overlay"
         android:layout_width="match_parent"
