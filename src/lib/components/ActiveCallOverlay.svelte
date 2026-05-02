@@ -181,14 +181,14 @@
             <div
                 class="relative w-full h-full
                        md:w-full md:max-w-sm md:h-auto md:max-h-[90vh]
-                       md:bg-slate-900/95 md:backdrop-blur-xl
-                       md:rounded-3xl md:shadow-2xl md:border md:border-white/10
+                       md:bg-[rgb(var(--color-mantle-rgb)/0.95)] md:dark:bg-slate-900/80 md:backdrop-blur-xl
+                       md:rounded-3xl md:shadow-2xl md:border md:border-[rgb(var(--color-overlay0-rgb)/0.30)] md:dark:border-white/10
                        md:overflow-hidden flex flex-col"
             >
                 <!-- Desktop-only header above the video. -->
-                <div class="hidden md:flex flex-col items-center px-6 pt-5 pb-3 text-white">
+                <div class="hidden md:flex flex-col items-center px-6 pt-5 pb-3 text-[rgb(var(--color-text-rgb))]">
                     <span class="text-lg font-medium">{profileName}</span>
-                    <span class="text-sm text-gray-300">{statusText}</span>
+                    <span class="text-sm text-[rgb(var(--color-subtext0-rgb))]">{statusText}</span>
                 </div>
 
                 <!-- Remote video frame.
@@ -284,7 +284,7 @@
                                     class="flex flex-col items-center gap-2"
                                     aria-label={$t('voiceCall.hangup')}
                                 >
-                                    <div class="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center">
+                                    <div class="w-14 h-14 rounded-full bg-[rgb(var(--color-red-rgb))] flex items-center justify-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 rotate-[135deg]">
                                             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
                                         </svg>
@@ -329,8 +329,8 @@
                             class="flex flex-col items-center gap-2"
                             aria-label={$voiceCallState.isMuted ? $t('voiceCall.unmute') : $t('voiceCall.mute')}
                         >
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center {$voiceCallState.isMuted ? 'bg-white' : 'bg-white/20 backdrop-blur'}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 {$voiceCallState.isMuted ? 'text-black' : 'text-white'}">
+                            <div class="w-12 h-12 rounded-full flex items-center justify-center {$voiceCallState.isMuted ? 'bg-[rgb(var(--color-text-rgb))]' : 'bg-[rgb(var(--color-surface0-rgb))] dark:bg-[rgb(var(--color-surface1-rgb))] backdrop-blur'}">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 {$voiceCallState.isMuted ? 'text-[rgb(var(--color-base-rgb))]' : 'text-[rgb(var(--color-text-rgb))]'}">
                                     {#if $voiceCallState.isMuted}
                                         <line x1="1" y1="1" x2="23" y2="23"></line>
                                         <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
@@ -353,8 +353,8 @@
                             class="flex flex-col items-center gap-2"
                             aria-label={$voiceCallState.isCameraOff ? $t('voiceCall.cameraOn') : $t('voiceCall.cameraOff')}
                         >
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center {$voiceCallState.isCameraOff ? 'bg-white' : 'bg-white/20 backdrop-blur'}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 {$voiceCallState.isCameraOff ? 'text-black' : 'text-white'}">
+                            <div class="w-12 h-12 rounded-full flex items-center justify-center {$voiceCallState.isCameraOff ? 'bg-[rgb(var(--color-text-rgb))]' : 'bg-[rgb(var(--color-surface0-rgb))] dark:bg-[rgb(var(--color-surface1-rgb))] backdrop-blur'}">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 {$voiceCallState.isCameraOff ? 'text-[rgb(var(--color-base-rgb))]' : 'text-[rgb(var(--color-text-rgb))]'}">
                                     {#if $voiceCallState.isCameraOff}
                                         <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"></path>
                                         <line x1="1" y1="1" x2="23" y2="23"></line>
@@ -372,7 +372,7 @@
                             class="flex flex-col items-center gap-2"
                             aria-label={$t('voiceCall.hangup')}
                         >
-                            <div class="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center">
+                            <div class="w-14 h-14 rounded-full bg-[rgb(var(--color-red-rgb))] flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 rotate-[135deg]">
                                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
                                 </svg>
@@ -401,20 +401,20 @@
             <div
                 class="w-full h-full flex flex-col items-center justify-center gap-8
                        md:w-full md:max-w-md md:h-auto md:gap-6 md:p-8
-                       md:bg-white/95 md:dark:bg-slate-900/80 md:backdrop-blur-xl
-                       md:rounded-3xl md:shadow-2xl md:border md:border-white/20 md:dark:border-white/10"
+                       md:bg-[rgb(var(--color-mantle-rgb)/0.95)] md:dark:bg-slate-900/80 md:backdrop-blur-xl
+                       md:rounded-3xl md:shadow-2xl md:border md:border-[rgb(var(--color-overlay0-rgb)/0.30)] md:dark:border-white/10"
             >
                 <!-- Peer info -->
                 <div class="flex flex-col items-center gap-4">
                     {#if profilePicture}
                         <img src={profilePicture} alt="" class="w-24 h-24 rounded-full object-cover" />
                     {:else}
-                        <div class="w-24 h-24 rounded-full bg-gray-700 md:bg-slate-300 md:dark:bg-gray-700 flex items-center justify-center text-3xl text-white md:text-slate-700 md:dark:text-white">
+                        <div class="w-24 h-24 rounded-full bg-gray-700 md:bg-[rgb(var(--color-surface0-rgb))] md:dark:bg-[rgb(var(--color-surface1-rgb))] flex items-center justify-center text-3xl text-white md:text-[rgb(var(--color-text-rgb))]">
                             {profileName.charAt(0).toUpperCase()}
                         </div>
                     {/if}
-                    <span class="text-white md:text-slate-900 md:dark:text-white text-xl font-medium">{profileName}</span>
-                    <span class="text-gray-400 md:text-slate-600 md:dark:text-gray-400 text-lg">{statusText}</span>
+                    <span class="text-white md:text-[rgb(var(--color-text-rgb))] text-xl font-medium">{profileName}</span>
+                    <span class="text-gray-400 md:text-[rgb(var(--color-subtext0-rgb))] text-lg">{statusText}</span>
                 </div>
 
                 <!-- Controls -->
@@ -426,8 +426,8 @@
                             class="flex flex-col items-center gap-2"
                             aria-label={$voiceCallState.isMuted ? $t('voiceCall.unmute') : $t('voiceCall.mute')}
                         >
-                            <div class="w-14 h-14 rounded-full flex items-center justify-center {$voiceCallState.isMuted ? 'bg-white' : 'bg-gray-700 md:bg-slate-200 md:dark:bg-gray-700'}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 {$voiceCallState.isMuted ? 'text-black' : 'text-white md:text-slate-700 md:dark:text-white'}">
+                            <div class="w-14 h-14 rounded-full flex items-center justify-center {$voiceCallState.isMuted ? 'bg-white md:bg-[rgb(var(--color-text-rgb))]' : 'bg-gray-700 md:bg-[rgb(var(--color-surface0-rgb))] md:dark:bg-[rgb(var(--color-surface1-rgb))]'}">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 {$voiceCallState.isMuted ? 'text-black md:text-[rgb(var(--color-base-rgb))]' : 'text-white md:text-[rgb(var(--color-text-rgb))]'}">
                                     {#if $voiceCallState.isMuted}
                                         <line x1="1" y1="1" x2="23" y2="23"></line>
                                         <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
@@ -442,7 +442,7 @@
                                     {/if}
                                 </svg>
                             </div>
-                            <span class="text-white md:text-slate-700 md:dark:text-white text-xs">
+                            <span class="text-white md:text-[rgb(var(--color-text-rgb))] text-xs">
                                 {$voiceCallState.isMuted ? $t('voiceCall.unmute') : $t('voiceCall.mute')}
                             </span>
                         </button>
@@ -453,7 +453,7 @@
                             class="flex flex-col items-center gap-2"
                             aria-label={$t('voiceCall.hangup')}
                         >
-                            <div class="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center">
+                            <div class="w-16 h-16 rounded-full bg-[rgb(var(--color-red-rgb))] flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 rotate-[135deg]">
                                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
                                 </svg>
@@ -466,13 +466,13 @@
                             class="flex flex-col items-center gap-2"
                             aria-label={$t('voiceCall.speaker')}
                         >
-                            <div class="w-14 h-14 rounded-full flex items-center justify-center {$voiceCallState.isSpeakerOn ? 'bg-white' : 'bg-gray-700 md:bg-slate-200 md:dark:bg-gray-700'}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 {$voiceCallState.isSpeakerOn ? 'text-black' : 'text-white md:text-slate-700 md:dark:text-white'}">
+                            <div class="w-14 h-14 rounded-full flex items-center justify-center {$voiceCallState.isSpeakerOn ? 'bg-white md:bg-[rgb(var(--color-text-rgb))]' : 'bg-gray-700 md:bg-[rgb(var(--color-surface0-rgb))] md:dark:bg-[rgb(var(--color-surface1-rgb))]'}">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 {$voiceCallState.isSpeakerOn ? 'text-black md:text-[rgb(var(--color-base-rgb))]' : 'text-white md:text-[rgb(var(--color-text-rgb))]'}">
                                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                     <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                                 </svg>
                             </div>
-                            <span class="text-white md:text-slate-700 md:dark:text-white text-xs">{$t('voiceCall.speaker')}</span>
+                            <span class="text-white md:text-[rgb(var(--color-text-rgb))] text-xs">{$t('voiceCall.speaker')}</span>
                         </button>
                     </div>
                 {/if}
