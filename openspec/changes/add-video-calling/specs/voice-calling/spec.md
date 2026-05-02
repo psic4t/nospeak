@@ -520,3 +520,41 @@ The system SHALL persist call history as NIP-17 gift-wrapped Kind 1405 rumor eve
 - **GIVEN** a Kind 1405 rumor written by an older build lacks the `call-media-type` tag
 - **WHEN** the rumor is rendered in the conversation timeline
 - **THEN** the rendering SHALL treat the call as `voice` (default) without raising any error
+
+### Requirement: Android Video-Call Chrome Auto-Hide
+On the Android build, the active-call UI SHALL auto-hide its top header (status, peer name, duration) and bottom control row (mute, camera-off, hangup, flip-camera, speaker) after 3 seconds of touch inactivity once a video call has reached the `active` state and the remote `SurfaceViewRenderer` has rendered its first frame. Any touch on the activity SHALL fade the chrome back in within ~200 ms and restart the 3-second auto-hide timer. While the chrome is hidden, the system status and navigation bars SHALL also be hidden using `WindowInsetsController` with `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` so the remote video occupies the full display, and SHALL be re-shown together with the chrome on the next touch. The local self-view picture-in-picture SHALL remain visible at all times regardless of chrome state. Chrome SHALL remain visible (and the auto-hide timer cancelled) whenever the call status is `outgoing-ringing`, `incoming-ringing`, `connecting`, or `ended`, or whenever Accessibility touch-exploration (TalkBack) is active. Voice calls and the web/PWA build SHALL NOT be affected by this behavior.
+
+#### Scenario: Chrome auto-hides after inactivity
+- **GIVEN** the user is on Android in a video call that has reached the `active` state
+- **AND** the remote `SurfaceViewRenderer` has rendered its first frame
+- **WHEN** the user does not touch the screen for 3 seconds
+- **THEN** the top header and bottom controls SHALL fade to invisible
+- **AND** the system status and navigation bars SHALL be hidden
+- **AND** the local self-view PiP SHALL remain visible
+
+#### Scenario: Tap reveals chrome and resets timer
+- **GIVEN** the chrome is currently hidden during an active video call
+- **WHEN** the user taps anywhere on the screen
+- **THEN** the top header, bottom controls, and system bars SHALL fade back in
+- **AND** a fresh 3-second auto-hide timer SHALL be started
+
+#### Scenario: Pre-active call keeps chrome visible
+- **GIVEN** the user is on Android in a video call whose status is `outgoing-ringing`, `incoming-ringing`, or `connecting`
+- **WHEN** any amount of time passes without touch input
+- **THEN** the top header and bottom controls SHALL remain visible
+- **AND** no auto-hide timer SHALL be in flight
+
+#### Scenario: Ended-call linger keeps chrome visible
+- **GIVEN** an Android video call has just transitioned to `ended`
+- **THEN** any pending auto-hide SHALL be cancelled
+- **AND** the chrome SHALL be visible for the entire ended-state linger so the user can read the end-reason text
+
+#### Scenario: Accessibility services keep chrome visible
+- **GIVEN** TalkBack / touch-exploration is enabled on the device
+- **WHEN** the user is in any Android video call
+- **THEN** the chrome SHALL remain visible for the entire call regardless of touch inactivity
+
+#### Scenario: Voice calls unaffected
+- **GIVEN** the user is on Android in an active voice (non-video) call
+- **THEN** the centered voice-call layout SHALL behave exactly as before
+- **AND** no auto-hide SHALL apply to its controls

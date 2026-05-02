@@ -17,6 +17,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -137,6 +138,39 @@ public class ActiveCallActivity extends Activity {
     private boolean bound = false;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    // -------- Chrome auto-hide (video calls only) --------
+    /**
+     * After this many ms of touch inactivity on a video call in ACTIVE
+     * state, the top header and bottom controls fade out (WhatsApp
+     * convention). Any touch reveals them again and resets the timer.
+     */
+    private static final long CHROME_AUTO_HIDE_MS = 3000L;
+    /** Fade-in / fade-out duration for chrome and system bars. */
+    private static final long CHROME_FADE_MS = 200L;
+    /** True when chrome (header + controls) is currently shown. */
+    private boolean chromeVisible = true;
+    /**
+     * True once the remote SurfaceViewRenderer has rendered its first
+     * frame. We never auto-hide chrome before then — hiding controls
+     * over a black-screen pre-roll is worse UX than leaving them up.
+     */
+    private boolean firstRemoteFrameRendered = false;
+    /**
+     * True when TalkBack / touch-exploration is active. While set, we
+     * keep chrome visible permanently so the controls remain
+     * reachable for accessibility services.
+     */
+    private boolean isAccessibilityTouchExplorationOn = false;
+    /**
+     * Most recent status from {@link NativeVoiceCallManager}. Auto-hide
+     * is only scheduled while this is {@code ACTIVE}; pre-active and
+     * ENDED states force chrome visible.
+     */
+    private NativeVoiceCallManager.CallStatus latestStatus =
+        NativeVoiceCallManager.CallStatus.IDLE;
+    private final Runnable hideChromeRunnable = this::hideChrome;
+    private AccessibilityManager.TouchExplorationStateChangeListener a11yListener;
 
     private final NativeVoiceCallManager.UiListener uiListener =
         new NativeVoiceCallManager.UiListener() {
@@ -292,6 +326,12 @@ public class ActiveCallActivity extends Activity {
         // A second call replacing the first lands here. Re-bind the
         // avatar so the new peer's picture (or identicon) shows.
         bindAvatar();
+        // Reset chrome auto-hide state for the replacement call: a
+        // brand-new call has a fresh remote stream, so we must wait
+        // for the new first frame before auto-hiding again. Force
+        // chrome visible in case the previous call had hidden it.
+        firstRemoteFrameRendered = false;
+        forceShowChrome();
     }
 
     @Override
@@ -309,6 +349,9 @@ public class ActiveCallActivity extends Activity {
 
     @Override
     protected void onStop() {
+        // Drop any pending chrome-hide so it can't fire on a destroyed
+        // window after the activity has finished.
+        mainHandler.removeCallbacks(hideChromeRunnable);
         if (bound) {
             try {
                 NativeVoiceCallManager mgr = VoiceCallForegroundService.getNativeManager();
@@ -319,6 +362,69 @@ public class ActiveCallActivity extends Activity {
             boundService = null;
         }
         super.onStop();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Track TalkBack / touch-exploration state. While enabled the
+        // chrome stays visible permanently — auto-hide would render
+        // controls unreachable for accessibility services.
+        AccessibilityManager am = (AccessibilityManager)
+            getSystemService(ACCESSIBILITY_SERVICE);
+        if (am != null) {
+            isAccessibilityTouchExplorationOn = am.isTouchExplorationEnabled();
+            a11yListener = enabled -> mainHandler.post(() -> {
+                isAccessibilityTouchExplorationOn = enabled;
+                if (enabled) {
+                    forceShowChrome();
+                } else {
+                    scheduleHideIfEligible();
+                }
+            });
+            try {
+                am.addTouchExplorationStateChangeListener(a11yListener);
+            } catch (Throwable ignored) {}
+            if (isAccessibilityTouchExplorationOn) {
+                forceShowChrome();
+            }
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (a11yListener != null) {
+            AccessibilityManager am = (AccessibilityManager)
+                getSystemService(ACCESSIBILITY_SERVICE);
+            if (am != null) {
+                try {
+                    am.removeTouchExplorationStateChangeListener(a11yListener);
+                } catch (Throwable ignored) {}
+            }
+            a11yListener = null;
+        }
+        super.onPause();
+    }
+
+    /**
+     * Activity-level interaction hook. Android dispatches this for
+     * every touch / key event the activity receives, before child
+     * views handle it. Using this (rather than an OnTouchListener on
+     * the root) means button taps both perform their action AND
+     * reset the chrome-hide timer, without us having to special-case
+     * dispatch.
+     */
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        if (!isVideoCall) return;
+        if (chromeVisible) {
+            // Keep-alive: any touch resets the 3 s hide timer.
+            scheduleHideIfEligible();
+        } else {
+            // Tap-to-reveal.
+            showChrome();
+        }
     }
 
     @Override
@@ -391,8 +497,16 @@ public class ActiveCallActivity extends Activity {
         int voiceVis = isVideoCall ? View.GONE : View.VISIBLE;
         if (remoteVideoRenderer != null) remoteVideoRenderer.setVisibility(videoVis);
         if (localVideoRenderer != null) localVideoRenderer.setVisibility(videoVis);
-        if (videoHeader != null) videoHeader.setVisibility(videoVis);
-        if (videoControls != null) videoControls.setVisibility(videoVis);
+        if (videoHeader != null) {
+            videoHeader.setVisibility(videoVis);
+            // Reset alpha defensively: any previous video session may
+            // have left it at 0 mid-fade if the activity was reused.
+            videoHeader.setAlpha(1f);
+        }
+        if (videoControls != null) {
+            videoControls.setVisibility(videoVis);
+            videoControls.setAlpha(1f);
+        }
         // The centered overlay is the entire voice-call surface
         // (avatar + name + status + duration + control row). On video
         // calls hide it wholesale so the camera frame is unobstructed.
@@ -420,6 +534,14 @@ public class ActiveCallActivity extends Activity {
             } else {
                 rootLayout.setBackgroundResource(R.drawable.bg_incoming_call);
             }
+        }
+        // Voice path: ensure chrome auto-hide is fully disengaged.
+        // The video header/controls are already GONE for voice (set
+        // above), but force-clear any timer so a previous video-call
+        // session's pending hide can't fire on this voice surface.
+        if (!isVideoCall) {
+            mainHandler.removeCallbacks(hideChromeRunnable);
+            chromeVisible = true;
         }
     }
 
@@ -636,6 +758,12 @@ public class ActiveCallActivity extends Activity {
                     @Override
                     public void onFirstFrameRendered() {
                         Log.d(TAG, "remoteVideoRenderer: first frame rendered");
+                        // Gate chrome auto-hide on first remote frame so
+                        // we never hide controls over a black pre-roll.
+                        mainHandler.post(() -> {
+                            firstRemoteFrameRendered = true;
+                            scheduleHideIfEligible();
+                        });
                     }
                     @Override
                     public void onFrameResolutionChanged(int videoWidth, int videoHeight, int rotation) {
@@ -783,6 +911,7 @@ public class ActiveCallActivity extends Activity {
     private void applyStatus(NativeVoiceCallManager.CallStatus status, String reason) {
         if (status == null) return;
         Log.d(TAG, "applyStatus: " + status + " reason=" + reason);
+        latestStatus = status;
         String text;
         switch (status) {
             case OUTGOING_RINGING: text = "Calling…"; break;
@@ -796,6 +925,14 @@ public class ActiveCallActivity extends Activity {
         if (text != null) {
             if (statusView != null) statusView.setText(text);
             if (statusViewVideo != null) statusViewVideo.setText(text);
+        }
+        // Chrome visibility coupling: ACTIVE → may schedule auto-hide;
+        // any other state → force chrome visible so end-reason text
+        // and pre-connect status are always readable.
+        if (status == NativeVoiceCallManager.CallStatus.ACTIVE) {
+            scheduleHideIfEligible();
+        } else {
+            forceShowChrome();
         }
         if (status == NativeVoiceCallManager.CallStatus.ENDED) {
             // Defer finishing slightly so the user briefly sees the
@@ -877,6 +1014,132 @@ public class ActiveCallActivity extends Activity {
                 ContextCompat.getColor(this, R.color.incoming_call_text),
                 PorterDuff.Mode.SRC_IN);
         }
+    }
+
+    // -------- Chrome auto-hide implementation --------
+
+    /**
+     * Schedule the auto-hide runnable iff we're in a state where
+     * hiding the chrome makes sense. No-ops on voice calls, before
+     * the first remote frame, while the call isn't ACTIVE, and while
+     * accessibility touch-exploration is on. Always cancels any
+     * previously-pending hide first so taps reliably extend the timer.
+     */
+    private void scheduleHideIfEligible() {
+        mainHandler.removeCallbacks(hideChromeRunnable);
+        if (!isVideoCall) return;
+        if (isAccessibilityTouchExplorationOn) return;
+        if (latestStatus != NativeVoiceCallManager.CallStatus.ACTIVE) return;
+        if (!firstRemoteFrameRendered) return;
+        mainHandler.postDelayed(hideChromeRunnable, CHROME_AUTO_HIDE_MS);
+    }
+
+    /**
+     * Cancel any pending auto-hide and ensure chrome is visible. Used
+     * when transitioning out of ACTIVE (e.g. CONNECTING / ENDED) and
+     * when accessibility services come on.
+     */
+    private void forceShowChrome() {
+        mainHandler.removeCallbacks(hideChromeRunnable);
+        if (!chromeVisible) {
+            showChrome();
+        }
+    }
+
+    /**
+     * Fade the top header + bottom controls back in (200 ms) and
+     * un-hide the system status / navigation bars. Resets the auto-
+     * hide timer if the call is currently eligible.
+     *
+     * <p>Voice calls are a no-op: the centered voice overlay is the
+     * entire UI on voice calls and is not subject to auto-hide.
+     */
+    private void showChrome() {
+        if (!isVideoCall) {
+            chromeVisible = true;
+            return;
+        }
+        chromeVisible = true;
+        if (videoHeader != null) {
+            videoHeader.setVisibility(View.VISIBLE);
+            videoHeader.animate()
+                .alpha(1f)
+                .setDuration(CHROME_FADE_MS)
+                .start();
+        }
+        if (videoControls != null) {
+            videoControls.setVisibility(View.VISIBLE);
+            videoControls.animate()
+                .alpha(1f)
+                .setDuration(CHROME_FADE_MS)
+                .start();
+        }
+        showSystemBars();
+        scheduleHideIfEligible();
+    }
+
+    /**
+     * Fade the top header + bottom controls out (200 ms) and hide the
+     * system status / navigation bars. Re-evaluates eligibility at
+     * fire time so a status change between scheduling and firing is
+     * handled correctly (the runnable bails out and re-shows).
+     */
+    private void hideChrome() {
+        if (!isVideoCall
+                || latestStatus != NativeVoiceCallManager.CallStatus.ACTIVE
+                || isAccessibilityTouchExplorationOn
+                || !firstRemoteFrameRendered) {
+            // State changed since we scheduled — abort the hide and
+            // make sure chrome is visible.
+            forceShowChrome();
+            return;
+        }
+        chromeVisible = false;
+        if (videoHeader != null) {
+            videoHeader.animate()
+                .alpha(0f)
+                .setDuration(CHROME_FADE_MS)
+                .withEndAction(() -> {
+                    if (!chromeVisible && videoHeader != null) {
+                        videoHeader.setVisibility(View.INVISIBLE);
+                    }
+                })
+                .start();
+        }
+        if (videoControls != null) {
+            videoControls.animate()
+                .alpha(0f)
+                .setDuration(CHROME_FADE_MS)
+                .withEndAction(() -> {
+                    if (!chromeVisible && videoControls != null) {
+                        videoControls.setVisibility(View.INVISIBLE);
+                    }
+                })
+                .start();
+        }
+        hideSystemBars();
+    }
+
+    /**
+     * Hide the system status + navigation bars while keeping them
+     * available via swipe-from-edge ({@code BEHAVIOR_SHOW_TRANSIENT_
+     * BARS_BY_SWIPE}). Mirrors WhatsApp's full-immersive video-call
+     * surface.
+     */
+    private void hideSystemBars() {
+        WindowInsetsControllerCompat c = WindowCompat.getInsetsController(
+            getWindow(), getWindow().getDecorView());
+        if (c == null) return;
+        c.setSystemBarsBehavior(
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        c.hide(WindowInsetsCompat.Type.systemBars());
+    }
+
+    private void showSystemBars() {
+        WindowInsetsControllerCompat c = WindowCompat.getInsetsController(
+            getWindow(), getWindow().getDecorView());
+        if (c == null) return;
+        c.show(WindowInsetsCompat.Type.systemBars());
     }
 
     private String endReasonText(String reason) {

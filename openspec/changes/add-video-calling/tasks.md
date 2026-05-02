@@ -42,7 +42,7 @@ phase; run Android unit tests after Android-touching phases.
 - [x] 3.10 Update `ActiveCallOverlay.svelte` to render full-screen `<video>` for remote and PiP `<video>` for local self-view when `callKind === 'video'`
 - [x] 3.11 Add camera-off and flip-camera control buttons in the active-call controls strip; gate their visibility on `callKind === 'video'`
 - [x] 3.12 Mirror the local self-view when `facingMode === 'user'` (CSS `transform: scaleX(-1)`)
-- [x] 3.13 Auto-hide controls after 3 s of pointer inactivity; reveal on tap (defer if scope creeps)
+- [x] 3.13 Auto-hide controls after 3 s of pointer inactivity; reveal on tap (defer if scope creeps) — Android implementation lives in section 11; web/PWA build remains intentionally non-auto-hiding (desktop pointer UX)
 - [x] 3.14 Update `IncomingCallOverlay.svelte` to display "Incoming video call" copy when `callKind === 'video'`
 - [x] 3.15 On video call active, set `isSpeakerOn=true` in the store
 - [x] 3.16 Extend `VoiceCallService.test.ts` with the test cases listed in section 7a of the design (initiate-video, send-offer-tag, handle-offer-with-and-without-tag, accept-video, toggle-camera, flip-camera, cleanup)
@@ -107,3 +107,21 @@ phase; run Android unit tests after Android-touching phases.
 - [x] 7.2 Run `openspec validate add-video-calling --strict` (already green; reconfirm after any spec edits)
 - [ ] 7.3 Run `openspec sync-specs add-video-calling` (or equivalent skill) to merge deltas into `openspec/specs/voice-calling/spec.md`
 - [ ] 7.4 Archive the change once production verification is complete (`openspec archive add-video-calling --yes`)
+
+## 11. Android video-call chrome auto-hide
+
+(Implements the previously deferred task 3.13 with an Android-specific
+behavior matching WhatsApp's full-screen video call surface.)
+
+- [x] 11.1 Add chrome auto-hide state fields to `ActiveCallActivity` (`chromeVisible`, `firstRemoteFrameRendered`, `isAccessibilityTouchExplorationOn`, `latestStatus`, `hideChromeRunnable`, `a11yListener`) plus constants `CHROME_AUTO_HIDE_MS = 3000` and `CHROME_FADE_MS = 200`
+- [x] 11.2 Override `Activity.onUserInteraction()` so any touch on the activity (including button taps) either resets the auto-hide timer when chrome is visible, or reveals chrome when hidden; voice calls are a no-op
+- [x] 11.3 Implement `scheduleHideIfEligible()` that posts the hide runnable only when video, `ACTIVE`, first remote frame seen, and TalkBack is off; always cancels any previously-pending hide first
+- [x] 11.4 Implement `showChrome()` (alpha 0→1 over 200 ms on `videoHeader` + `videoControls`, restore system bars, reschedule timer) and `hideChrome()` (alpha 1→0, set `INVISIBLE`, hide system bars with `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`)
+- [x] 11.5 Implement `forceShowChrome()` to cancel the timer and restore visibility, used on transitions out of `ACTIVE`
+- [x] 11.6 Hook `applyStatus` so `ACTIVE` calls `scheduleHideIfEligible()` and any other status calls `forceShowChrome()`; track `latestStatus`
+- [x] 11.7 Hook `RendererCommon.RendererEvents.onFirstFrameRendered` on the remote renderer to set `firstRemoteFrameRendered = true` and trigger `scheduleHideIfEligible()` on the main thread
+- [x] 11.8 Reset `firstRemoteFrameRendered` and force chrome visible in `onNewIntent` so a back-to-back replacement call gets a fresh first-frame gate
+- [x] 11.9 Register an `AccessibilityManager.TouchExplorationStateChangeListener` in `onResume` and unregister in `onPause`; while touch-exploration is on, force chrome visible and skip the timer
+- [x] 11.10 Cancel any pending `hideChromeRunnable` in `onStop` so it cannot fire on a destroyed window; also cancel in `applyKindVisibility` when entering the voice path
+- [x] 11.11 Reset `videoHeader` / `videoControls` alpha to 1f in `applyKindVisibility` so a reused activity instance never starts a new call mid-fade
+- [x] 11.12 Verify the Java change compiles (`./gradlew :app:compileDebugJavaWithJavac` or full `assembleDebug`); manual smoke test on a video call: chrome fades after 3 s, returns on tap, system bars track chrome, PiP unaffected, ringing/connecting keep chrome up, end-of-call linger shows chrome, voice calls unaffected
