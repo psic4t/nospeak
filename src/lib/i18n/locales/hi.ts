@@ -480,6 +480,52 @@ const hi = {
         expectedAccount: 'लॉगिन किया हुआ',
         actualAccount: 'साइनर सक्रिय खाता',
         instructions: 'कृपया अपने साइनर एक्सटेंशन में सही खाते पर स्विच करें और इस पेज को रीलोड करें।'
+    },
+    voiceCall: {
+        calling: 'कॉल हो रही है...',
+        callingVideo: 'वीडियो कॉल हो रही है...',
+        connecting: 'कनेक्ट हो रहा है...',
+        incomingCall: 'इनकमिंग वॉइस कॉल',
+        incomingVideoCall: 'इनकमिंग वीडियो कॉल',
+        accept: 'स्वीकार करें',
+        decline: 'अस्वीकार करें',
+        hangup: 'बंद करें',
+        mute: 'म्यूट',
+        unmute: 'अनम्यूट',
+        speaker: 'स्पीकर',
+        cameraOff: 'कैमरा बंद',
+        cameraOn: 'कैमरा चालू',
+        flipCamera: 'कैमरा बदलें',
+        endReasonHangup: 'कॉल समाप्त',
+        endReasonRejected: 'कॉल अस्वीकार',
+        endReasonBusy: 'उपयोगकर्ता व्यस्त',
+        endReasonTimeout: 'कोई जवाब नहीं',
+        endReasonIceFailed: 'कनेक्शन विफल',
+        endReasonError: 'कॉल विफल',
+        pill: {
+            missed: 'मिस्ड वॉइस कॉल',
+            ended: 'वॉइस कॉल समाप्त',
+            endedWithDuration: 'वॉइस कॉल समाप्त \u2022 {duration}',
+            noAnswerByPeer: 'कोई जवाब नहीं',
+            noAnswerMe: 'मिस्ड वॉइस कॉल',
+            declinedByPeer: 'कॉल अस्वीकार',
+            declinedByMe: 'अस्वीकृत',
+            busyByPeer: 'उपयोगकर्ता व्यस्त',
+            busyMe: 'मिस्ड वॉइस कॉल (व्यस्त)',
+            failed: 'कनेक्शन विफल',
+            cancelled: 'रद्द किया गया',
+            generic: 'वॉइस कॉल',
+            directionOutgoing: 'आउटगोइंग कॉल',
+            directionIncoming: 'इनकमिंग कॉल',
+            video: {
+                missed: 'मिस्ड वीडियो कॉल',
+                ended: 'वीडियो कॉल समाप्त',
+                endedWithDuration: 'वीडियो कॉल समाप्त \u2022 {duration}',
+                noAnswerMe: 'मिस्ड वीडियो कॉल',
+                busyMe: 'मिस्ड वीडियो कॉल (व्यस्त)',
+                generic: 'वीडियो कॉल'
+            }
+        }
     }
 };
 

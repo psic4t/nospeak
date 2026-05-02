@@ -480,6 +480,52 @@ const th = {
         expectedAccount: 'เข้าสู่ระบบเป็น',
         actualAccount: 'บัญชีที่ใช้งานอยู่ใน Signer',
         instructions: 'กรุณาสลับไปยังบัญชีที่ถูกต้องในส่วนขยาย Signer ของคุณและโหลดหน้านี้ใหม่'
+    },
+    voiceCall: {
+        calling: 'กำลังโทร...',
+        callingVideo: 'กำลังโทรวิดีโอ...',
+        connecting: 'กำลังเชื่อมต่อ...',
+        incomingCall: 'สายเสียงเรียกเข้า',
+        incomingVideoCall: 'สายวิดีโอเรียกเข้า',
+        accept: 'รับสาย',
+        decline: 'ปฏิเสธ',
+        hangup: 'วางสาย',
+        mute: 'ปิดเสียง',
+        unmute: 'เปิดเสียง',
+        speaker: 'ลำโพง',
+        cameraOff: 'ปิดกล้อง',
+        cameraOn: 'เปิดกล้อง',
+        flipCamera: 'สลับกล้อง',
+        endReasonHangup: 'วางสายแล้ว',
+        endReasonRejected: 'สายถูกปฏิเสธ',
+        endReasonBusy: 'ผู้ใช้ไม่ว่าง',
+        endReasonTimeout: 'ไม่มีการตอบรับ',
+        endReasonIceFailed: 'การเชื่อมต่อล้มเหลว',
+        endReasonError: 'การโทรล้มเหลว',
+        pill: {
+            missed: 'สายเสียงที่ไม่ได้รับ',
+            ended: 'สายเสียงสิ้นสุด',
+            endedWithDuration: 'สายเสียงสิ้นสุด \u2022 {duration}',
+            noAnswerByPeer: 'ไม่มีการตอบรับ',
+            noAnswerMe: 'สายเสียงที่ไม่ได้รับ',
+            declinedByPeer: 'สายถูกปฏิเสธ',
+            declinedByMe: 'ปฏิเสธแล้ว',
+            busyByPeer: 'ผู้ใช้ไม่ว่าง',
+            busyMe: 'สายเสียงที่ไม่ได้รับ (ไม่ว่าง)',
+            failed: 'การเชื่อมต่อล้มเหลว',
+            cancelled: 'ยกเลิกแล้ว',
+            generic: 'สายเสียง',
+            directionOutgoing: 'สายโทรออก',
+            directionIncoming: 'สายเรียกเข้า',
+            video: {
+                missed: 'สายวิดีโอที่ไม่ได้รับ',
+                ended: 'สายวิดีโอสิ้นสุด',
+                endedWithDuration: 'สายวิดีโอสิ้นสุด \u2022 {duration}',
+                noAnswerMe: 'สายวิดีโอที่ไม่ได้รับ',
+                busyMe: 'สายวิดีโอที่ไม่ได้รับ (ไม่ว่าง)',
+                generic: 'สายวิดีโอ'
+            }
+        }
     }
 };
 

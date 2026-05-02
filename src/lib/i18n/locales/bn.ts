@@ -480,6 +480,52 @@ const bn = {
         expectedAccount: 'যে অ্যাকাউন্টে লগইন করা হয়েছে',
         actualAccount: 'সাইনারে সক্রিয় অ্যাকাউন্ট',
         instructions: 'অনুগ্রহ করে আপনার সাইনার এক্সটেনশনে সঠিক অ্যাকাউন্টে স্যুইচ করুন এবং এই পৃষ্ঠাটি পুনরায় লোড করুন।'
+    },
+    voiceCall: {
+        calling: 'কল হচ্ছে...',
+        callingVideo: 'ভিডিও কল হচ্ছে...',
+        connecting: 'সংযোগ করা হচ্ছে...',
+        incomingCall: 'ইনকামিং ভয়েস কল',
+        incomingVideoCall: 'ইনকামিং ভিডিও কল',
+        accept: 'গ্রহণ করুন',
+        decline: 'প্রত্যাখ্যান করুন',
+        hangup: 'কল শেষ করুন',
+        mute: 'মিউট',
+        unmute: 'আনমিউট',
+        speaker: 'স্পিকার',
+        cameraOff: 'ক্যামেরা বন্ধ',
+        cameraOn: 'ক্যামেরা চালু',
+        flipCamera: 'ক্যামেরা পরিবর্তন করুন',
+        endReasonHangup: 'কল শেষ',
+        endReasonRejected: 'কল প্রত্যাখ্যাত',
+        endReasonBusy: 'ব্যবহারকারী ব্যস্ত',
+        endReasonTimeout: 'কোনো উত্তর নেই',
+        endReasonIceFailed: 'সংযোগ ব্যর্থ',
+        endReasonError: 'কল ব্যর্থ',
+        pill: {
+            missed: 'মিসড ভয়েস কল',
+            ended: 'ভয়েস কল শেষ',
+            endedWithDuration: 'ভয়েস কল শেষ \u2022 {duration}',
+            noAnswerByPeer: 'কোনো উত্তর নেই',
+            noAnswerMe: 'মিসড ভয়েস কল',
+            declinedByPeer: 'কল প্রত্যাখ্যাত',
+            declinedByMe: 'প্রত্যাখ্যাত',
+            busyByPeer: 'ব্যবহারকারী ব্যস্ত',
+            busyMe: 'মিসড ভয়েস কল (ব্যস্ত)',
+            failed: 'সংযোগ ব্যর্থ',
+            cancelled: 'বাতিল করা হয়েছে',
+            generic: 'ভয়েস কল',
+            directionOutgoing: 'আউটগোয়িং কল',
+            directionIncoming: 'ইনকামিং কল',
+            video: {
+                missed: 'মিসড ভিডিও কল',
+                ended: 'ভিডিও কল শেষ',
+                endedWithDuration: 'ভিডিও কল শেষ \u2022 {duration}',
+                noAnswerMe: 'মিসড ভিডিও কল',
+                busyMe: 'মিসড ভিডিও কল (ব্যস্ত)',
+                generic: 'ভিডিও কল'
+            }
+        }
     }
 };
 

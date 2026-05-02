@@ -549,7 +549,26 @@ const en = {
             // = outgoing, peer = incoming). Legacy rows lacking the tag
             // render no arrow, so neither label is used in that case.
             directionOutgoing: 'Outgoing call',
-            directionIncoming: 'Incoming call'
+            directionIncoming: 'Incoming call',
+            // Video-call overrides for the subset of pill keys whose copy
+            // mentions "voice call" or otherwise needs media-specific
+            // wording. Renderers (CallEventMessage.svelte and
+            // mediaPreview.ts) consult these when message.callMediaType
+            // === 'video', falling back to the voice keys above when a
+            // video override is missing — so locales that have not been
+            // updated still render localized voice copy rather than a
+            // raw key. Keys that already read as media-neutral
+            // (declinedByPeer, declinedByMe, busyByPeer, noAnswerByPeer,
+            // failed, cancelled, directionOutgoing, directionIncoming)
+            // are intentionally not duplicated here and remain shared.
+            video: {
+                missed: 'Missed video call',
+                ended: 'Video call ended',
+                endedWithDuration: 'Video call ended \u2022 {duration}',
+                noAnswerMe: 'Missed video call',
+                busyMe: 'Missed video call (busy)',
+                generic: 'Video call'
+            }
         }
     }
 };

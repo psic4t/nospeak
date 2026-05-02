@@ -480,6 +480,52 @@ const ja = {
         expectedAccount: 'ログイン中のアカウント',
         actualAccount: '署名拡張機能のアクティブアカウント',
         instructions: '署名拡張機能で正しいアカウントに切り替えて、このページを再読み込みしてください。'
+    },
+    voiceCall: {
+        calling: '発信中...',
+        callingVideo: 'ビデオ通話を発信中...',
+        connecting: '接続中...',
+        incomingCall: '着信中の音声通話',
+        incomingVideoCall: '着信中のビデオ通話',
+        accept: '応答',
+        decline: '拒否',
+        hangup: '通話終了',
+        mute: 'ミュート',
+        unmute: 'ミュート解除',
+        speaker: 'スピーカー',
+        cameraOff: 'カメラオフ',
+        cameraOn: 'カメラオン',
+        flipCamera: 'カメラ切り替え',
+        endReasonHangup: '通話を終了しました',
+        endReasonRejected: '通話が拒否されました',
+        endReasonBusy: '相手が通話中',
+        endReasonTimeout: '応答なし',
+        endReasonIceFailed: '接続に失敗しました',
+        endReasonError: '通話に失敗しました',
+        pill: {
+            missed: '不在着信（音声）',
+            ended: '音声通話を終了しました',
+            endedWithDuration: '音声通話を終了しました \u2022 {duration}',
+            noAnswerByPeer: '応答なし',
+            noAnswerMe: '不在着信（音声）',
+            declinedByPeer: '通話が拒否されました',
+            declinedByMe: '拒否しました',
+            busyByPeer: '相手が通話中',
+            busyMe: '不在着信（音声・通話中）',
+            failed: '接続に失敗しました',
+            cancelled: 'キャンセルしました',
+            generic: '音声通話',
+            directionOutgoing: '発信通話',
+            directionIncoming: '着信通話',
+            video: {
+                missed: '不在着信（ビデオ）',
+                ended: 'ビデオ通話を終了しました',
+                endedWithDuration: 'ビデオ通話を終了しました \u2022 {duration}',
+                noAnswerMe: '不在着信（ビデオ）',
+                busyMe: '不在着信（ビデオ・通話中）',
+                generic: 'ビデオ通話'
+            }
+        }
     }
 };
 

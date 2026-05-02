@@ -486,6 +486,52 @@ const fr = {
         expectedAccount: 'Connecté en tant que',
         actualAccount: 'Compte actif du signataire',
         instructions: 'Veuillez passer au bon compte dans votre extension de signature et recharger cette page.'
+    },
+    voiceCall: {
+        calling: 'Appel en cours...',
+        callingVideo: 'Appel vidéo en cours...',
+        connecting: 'Connexion...',
+        incomingCall: 'Appel vocal entrant',
+        incomingVideoCall: 'Appel vidéo entrant',
+        accept: 'Accepter',
+        decline: 'Refuser',
+        hangup: 'Raccrocher',
+        mute: 'Couper le son',
+        unmute: 'Activer le son',
+        speaker: 'Haut-parleur',
+        cameraOff: 'Caméra éteinte',
+        cameraOn: 'Caméra allumée',
+        flipCamera: 'Changer de caméra',
+        endReasonHangup: 'Appel terminé',
+        endReasonRejected: 'Appel refusé',
+        endReasonBusy: 'Utilisateur occupé',
+        endReasonTimeout: 'Pas de réponse',
+        endReasonIceFailed: 'Échec de la connexion',
+        endReasonError: 'Échec de l’appel',
+        pill: {
+            missed: 'Appel vocal manqué',
+            ended: 'Appel vocal terminé',
+            endedWithDuration: 'Appel vocal terminé \u2022 {duration}',
+            noAnswerByPeer: 'Pas de réponse',
+            noAnswerMe: 'Appel vocal manqué',
+            declinedByPeer: 'Appel refusé',
+            declinedByMe: 'Refusé',
+            busyByPeer: 'Utilisateur occupé',
+            busyMe: 'Appel vocal manqué (occupé)',
+            failed: 'Échec de la connexion',
+            cancelled: 'Annulé',
+            generic: 'Appel vocal',
+            directionOutgoing: 'Appel sortant',
+            directionIncoming: 'Appel entrant',
+            video: {
+                missed: 'Appel vidéo manqué',
+                ended: 'Appel vidéo terminé',
+                endedWithDuration: 'Appel vidéo terminé \u2022 {duration}',
+                noAnswerMe: 'Appel vidéo manqué',
+                busyMe: 'Appel vidéo manqué (occupé)',
+                generic: 'Appel vidéo'
+            }
+        }
     }
 };
 

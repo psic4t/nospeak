@@ -486,6 +486,52 @@ const es = {
         expectedAccount: 'Conectado como',
         actualAccount: 'Cuenta activa del firmante',
         instructions: 'Por favor, cambia a la cuenta correcta en tu extensión de firmante y recarga esta página.'
+    },
+    voiceCall: {
+        calling: 'Llamando...',
+        callingVideo: 'Llamando por vídeo...',
+        connecting: 'Conectando...',
+        incomingCall: 'Llamada de voz entrante',
+        incomingVideoCall: 'Videollamada entrante',
+        accept: 'Aceptar',
+        decline: 'Rechazar',
+        hangup: 'Colgar',
+        mute: 'Silenciar',
+        unmute: 'Activar sonido',
+        speaker: 'Altavoz',
+        cameraOff: 'Cámara apagada',
+        cameraOn: 'Cámara encendida',
+        flipCamera: 'Cambiar cámara',
+        endReasonHangup: 'Llamada finalizada',
+        endReasonRejected: 'Llamada rechazada',
+        endReasonBusy: 'Usuario ocupado',
+        endReasonTimeout: 'Sin respuesta',
+        endReasonIceFailed: 'Error de conexión',
+        endReasonError: 'Error en la llamada',
+        pill: {
+            missed: 'Llamada de voz perdida',
+            ended: 'Llamada de voz finalizada',
+            endedWithDuration: 'Llamada de voz finalizada \u2022 {duration}',
+            noAnswerByPeer: 'Sin respuesta',
+            noAnswerMe: 'Llamada de voz perdida',
+            declinedByPeer: 'Llamada rechazada',
+            declinedByMe: 'Rechazada',
+            busyByPeer: 'Usuario ocupado',
+            busyMe: 'Llamada de voz perdida (ocupado)',
+            failed: 'Error de conexión',
+            cancelled: 'Cancelada',
+            generic: 'Llamada de voz',
+            directionOutgoing: 'Llamada saliente',
+            directionIncoming: 'Llamada entrante',
+            video: {
+                missed: 'Videollamada perdida',
+                ended: 'Videollamada finalizada',
+                endedWithDuration: 'Videollamada finalizada \u2022 {duration}',
+                noAnswerMe: 'Videollamada perdida',
+                busyMe: 'Videollamada perdida (ocupado)',
+                generic: 'Videollamada'
+            }
+        }
     }
 };
 

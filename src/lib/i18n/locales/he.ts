@@ -480,6 +480,52 @@ const he = {
         expectedAccount: 'מחובר בתור',
         actualAccount: 'חשבון פעיל בתוסף החתימה',
         instructions: 'אנא עבור לחשבון הנכון בתוסף החתימה שלך וטען מחדש את הדף.'
+    },
+    voiceCall: {
+        calling: 'מתקשר...',
+        callingVideo: 'מתקשר בווידאו...',
+        connecting: 'מתחבר...',
+        incomingCall: 'שיחה קולית נכנסת',
+        incomingVideoCall: 'שיחת וידאו נכנסת',
+        accept: 'קבל',
+        decline: 'דחה',
+        hangup: 'נתק',
+        mute: 'השתק',
+        unmute: 'בטל השתקה',
+        speaker: 'רמקול',
+        cameraOff: 'מצלמה כבויה',
+        cameraOn: 'מצלמה פועלת',
+        flipCamera: 'החלף מצלמה',
+        endReasonHangup: 'השיחה הסתיימה',
+        endReasonRejected: 'השיחה נדחתה',
+        endReasonBusy: 'המשתמש תפוס',
+        endReasonTimeout: 'אין מענה',
+        endReasonIceFailed: 'החיבור נכשל',
+        endReasonError: 'השיחה נכשלה',
+        pill: {
+            missed: 'שיחה קולית שלא נענתה',
+            ended: 'שיחה קולית הסתיימה',
+            endedWithDuration: 'שיחה קולית הסתיימה \u2022 {duration}',
+            noAnswerByPeer: 'אין מענה',
+            noAnswerMe: 'שיחה קולית שלא נענתה',
+            declinedByPeer: 'השיחה נדחתה',
+            declinedByMe: 'נדחתה',
+            busyByPeer: 'המשתמש תפוס',
+            busyMe: 'שיחה קולית שלא נענתה (תפוס)',
+            failed: 'החיבור נכשל',
+            cancelled: 'בוטלה',
+            generic: 'שיחה קולית',
+            directionOutgoing: 'שיחה יוצאת',
+            directionIncoming: 'שיחה נכנסת',
+            video: {
+                missed: 'שיחת וידאו שלא נענתה',
+                ended: 'שיחת וידאו הסתיימה',
+                endedWithDuration: 'שיחת וידאו הסתיימה \u2022 {duration}',
+                noAnswerMe: 'שיחת וידאו שלא נענתה',
+                busyMe: 'שיחת וידאו שלא נענתה (תפוס)',
+                generic: 'שיחת וידאו'
+            }
+        }
     }
 };
 

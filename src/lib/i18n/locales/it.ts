@@ -486,6 +486,52 @@ const it = {
         expectedAccount: 'Connesso come',
         actualAccount: 'Account attivo del firmatario',
         instructions: "Passa all'account corretto nell'estensione del firmatario e ricarica questa pagina."
+    },
+    voiceCall: {
+        calling: 'Chiamata in corso...',
+        callingVideo: 'Videochiamata in corso...',
+        connecting: 'Connessione...',
+        incomingCall: 'Chiamata vocale in arrivo',
+        incomingVideoCall: 'Videochiamata in arrivo',
+        accept: 'Accetta',
+        decline: 'Rifiuta',
+        hangup: 'Riaggancia',
+        mute: 'Silenzia',
+        unmute: 'Riattiva audio',
+        speaker: 'Altoparlante',
+        cameraOff: 'Fotocamera spenta',
+        cameraOn: 'Fotocamera accesa',
+        flipCamera: 'Cambia fotocamera',
+        endReasonHangup: 'Chiamata terminata',
+        endReasonRejected: 'Chiamata rifiutata',
+        endReasonBusy: 'Utente occupato',
+        endReasonTimeout: 'Nessuna risposta',
+        endReasonIceFailed: 'Connessione fallita',
+        endReasonError: 'Chiamata fallita',
+        pill: {
+            missed: 'Chiamata vocale persa',
+            ended: 'Chiamata vocale terminata',
+            endedWithDuration: 'Chiamata vocale terminata \u2022 {duration}',
+            noAnswerByPeer: 'Nessuna risposta',
+            noAnswerMe: 'Chiamata vocale persa',
+            declinedByPeer: 'Chiamata rifiutata',
+            declinedByMe: 'Rifiutata',
+            busyByPeer: 'Utente occupato',
+            busyMe: 'Chiamata vocale persa (occupato)',
+            failed: 'Connessione fallita',
+            cancelled: 'Annullata',
+            generic: 'Chiamata vocale',
+            directionOutgoing: 'Chiamata in uscita',
+            directionIncoming: 'Chiamata in arrivo',
+            video: {
+                missed: 'Videochiamata persa',
+                ended: 'Videochiamata terminata',
+                endedWithDuration: 'Videochiamata terminata \u2022 {duration}',
+                noAnswerMe: 'Videochiamata persa',
+                busyMe: 'Videochiamata persa (occupato)',
+                generic: 'Videochiamata'
+            }
+        }
     }
 };
 

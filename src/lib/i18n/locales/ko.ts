@@ -492,6 +492,52 @@ const ko = {
         expectedAccount: '로그인된 계정',
         actualAccount: '서명자 활성 계정',
         instructions: '서명 확장 프로그램에서 올바른 계정으로 전환하고 이 페이지를 새로고침해 주세요.'
+    },
+    voiceCall: {
+        calling: '발신 중...',
+        callingVideo: '영상 통화 발신 중...',
+        connecting: '연결 중...',
+        incomingCall: '수신 중인 음성 통화',
+        incomingVideoCall: '수신 중인 영상 통화',
+        accept: '수락',
+        decline: '거절',
+        hangup: '끊기',
+        mute: '음소거',
+        unmute: '음소거 해제',
+        speaker: '스피커',
+        cameraOff: '카메라 끔',
+        cameraOn: '카메라 켬',
+        flipCamera: '카메라 전환',
+        endReasonHangup: '통화 종료',
+        endReasonRejected: '통화 거절됨',
+        endReasonBusy: '사용자 통화 중',
+        endReasonTimeout: '응답 없음',
+        endReasonIceFailed: '연결 실패',
+        endReasonError: '통화 실패',
+        pill: {
+            missed: '부재중 음성 통화',
+            ended: '음성 통화 종료',
+            endedWithDuration: '음성 통화 종료 \u2022 {duration}',
+            noAnswerByPeer: '응답 없음',
+            noAnswerMe: '부재중 음성 통화',
+            declinedByPeer: '통화 거절됨',
+            declinedByMe: '거절됨',
+            busyByPeer: '사용자 통화 중',
+            busyMe: '부재중 음성 통화 (통화 중)',
+            failed: '연결 실패',
+            cancelled: '취소됨',
+            generic: '음성 통화',
+            directionOutgoing: '발신 통화',
+            directionIncoming: '수신 통화',
+            video: {
+                missed: '부재중 영상 통화',
+                ended: '영상 통화 종료',
+                endedWithDuration: '영상 통화 종료 \u2022 {duration}',
+                noAnswerMe: '부재중 영상 통화',
+                busyMe: '부재중 영상 통화 (통화 중)',
+                generic: '영상 통화'
+            }
+        }
     }
 };
 

@@ -295,6 +295,52 @@ const pl = {
         description: 'Rozszerzenie podpisujące w przeglądarce ma aktywne inne konto niż to, którym się zalogowałeś.',
         expectedAccount: 'Zalogowany jako', actualAccount: 'Aktywne konto podpisującego',
         instructions: 'Przełącz na prawidłowe konto w rozszerzeniu podpisującym i odśwież tę stronę.'
+    },
+    voiceCall: {
+        calling: 'Dzwonienie...',
+        callingVideo: 'Rozpoczynanie wideorozmowy...',
+        connecting: 'Łączenie...',
+        incomingCall: 'Połączenie głosowe przychodzące',
+        incomingVideoCall: 'Wideorozmowa przychodząca',
+        accept: 'Odbierz',
+        decline: 'Odrzuć',
+        hangup: 'Rozłącz',
+        mute: 'Wycisz',
+        unmute: 'Wyłącz wyciszenie',
+        speaker: 'Głośnik',
+        cameraOff: 'Kamera wyłączona',
+        cameraOn: 'Kamera włączona',
+        flipCamera: 'Przełącz kamerę',
+        endReasonHangup: 'Połączenie zakończone',
+        endReasonRejected: 'Połączenie odrzucone',
+        endReasonBusy: 'Użytkownik zajęty',
+        endReasonTimeout: 'Brak odpowiedzi',
+        endReasonIceFailed: 'Błąd połączenia',
+        endReasonError: 'Połączenie nie powiodło się',
+        pill: {
+            missed: 'Nieodebrane połączenie głosowe',
+            ended: 'Połączenie głosowe zakończone',
+            endedWithDuration: 'Połączenie głosowe zakończone \u2022 {duration}',
+            noAnswerByPeer: 'Brak odpowiedzi',
+            noAnswerMe: 'Nieodebrane połączenie głosowe',
+            declinedByPeer: 'Połączenie odrzucone',
+            declinedByMe: 'Odrzucono',
+            busyByPeer: 'Użytkownik zajęty',
+            busyMe: 'Nieodebrane połączenie głosowe (zajęty)',
+            failed: 'Błąd połączenia',
+            cancelled: 'Anulowano',
+            generic: 'Połączenie głosowe',
+            directionOutgoing: 'Połączenie wychodzące',
+            directionIncoming: 'Połączenie przychodzące',
+            video: {
+                missed: 'Nieodebrana wideorozmowa',
+                ended: 'Wideorozmowa zakończona',
+                endedWithDuration: 'Wideorozmowa zakończona \u2022 {duration}',
+                noAnswerMe: 'Nieodebrana wideorozmowa',
+                busyMe: 'Nieodebrana wideorozmowa (zajęty)',
+                generic: 'Wideorozmowa'
+            }
+        }
     }
 };
 

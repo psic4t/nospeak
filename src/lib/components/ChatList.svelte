@@ -211,11 +211,13 @@
         // encodes role (e.g. "Cancelled" implies local user, "Call
         // declined" implies peer declined our call), so we suppress
         // the "You: " prefix that normally fires for direction === "sent".
+        // `callMediaType` selects voice vs video copy + emoji.
         lastMessageText = getCallEventPreviewLabel(
           lastMsg.callEventType,
           lastMsg.callDuration,
           lastMsg.callInitiatorNpub,
           get(currentUser)?.npub,
+          lastMsg.callMediaType,
         );
         suppressYouPrefix = true;
       } else if (lastMsg.fileUrl && lastMsg.fileType) {
@@ -360,11 +362,13 @@
           // this branch keeps the preview from rendering blank if a
           // future build lands them. Suppress both the "You: " and
           // "<sender>: " prefixes since role is already encoded.
+          // `callMediaType` selects voice vs video copy + emoji.
           lastMessageText = getCallEventPreviewLabel(
             lastMsg.callEventType,
             lastMsg.callDuration,
             lastMsg.callInitiatorNpub,
             get(currentUser)?.npub,
+            lastMsg.callMediaType,
           );
           suppressGroupSenderPrefix = true;
         } else if (lastMsg.fileUrl && lastMsg.fileType) {

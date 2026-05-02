@@ -480,6 +480,52 @@ const ar = {
         expectedAccount: 'مسجل الدخول باسم',
         actualAccount: 'الحساب النشط في إضافة التوقيع',
         instructions: 'يرجى التبديل إلى الحساب الصحيح في إضافة التوقيع وإعادة تحميل هذه الصفحة.'
+    },
+    voiceCall: {
+        calling: 'جاري الاتصال...',
+        callingVideo: 'جاري بدء مكالمة فيديو...',
+        connecting: 'جاري الاتصال...',
+        incomingCall: 'مكالمة صوتية واردة',
+        incomingVideoCall: 'مكالمة فيديو واردة',
+        accept: 'قبول',
+        decline: 'رفض',
+        hangup: 'إنهاء',
+        mute: 'كتم',
+        unmute: 'إلغاء الكتم',
+        speaker: 'مكبر الصوت',
+        cameraOff: 'إيقاف الكاميرا',
+        cameraOn: 'تشغيل الكاميرا',
+        flipCamera: 'تبديل الكاميرا',
+        endReasonHangup: 'انتهت المكالمة',
+        endReasonRejected: 'تم رفض المكالمة',
+        endReasonBusy: 'المستخدم مشغول',
+        endReasonTimeout: 'لا يوجد رد',
+        endReasonIceFailed: 'فشل الاتصال',
+        endReasonError: 'فشلت المكالمة',
+        pill: {
+            missed: 'مكالمة صوتية فائتة',
+            ended: 'انتهت المكالمة الصوتية',
+            endedWithDuration: 'انتهت المكالمة الصوتية \u2022 {duration}',
+            noAnswerByPeer: 'لا يوجد رد',
+            noAnswerMe: 'مكالمة صوتية فائتة',
+            declinedByPeer: 'تم رفض المكالمة',
+            declinedByMe: 'مرفوضة',
+            busyByPeer: 'المستخدم مشغول',
+            busyMe: 'مكالمة صوتية فائتة (مشغول)',
+            failed: 'فشل الاتصال',
+            cancelled: 'ملغاة',
+            generic: 'مكالمة صوتية',
+            directionOutgoing: 'مكالمة صادرة',
+            directionIncoming: 'مكالمة واردة',
+            video: {
+                missed: 'مكالمة فيديو فائتة',
+                ended: 'انتهت مكالمة الفيديو',
+                endedWithDuration: 'انتهت مكالمة الفيديو \u2022 {duration}',
+                noAnswerMe: 'مكالمة فيديو فائتة',
+                busyMe: 'مكالمة فيديو فائتة (مشغول)',
+                generic: 'مكالمة فيديو'
+            }
+        }
     }
 };
 

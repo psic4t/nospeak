@@ -480,6 +480,52 @@ const tr = {
         expectedAccount: 'Giriş yapılan hesap',
         actualAccount: 'İmzalayıcı etkin hesap',
         instructions: 'Lütfen imzalayıcı eklentinizde doğru hesaba geçin ve bu sayfayı yeniden yükleyin.'
+    },
+    voiceCall: {
+        calling: 'Aranıyor...',
+        callingVideo: 'Görüntülü aranıyor...',
+        connecting: 'Bağlanıyor...',
+        incomingCall: 'Gelen sesli arama',
+        incomingVideoCall: 'Gelen görüntülü arama',
+        accept: 'Kabul et',
+        decline: 'Reddet',
+        hangup: 'Kapat',
+        mute: 'Sesi kapat',
+        unmute: 'Sesi aç',
+        speaker: 'Hoparlör',
+        cameraOff: 'Kamera kapalı',
+        cameraOn: 'Kamera açık',
+        flipCamera: 'Kamerayı değiştir',
+        endReasonHangup: 'Arama sonlandırıldı',
+        endReasonRejected: 'Arama reddedildi',
+        endReasonBusy: 'Kullanıcı meşgul',
+        endReasonTimeout: 'Cevap yok',
+        endReasonIceFailed: 'Bağlantı başarısız',
+        endReasonError: 'Arama başarısız',
+        pill: {
+            missed: 'Cevapsız sesli arama',
+            ended: 'Sesli arama sonlandı',
+            endedWithDuration: 'Sesli arama sonlandı \u2022 {duration}',
+            noAnswerByPeer: 'Cevap yok',
+            noAnswerMe: 'Cevapsız sesli arama',
+            declinedByPeer: 'Arama reddedildi',
+            declinedByMe: 'Reddedildi',
+            busyByPeer: 'Kullanıcı meşgul',
+            busyMe: 'Cevapsız sesli arama (meşgul)',
+            failed: 'Bağlantı başarısız',
+            cancelled: 'İptal edildi',
+            generic: 'Sesli arama',
+            directionOutgoing: 'Giden arama',
+            directionIncoming: 'Gelen arama',
+            video: {
+                missed: 'Cevapsız görüntülü arama',
+                ended: 'Görüntülü arama sonlandı',
+                endedWithDuration: 'Görüntülü arama sonlandı \u2022 {duration}',
+                noAnswerMe: 'Cevapsız görüntülü arama',
+                busyMe: 'Cevapsız görüntülü arama (meşgul)',
+                generic: 'Görüntülü arama'
+            }
+        }
     }
 };
 

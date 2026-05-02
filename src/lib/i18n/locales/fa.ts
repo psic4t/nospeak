@@ -492,6 +492,52 @@ const fa = {
         expectedAccount: 'وارد شده به عنوان',
         actualAccount: 'حساب فعال امضاکننده',
         instructions: 'لطفاً در افزونه امضاکننده خود به حساب صحیح تغییر دهید و این صفحه را بازخوانی کنید.'
+    },
+    voiceCall: {
+        calling: 'در حال تماس...',
+        callingVideo: 'در حال تماس تصویری...',
+        connecting: 'در حال اتصال...',
+        incomingCall: 'تماس صوتی ورودی',
+        incomingVideoCall: 'تماس تصویری ورودی',
+        accept: 'پذیرفتن',
+        decline: 'رد کردن',
+        hangup: 'پایان تماس',
+        mute: 'بی‌صدا',
+        unmute: 'لغو بی‌صدا',
+        speaker: 'بلندگو',
+        cameraOff: 'دوربین خاموش',
+        cameraOn: 'دوربین روشن',
+        flipCamera: 'تعویض دوربین',
+        endReasonHangup: 'تماس پایان یافت',
+        endReasonRejected: 'تماس رد شد',
+        endReasonBusy: 'کاربر مشغول است',
+        endReasonTimeout: 'پاسخی داده نشد',
+        endReasonIceFailed: 'اتصال ناموفق بود',
+        endReasonError: 'تماس ناموفق بود',
+        pill: {
+            missed: 'تماس صوتی از دست رفته',
+            ended: 'تماس صوتی پایان یافت',
+            endedWithDuration: 'تماس صوتی پایان یافت \u2022 {duration}',
+            noAnswerByPeer: 'پاسخی داده نشد',
+            noAnswerMe: 'تماس صوتی از دست رفته',
+            declinedByPeer: 'تماس رد شد',
+            declinedByMe: 'رد شد',
+            busyByPeer: 'کاربر مشغول است',
+            busyMe: 'تماس صوتی از دست رفته (مشغول)',
+            failed: 'اتصال ناموفق بود',
+            cancelled: 'لغو شد',
+            generic: 'تماس صوتی',
+            directionOutgoing: 'تماس خروجی',
+            directionIncoming: 'تماس ورودی',
+            video: {
+                missed: 'تماس تصویری از دست رفته',
+                ended: 'تماس تصویری پایان یافت',
+                endedWithDuration: 'تماس تصویری پایان یافت \u2022 {duration}',
+                noAnswerMe: 'تماس تصویری از دست رفته',
+                busyMe: 'تماس تصویری از دست رفته (مشغول)',
+                generic: 'تماس تصویری'
+            }
+        }
     }
 };
 

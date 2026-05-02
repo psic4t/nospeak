@@ -2,6 +2,7 @@
     import type { Message } from '$lib/db/db';
     import { t } from '$lib/i18n';
     import { currentUser } from '$lib/stores/auth';
+    import { resolvePillKey } from '$lib/utils/mediaPreview';
 
     interface Props {
         message: Message;
@@ -35,46 +36,49 @@
     );
 
     /**
-     * Map a callEventType (+ role) to its pill label.
+     * Map a callEventType (+ role + media type) to its pill label.
+     *
+     * For video calls (`message.callMediaType === 'video'`) we resolve
+     * through the `voiceCall.pill.video.*` overrides for the subset of
+     * keys whose copy mentions "voice call" (missed, ended,
+     * endedWithDuration, noAnswerMe, busyMe, generic). Keys that are
+     * already media-neutral (declined*, busyByPeer, noAnswerByPeer,
+     * failed, cancelled) stay shared. Locales that haven't been updated
+     * with a video override gracefully fall back to their localized
+     * voice copy via `resolvePillKey`.
      *
      * Legacy values (`'outgoing'`, `'incoming'`, plus the interim
      * `'declined-outgoing'`/`'declined-incoming'` from an earlier iteration
      * of this same change that never shipped) and any forward-compat value
-     * we don't recognise fall through to the generic 'Voice call' label so
-     * the row never renders blank.
+     * we don't recognise fall through to the generic call label so the
+     * row never renders blank.
      */
     const messageText = $derived.by(() => {
+        const pick = (base: string) => resolvePillKey($t, base, message.callMediaType);
         switch (message.callEventType) {
             case 'missed':
-                return $t('voiceCall.pill.missed');
+                return pick('missed');
             case 'cancelled':
-                return $t('voiceCall.pill.cancelled');
+                return pick('cancelled');
             case 'ended': {
                 const duration = formatDuration(message.callDuration);
                 if (duration) {
-                    const template = $t('voiceCall.pill.endedWithDuration');
-                    return template.replace('{duration}', duration);
+                    return pick('endedWithDuration').replace('{duration}', duration);
                 }
-                return $t('voiceCall.pill.ended');
+                return pick('ended');
             }
             case 'declined':
-                return iAmInitiator
-                    ? $t('voiceCall.pill.declinedByPeer')
-                    : $t('voiceCall.pill.declinedByMe');
+                return iAmInitiator ? pick('declinedByPeer') : pick('declinedByMe');
             case 'busy':
-                return iAmInitiator
-                    ? $t('voiceCall.pill.busyByPeer')
-                    : $t('voiceCall.pill.busyMe');
+                return iAmInitiator ? pick('busyByPeer') : pick('busyMe');
             case 'no-answer':
-                return iAmInitiator
-                    ? $t('voiceCall.pill.noAnswerByPeer')
-                    : $t('voiceCall.pill.noAnswerMe');
+                return iAmInitiator ? pick('noAnswerByPeer') : pick('noAnswerMe');
             case 'failed':
-                return $t('voiceCall.pill.failed');
+                return pick('failed');
             default:
                 // Legacy ('outgoing', 'incoming', 'declined-outgoing',
                 // 'declined-incoming') and unknown forward-compat values.
-                return $t('voiceCall.pill.generic');
+                return pick('generic');
         }
     });
 

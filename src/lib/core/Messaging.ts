@@ -885,6 +885,7 @@ export type AuthoredCallEventType =
               message.callDuration,
               message.callInitiatorNpub,
               user.npub,
+              message.callMediaType,
             )
           : (message.fileUrl && message.fileType)
             ? getMediaPreviewLabel(message.fileType)

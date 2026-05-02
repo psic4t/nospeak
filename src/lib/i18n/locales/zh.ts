@@ -480,6 +480,52 @@ const zh = {
         expectedAccount: '已登录账户',
         actualAccount: '签名扩展活动账户',
         instructions: '请在签名扩展中切换到正确的账户，然后重新加载此页面。'
+    },
+    voiceCall: {
+        calling: '正在呼叫...',
+        callingVideo: '正在视频呼叫...',
+        connecting: '连接中...',
+        incomingCall: '语音来电',
+        incomingVideoCall: '视频来电',
+        accept: '接听',
+        decline: '拒绝',
+        hangup: '挂断',
+        mute: '静音',
+        unmute: '取消静音',
+        speaker: '扬声器',
+        cameraOff: '摄像头关闭',
+        cameraOn: '摄像头开启',
+        flipCamera: '切换摄像头',
+        endReasonHangup: '通话已结束',
+        endReasonRejected: '通话被拒绝',
+        endReasonBusy: '对方忙线',
+        endReasonTimeout: '无人接听',
+        endReasonIceFailed: '连接失败',
+        endReasonError: '通话失败',
+        pill: {
+            missed: '未接语音通话',
+            ended: '语音通话已结束',
+            endedWithDuration: '语音通话已结束 \u2022 {duration}',
+            noAnswerByPeer: '无人接听',
+            noAnswerMe: '未接语音通话',
+            declinedByPeer: '通话被拒绝',
+            declinedByMe: '已拒绝',
+            busyByPeer: '对方忙线',
+            busyMe: '未接语音通话（忙线）',
+            failed: '连接失败',
+            cancelled: '已取消',
+            generic: '语音通话',
+            directionOutgoing: '呼出通话',
+            directionIncoming: '呼入通话',
+            video: {
+                missed: '未接视频通话',
+                ended: '视频通话已结束',
+                endedWithDuration: '视频通话已结束 \u2022 {duration}',
+                noAnswerMe: '未接视频通话',
+                busyMe: '未接视频通话（忙线）',
+                generic: '视频通话'
+            }
+        }
     }
 };
 

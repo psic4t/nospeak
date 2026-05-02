@@ -41,6 +41,36 @@ export function getLocationPreviewLabel(): string {
 }
 
 /**
+ * Resolve a single pill key, preferring a video override when
+ * `callMediaType === 'video'` and falling back to the voice key when
+ * the locale has not supplied a video override yet.
+ *
+ * The fallback is keyed on the translator-result equalling the lookup
+ * key itself — that's the contract svelte-i18n uses when a key is
+ * missing — so locales without a `voiceCall.pill.video.*` block
+ * render their localized voice copy rather than a raw key string.
+ *
+ * Exported for use by `CallEventMessage.svelte` so the in-chat pill
+ * and the chat-list / notification previews share identical key
+ * resolution logic.
+ */
+export function resolvePillKey(
+    tr: (key: string) => string,
+    base: string,
+    callMediaType: 'voice' | 'video' | undefined
+): string {
+    if (callMediaType === 'video') {
+        const videoKey = `voiceCall.pill.video.${base}`;
+        const translated = tr(videoKey);
+        // svelte-i18n returns the key when no translation is found.
+        if (translated !== videoKey) return translated;
+        // Locale has no video override — use the voice copy so we never
+        // emit the raw key.
+    }
+    return tr(`voiceCall.pill.${base}`);
+}
+
+/**
  * Returns a user-friendly, localized one-line preview of a call event,
  * suitable for the chat list and push notifications.
  *
@@ -70,6 +100,14 @@ export function getLocationPreviewLabel(): string {
  * compat callEventType fall through to the generic label so the preview
  * never renders blank.
  *
+ * Video calls (`callMediaType === 'video'`) re-use the role/outcome
+ * matrix but resolve through `voiceCall.pill.video.*` overrides for the
+ * subset of keys whose copy mentions "voice call" (missed, ended,
+ * endedWithDuration, noAnswerMe, busyMe, generic). The leading emoji
+ * also switches from 📞 to 📹 so the chat-list row and notification
+ * preview are visually distinguishable from voice calls without
+ * relying on the user reading the label.
+ *
  * @param callEventType   Value of the `call-event-type` tag persisted on
  *                        the rumor (`Message.callEventType`).
  * @param callDuration    Seconds; only consulted for `'ended'`.
@@ -77,26 +115,33 @@ export function getLocationPreviewLabel(): string {
  *                           (`Message.callInitiatorNpub`).
  * @param currentUserNpub The locally-authenticated user's npub
  *                        (`get(currentUser)?.npub`).
+ * @param callMediaType   `'voice'` (default) or `'video'`. Controls
+ *                        i18n key selection and the leading emoji.
+ *                        Undefined / unknown values are treated as
+ *                        `'voice'` for forward-compat with future media
+ *                        types.
  */
 export function getCallEventPreviewLabel(
     callEventType: string | undefined,
     callDuration: number | undefined,
     callInitiatorNpub: string | undefined,
-    currentUserNpub: string | undefined
+    currentUserNpub: string | undefined,
+    callMediaType?: 'voice' | 'video'
 ): string {
     const tr = get(t);
     const iAmInitiator =
         !!callInitiatorNpub &&
         !!currentUserNpub &&
         callInitiatorNpub === currentUserNpub;
+    const pick = (base: string) => resolvePillKey(tr, base, callMediaType);
 
     let label: string;
     switch (callEventType) {
         case 'missed':
-            label = tr('voiceCall.pill.missed');
+            label = pick('missed');
             break;
         case 'cancelled':
-            label = tr('voiceCall.pill.cancelled');
+            label = pick('cancelled');
             break;
         case 'ended': {
             // The `> 0` guard is not just dead code on top of the truthy
@@ -107,10 +152,9 @@ export function getCallEventPreviewLabel(
                 const mins = Math.floor(callDuration / 60);
                 const secs = callDuration % 60;
                 const formatted = `${mins}:${secs.toString().padStart(2, '0')}`;
-                label = tr('voiceCall.pill.endedWithDuration')
-                    .replace('{duration}', formatted);
+                label = pick('endedWithDuration').replace('{duration}', formatted);
             } else {
-                label = tr('voiceCall.pill.ended');
+                label = pick('ended');
             }
             break;
         }
@@ -119,40 +163,35 @@ export function getCallEventPreviewLabel(
             // through to the generic label (matches pill's behavior when
             // $currentUser is null).
             if (!callInitiatorNpub || !currentUserNpub) {
-                label = tr('voiceCall.pill.generic');
+                label = pick('generic');
             } else {
-                label = iAmInitiator
-                    ? tr('voiceCall.pill.declinedByPeer')
-                    : tr('voiceCall.pill.declinedByMe');
+                label = iAmInitiator ? pick('declinedByPeer') : pick('declinedByMe');
             }
             break;
         case 'busy':
             if (!callInitiatorNpub || !currentUserNpub) {
-                label = tr('voiceCall.pill.generic');
+                label = pick('generic');
             } else {
-                label = iAmInitiator
-                    ? tr('voiceCall.pill.busyByPeer')
-                    : tr('voiceCall.pill.busyMe');
+                label = iAmInitiator ? pick('busyByPeer') : pick('busyMe');
             }
             break;
         case 'no-answer':
             if (!callInitiatorNpub || !currentUserNpub) {
-                label = tr('voiceCall.pill.generic');
+                label = pick('generic');
             } else {
-                label = iAmInitiator
-                    ? tr('voiceCall.pill.noAnswerByPeer')
-                    : tr('voiceCall.pill.noAnswerMe');
+                label = iAmInitiator ? pick('noAnswerByPeer') : pick('noAnswerMe');
             }
             break;
         case 'failed':
-            label = tr('voiceCall.pill.failed');
+            label = pick('failed');
             break;
         default:
             // Legacy ('outgoing', 'incoming'), undefined, empty, and any
             // unknown forward-compat value.
-            label = tr('voiceCall.pill.generic');
+            label = pick('generic');
             break;
     }
 
-    return `📞 ${label}`;
+    const emoji = callMediaType === 'video' ? '📹' : '📞';
+    return `${emoji} ${label}`;
 }

@@ -295,6 +295,52 @@ const ru = {
         description: 'В расширении для подписи в вашем браузере активен другой аккаунт, отличный от того, под которым вы вошли.',
         expectedAccount: 'Вход выполнен как', actualAccount: 'Активный аккаунт подписчика',
         instructions: 'Переключитесь на правильный аккаунт в расширении для подписи и перезагрузите эту страницу.'
+    },
+    voiceCall: {
+        calling: 'Вызов...',
+        callingVideo: 'Видеовызов...',
+        connecting: 'Подключение...',
+        incomingCall: 'Входящий голосовой вызов',
+        incomingVideoCall: 'Входящий видеовызов',
+        accept: 'Принять',
+        decline: 'Отклонить',
+        hangup: 'Завершить',
+        mute: 'Без звука',
+        unmute: 'Включить звук',
+        speaker: 'Громкая связь',
+        cameraOff: 'Камера выключена',
+        cameraOn: 'Камера включена',
+        flipCamera: 'Переключить камеру',
+        endReasonHangup: 'Вызов завершён',
+        endReasonRejected: 'Вызов отклонён',
+        endReasonBusy: 'Пользователь занят',
+        endReasonTimeout: 'Нет ответа',
+        endReasonIceFailed: 'Ошибка соединения',
+        endReasonError: 'Сбой вызова',
+        pill: {
+            missed: 'Пропущенный голосовой вызов',
+            ended: 'Голосовой вызов завершён',
+            endedWithDuration: 'Голосовой вызов завершён \u2022 {duration}',
+            noAnswerByPeer: 'Нет ответа',
+            noAnswerMe: 'Пропущенный голосовой вызов',
+            declinedByPeer: 'Вызов отклонён',
+            declinedByMe: 'Отклонён',
+            busyByPeer: 'Пользователь занят',
+            busyMe: 'Пропущенный голосовой вызов (занято)',
+            failed: 'Ошибка соединения',
+            cancelled: 'Отменён',
+            generic: 'Голосовой вызов',
+            directionOutgoing: 'Исходящий вызов',
+            directionIncoming: 'Входящий вызов',
+            video: {
+                missed: 'Пропущенный видеовызов',
+                ended: 'Видеовызов завершён',
+                endedWithDuration: 'Видеовызов завершён \u2022 {duration}',
+                noAnswerMe: 'Пропущенный видеовызов',
+                busyMe: 'Пропущенный видеовызов (занято)',
+                generic: 'Видеовызов'
+            }
+        }
     }
 };
 

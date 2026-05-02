@@ -32,32 +32,63 @@ const PILL = {
     generic: 'Voice call'
 };
 
+// Subset of pill keys that have a video-specific override in
+// src/lib/i18n/locales/en.ts -> voiceCall.pill.video.*. Keys NOT
+// listed here (declined*, busyByPeer, noAnswerByPeer, failed,
+// cancelled) deliberately fall through to the voice copy in
+// resolvePillKey because their existing English wording is already
+// media-neutral. Keep this in sync with the .video.* block in en.ts.
+const PILL_VIDEO = {
+    missed: 'Missed video call',
+    ended: 'Video call ended',
+    endedWithDuration: 'Video call ended \u2022 {duration}',
+    noAnswerMe: 'Missed video call',
+    busyMe: 'Missed video call (busy)',
+    generic: 'Video call'
+};
+
+function pick(base: keyof typeof PILL, mediaType: 'voice' | 'video' | undefined): string {
+    // Mirror of resolvePillKey from src/lib/utils/mediaPreview.ts: prefer
+    // the video override if present, else fall back to the voice copy.
+    if (mediaType === 'video' && base in PILL_VIDEO) {
+        return (PILL_VIDEO as Record<string, string>)[base as string];
+    }
+    return PILL[base];
+}
+
 function getMessageText(
     callEventType: string | undefined,
     iAmInitiator: boolean,
-    callDuration?: number
+    callDuration?: number,
+    callMediaType?: 'voice' | 'video'
 ): string {
     switch (callEventType) {
         case 'missed':
-            return PILL.missed;
+            return pick('missed', callMediaType);
         case 'cancelled':
-            return PILL.cancelled;
+            return pick('cancelled', callMediaType);
         case 'ended': {
             const duration = formatDuration(callDuration);
             return duration
-                ? PILL.endedWithDuration.replace('{duration}', duration)
-                : PILL.ended;
+                ? pick('endedWithDuration', callMediaType).replace('{duration}', duration)
+                : pick('ended', callMediaType);
         }
         case 'declined':
-            return iAmInitiator ? PILL.declinedByPeer : PILL.declinedByMe;
+            return iAmInitiator
+                ? pick('declinedByPeer', callMediaType)
+                : pick('declinedByMe', callMediaType);
         case 'busy':
-            return iAmInitiator ? PILL.busyByPeer : PILL.busyMe;
+            return iAmInitiator
+                ? pick('busyByPeer', callMediaType)
+                : pick('busyMe', callMediaType);
         case 'no-answer':
-            return iAmInitiator ? PILL.noAnswerByPeer : PILL.noAnswerMe;
+            return iAmInitiator
+                ? pick('noAnswerByPeer', callMediaType)
+                : pick('noAnswerMe', callMediaType);
         case 'failed':
-            return PILL.failed;
+            return pick('failed', callMediaType);
         default:
-            return PILL.generic;
+            return pick('generic', callMediaType);
     }
 }
 
@@ -178,6 +209,68 @@ describe('CallEventMessage', () => {
 
         it('falls back to generic for forward-compat unknown values', () => {
             expect(getMessageText('something-future', true)).toBe('Voice call');
+        });
+    });
+
+    describe('getMessageText — video calls', () => {
+        // Mirrors the .video.* override block in en.ts — only the keys
+        // whose voice copy mentions "voice call" get a video form. The
+        // rest deliberately reuse the voice copy because their wording
+        // is already media-neutral (e.g. "Call declined", "User busy").
+
+        it('renders missed as "Missed video call"', () => {
+            expect(getMessageText('missed', false, undefined, 'video'))
+                .toBe('Missed video call');
+        });
+
+        it('renders ended with duration as "Video call ended \u2022 MM:SS"', () => {
+            expect(getMessageText('ended', true, 150, 'video'))
+                .toBe('Video call ended \u2022 2:30');
+        });
+
+        it('renders ended without duration as "Video call ended"', () => {
+            expect(getMessageText('ended', true, undefined, 'video'))
+                .toBe('Video call ended');
+        });
+
+        it('renders no-answer (callee side) as "Missed video call"', () => {
+            expect(getMessageText('no-answer', false, undefined, 'video'))
+                .toBe('Missed video call');
+        });
+
+        it('renders busy (callee side) as "Missed video call (busy)"', () => {
+            expect(getMessageText('busy', false, undefined, 'video'))
+                .toBe('Missed video call (busy)');
+        });
+
+        it('falls back to "Video call" generic for unknown / legacy types', () => {
+            expect(getMessageText('outgoing', false, undefined, 'video'))
+                .toBe('Video call');
+            expect(getMessageText(undefined, false, undefined, 'video'))
+                .toBe('Video call');
+        });
+
+        // Media-neutral keys: video calls reuse the voice copy.
+        it('reuses voice copy for media-neutral outcomes', () => {
+            expect(getMessageText('declined', true, undefined, 'video'))
+                .toBe('Call declined');
+            expect(getMessageText('declined', false, undefined, 'video'))
+                .toBe('Declined');
+            expect(getMessageText('busy', true, undefined, 'video'))
+                .toBe('User busy');
+            expect(getMessageText('no-answer', true, undefined, 'video'))
+                .toBe('No answer');
+            expect(getMessageText('failed', true, undefined, 'video'))
+                .toBe('Connection failed');
+            expect(getMessageText('cancelled', true, undefined, 'video'))
+                .toBe('Cancelled');
+        });
+
+        it("treats explicit 'voice' identically to undefined media type", () => {
+            expect(getMessageText('missed', false, undefined, 'voice'))
+                .toBe('Missed voice call');
+            expect(getMessageText('missed', false, undefined, undefined))
+                .toBe('Missed voice call');
         });
     });
 

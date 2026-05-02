@@ -486,6 +486,52 @@ const pt = {
         expectedAccount: 'Conectado como',
         actualAccount: 'Conta ativa do assinante',
         instructions: 'Por favor, mude para a conta correta na sua extensão de assinante e recarregue esta página.'
+    },
+    voiceCall: {
+        calling: 'A chamar...',
+        callingVideo: 'A iniciar videochamada...',
+        connecting: 'A conectar...',
+        incomingCall: 'Chamada de voz recebida',
+        incomingVideoCall: 'Videochamada recebida',
+        accept: 'Atender',
+        decline: 'Rejeitar',
+        hangup: 'Desligar',
+        mute: 'Silenciar',
+        unmute: 'Ativar som',
+        speaker: 'Altifalante',
+        cameraOff: 'Câmara desligada',
+        cameraOn: 'Câmara ligada',
+        flipCamera: 'Trocar câmara',
+        endReasonHangup: 'Chamada terminada',
+        endReasonRejected: 'Chamada recusada',
+        endReasonBusy: 'Utilizador ocupado',
+        endReasonTimeout: 'Sem resposta',
+        endReasonIceFailed: 'Falha na ligação',
+        endReasonError: 'Falha na chamada',
+        pill: {
+            missed: 'Chamada de voz perdida',
+            ended: 'Chamada de voz terminada',
+            endedWithDuration: 'Chamada de voz terminada \u2022 {duration}',
+            noAnswerByPeer: 'Sem resposta',
+            noAnswerMe: 'Chamada de voz perdida',
+            declinedByPeer: 'Chamada recusada',
+            declinedByMe: 'Recusada',
+            busyByPeer: 'Utilizador ocupado',
+            busyMe: 'Chamada de voz perdida (ocupado)',
+            failed: 'Falha na ligação',
+            cancelled: 'Cancelada',
+            generic: 'Chamada de voz',
+            directionOutgoing: 'Chamada efetuada',
+            directionIncoming: 'Chamada recebida',
+            video: {
+                missed: 'Videochamada perdida',
+                ended: 'Videochamada terminada',
+                endedWithDuration: 'Videochamada terminada \u2022 {duration}',
+                noAnswerMe: 'Videochamada perdida',
+                busyMe: 'Videochamada perdida (ocupado)',
+                generic: 'Videochamada'
+            }
+        }
     }
 };
 

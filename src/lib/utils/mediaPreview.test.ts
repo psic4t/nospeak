@@ -23,9 +23,23 @@ vi.mock('$lib/i18n', () => ({
                     'voiceCall.pill.busyMe': 'Missed voice call (busy)',
                     'voiceCall.pill.failed': 'Connection failed',
                     'voiceCall.pill.cancelled': 'Cancelled',
-                    'voiceCall.pill.generic': 'Voice call'
+                    'voiceCall.pill.generic': 'Voice call',
+                    // Video overrides — only the keys that need to differ
+                    // from voice copy. Keys without an override fall back
+                    // to the voice key via resolvePillKey, which is the
+                    // contract this test mock encodes by simply returning
+                    // the lookup key when not present in `translations`.
+                    'voiceCall.pill.video.missed': 'Missed video call',
+                    'voiceCall.pill.video.ended': 'Video call ended',
+                    'voiceCall.pill.video.endedWithDuration': 'Video call ended \u2022 {duration}',
+                    'voiceCall.pill.video.noAnswerMe': 'Missed video call',
+                    'voiceCall.pill.video.busyMe': 'Missed video call (busy)',
+                    'voiceCall.pill.video.generic': 'Video call'
                 };
-                return translations[key] || key;
+                // Return the raw key on miss so the resolvePillKey
+                // fallback (key === translated → use voice copy) is
+                // exercised exactly as in production svelte-i18n.
+                return translations[key] !== undefined ? translations[key] : key;
             });
             return () => {};
         })
@@ -210,6 +224,104 @@ describe('getCallEventPreviewLabel', () => {
     it('falls through to generic for empty-string callEventType', () => {
         expect(getCallEventPreviewLabel('', undefined, me, me))
             .toBe('📞 Voice call');
+    });
+});
+
+describe('getCallEventPreviewLabel — video calls', () => {
+    const me = 'npub1me';
+    const peer = 'npub1peer';
+
+    it('uses 📹 emoji and video copy for missed', () => {
+        expect(getCallEventPreviewLabel('missed', undefined, peer, me, 'video'))
+            .toBe('📹 Missed video call');
+    });
+
+    it('uses 📹 emoji and video copy for ended without duration', () => {
+        expect(getCallEventPreviewLabel('ended', undefined, me, me, 'video'))
+            .toBe('📹 Video call ended');
+    });
+
+    it('uses 📹 emoji and video copy for ended with duration', () => {
+        expect(getCallEventPreviewLabel('ended', 83, me, me, 'video'))
+            .toBe('📹 Video call ended • 1:23');
+    });
+
+    it('uses 📹 emoji and video copy for no-answer (callee side)', () => {
+        // Peer initiated → local user is callee → noAnswerMe → 'Missed video call'.
+        expect(getCallEventPreviewLabel('no-answer', undefined, peer, me, 'video'))
+            .toBe('📹 Missed video call');
+    });
+
+    it('uses 📹 emoji and video copy for busy (callee side)', () => {
+        expect(getCallEventPreviewLabel('busy', undefined, peer, me, 'video'))
+            .toBe('📹 Missed video call (busy)');
+    });
+
+    it('uses 📹 emoji and video copy for generic fallback', () => {
+        expect(getCallEventPreviewLabel('outgoing', undefined, me, me, 'video'))
+            .toBe('📹 Video call');
+        expect(getCallEventPreviewLabel(undefined, undefined, me, me, 'video'))
+            .toBe('📹 Video call');
+    });
+
+    // Media-neutral keys: video calls reuse the same English copy as
+    // voice calls because there is no `voiceCall.pill.video.*` override
+    // for them. Only the emoji distinguishes the rows in the chat list.
+    it('shares declined copy with voice calls but switches the emoji', () => {
+        expect(getCallEventPreviewLabel('declined', undefined, me, me, 'video'))
+            .toBe('📹 Call declined');
+        expect(getCallEventPreviewLabel('declined', undefined, peer, me, 'video'))
+            .toBe('📹 Declined');
+    });
+
+    it('shares busyByPeer / noAnswerByPeer / failed / cancelled copy with voice calls', () => {
+        expect(getCallEventPreviewLabel('busy', undefined, me, me, 'video'))
+            .toBe('📹 User busy');
+        expect(getCallEventPreviewLabel('no-answer', undefined, me, me, 'video'))
+            .toBe('📹 No answer');
+        expect(getCallEventPreviewLabel('failed', undefined, me, me, 'video'))
+            .toBe('📹 Connection failed');
+        expect(getCallEventPreviewLabel('cancelled', undefined, me, me, 'video'))
+            .toBe('📹 Cancelled');
+    });
+
+    it("treats explicit 'voice' identically to undefined media type", () => {
+        expect(getCallEventPreviewLabel('ended', 83, me, me, 'voice'))
+            .toBe('📞 Voice call ended • 1:23');
+        expect(getCallEventPreviewLabel('ended', 83, me, me))
+            .toBe('📞 Voice call ended • 1:23');
+    });
+});
+
+describe('resolvePillKey — video fallback to voice', () => {
+    // Locale that has no video overrides — every video.* lookup misses
+    // and the helper must return the voice key's translation, NOT the
+    // raw key string.
+    const trVoiceOnly = (key: string): string => {
+        const voiceOnly: Record<string, string> = {
+            'voiceCall.pill.missed': 'Sprachanruf verpasst',
+            'voiceCall.pill.ended': 'Sprachanruf beendet',
+            'voiceCall.pill.generic': 'Sprachanruf'
+        };
+        return voiceOnly[key] !== undefined ? voiceOnly[key] : key;
+    };
+
+    it('falls back to localized voice copy when video override is missing', async () => {
+        const { resolvePillKey } = await import('./mediaPreview');
+        expect(resolvePillKey(trVoiceOnly, 'missed', 'video'))
+            .toBe('Sprachanruf verpasst');
+        expect(resolvePillKey(trVoiceOnly, 'ended', 'video'))
+            .toBe('Sprachanruf beendet');
+        expect(resolvePillKey(trVoiceOnly, 'generic', 'video'))
+            .toBe('Sprachanruf');
+    });
+
+    it("returns voice translation when callMediaType is 'voice' or undefined", async () => {
+        const { resolvePillKey } = await import('./mediaPreview');
+        expect(resolvePillKey(trVoiceOnly, 'missed', 'voice'))
+            .toBe('Sprachanruf verpasst');
+        expect(resolvePillKey(trVoiceOnly, 'missed', undefined))
+            .toBe('Sprachanruf verpasst');
     });
 });
 

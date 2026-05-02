@@ -492,6 +492,52 @@ const nl = {
         expectedAccount: 'Ingelogd als',
         actualAccount: 'Actief signer-account',
         instructions: 'Schakel naar het juiste account in je signer-extensie en herlaad deze pagina.'
+    },
+    voiceCall: {
+        calling: 'Bellen...',
+        callingVideo: 'Videogesprek starten...',
+        connecting: 'Verbinden...',
+        incomingCall: 'Inkomend spraakgesprek',
+        incomingVideoCall: 'Inkomend videogesprek',
+        accept: 'Accepteren',
+        decline: 'Weigeren',
+        hangup: 'Ophangen',
+        mute: 'Dempen',
+        unmute: 'Dempen opheffen',
+        speaker: 'Luidspreker',
+        cameraOff: 'Camera uit',
+        cameraOn: 'Camera aan',
+        flipCamera: 'Camera wisselen',
+        endReasonHangup: 'Gesprek beëindigd',
+        endReasonRejected: 'Gesprek geweigerd',
+        endReasonBusy: 'Gebruiker bezet',
+        endReasonTimeout: 'Geen antwoord',
+        endReasonIceFailed: 'Verbinding mislukt',
+        endReasonError: 'Gesprek mislukt',
+        pill: {
+            missed: 'Gemist spraakgesprek',
+            ended: 'Spraakgesprek beëindigd',
+            endedWithDuration: 'Spraakgesprek beëindigd \u2022 {duration}',
+            noAnswerByPeer: 'Geen antwoord',
+            noAnswerMe: 'Gemist spraakgesprek',
+            declinedByPeer: 'Gesprek geweigerd',
+            declinedByMe: 'Geweigerd',
+            busyByPeer: 'Gebruiker bezet',
+            busyMe: 'Gemist spraakgesprek (bezet)',
+            failed: 'Verbinding mislukt',
+            cancelled: 'Geannuleerd',
+            generic: 'Spraakgesprek',
+            directionOutgoing: 'Uitgaand gesprek',
+            directionIncoming: 'Inkomend gesprek',
+            video: {
+                missed: 'Gemist videogesprek',
+                ended: 'Videogesprek beëindigd',
+                endedWithDuration: 'Videogesprek beëindigd \u2022 {duration}',
+                noAnswerMe: 'Gemist videogesprek',
+                busyMe: 'Gemist videogesprek (bezet)',
+                generic: 'Videogesprek'
+            }
+        }
     }
 };
 

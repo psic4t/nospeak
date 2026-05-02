@@ -480,6 +480,52 @@ const ur = {
         expectedAccount: 'لاگ ان بطور',
         actualAccount: 'سائنر کا فعال اکاؤنٹ',
         instructions: 'براہ کرم اپنی سائنر ایکسٹینشن میں درست اکاؤنٹ پر سوئچ کریں اور یہ صفحہ دوبارہ لوڈ کریں۔'
+    },
+    voiceCall: {
+        calling: 'کال ہو رہی ہے...',
+        callingVideo: 'ویڈیو کال ہو رہی ہے...',
+        connecting: 'کنیکٹ ہو رہا ہے...',
+        incomingCall: 'انکمنگ وائس کال',
+        incomingVideoCall: 'انکمنگ ویڈیو کال',
+        accept: 'قبول کریں',
+        decline: 'مسترد کریں',
+        hangup: 'بند کریں',
+        mute: 'خاموش',
+        unmute: 'آواز چالو کریں',
+        speaker: 'اسپیکر',
+        cameraOff: 'کیمرہ بند',
+        cameraOn: 'کیمرہ آن',
+        flipCamera: 'کیمرہ تبدیل کریں',
+        endReasonHangup: 'کال ختم',
+        endReasonRejected: 'کال مسترد',
+        endReasonBusy: 'صارف مصروف',
+        endReasonTimeout: 'کوئی جواب نہیں',
+        endReasonIceFailed: 'کنیکشن ناکام',
+        endReasonError: 'کال ناکام',
+        pill: {
+            missed: 'مس وائس کال',
+            ended: 'وائس کال ختم',
+            endedWithDuration: 'وائس کال ختم \u2022 {duration}',
+            noAnswerByPeer: 'کوئی جواب نہیں',
+            noAnswerMe: 'مس وائس کال',
+            declinedByPeer: 'کال مسترد',
+            declinedByMe: 'مسترد',
+            busyByPeer: 'صارف مصروف',
+            busyMe: 'مس وائس کال (مصروف)',
+            failed: 'کنیکشن ناکام',
+            cancelled: 'منسوخ',
+            generic: 'وائس کال',
+            directionOutgoing: 'آؤٹ گوئنگ کال',
+            directionIncoming: 'انکمنگ کال',
+            video: {
+                missed: 'مس ویڈیو کال',
+                ended: 'ویڈیو کال ختم',
+                endedWithDuration: 'ویڈیو کال ختم \u2022 {duration}',
+                noAnswerMe: 'مس ویڈیو کال',
+                busyMe: 'مس ویڈیو کال (مصروف)',
+                generic: 'ویڈیو کال'
+            }
+        }
     }
 };
 

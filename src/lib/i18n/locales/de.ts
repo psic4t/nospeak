@@ -494,6 +494,52 @@ const de = {
         expectedAccount: 'Angemeldet als',
         actualAccount: 'Signer aktives Konto',
         instructions: 'Bitte wechsle in deiner Signer-Erweiterung zum richtigen Konto und lade diese Seite neu.'
+    },
+    voiceCall: {
+        calling: 'Wird angerufen...',
+        callingVideo: 'Videoanruf wird gestartet...',
+        connecting: 'Verbindung wird hergestellt...',
+        incomingCall: 'Eingehender Sprachanruf',
+        incomingVideoCall: 'Eingehender Videoanruf',
+        accept: 'Annehmen',
+        decline: 'Ablehnen',
+        hangup: 'Auflegen',
+        mute: 'Stummschalten',
+        unmute: 'Stummschaltung aufheben',
+        speaker: 'Lautsprecher',
+        cameraOff: 'Kamera aus',
+        cameraOn: 'Kamera an',
+        flipCamera: 'Kamera wechseln',
+        endReasonHangup: 'Anruf beendet',
+        endReasonRejected: 'Anruf abgelehnt',
+        endReasonBusy: 'Benutzer besetzt',
+        endReasonTimeout: 'Keine Antwort',
+        endReasonIceFailed: 'Verbindung fehlgeschlagen',
+        endReasonError: 'Anruf fehlgeschlagen',
+        pill: {
+            missed: 'Verpasster Sprachanruf',
+            ended: 'Sprachanruf beendet',
+            endedWithDuration: 'Sprachanruf beendet \u2022 {duration}',
+            noAnswerByPeer: 'Keine Antwort',
+            noAnswerMe: 'Verpasster Sprachanruf',
+            declinedByPeer: 'Anruf abgelehnt',
+            declinedByMe: 'Abgelehnt',
+            busyByPeer: 'Benutzer besetzt',
+            busyMe: 'Verpasster Sprachanruf (besetzt)',
+            failed: 'Verbindung fehlgeschlagen',
+            cancelled: 'Abgebrochen',
+            generic: 'Sprachanruf',
+            directionOutgoing: 'Ausgehender Anruf',
+            directionIncoming: 'Eingehender Anruf',
+            video: {
+                missed: 'Verpasster Videoanruf',
+                ended: 'Videoanruf beendet',
+                endedWithDuration: 'Videoanruf beendet \u2022 {duration}',
+                noAnswerMe: 'Verpasster Videoanruf',
+                busyMe: 'Verpasster Videoanruf (besetzt)',
+                generic: 'Videoanruf'
+            }
+        }
     }
 };
 

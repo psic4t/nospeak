@@ -480,6 +480,52 @@ const vi = {
         expectedAccount: 'Đã đăng nhập với',
         actualAccount: 'Tài khoản đang hoạt động trên tiện ích ký',
         instructions: 'Vui lòng chuyển sang tài khoản đúng trong tiện ích ký và tải lại trang.'
+    },
+    voiceCall: {
+        calling: 'Đang gọi...',
+        callingVideo: 'Đang gọi video...',
+        connecting: 'Đang kết nối...',
+        incomingCall: 'Cuộc gọi thoại đến',
+        incomingVideoCall: 'Cuộc gọi video đến',
+        accept: 'Chấp nhận',
+        decline: 'Từ chối',
+        hangup: 'Kết thúc',
+        mute: 'Tắt tiếng',
+        unmute: 'Bật tiếng',
+        speaker: 'Loa ngoài',
+        cameraOff: 'Tắt camera',
+        cameraOn: 'Bật camera',
+        flipCamera: 'Đổi camera',
+        endReasonHangup: 'Cuộc gọi đã kết thúc',
+        endReasonRejected: 'Cuộc gọi bị từ chối',
+        endReasonBusy: 'Người dùng đang bận',
+        endReasonTimeout: 'Không có trả lời',
+        endReasonIceFailed: 'Kết nối thất bại',
+        endReasonError: 'Cuộc gọi thất bại',
+        pill: {
+            missed: 'Cuộc gọi thoại bị nhỡ',
+            ended: 'Cuộc gọi thoại đã kết thúc',
+            endedWithDuration: 'Cuộc gọi thoại đã kết thúc \u2022 {duration}',
+            noAnswerByPeer: 'Không có trả lời',
+            noAnswerMe: 'Cuộc gọi thoại bị nhỡ',
+            declinedByPeer: 'Cuộc gọi bị từ chối',
+            declinedByMe: 'Đã từ chối',
+            busyByPeer: 'Người dùng đang bận',
+            busyMe: 'Cuộc gọi thoại bị nhỡ (bận)',
+            failed: 'Kết nối thất bại',
+            cancelled: 'Đã hủy',
+            generic: 'Cuộc gọi thoại',
+            directionOutgoing: 'Cuộc gọi đi',
+            directionIncoming: 'Cuộc gọi đến',
+            video: {
+                missed: 'Cuộc gọi video bị nhỡ',
+                ended: 'Cuộc gọi video đã kết thúc',
+                endedWithDuration: 'Cuộc gọi video đã kết thúc \u2022 {duration}',
+                noAnswerMe: 'Cuộc gọi video bị nhỡ',
+                busyMe: 'Cuộc gọi video bị nhỡ (bận)',
+                generic: 'Cuộc gọi video'
+            }
+        }
     }
 };
 
