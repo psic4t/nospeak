@@ -47,6 +47,7 @@ const hi = {
         export: 'निर्यात',
         archive: 'संग्रहित करें',
         unarchive: 'असंग्रहित करें',
+        search: 'खोजें',
         archived: 'संग्रहित',
         emptyArchive: 'कोई संग्रहित चैट नहीं',
         chatArchived: 'चैट संग्रहित हो गई',

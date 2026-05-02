@@ -47,6 +47,7 @@ const es = {
         export: 'Exportar',
         archive: 'Archivar',
         unarchive: 'Desarchivar',
+        search: 'Buscar',
         archived: 'Archivados',
         emptyArchive: 'No hay chats archivados',
         chatArchived: 'Chat archivado',

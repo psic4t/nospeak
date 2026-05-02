@@ -47,6 +47,7 @@ const pl = {
         export: 'Eksportuj',
         archive: 'Archiwizuj',
         unarchive: 'Przywróć z archiwum',
+        search: 'Szukaj',
         archived: 'Zarchiwizowane',
         emptyArchive: 'Brak zarchiwizowanych czatów',
         chatArchived: 'Czat zarchiwizowany',

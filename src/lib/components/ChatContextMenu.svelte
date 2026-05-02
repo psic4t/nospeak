@@ -1,11 +1,12 @@
 <script lang="ts">
     import { t } from '$lib/i18n';
 
-    let { x = 0, y = 0, isOpen = false, onClose, onExport, onArchive, isArchived = false } = $props<{
+    let { x = 0, y = 0, isOpen = false, onClose, onSearch, onExport, onArchive, isArchived = false } = $props<{
         x: number;
         y: number;
         isOpen: boolean;
         onClose: () => void;
+        onSearch?: () => void;
         onExport?: () => void;
         onArchive: () => void;
         isArchived?: boolean;
@@ -87,6 +88,19 @@
         use:reposition={{x, y}}
         class="chat-context-menu fixed bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl py-1 z-[9999] min-w-[160px] outline-none"
     >
+        {#if onSearch}
+            <button
+                class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"
+                onclick={() => { onSearch(); onClose(); }}
+            >
+                <!-- Search icon (magnifier) -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7"/>
+                    <path d="m21 21-4.3-4.3"/>
+                </svg>
+                {$t('chats.search')}
+            </button>
+        {/if}
         {#if onExport}
             <button
                 class="w-full text-start px-4 py-2 hover:bg-gray-100/50 dark:hover:bg-slate-700/50 text-sm dark:text-white transition-colors flex items-center gap-2"

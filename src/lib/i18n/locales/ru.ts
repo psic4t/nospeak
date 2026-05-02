@@ -47,6 +47,7 @@ const ru = {
         export: 'Экспортировать',
         archive: 'Архивировать',
         unarchive: 'Разархивировать',
+        search: 'Поиск',
         archived: 'Архив',
         emptyArchive: 'Нет архивных чатов',
         chatArchived: 'Чат архивирован',

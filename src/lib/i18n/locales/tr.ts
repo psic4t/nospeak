@@ -47,6 +47,7 @@ const tr = {
         export: 'Dışa aktar',
         archive: 'Arşivle',
         unarchive: 'Arşivden Çıkar',
+        search: 'Ara',
         archived: 'Arşivlendi',
         emptyArchive: 'Arşivlenmiş sohbet yok',
         chatArchived: 'Sohbet arşivlendi',

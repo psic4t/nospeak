@@ -47,6 +47,7 @@ const vi = {
         export: 'Xuất',
         archive: 'Lưu trữ',
         unarchive: 'Bỏ lưu trữ',
+        search: 'Tìm kiếm',
         archived: 'Đã lưu trữ',
         emptyArchive: 'Không có cuộc trò chuyện đã lưu trữ',
         chatArchived: 'Cuộc trò chuyện đã được lưu trữ',

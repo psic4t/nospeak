@@ -47,6 +47,7 @@ const fr = {
         export: 'Exporter',
         archive: 'Archiver',
         unarchive: 'Désarchiver',
+        search: 'Rechercher',
         archived: 'Archivés',
         emptyArchive: 'Aucune discussion archivée',
         chatArchived: 'Discussion archivée',

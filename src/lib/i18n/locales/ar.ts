@@ -47,6 +47,7 @@ const ar = {
         export: 'تصدير',
         archive: 'أرشفة',
         unarchive: 'إلغاء الأرشفة',
+        search: 'بحث',
         archived: 'المؤرشفة',
         emptyArchive: 'لا توجد محادثات مؤرشفة',
         chatArchived: 'تمت أرشفة المحادثة',

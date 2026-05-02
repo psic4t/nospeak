@@ -47,6 +47,7 @@ const th = {
         export: 'ส่งออก',
         archive: 'เก็บถาวร',
         unarchive: 'ยกเลิกการเก็บถาวร',
+        search: 'ค้นหา',
         archived: 'เก็บถาวรแล้ว',
         emptyArchive: 'ไม่มีแชทที่เก็บถาวร',
         chatArchived: 'เก็บถาวรแชทแล้ว',

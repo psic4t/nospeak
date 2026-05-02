@@ -47,6 +47,7 @@ const pt = {
         export: 'Exportar',
         archive: 'Arquivar',
         unarchive: 'Desarquivar',
+        search: 'Pesquisar',
         archived: 'Arquivados',
         emptyArchive: 'Nenhuma conversa arquivada',
         chatArchived: 'Conversa arquivada',

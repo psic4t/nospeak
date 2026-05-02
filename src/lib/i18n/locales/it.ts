@@ -47,6 +47,7 @@ const it = {
         export: 'Esporta',
         archive: 'Archivia',
         unarchive: 'Ripristina',
+        search: 'Cerca',
         archived: 'Archiviati',
         emptyArchive: 'Nessuna chat archiviata',
         chatArchived: 'Chat archiviata',

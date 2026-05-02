@@ -47,6 +47,7 @@ const ja = {
         export: 'エクスポート',
         archive: 'アーカイブ',
         unarchive: 'アーカイブ解除',
+        search: '検索',
         archived: 'アーカイブ済み',
         emptyArchive: 'アーカイブされたチャットはありません',
         chatArchived: 'チャットをアーカイブしました',

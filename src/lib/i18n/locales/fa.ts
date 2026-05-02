@@ -47,6 +47,7 @@ const fa = {
         export: 'خروجی',
         archive: 'بایگانی',
         unarchive: 'خارج کردن از بایگانی',
+        search: 'جستجو',
         archived: 'بایگانی‌شده',
         emptyArchive: 'گفتگوی بایگانی‌شده‌ای نیست',
         chatArchived: 'گفتگو بایگانی شد',

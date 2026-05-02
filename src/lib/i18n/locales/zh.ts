@@ -47,6 +47,7 @@ const zh = {
         export: '导出',
         archive: '归档',
         unarchive: '取消归档',
+        search: '搜索',
         archived: '已归档',
         emptyArchive: '没有已归档的聊天',
         chatArchived: '聊天已归档',

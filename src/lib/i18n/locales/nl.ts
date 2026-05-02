@@ -47,6 +47,7 @@ const nl = {
         export: 'Exporteren',
         archive: 'Archiveren',
         unarchive: 'Dearchiveren',
+        search: 'Zoeken',
         archived: 'Gearchiveerd',
         emptyArchive: 'Geen gearchiveerde chats',
         chatArchived: 'Chat gearchiveerd',

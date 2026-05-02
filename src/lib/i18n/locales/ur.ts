@@ -47,6 +47,7 @@ const ur = {
         export: 'برآمد',
         archive: 'آرکائیو',
         unarchive: 'آرکائیو سے نکالیں',
+        search: 'تلاش کریں',
         archived: 'آرکائیو شدہ',
         emptyArchive: 'کوئی آرکائیو شدہ چیٹ نہیں',
         chatArchived: 'چیٹ آرکائیو ہو گئی',

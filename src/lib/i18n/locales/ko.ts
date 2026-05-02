@@ -47,6 +47,7 @@ const ko = {
         export: '내보내기',
         archive: '보관',
         unarchive: '보관 해제',
+        search: '검색',
         archived: '보관됨',
         emptyArchive: '보관된 채팅이 없습니다',
         chatArchived: '채팅이 보관되었습니다',

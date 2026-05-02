@@ -47,6 +47,7 @@ const bn = {
         export: 'রপ্তানি',
         archive: 'আর্কাইভ',
         unarchive: 'আর্কাইভ মুক্ত করুন',
+        search: 'অনুসন্ধান',
         archived: 'আর্কাইভ করা',
         emptyArchive: 'কোনো আর্কাইভ করা চ্যাট নেই',
         chatArchived: 'চ্যাট আর্কাইভ হয়েছে',

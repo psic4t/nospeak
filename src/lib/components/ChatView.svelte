@@ -14,6 +14,8 @@
   import { conversationRepo } from "$lib/db/ConversationRepository";
   import MessageContent from "./MessageContent.svelte";
   import ContextMenu from "./ContextMenu.svelte";
+  import ChatContextMenu from "./ChatContextMenu.svelte";
+  import { exportChatToHtml } from "$lib/core/ChatExporter";
   import MessageReactions from "./MessageReactions.svelte";
   import MediaUploadButton from "./MediaUploadButton.svelte";
   import AttachmentPreviewModal from "./AttachmentPreviewModal.svelte";
@@ -252,6 +254,9 @@
   let searchToken = 0;
   let isSearchActive = $derived(searchQuery.trim().length >= 3);
 
+  // Chat header three-dot menu
+  let chatMenu = $state<{ isOpen: boolean; x: number; y: number }>({ isOpen: false, x: 0, y: 0 });
+
   function cancelPendingSearch() {
     searchToken += 1;
     isSearchingHistory = false;
@@ -297,6 +302,38 @@
     e.preventDefault();
     hapticSelection();
     closeSearch();
+  }
+
+  function openChatMenu(e: MouseEvent) {
+    const target = e.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    chatMenu = { isOpen: true, x: rect.right, y: rect.bottom + 4 };
+  }
+
+  function closeChatMenu() {
+    chatMenu.isOpen = false;
+  }
+
+  function handleMenuSearch() {
+    closeChatMenu();
+    openSearch();
+  }
+
+  async function handleMenuExport() {
+    if (!chatArchiveId) return;
+    closeChatMenu();
+    try {
+      await exportChatToHtml(chatArchiveId);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  }
+
+  function handleMenuArchive() {
+    if (!chatArchiveId) return;
+    toggleArchive(chatArchiveId);
+    closeChatMenu();
   }
 
   function escapeHtml(value: string): string {
@@ -2096,7 +2133,7 @@
           {#if partnerNpub && !isGroup}
             <button
               onclick={startVideoCall}
-              class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text transition-colors"
+              class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] active:bg-[rgb(var(--color-lavender-rgb)/0.24)] focus-visible:bg-[rgb(var(--color-lavender-rgb)/0.18)] focus:outline-none transition-colors"
               aria-label="Video call"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
@@ -2106,7 +2143,7 @@
             </button>
             <button
               onclick={startVoiceCall}
-              class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text transition-colors"
+              class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] active:bg-[rgb(var(--color-lavender-rgb)/0.24)] focus-visible:bg-[rgb(var(--color-lavender-rgb)/0.18)] focus:outline-none transition-colors"
               aria-label="Voice call"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
@@ -2115,17 +2152,31 @@
             </button>
           {/if}
 
-          <Button
-            size="icon"
-            onclick={toggleSearch}
-            class="h-11 w-11 relative z-40"
-            aria-label="Search chat"
+          <button
+            onclick={(e) => { hapticSelection(); openChatMenu(e); }}
+            class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] active:bg-[rgb(var(--color-lavender-rgb)/0.24)] focus-visible:bg-[rgb(var(--color-lavender-rgb)/0.18)] focus:outline-none transition-colors relative z-40 {chatMenu.isOpen ? 'bg-[rgb(var(--color-lavender-rgb)/0.20)]' : ''}"
+            aria-label="Chat menu"
+            aria-haspopup="menu"
+            aria-expanded={chatMenu.isOpen}
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="5" r="1.6"/>
+              <circle cx="12" cy="12" r="1.6"/>
+              <circle cx="12" cy="19" r="1.6"/>
             </svg>
-          </Button>
+          </button>
         </div>
+
+        <ChatContextMenu
+          x={chatMenu.x}
+          y={chatMenu.y}
+          isOpen={chatMenu.isOpen}
+          onClose={closeChatMenu}
+          onSearch={handleMenuSearch}
+          onExport={chatArchiveId ? handleMenuExport : undefined}
+          onArchive={handleMenuArchive}
+          isArchived={isArchived}
+        />
       {/if}
 
      </div>

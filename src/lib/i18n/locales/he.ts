@@ -47,6 +47,7 @@ const he = {
         export: 'ייצוא',
         archive: 'ארכיון',
         unarchive: 'הוצאה מארכיון',
+        search: 'חיפוש',
         archived: 'בארכיון',
         emptyArchive: 'אין צ\'אטים בארכיון',
         chatArchived: 'הצ\'אט הועבר לארכיון',
