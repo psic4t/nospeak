@@ -95,6 +95,25 @@ public class NativeBackgroundMessagingService extends Service {
     private static volatile NativeBackgroundMessagingService sInstance = null;
 
     /**
+     * Pre-session ICE candidate buffer keyed by sender pubkey. Holds
+     * kind-25052 ICE candidates that arrive while no
+     * {@link NativeVoiceCallManager} exists for the sender (typically:
+     * an offer is ringing on the lockscreen and the user has not yet
+     * accepted). Drained into the manager's per-session buffer when
+     * {@link VoiceCallForegroundService} bootstraps the manager. Part
+     * of NIP-AC §"ICE Candidate Buffering" compliance.
+     */
+    private final GlobalIceBuffer globalIceBuffer = new GlobalIceBuffer();
+
+    /**
+     * Exposes the global ICE buffer so {@link VoiceCallForegroundService}
+     * can drain candidates for a peer at manager construction time.
+     */
+    public GlobalIceBuffer getGlobalIceBuffer() {
+        return globalIceBuffer;
+    }
+
+    /**
      * Returns the currently running service instance, or null if the service is not running.
      * Used by the plugin to trigger avatar pre-fetches when profiles are cached.
      */
@@ -619,6 +638,10 @@ public class NativeBackgroundMessagingService extends Service {
     @Override
     public void onDestroy() {
         persistEventQueue();
+
+        // Drop any pre-session ICE candidates still buffered. They have
+        // no consumer once the messaging service is gone.
+        globalIceBuffer.clearAll();
 
         serviceRunning = false;
         sInstance = null;
@@ -3191,27 +3214,32 @@ public class NativeBackgroundMessagingService extends Service {
      * NIP-AC ephemeral gift-wrap (kind 21059) handler.
      *
      * Decrypts the wrap directly to the signed inner event (no seal
-     * layer), applies a 60-second created_at staleness check, dedups by
-     * inner event ID, and dispatches based on inner kind:
+     * layer), verifies the inner event's BIP-340 Schnorr signature via
+     * {@link SchnorrCrypto#verify}, applies a 60-second
+     * {@code created_at} staleness check, dedups by inner event ID,
+     * and dispatches based on inner kind:
      * <ul>
-     *   <li>25050 (Call Offer): persist to SharedPrefs and post the FSI
-     *       ringer notification, AFTER follow-gating against the saved
-     *       NIP-02 contact-list set.</li>
-     *   <li>25053 (Hangup) and 25054 (Reject): treated as a remote
-     *       cancellation of any pending ringing call.</li>
-     *   <li>25051 (Answer), 25052 (ICE), self-authored events: silently
-     *       discarded — these are useless without an active in-JS call
-     *       session and the JS layer has its own subscription for them
-     *       once the user is in-app.</li>
+     *   <li>25050 (Call Offer): if a {@link NativeVoiceCallManager} is
+     *       busy with a different call, auto-reject with content
+     *       {@code "busy"} via {@link NativeBusyRejectDecision};
+     *       otherwise apply follow-gating against the saved NIP-02
+     *       contact-list set, persist to SharedPrefs, and post the FSI
+     *       ringer notification.</li>
+     *   <li>25051 (Answer), 25053 (Hangup), 25054 (Reject), 25055
+     *       (Renegotiate): when a {@link NativeVoiceCallManager}
+     *       exists, route directly into the manager. Hangup/Reject
+     *       additionally dismiss the FSI ringer notification when no
+     *       manager is up.</li>
+     *   <li>25052 (ICE Candidate): when a manager exists, dispatch to
+     *       it; otherwise buffer in {@link GlobalIceBuffer} keyed by
+     *       sender pubkey so candidates that trickle during the FSI
+     *       ringer window survive into the eventually-accepted call.</li>
+     *   <li>Self-authored events: dispatched through
+     *       {@link NativeSelfDismissDecision}. Most kinds drop;
+     *       self 25051 / 25054 with a matching pending call-id
+     *       implement NIP-AC §"Multi-Device Support" by ending the
+     *       active manager and / or dismissing the FSI ringer.</li>
      * </ul>
-     *
-     * NOTE: signature verification on the inner event is NOT performed
-     * here. Without a Java-side BIP-340 verifier we trust that the
-     * combination of NIP-44 decryption (which requires a valid shared
-     * key with the user's identity) and the JS-layer signature check
-     * (in unwrapNipAcGiftWrap) is sufficient. The native side's only
-     * effect is the FSI ring; a forged offer that decrypts can ring
-     * the user once but cannot establish a call without the real key.
      */
     private void handleNipAcWrapEvent(JSONObject wrap, String wrapEventId) {
         if (currentPubkeyHex == null || currentPubkeyHex.isEmpty()) return;
@@ -3255,19 +3283,13 @@ public class NativeBackgroundMessagingService extends Service {
 
         if (innerSenderHex == null || innerEventId == null || innerTags == null) return;
 
-        // Discard self-authored events — they are echoes of our own send.
-        // (Self-Answer / self-Reject for multi-device dismissal are
-        // handled by the JS layer when the app is open; while the app is
-        // closed there is no ringing UI to dismiss.)
-        if (innerSenderHex.equalsIgnoreCase(currentPubkeyHex)) {
-            return;
-        }
-
         // BIP-340 Schnorr signature verification of the inner event.
         // The native layer is the only line of defense when the
         // WebView is dead, so we verify here unconditionally. A
         // failure drops the event silently — invalid signatures are
-        // forged and have no business reaching any handler.
+        // forged and have no business reaching any handler. Verify
+        // BEFORE the self-event filter so a forged "self" event with
+        // a bad signature can't bypass any downstream dismissal.
         try {
             String innerSig = inner.optString("sig", null);
             byte[] innerIdBytes = hexToBytes(innerEventId);
@@ -3309,6 +3331,66 @@ public class NativeBackgroundMessagingService extends Service {
                 Log.d(LOG_TAG, "[NIP-AC] drop inner with no call-id kind=" + innerKind);
             }
             return;
+        }
+
+        // NIP-AC §"Multi-Device Support" + §"Self-Event Filtering":
+        // Self-authored events are echoes of our own send. Most kinds
+        // drop silently; kind 25051/25054 with a matching call-id are
+        // multi-device "answered/rejected elsewhere" signals that must
+        // dismiss the ringing UI. The decision lives in a pure-Java
+        // helper for testability — see NativeSelfDismissDecision.
+        if (innerSenderHex.equalsIgnoreCase(currentPubkeyHex)) {
+            // Read the pending FSI prefs and current manager state,
+            // then ask the helper what to do.
+            SharedPreferences pendingPrefs = getSharedPreferences(
+                "nospeak_pending_incoming_call", MODE_PRIVATE);
+            String pendingPrefsCallId = pendingPrefs.getString("callId", null);
+            NativeVoiceCallManager selfDismissMgr =
+                VoiceCallForegroundService.getNativeManager();
+            String managerCallId = selfDismissMgr != null ? selfDismissMgr.getCallId() : null;
+            String managerStatusName = selfDismissMgr != null && selfDismissMgr.getStatus() != null
+                ? selfDismissMgr.getStatus().name()
+                : null;
+
+            NativeSelfDismissDecision.Action selfAction =
+                NativeSelfDismissDecision.decide(
+                    innerKind, callId, pendingPrefsCallId,
+                    managerCallId, managerStatusName);
+
+            switch (selfAction) {
+                case END_MANAGER_ANSWERED: {
+                    if (isDebugBuild()) {
+                        Log.d(LOG_TAG, "[NIP-AC] self-answer: ending manager as answered-elsewhere callId=" + callId);
+                    }
+                    final NativeVoiceCallManager fMgr = selfDismissMgr;
+                    final String fCallId = callId;
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.endForAnsweredElsewhere(fCallId));
+                    handleRemoteCallCancellation(callId);
+                    return;
+                }
+                case END_MANAGER_REJECTED: {
+                    if (isDebugBuild()) {
+                        Log.d(LOG_TAG, "[NIP-AC] self-reject: ending manager as rejected-elsewhere callId=" + callId);
+                    }
+                    final NativeVoiceCallManager fMgr = selfDismissMgr;
+                    final String fCallId = callId;
+                    new Handler(Looper.getMainLooper()).post(() ->
+                        fMgr.endForRejectedElsewhere(fCallId));
+                    handleRemoteCallCancellation(callId);
+                    return;
+                }
+                case DISMISS_FSI: {
+                    if (isDebugBuild()) {
+                        Log.d(LOG_TAG, "[NIP-AC] self-event: dismissing FSI for callId=" + callId);
+                    }
+                    handleRemoteCallCancellation(callId);
+                    return;
+                }
+                case DROP:
+                default:
+                    return;
+            }
         }
 
         // ===============================================================
@@ -3397,9 +3479,46 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        // NIP-AC §"ICE Candidate Buffering": kind-25052 ICE candidates
+        // that arrive before any NativeVoiceCallManager exists for the
+        // sender are buffered globally, keyed by sender pubkey.
+        // VoiceCallForegroundService drains the per-peer entries into
+        // the manager's per-session buffer when it bootstraps the
+        // manager, so candidates trickled during the FSI ringer
+        // window survive into the active call.
+        if (innerKind == 25052) {
+            String iceCand = null;
+            String iceSdpMid = null;
+            Integer iceSdpMLineIndex = null;
+            try {
+                JSONObject icePayload = new JSONObject(innerContent);
+                iceCand = icePayload.optString("candidate", "");
+                if (!icePayload.isNull("sdpMid")) {
+                    iceSdpMid = icePayload.optString("sdpMid", null);
+                }
+                if (!icePayload.isNull("sdpMLineIndex")) {
+                    iceSdpMLineIndex = icePayload.optInt("sdpMLineIndex", 0);
+                }
+            } catch (JSONException e) {
+                Log.w(LOG_TAG, "[NIP-AC] pre-session ICE payload parse failed", e);
+                return;
+            }
+            long nowMs = System.currentTimeMillis();
+            globalIceBuffer.add(
+                innerSenderHex.toLowerCase(),
+                new GlobalIceBuffer.IceCandidatePayload(
+                    iceCand, iceSdpMid, iceSdpMLineIndex, nowMs),
+                nowMs);
+            if (isDebugBuild()) {
+                Log.d(LOG_TAG, "[NIP-AC] buffered pre-session ICE from "
+                    + innerSenderHex.substring(0, Math.min(8, innerSenderHex.length())));
+            }
+            return;
+        }
+
         // Only Call Offer (25050) produces a notification while the app
-        // is closed. Answer/ICE/Renegotiate are useless without an
-        // active call session.
+        // is closed. Answer/Renegotiate are useless without an active
+        // call session (ICE handled above via the global buffer).
         if (innerKind != 25050) {
             if (isDebugBuild()) {
                 Log.d(LOG_TAG, "[NIP-AC] drop non-offer kind while app closed: " + innerKind);
@@ -3423,6 +3542,54 @@ public class NativeBackgroundMessagingService extends Service {
                 Log.d(LOG_TAG, "[NIP-AC] drop offer from non-followed sender");
             }
             return;
+        }
+
+        // NIP-AC §"Busy Rejection": if a NativeVoiceCallManager is
+        // already committed to a different call, auto-reject the new
+        // offer with content="busy" and self-wrap so multi-device sees
+        // the same decision. A duplicate redelivery (same call-id) is
+        // silently ignored. The decision lives in a pure-Java helper
+        // for testability — see NativeBusyRejectDecision.
+        //
+        // This branch only matters when the FGS / native manager is up
+        // (typically: in-call, app may or may not be foreground). When
+        // JS owns the call (manager is idle), this falls through to
+        // the normal follow-gate-passed FSI ringer path and the JS
+        // layer makes its own busy decision via VoiceCallService.handleOffer.
+        {
+            NativeVoiceCallManager busyMgr = VoiceCallForegroundService.getNativeManager();
+            String managerCallId = busyMgr != null ? busyMgr.getCallId() : null;
+            boolean managerIsBusy = busyMgr != null && busyMgr.isBusy();
+            NativeBusyRejectDecision.Action busyAction =
+                NativeBusyRejectDecision.decide(managerCallId, managerIsBusy, callId);
+            switch (busyAction) {
+                case AUTO_REJECT_BUSY: {
+                    if (isDebugBuild()) {
+                        Log.d(LOG_TAG, "[NIP-AC] busy auto-reject: incoming callId="
+                            + callId + " activeCallId=" + managerCallId);
+                    }
+                    final String fSender = innerSenderHex.toLowerCase();
+                    final String fIncomingCallId = callId;
+                    new Thread(() -> {
+                        try {
+                            sendVoiceCallReject(fSender, fIncomingCallId, "busy");
+                        } catch (Throwable t) {
+                            Log.w(LOG_TAG, "[NIP-AC] busy auto-reject send failed", t);
+                        }
+                    }, "nospeak-busy-auto-reject").start();
+                    return;
+                }
+                case IGNORE_DUPLICATE: {
+                    if (isDebugBuild()) {
+                        Log.d(LOG_TAG, "[NIP-AC] drop duplicate offer for active callId=" + callId);
+                    }
+                    return;
+                }
+                case NORMAL_FLOW:
+                default:
+                    // Manager is idle/ended/absent — fall through to FSI ringer path.
+                    break;
+            }
         }
 
         // Extract NIP-AC tags.
@@ -3511,6 +3678,24 @@ public class NativeBackgroundMessagingService extends Service {
      * synchronous and the WebSocket sends should not happen on the UI thread.
      */
     public void sendVoiceCallReject(String recipientPubkeyHex, String callId) {
+        sendVoiceCallReject(recipientPubkeyHex, callId, null);
+    }
+
+    /**
+     * NIP-AC kind 25054 Call Reject with an explicit {@code reason}.
+     *
+     * <p>The {@code reason} string is placed verbatim into the inner
+     * event's {@code content} field. Pass {@code null} or an empty
+     * string for an unreasoned reject (e.g. user-initiated decline).
+     * Pass {@code "busy"} for the NIP-AC §"Busy Rejection" auto-reject
+     * from a non-idle state — this is what remote peers compare against
+     * to distinguish a user decline from a busy auto-reject.
+     *
+     * <p>Wire-equivalent to JavaScript {@code Messaging.sendCallReject}
+     * for the same logical inputs (verified by the wire-parity fixture
+     * at {@code tests/fixtures/nip-ac-wire/inner-events.json}).
+     */
+    public void sendVoiceCallReject(String recipientPubkeyHex, String callId, String reason) {
         if (recipientPubkeyHex == null || recipientPubkeyHex.isEmpty()
             || callId == null || callId.isEmpty()
             || currentPubkeyHex == null || currentPubkeyHex.isEmpty()) {
@@ -3518,21 +3703,27 @@ public class NativeBackgroundMessagingService extends Service {
             return;
         }
 
+        // Normalize reason: null/empty → empty content (matches JS path
+        // when no reason argument is supplied).
+        final String content = (reason == null) ? "" : reason;
+
         Log.d(LOG_TAG, "[NIP-AC] reject (25054): starting callId=" + callId
             + " recipient=" + (recipientPubkeyHex.length() >= 8
                 ? recipientPubkeyHex.substring(0, 8) + ".." : recipientPubkeyHex)
+            + (content.isEmpty() ? "" : " reason=" + content)
             + " mode=" + currentMode);
 
         try {
             long nowSec = System.currentTimeMillis() / 1000L;
 
             // 1. Build the signed inner Call Reject event (kind 25054).
-            //    Content is empty (we don't signal "busy" from the native
-            //    decline path — busy-reject is a JS-side concern).
+            //    Content is the caller-supplied reason (empty when null
+            //    or unspecified). Pass "busy" for NIP-AC busy auto-reject
+            //    so remote peers can distinguish busy from user-decline.
             JSONObject inner = new JSONObject();
             inner.put("kind", 25054);
             inner.put("created_at", nowSec);
-            inner.put("content", "");
+            inner.put("content", content);
             inner.put("pubkey", currentPubkeyHex);
             JSONArray innerTags = new JSONArray();
             JSONArray pTag = new JSONArray();

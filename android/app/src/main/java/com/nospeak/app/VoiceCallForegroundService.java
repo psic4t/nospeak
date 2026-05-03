@@ -610,6 +610,16 @@ public class VoiceCallForegroundService extends Service {
             }
 
             @Override
+            public java.util.List<GlobalIceBuffer.IceCandidatePayload> drainPreSessionIce(
+                    String senderHex) {
+                NativeBackgroundMessagingService svc =
+                    NativeBackgroundMessagingService.getInstance();
+                if (svc == null) return java.util.Collections.emptyList();
+                return svc.getGlobalIceBuffer()
+                    .drain(senderHex, System.currentTimeMillis());
+            }
+
+            @Override
             public void sendCallHistoryRumor(
                     String recipientHex,
                     String type,

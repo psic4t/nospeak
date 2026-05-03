@@ -254,6 +254,23 @@ public class NativeVoiceCallManager {
             String initiatorHex,
             String callMediaType
         );
+
+        /**
+         * Drain the {@link NativeBackgroundMessagingService}'s global
+         * pre-session ICE buffer for the given sender pubkey. Returns
+         * candidates that arrived before this manager existed for the
+         * peer (typically: ICE trickled during the FSI ringer window
+         * before the user accepted). The buffer's per-peer entries
+         * are removed by the call. Returns an empty list when no
+         * candidates were buffered or when the bridge cannot reach
+         * the messaging service. Default no-op for older bridges and
+         * test doubles. Part of NIP-AC §"ICE Candidate Buffering"
+         * compliance.
+         */
+        default java.util.List<GlobalIceBuffer.IceCandidatePayload> drainPreSessionIce(
+                String senderHex) {
+            return java.util.Collections.emptyList();
+        }
     }
 
     /** Possible peer-connection states recognised by the JS layer. */
@@ -459,6 +476,12 @@ public class NativeVoiceCallManager {
         try {
             ensureFactory(this.callKind);
             buildPeerConnection();
+            // Defensive: drain any global pre-session ICE for this peer.
+            // For outgoing calls the manager exists from the start so
+            // this is normally a no-op, but a brief race where the
+            // manager was momentarily null between calls could leave
+            // stragglers. Idempotent.
+            drainGlobalPreSessionIceForPeer();
             attachLocalAudioTrack();
             if (this.callKind == CallKind.VIDEO) {
                 attachLocalVideoTrack();
@@ -541,6 +564,12 @@ public class NativeVoiceCallManager {
         try {
             ensureFactory(this.callKind);
             buildPeerConnection();
+            // Drain any ICE candidates that arrived during the FSI ringer
+            // window (before this manager existed for the peer) into the
+            // per-session pending-ICE buffer. They will be flushed to the
+            // peer connection when setRemoteDescription resolves below.
+            // Part of NIP-AC §"ICE Candidate Buffering" compliance.
+            drainGlobalPreSessionIceForPeer();
 
             SessionDescription remote = new SessionDescription(
                 SessionDescription.Type.OFFER, offerSdp);
@@ -567,6 +596,37 @@ public class NativeVoiceCallManager {
             emitError("accept-failed", t.getMessage());
             handleFatal("error");
         }
+    }
+
+    /**
+     * Drain the messaging service's global pre-session ICE buffer for
+     * the current {@link #peerHex} into the per-session pending-ICE
+     * deque. Candidates are added to {@code sessionPendingIce} in
+     * arrival order so the existing {@link #drainSessionPendingIce}
+     * flush (called after {@code setRemoteDescription} resolves)
+     * applies them to the peer connection in order. Part of NIP-AC
+     * §"ICE Candidate Buffering" compliance — see
+     * {@link GlobalIceBuffer}.
+     *
+     * <p>No-op when {@link #peerHex} is null or the bridge returns
+     * an empty list.
+     */
+    private void drainGlobalPreSessionIceForPeer() {
+        if (peerHex == null || bridge == null) return;
+        List<GlobalIceBuffer.IceCandidatePayload> drained =
+            bridge.drainPreSessionIce(peerHex);
+        if (drained == null || drained.isEmpty()) return;
+        for (GlobalIceBuffer.IceCandidatePayload p : drained) {
+            IceCandidate ice = new IceCandidate(
+                p.sdpMid != null ? p.sdpMid : "",
+                p.sdpMLineIndex != null ? p.sdpMLineIndex : 0,
+                p.candidate
+            );
+            sessionPendingIce.addLast(ice);
+        }
+        Log.d(TAG, "drained " + drained.size()
+            + " pre-session ICE candidate(s) for peerHex="
+            + peerHex.substring(0, Math.min(8, peerHex.length())));
     }
 
     /** Mark the manager as ringing for an incoming call (no media setup yet). */
@@ -1106,6 +1166,54 @@ public class NativeVoiceCallManager {
 
     /** Identifier of the current call, or null. */
     public String getCallId() { return callId; }
+
+    /**
+     * True iff the manager is currently committed to a call — i.e. any
+     * status other than {@link CallStatus#IDLE} and
+     * {@link CallStatus#ENDED}. Used by {@link NativeBackgroundMessagingService}
+     * to decide whether an inbound kind-25050 offer with a different
+     * call-id should be auto-rejected with {@code "busy"} per NIP-AC
+     * §"Busy Rejection".
+     *
+     * <p>{@link CallStatus#ENDED} is treated as not-busy because the
+     * manager will reset to {@link CallStatus#IDLE} after
+     * {@link #IDLE_RESET_DELAY_MS} and any incoming offer arriving in
+     * that window should be allowed to ring normally rather than be
+     * auto-rejected.
+     */
+    public boolean isBusy() {
+        CallStatus s = this.status;
+        return s != CallStatus.IDLE && s != CallStatus.ENDED;
+    }
+
+    /**
+     * NIP-AC §"Multi-Device Support": end the current call with reason
+     * {@code "answered-elsewhere"} when another device of the same user
+     * has accepted the same incoming call. Idempotent and call-id
+     * guarded — a stale event with a non-matching call-id is dropped.
+     * No wire event is sent in response.
+     */
+    public void endForAnsweredElsewhere(String incomingCallId) {
+        ensureMain();
+        if (callMismatch(incomingCallId)) return;
+        // Only meaningful while ringing; outside that window the call
+        // is already past the multi-device-dismiss point.
+        if (status != CallStatus.INCOMING_RINGING) return;
+        finishCall("answered-elsewhere", /* sendHangup= */ false);
+    }
+
+    /**
+     * NIP-AC §"Multi-Device Support": end the current call with reason
+     * {@code "rejected-elsewhere"} when another device of the same user
+     * has rejected the same incoming call. Idempotent and call-id
+     * guarded. No wire event is sent in response.
+     */
+    public void endForRejectedElsewhere(String incomingCallId) {
+        ensureMain();
+        if (callMismatch(incomingCallId)) return;
+        if (status != CallStatus.INCOMING_RINGING) return;
+        finishCall("rejected-elsewhere", /* sendHangup= */ false);
+    }
 
     /**
      * Tear down all WebRTC resources and reset state. Called by the FGS
