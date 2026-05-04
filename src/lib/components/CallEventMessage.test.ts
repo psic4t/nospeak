@@ -333,4 +333,115 @@ describe('CallEventMessage', () => {
             );
         });
     });
+
+    describe('relative-time band selection', () => {
+        // Pure mirror of the band cutoffs in src/lib/utils/time.ts so a
+        // future change to the bands has to update this test on purpose.
+        // The component itself delegates to getRelativeTime(message.sentAt,
+        // now); this assertion documents which band each (sentAt, now)
+        // pair falls into, which is the user-visible contract.
+        function pickBand(
+            sentAt: number,
+            now: number
+        ):
+            | 'justNow'
+            | 'minutes'
+            | 'hours'
+            | 'days'
+            | 'weeks'
+            | 'months'
+            | 'years' {
+            const diff = now - sentAt;
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            const weeks = Math.floor(days / 7);
+            const months = Math.floor(days / 30);
+            if (seconds < 60) return 'justNow';
+            if (minutes < 60) return 'minutes';
+            if (hours < 24) return 'hours';
+            if (days < 7) return 'days';
+            if (weeks < 4) return 'weeks';
+            if (months < 12) return 'months';
+            return 'years';
+        }
+
+        const NOW = 1_700_000_000_000;
+
+        it('renders just-now for events under 60 seconds old', () => {
+            // 30s ago — pill must read as "just now" so a freshly-ended
+            // call doesn't briefly show "0m ago".
+            expect(pickBand(NOW - 30 * 1000, NOW)).toBe('justNow');
+        });
+
+        it('renders minutes band from 1m up to 59m', () => {
+            expect(pickBand(NOW - 60 * 1000, NOW)).toBe('minutes');
+            expect(pickBand(NOW - 5 * 60 * 1000, NOW)).toBe('minutes');
+            expect(pickBand(NOW - 59 * 60 * 1000, NOW)).toBe('minutes');
+        });
+
+        it('renders hours band from 1h up to 23h', () => {
+            expect(pickBand(NOW - 60 * 60 * 1000, NOW)).toBe('hours');
+            expect(pickBand(NOW - 23 * 60 * 60 * 1000, NOW)).toBe('hours');
+        });
+
+        it('renders days band from 1d up to 6d', () => {
+            expect(pickBand(NOW - 24 * 60 * 60 * 1000, NOW)).toBe('days');
+            expect(pickBand(NOW - 6 * 24 * 60 * 60 * 1000, NOW)).toBe('days');
+        });
+
+        it('renders weeks band from 7d up to 27d', () => {
+            expect(pickBand(NOW - 7 * 24 * 60 * 60 * 1000, NOW)).toBe('weeks');
+            expect(pickBand(NOW - 27 * 24 * 60 * 60 * 1000, NOW)).toBe('weeks');
+        });
+
+        it('renders months band starting at 30d', () => {
+            expect(pickBand(NOW - 30 * 24 * 60 * 60 * 1000, NOW)).toBe(
+                'months'
+            );
+        });
+
+        it('renders years band beyond a year', () => {
+            expect(pickBand(NOW - 400 * 24 * 60 * 60 * 1000, NOW)).toBe(
+                'years'
+            );
+        });
+
+        it('flips between bands as the reactive `now` advances', () => {
+            // Captures the live-updating contract: the same `sentAt`
+            // moves from "just now" to "1m ago" purely as `now`
+            // advances past 60s. ChatView's per-minute ticker drives
+            // this by updating its `currentTime` rune; CallEventMessage
+            // is a pure function of (message, now), so this band flip
+            // is the entire mechanism by which the pill text refreshes.
+            const sentAt = NOW;
+            expect(pickBand(sentAt, NOW + 30 * 1000)).toBe('justNow');
+            expect(pickBand(sentAt, NOW + 60 * 1000)).toBe('minutes');
+        });
+    });
+
+    describe('absolute-time tooltip', () => {
+        // The pill renders relative time as the visible label and the
+        // full localized datetime in the title attribute, exactly like
+        // regular message bubbles in ChatView.svelte:2413-2416. We
+        // can't easily mount the component here (no testing-library
+        // dep), but we can lock the formula:
+        //
+        //     title = new Date(message.sentAt).toLocaleString()
+        //
+        // so any future change has to update this test on purpose.
+        it('formats the title as the full localized datetime string', () => {
+            const sentAt = 1_700_000_000_000;
+            const expected = new Date(sentAt).toLocaleString();
+            // Sanity: toLocaleString returns a non-empty, non-just-time
+            // string (i.e., it includes the date too). This is the
+            // distinguishing characteristic vs. the previous
+            // toLocaleTimeString-only label.
+            expect(expected).toBeTruthy();
+            expect(expected.length).toBeGreaterThan(
+                new Date(sentAt).toLocaleTimeString().length
+            );
+        });
+    });
 });

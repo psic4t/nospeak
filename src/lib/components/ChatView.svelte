@@ -2295,7 +2295,7 @@
       {/if}
 
       {#if msg.rumorKind === CALL_HISTORY_KIND}
-        <CallEventMessage message={msg} />
+        <CallEventMessage message={msg} now={currentTime} />
       {:else}
        {@const hasUnreadMarker = msg.direction === "received" && (
          unreadSnapshotMessageSet.has(msg.eventId) ||

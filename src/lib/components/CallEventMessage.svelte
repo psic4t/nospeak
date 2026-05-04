@@ -3,12 +3,21 @@
     import { t } from '$lib/i18n';
     import { currentUser } from '$lib/stores/auth';
     import { resolvePillKey } from '$lib/utils/mediaPreview';
+    import { getRelativeTime } from '$lib/utils/time';
 
     interface Props {
         message: Message;
+        /**
+         * Reactive "now" in ms used to compute the pill's relative-time
+         * label (e.g. "Just now", "5m ago"). The owning view (ChatView)
+         * already maintains a per-minute ticker for regular message
+         * bubbles and passes the same value down here so all timestamps
+         * in the thread flip on the same tick.
+         */
+        now: number;
     }
 
-    let { message }: Props = $props();
+    let { message, now }: Props = $props();
 
     function formatDuration(seconds: number | undefined): string {
         if (!seconds) return '';
@@ -165,8 +174,11 @@
                 {messageText}
             </span>
         </div>
-        <span class="text-xs text-gray-400 mt-1">
-            {new Date(message.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        <span
+            class="text-xs text-gray-400 mt-1 cursor-help"
+            title={new Date(message.sentAt).toLocaleString()}
+        >
+            {getRelativeTime(message.sentAt, now)}
         </span>
     </div>
 </div>
