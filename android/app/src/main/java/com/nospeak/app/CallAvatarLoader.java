@@ -121,6 +121,69 @@ public final class CallAvatarLoader {
     }
 
     /**
+     * Bitmap-returning sibling of {@link #loadCircular} for surfaces that
+     * need a {@link Bitmap} rather than a {@link Drawable} — e.g. the
+     * ongoing-call FGS notification's
+     * {@code NotificationCompat.Builder.setLargeIcon(Bitmap)}.
+     *
+     * <p>Resolution order matches {@link #loadCircular}: cached PNG →
+     * identicon → null. Output is always a square circular bitmap (or
+     * {@code null}).
+     *
+     * @param ctx             non-null context
+     * @param avatarFilePath  optional cached PNG path (typically from
+     *                        {@link NativeBackgroundMessagingService#resolveCachedAvatarFilePath})
+     * @param peerHex         optional peer pubkey hex used for the
+     *                        identicon fallback seed
+     * @param targetPx        size in pixels for the identicon fallback;
+     *                        the cached-file path returns the file at
+     *                        its decoded size, then circularizes
+     */
+    @Nullable
+    public static Bitmap loadCircularBitmap(
+        Context ctx,
+        @Nullable String avatarFilePath,
+        @Nullable String peerHex,
+        int targetPx
+    ) {
+        if (ctx == null) return null;
+
+        // 1) Try cached real picture.
+        if (avatarFilePath != null && !avatarFilePath.isEmpty()) {
+            try {
+                Bitmap raw = BitmapFactory.decodeFile(avatarFilePath);
+                if (raw != null) {
+                    Bitmap circ = makeCircularBitmap(raw);
+                    if (circ != null) return circ;
+                }
+                Log.d(TAG, "loadCircularBitmap: decodeFile returned null path=" + avatarFilePath);
+            } catch (Throwable t) {
+                Log.d(TAG, "loadCircularBitmap: decodeFile threw for path=" + avatarFilePath, t);
+            }
+        }
+
+        // 2) Identicon fallback.
+        if (peerHex != null && !peerHex.isEmpty()) {
+            try {
+                String npub = Bech32.pubkeyHexToNpub(peerHex);
+                if (npub != null && npub.length() >= 10) {
+                    String seed = npub.substring(npub.length() - 10);
+                    int size = targetPx > 0 ? targetPx : 192;
+                    Bitmap raw = IdenticonGenerator.generate(seed, size);
+                    if (raw != null) {
+                        Bitmap circ = makeCircularBitmap(raw);
+                        if (circ != null) return circ;
+                    }
+                }
+            } catch (Throwable t) {
+                Log.d(TAG, "loadCircularBitmap: identicon fallback failed for peerHex", t);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Mask a square bitmap into a circle using a PorterDuff DST_IN
      * compositing pass. Static duplicate of the instance method on
      * {@link NativeBackgroundMessagingService} — see class javadoc.

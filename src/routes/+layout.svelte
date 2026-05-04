@@ -223,13 +223,6 @@
       const handleNotificationRoute = async (payload: AndroidNotificationRoutePayload): Promise<void> => {
           if (!payload) return;
 
-          if (payload.kind === 'voice-call-active') {
-              // The ActiveCallOverlay is already mounted in the root layout.
-              // No navigation needed — just mark routed-from-notification.
-              routedFromNotification = true;
-              return;
-          }
-
           if (payload.kind === 'voice-call-unlock') {
               // Phase 2 of add-native-voice-calls: lockscreen accept
               // landed on a PIN-locked nsec. The JS layer has been

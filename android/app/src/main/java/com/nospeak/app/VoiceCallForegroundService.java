@@ -993,10 +993,21 @@ public class VoiceCallForegroundService extends Service {
     }
 
     private Notification buildOngoingNotification(String callId, String peerName, String role) {
-        Intent activityIntent = new Intent(this, MainActivity.class)
-            .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra("nospeak_route_kind", "voice-call-active")
-            .putExtra("call_id", callId);
+        // Tap target: bring the existing ActiveCallActivity instance back
+        // to the front. The activity is declared singleTask with an empty
+        // taskAffinity (see AndroidManifest.xml around the
+        // .ActiveCallActivity entry), so combining FLAG_ACTIVITY_NEW_TASK
+        // (required because we dispatch from a Service context) with
+        // FLAG_ACTIVITY_SINGLE_TOP delivers the intent to the existing
+        // instance via onNewIntent rather than recreating it. This is the
+        // reliable "return to ongoing call" affordance — the activity is
+        // declared excludeFromRecents="true", so the system Recents
+        // surface cannot be used as a fallback.
+        Intent activityIntent = new Intent(this, ActiveCallActivity.class)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(ActiveCallActivity.EXTRA_CALL_ID, callId);
         PendingIntent contentPi = PendingIntent.getActivity(
             this, 0, activityIntent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -1014,25 +1025,61 @@ public class VoiceCallForegroundService extends Service {
         // lifetime). Falls back to "On call" when no manager is
         // available (rare race during teardown).
         boolean isVideo = false;
+        String peerHexFromMgr = null;
         try {
             NativeVoiceCallManager mgr = nativeManager;
-            if (mgr != null
-                && mgr.getCallKind() == NativeVoiceCallManager.CallKind.VIDEO) {
-                isVideo = true;
+            if (mgr != null) {
+                if (mgr.getCallKind() == NativeVoiceCallManager.CallKind.VIDEO) {
+                    isVideo = true;
+                }
+                peerHexFromMgr = mgr.getPeerHex();
             }
         } catch (Throwable ignored) {}
         String title = isVideo ? "Video call" : "Voice call";
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        // Resolve a richer display name + avatar from the cached profile
+        // when available. Falls back to the peerName passed in (which is
+        // what the legacy notification displayed) and ultimately to an
+        // empty string. Avatar resolution mirrors the IncomingCallNotification
+        // path: cached PNG → identicon → null.
+        String displayName = peerName != null ? peerName : "";
+        android.graphics.Bitmap avatar = null;
+        try {
+            if (peerHexFromMgr != null && !peerHexFromMgr.isEmpty()) {
+                AndroidProfileCachePrefs.Identity ident =
+                    AndroidProfileCachePrefs.get(this, peerHexFromMgr);
+                if (ident != null) {
+                    if (ident.username != null && !ident.username.isEmpty()) {
+                        displayName = ident.username;
+                    }
+                    String avatarPath = NativeBackgroundMessagingService
+                        .resolveCachedAvatarFilePath(this, ident.pictureUrl);
+                    avatar = CallAvatarLoader.loadCircularBitmap(
+                        this, avatarPath, peerHexFromMgr, 192);
+                } else {
+                    // No cached profile record — fall back to identicon
+                    // alone via the loader helper.
+                    avatar = CallAvatarLoader.loadCircularBitmap(
+                        this, null, peerHexFromMgr, 192);
+                }
+            }
+        } catch (Throwable t) {
+            Log.d(TAG, "buildOngoingNotification: avatar/profile resolution failed", t);
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(peerName != null ? peerName : "")
+            .setContentText(displayName)
             .setSmallIcon(R.drawable.ic_stat_nospeak)
             .setContentIntent(contentPi)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(R.drawable.ic_call_end, "Hang up", hangupPi)
-            .build();
+            .addAction(R.drawable.ic_call_end, "Hang up", hangupPi);
+        if (avatar != null) {
+            builder.setLargeIcon(avatar);
+        }
+        return builder.build();
     }
 
     private void createChannelIfNeeded() {
