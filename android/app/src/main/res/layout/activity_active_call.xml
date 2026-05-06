@@ -46,17 +46,23 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
-    <!-- Picture-in-picture self-view (gone for voice calls). The top
-         margin here is a fallback; ActiveCallActivity overrides it
-         from the system-bars + display-cutout inset so the PiP
-         doesn't sit under the status bar / camera notch. -->
+    <!-- Picture-in-picture self-view (gone for voice calls).
+         The bottom margin here is the corner-position fallback used
+         while the inset listener hasn't yet measured the controls bar
+         and applied final margins. ActiveCallActivity drives the
+         actual placement via applyLocalPipBottomMargin():
+           - chrome hidden:  navInset + 16dp gap (corner)
+           - chrome visible: navInset + controlsHeight + 16dp gap
+                             (slid up so the controls scrim doesn't
+                             overlap the PiP). Transitions are
+                             animated to match the chrome fade. -->
     <org.webrtc.SurfaceViewRenderer
         android:id="@+id/active_call_local_video"
         android:layout_width="120dp"
         android:layout_height="160dp"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="48dp"
-        android:layout_marginEnd="20dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="32dp"
+        android:layout_marginEnd="16dp"
         android:visibility="gone" />
 
     <!-- Centered avatar overlay for video calls. Visible only while

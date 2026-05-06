@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.animation.ValueAnimator;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
@@ -17,6 +18,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -120,13 +122,39 @@ public class ActiveCallActivity extends Activity {
     private ImageView videoAvatarView;
     private TextView videoNameCentered;
     /**
-     * Default top margin for the local self-view PiP (matches the
-     * fallback in activity_active_call.xml). The actual margin is
-     * recomputed when system-bar / display-cutout insets arrive so the
-     * PiP clears the status bar and any camera cutout.
+     * Corner-position fallback bottom margin for the local self-view
+     * PiP (matches the fallback in activity_active_call.xml). Used
+     * before the inset listener has run and before the chrome
+     * visibility is known. Real placement is computed by
+     * {@link #applyLocalPipBottomMargin(boolean)}.
      */
-    private static final int LOCAL_PIP_DEFAULT_TOP_MARGIN_DP = 48;
+    private static final int LOCAL_PIP_DEFAULT_BOTTOM_MARGIN_DP = 32;
+    /**
+     * Used when the video-controls bar hasn't been measured yet (first
+     * inset pass before layout completes). Roughly the height of the
+     * controls row including its scrim padding. Only consulted when
+     * chrome is visible (slid-up position).
+     */
+    private static final int LOCAL_PIP_CONTROLS_FALLBACK_DP = 120;
+    /**
+     * Gap between the PiP and either the navigation bar (corner mode)
+     * or the controls scrim (slid-up mode).
+     */
     private static final int LOCAL_PIP_INSET_GAP_DP = 16;
+    /**
+     * Slide-animation handle for {@link #applyLocalPipBottomMargin}.
+     * Cancelled on every new transition so back-to-back chrome
+     * show/hide events don't queue up half-finished tweens.
+     */
+    private ValueAnimator localPipMarginAnimator;
+    /**
+     * Last-known navigation-bar / display-cutout bottom inset, cached
+     * by the inset listener. The PiP placement helper consults this
+     * outside the inset callback (e.g. from {@link #showChrome()} /
+     * {@link #hideChrome()}) without needing the original
+     * {@code WindowInsetsCompat} object.
+     */
+    private int cachedNavBarInsetPx = 0;
 
     private String avatarPath;
     private String peerHex;
@@ -365,6 +393,11 @@ public class ActiveCallActivity extends Activity {
             videoAvatarOverlay.setVisibility(
                 isVideoCall ? View.VISIBLE : View.GONE);
         }
+        // Re-apply PiP placement defensively: forceShowChrome only
+        // calls showChrome (which moves the PiP) when chrome was
+        // hidden. If the previous call left chrome visible, we still
+        // want to ensure the PiP sits at the slid-up position.
+        applyLocalPipBottomMargin(false);
     }
 
     @Override
@@ -462,6 +495,12 @@ public class ActiveCallActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        // Cancel any in-flight PiP slide so its update listener can't
+        // fire on a released renderer.
+        if (localPipMarginAnimator != null) {
+            try { localPipMarginAnimator.cancel(); } catch (Throwable ignored) {}
+            localPipMarginAnimator = null;
+        }
         // Release the renderers but DO NOT release the EglBase — the
         // manager owns its lifecycle (released in NativeVoiceCallManager
         // .dispose()). Releasing here would crash the manager's
@@ -589,6 +628,10 @@ public class ActiveCallActivity extends Activity {
         // a kind change (notably a successful voice→video upgrade
         // re-enters this method to hide it).
         refreshAddVideoButton();
+        // Initial PiP placement when entering video mode. Snap (no
+        // animation) so the first frame doesn't slide in from a
+        // half-applied XML margin.
+        applyLocalPipBottomMargin(false);
     }
 
     /**
@@ -673,24 +716,14 @@ public class ActiveCallActivity extends Activity {
                 overlayLayout.setPadding(
                     basePadX, basePadY + bars.top, basePadX, basePadY + bars.bottom);
             }
-            if (localVideoRenderer != null) {
-                ViewGroup.LayoutParams lp = localVideoRenderer.getLayoutParams();
-                if (lp instanceof android.widget.FrameLayout.LayoutParams) {
-                    android.widget.FrameLayout.LayoutParams flp =
-                        (android.widget.FrameLayout.LayoutParams) lp;
-                    int desiredTop = bars.top + dpToPx(LOCAL_PIP_INSET_GAP_DP);
-                    if (desiredTop < dpToPx(LOCAL_PIP_DEFAULT_TOP_MARGIN_DP)) {
-                        // On older devices / emulators with no status
-                        // bar inset, keep the design default rather
-                        // than slamming the PiP to the very top.
-                        desiredTop = dpToPx(LOCAL_PIP_DEFAULT_TOP_MARGIN_DP);
-                    }
-                    if (flp.topMargin != desiredTop) {
-                        flp.topMargin = desiredTop;
-                        localVideoRenderer.setLayoutParams(flp);
-                    }
-                }
-            }
+            // Cache the bottom inset so chrome show/hide transitions
+            // can recompute the PiP target without a fresh inset event.
+            cachedNavBarInsetPx = bars.bottom;
+            // Recompute the PiP placement on every inset change. Skip
+            // the slide animation here — insets fire during layout,
+            // so animating would feel laggy. Chrome show/hide call
+            // sites pass animate=true.
+            applyLocalPipBottomMargin(false);
             // Don't consume — let children that may want insets get them.
             return insets;
         });
@@ -700,6 +733,98 @@ public class ActiveCallActivity extends Activity {
     private int dpToPx(int dp) {
         float density = getResources().getDisplayMetrics().density;
         return Math.round(dp * density);
+    }
+
+    /**
+     * Compute and apply the bottom-margin for the local self-view PiP.
+     *
+     * <p>Two states:
+     * <ul>
+     *   <li><b>Chrome hidden (the common case while in a call):</b>
+     *       PiP sits in the bottom-right corner — {@code navBar +
+     *       16dp gap} from the bottom edge.</li>
+     *   <li><b>Chrome visible (briefly, after a tap or before first
+     *       remote frame):</b> PiP slides up so the controls scrim
+     *       doesn't overlap it — {@code navBar + controlsHeight +
+     *       16dp gap}.</li>
+     * </ul>
+     *
+     * <p>When {@code animate} is {@code true} the change is tweened
+     * over {@link #CHROME_FADE_MS} so the PiP visually moves with the
+     * scrim fade. When {@code false} (e.g. inset listener, initial
+     * placement) the margin snaps to the target.
+     *
+     * <p>Idempotent: re-running with the same target margin is a
+     * no-op. Voice calls are no-ops (the PiP is gone in voice mode).
+     */
+    private void applyLocalPipBottomMargin(boolean animate) {
+        if (!isVideoCall) return;
+        if (localVideoRenderer == null) return;
+        ViewGroup.LayoutParams lp = localVideoRenderer.getLayoutParams();
+        if (!(lp instanceof android.widget.FrameLayout.LayoutParams)) return;
+        final android.widget.FrameLayout.LayoutParams flp =
+            (android.widget.FrameLayout.LayoutParams) lp;
+
+        int navInset = cachedNavBarInsetPx;
+        int gap = dpToPx(LOCAL_PIP_INSET_GAP_DP);
+        int designFallback = dpToPx(LOCAL_PIP_DEFAULT_BOTTOM_MARGIN_DP);
+        int targetBottom;
+        if (chromeVisible) {
+            int controlsHeightPx = (videoControls != null
+                    && videoControls.getHeight() > 0)
+                ? videoControls.getHeight()
+                : dpToPx(LOCAL_PIP_CONTROLS_FALLBACK_DP);
+            targetBottom = navInset + controlsHeightPx + gap;
+        } else {
+            targetBottom = navInset + gap;
+        }
+        if (targetBottom < designFallback) {
+            // Pre-measure / no-inset edge case (e.g. emulator without
+            // gesture pill). Keep the design default so the PiP
+            // doesn't slam against the very bottom edge.
+            targetBottom = designFallback;
+        }
+
+        // Defensive: ensure no leftover topMargin keeps the PiP
+        // pinned high (older layouts used top|end gravity).
+        boolean topMarginNeedsReset = flp.topMargin != 0;
+        if (flp.bottomMargin == targetBottom && !topMarginNeedsReset) {
+            return; // already there
+        }
+
+        // Cancel any in-flight transition so back-to-back chrome
+        // show/hide events don't queue up.
+        if (localPipMarginAnimator != null && localPipMarginAnimator.isRunning()) {
+            localPipMarginAnimator.cancel();
+        }
+
+        if (!animate) {
+            flp.bottomMargin = targetBottom;
+            if (topMarginNeedsReset) flp.topMargin = 0;
+            localVideoRenderer.setLayoutParams(flp);
+            return;
+        }
+
+        // Always reset stale top margin synchronously — animating only
+        // the bottom is enough for the visual slide.
+        if (topMarginNeedsReset) flp.topMargin = 0;
+        final int startBottom = flp.bottomMargin;
+        ValueAnimator anim = ValueAnimator.ofInt(startBottom, targetBottom);
+        anim.setDuration(CHROME_FADE_MS);
+        anim.setInterpolator(new DecelerateInterpolator());
+        anim.addUpdateListener(animation -> {
+            // Re-fetch layout params on each frame: the view may have
+            // been re-parented or had its params replaced concurrently.
+            ViewGroup.LayoutParams cur = localVideoRenderer.getLayoutParams();
+            if (cur instanceof android.widget.FrameLayout.LayoutParams) {
+                android.widget.FrameLayout.LayoutParams curFlp =
+                    (android.widget.FrameLayout.LayoutParams) cur;
+                curFlp.bottomMargin = (int) animation.getAnimatedValue();
+                localVideoRenderer.setLayoutParams(curFlp);
+            }
+        });
+        localPipMarginAnimator = anim;
+        anim.start();
     }
 
     /**
@@ -870,6 +995,13 @@ public class ActiveCallActivity extends Activity {
                 localVideoRenderer.setZOrderMediaOverlay(true);
                 // Mirror initially since we default to the front camera.
                 localVideoRenderer.setMirror(true);
+                // Note: rounded corners are intentionally not applied
+                // here. SurfaceView's pixel surface is composited on a
+                // separate hardware layer; setClipToOutline does not
+                // clip those pixels, so any rounded mask we set would
+                // be invisible. Reverting to square corners on Android
+                // is a deliberate choice (the PWA self-view stays
+                // rounded; see ActiveCallOverlay.svelte).
                 Log.d(TAG, "localVideoRenderer: init done");
             }
             renderersInitialized = true;
@@ -1215,6 +1347,9 @@ public class ActiveCallActivity extends Activity {
                 .setDuration(CHROME_FADE_MS)
                 .start();
         }
+        // Slide the local PiP up so the controls scrim doesn't cover
+        // it. Tweens over the same CHROME_FADE_MS as the scrim alpha.
+        applyLocalPipBottomMargin(true);
         showSystemBars();
         scheduleHideIfEligible();
     }
@@ -1258,6 +1393,10 @@ public class ActiveCallActivity extends Activity {
                 })
                 .start();
         }
+        // Slide the local PiP back down to the corner now that the
+        // scrim is going away. Same duration as the scrim fade so the
+        // two motions land together.
+        applyLocalPipBottomMargin(true);
         hideSystemBars();
     }
 
