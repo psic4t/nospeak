@@ -33,7 +33,12 @@ import {
     NIP_AC_STALENESS_SECONDS,
     NIP_AC_PROCESSED_ID_CAPACITY
 } from '$lib/core/voiceCall/constants';
-import { createNipAcGiftWrap, unwrapNipAcGiftWrap } from '$lib/core/voiceCall/nipAcGiftWrap';
+import type { NipAcGroupSendContext } from '$lib/core/voiceCall/types';
+import {
+    createNipAcGiftWrap,
+    unwrapNipAcGiftWrap,
+    buildGroupExtraTags
+} from '$lib/core/voiceCall/nipAcGiftWrap';
 import { followGate } from '$lib/core/voiceCall/followGate';
 import { isAndroidNative } from '$lib/core/NativeDialogs';
 
@@ -168,6 +173,24 @@ export type AuthoredCallEventType =
                  this.createLocalCallEventMessage(
                      recipientNpub, type, callId, initiatorPubkeyHex, callMediaType)
          );
+         if (voiceCallService.registerGroupCallEventCreator) {
+             voiceCallService.registerGroupCallEventCreator(
+                 (conversationId, participantNpubs, type, groupCallId,
+                     initiatorNpub, duration, callMediaType) =>
+                     this.createGroupCallEventMessage(
+                         conversationId, participantNpubs, type, groupCallId,
+                         initiatorNpub, duration, callMediaType)
+             );
+         }
+         if (voiceCallService.registerLocalGroupCallEventCreator) {
+             voiceCallService.registerLocalGroupCallEventCreator(
+                 (conversationId, participantNpubs, type, groupCallId,
+                     initiatorNpub, callMediaType) =>
+                     this.createLocalGroupCallEventMessage(
+                         conversationId, participantNpubs, type, groupCallId,
+                         initiatorNpub, callMediaType)
+             );
+         }
      });
 
      return unsub;
@@ -2267,6 +2290,187 @@ export type AuthoredCallEventType =
   }
 
   /**
+   * Build the tag set for a GROUP call-history Kind 1405 rumor. One
+   * `['p', <hex>]` tag per other roster member, plus the standard
+   * call-event tags, plus the group-call correlation tags
+   * ({@code group-call-id}, {@code conversation-id}). Tag order is
+   * stable so multi-device authoring produces identical rumor ids on
+   * each device for the same call (which the existing message
+   * dedup-by-id logic relies on for clean rendering).
+   */
+  private buildGroupCallEventTags(
+    participantPubkeys: string[],
+    callEventType: AuthoredCallEventType,
+    initiatorPubkey: string,
+    groupCallId: string,
+    conversationId: string,
+    duration: number | undefined,
+    callMediaType: 'voice' | 'video' = 'voice'
+  ): string[][] {
+    const tags: string[][] = [];
+    for (const peerHex of participantPubkeys) {
+      tags.push(['p', peerHex]);
+    }
+    tags.push(
+      ['type', 'call-event'],
+      ['call-event-type', callEventType],
+      ['call-initiator', initiatorPubkey],
+      ['call-media-type', callMediaType],
+      ['group-call-id', groupCallId],
+      ['conversation-id', conversationId]
+    );
+    if (duration !== undefined) {
+      tags.push(['call-duration', String(duration)]);
+    }
+    return tags;
+  }
+
+  /**
+   * Group-call counterpart of {@link createCallEventMessage}. Authors
+   * one Kind 1405 rumor with one `['p', <hex>]` tag per other roster
+   * member plus a `['group-call-id', <hex32>]` correlation tag and a
+   * `['conversation-id', <hex16>]` anchor tag. The rumor flows through
+   * the existing 3-layer NIP-17 group pipeline ({@code sendEnvelope}
+   * already fans out to N recipients with one self-wrap), distinct
+   * from the NIP-AC kind-21059 signaling pipeline.
+   *
+   * <p>Used for the symmetric outcomes that should appear in EVERY
+   * participant's chat history: {@code ended}, {@code no-answer},
+   * {@code declined}, {@code busy}, {@code failed}. For asymmetric
+   * outcomes ({@code missed}, {@code cancelled}), use
+   * {@link createLocalGroupCallEventMessage} instead.
+   *
+   * @param conversationId 16-character hex id of the local group
+   *     conversation this call is anchored to.
+   * @param participantNpubs Other roster members (excluding self).
+   * @param initiatorNpub The initiator's npub. May be the local user
+   *     (initiator-authored {@code ended} / {@code cancelled} on the
+   *     happy path) or another participant (when the local user is
+   *     authoring a self-perspective outcome on someone else's call).
+   */
+  public async createGroupCallEventMessage(
+    conversationId: string,
+    participantNpubs: string[],
+    callEventType: AuthoredCallEventType,
+    groupCallId: string,
+    initiatorNpub: string,
+    duration?: number,
+    callMediaType?: import('$lib/core/voiceCall/types').CallKind
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const pubkey = await s.getPublicKey();
+    const initiatorPubkey = nip19.decode(initiatorNpub).data as string;
+    const participantPubkeys = participantNpubs.map(
+      (npub) => nip19.decode(npub).data as string
+    );
+    const resolvedKind = callMediaType ?? 'voice';
+
+    const tags = this.buildGroupCallEventTags(
+      participantPubkeys,
+      callEventType,
+      initiatorPubkey,
+      groupCallId,
+      conversationId,
+      duration,
+      resolvedKind
+    );
+
+    const rumor: Partial<NostrEvent> = {
+      kind: CALL_HISTORY_KIND,
+      created_at: Math.floor(Date.now() / 1000),
+      content: '',
+      tags,
+      pubkey
+    };
+
+    await this.sendEnvelope({
+      recipients: participantNpubs,
+      rumor,
+      messageDbFields: {
+        callEventType,
+        callDuration: duration,
+        callInitiatorNpub: initiatorNpub,
+        callId: groupCallId,
+        callMediaType: resolvedKind
+      }
+    });
+  }
+
+  /**
+   * Group-call counterpart of {@link createLocalCallEventMessage}.
+   * Persists a Kind 1405 rumor LOCAL-ONLY with the same tag structure
+   * as {@link createGroupCallEventMessage} — no relay publish, no
+   * gift-wrap, no self-wrap. Used for {@code missed} (no answer
+   * locally) and {@code cancelled} (initiator hung up before any peer
+   * connected).
+   *
+   * <p>The DB row carries {@code direction: 'sent'} and an explicit
+   * {@code conversationId} so the entry lands in the correct group
+   * chat without going through the gift-wrap pipeline's automatic
+   * conversation-id derivation.
+   */
+  public async createLocalGroupCallEventMessage(
+    conversationId: string,
+    participantNpubs: string[],
+    callEventType: AuthoredCallEventType,
+    groupCallId: string,
+    initiatorNpub: string,
+    callMediaType?: import('$lib/core/voiceCall/types').CallKind
+  ): Promise<void> {
+    const s = get(signer);
+    if (!s) throw new Error('Not authenticated');
+
+    const pubkey = await s.getPublicKey();
+    const initiatorPubkey = nip19.decode(initiatorNpub).data as string;
+    const participantPubkeys = participantNpubs.map(
+      (npub) => nip19.decode(npub).data as string
+    );
+    const resolvedKind = callMediaType ?? 'voice';
+
+    const tags = this.buildGroupCallEventTags(
+      participantPubkeys,
+      callEventType,
+      initiatorPubkey,
+      groupCallId,
+      conversationId,
+      undefined,
+      resolvedKind
+    );
+    const createdAtSec = Math.floor(Date.now() / 1000);
+
+    const rumor: Partial<NostrEvent> = {
+      kind: CALL_HISTORY_KIND,
+      created_at: createdAtSec,
+      content: '',
+      tags,
+      pubkey
+    };
+
+    const rumorId = getEventHash(rumor as NostrEvent);
+
+    await messageRepo.saveMessage({
+      // For group local-only entries, pick the first peer as the row's
+      // recipientNpub so the legacy schema column is populated, but the
+      // chat targeting is driven by `conversationId`.
+      recipientNpub: participantNpubs[0] ?? '',
+      message: '',
+      sentAt: createdAtSec * 1000,
+      eventId: rumorId,
+      rumorId,
+      direction: 'sent',
+      createdAt: Date.now(),
+      rumorKind: CALL_HISTORY_KIND,
+      conversationId,
+      callEventType,
+      callInitiatorNpub: initiatorNpub,
+      callId: groupCallId,
+      callMediaType: resolvedKind
+    } as any);
+  }
+
+  /**
    * Send a voice call signal (offer, answer, ICE, hangup, etc.)
    * as a gift-wrapped Kind 14 event that is NOT saved to the message DB.
    */
@@ -2399,12 +2603,26 @@ export type AuthoredCallEventType =
     }
   }
 
-  /** NIP-AC kind 25050 Call Offer. SDP is the raw `content`. No self-wrap. */
+  /**
+   * NIP-AC kind 25050 Call Offer. SDP is the raw `content`. No self-wrap.
+   *
+   * <p>For 1-on-1 calls, pass only {@code opts.callType}. For group
+   * calls, pass {@code opts.group}; the helper emits the four/five
+   * group tags ({@code group-call-id}, {@code conversation-id},
+   * {@code initiator}, {@code participants}, and — on invite-only
+   * offers — {@code role=invite}) on the inner event in the order
+   * fixed by the wire-parity fixture. Invite-only group offers SHALL
+   * have empty {@code sdp} content; the recipient is the designated
+   * SDP offerer for that pair under the deterministic-pair rule.
+   */
   public async sendCallOffer(
     recipientNpub: string,
     callId: string,
     sdp: string,
-    opts?: { callType?: import('$lib/core/voiceCall/types').CallKind }
+    opts?: {
+      callType?: import('$lib/core/voiceCall/types').CallKind;
+      group?: NipAcGroupSendContext;
+    }
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
@@ -2412,8 +2630,25 @@ export type AuthoredCallEventType =
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
 
     const callType = opts?.callType ?? 'voice';
-    const altText =
-      callType === 'video' ? 'WebRTC video call offer' : 'WebRTC call offer';
+    const isGroup = !!opts?.group;
+    const altText = isGroup
+      ? callType === 'video'
+        ? 'WebRTC group video call offer'
+        : 'WebRTC group voice call offer'
+      : callType === 'video'
+        ? 'WebRTC video call offer'
+        : 'WebRTC call offer';
+
+    // Tag order (must match wire-parity fixture):
+    //   [p, call-id, alt, call-type, group-call-id, conversation-id,
+    //    initiator, participants, role?]
+    const extraTags: string[][] = [['call-type', callType]];
+    extraTags.push(
+      ...buildGroupExtraTags(opts?.group, {
+        includeParticipants: true,
+        includeRoleInvite: true
+      })
+    );
 
     const inner = await this.buildSignedNipAcInner({
       s,
@@ -2423,7 +2658,7 @@ export type AuthoredCallEventType =
       content: sdp,
       callId,
       altText,
-      extraTags: [['call-type', callType]]
+      extraTags
     });
     await this.publishNipAcSignal({
       signedInner: inner,
@@ -2437,16 +2672,26 @@ export type AuthoredCallEventType =
   /**
    * NIP-AC kind 25051 Call Answer. SDP is the raw `content`. SELF-WRAPPED
    * for multi-device "answered elsewhere" support.
+   *
+   * <p>For group calls, pass {@code opts.group}; the helper emits the
+   * three non-participants group tags ({@code group-call-id},
+   * {@code conversation-id}, {@code initiator}). Roster/participants
+   * are NOT repeated on kind 25051 — the receiver caches the roster
+   * from the first kind-25050 with the matching {@code group-call-id}.
    */
   public async sendCallAnswer(
     recipientNpub: string,
     callId: string,
-    sdp: string
+    sdp: string,
+    opts?: { group?: NipAcGroupSendContext }
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
     const senderPubkey = await s.getPublicKey();
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const isGroup = !!opts?.group;
+    const altText = isGroup ? 'WebRTC group call answer' : 'WebRTC call answer';
 
     const inner = await this.buildSignedNipAcInner({
       s,
@@ -2455,7 +2700,8 @@ export type AuthoredCallEventType =
       kind: NIP_AC_KIND_ANSWER,
       content: sdp,
       callId,
-      altText: 'WebRTC call answer'
+      altText,
+      extraTags: buildGroupExtraTags(opts?.group)
     });
     await this.publishNipAcSignal({
       signedInner: inner,
@@ -2478,12 +2724,16 @@ export type AuthoredCallEventType =
     callId: string,
     candidate: string,
     sdpMid: string | null,
-    sdpMLineIndex: number | null
+    sdpMLineIndex: number | null,
+    opts?: { group?: NipAcGroupSendContext }
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
     const senderPubkey = await s.getPublicKey();
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const isGroup = !!opts?.group;
+    const altText = isGroup ? 'WebRTC group ICE candidate' : 'WebRTC ICE candidate';
 
     const payload = {
       candidate,
@@ -2497,7 +2747,8 @@ export type AuthoredCallEventType =
       kind: NIP_AC_KIND_ICE,
       content: JSON.stringify(payload),
       callId,
-      altText: 'WebRTC ICE candidate'
+      altText,
+      extraTags: buildGroupExtraTags(opts?.group)
     });
     await this.publishNipAcSignal({
       signedInner: inner,
@@ -2512,12 +2763,16 @@ export type AuthoredCallEventType =
   public async sendCallHangup(
     recipientNpub: string,
     callId: string,
-    reason?: string
+    reason?: string,
+    opts?: { group?: NipAcGroupSendContext }
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
     const senderPubkey = await s.getPublicKey();
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const isGroup = !!opts?.group;
+    const altText = isGroup ? 'WebRTC group call hangup' : 'WebRTC call hangup';
 
     const inner = await this.buildSignedNipAcInner({
       s,
@@ -2526,7 +2781,8 @@ export type AuthoredCallEventType =
       kind: NIP_AC_KIND_HANGUP,
       content: reason ?? '',
       callId,
-      altText: 'WebRTC call hangup'
+      altText,
+      extraTags: buildGroupExtraTags(opts?.group)
     });
     await this.publishNipAcSignal({
       signedInner: inner,
@@ -2545,12 +2801,16 @@ export type AuthoredCallEventType =
   public async sendCallReject(
     recipientNpub: string,
     callId: string,
-    reason?: string
+    reason?: string,
+    opts?: { group?: NipAcGroupSendContext }
   ): Promise<void> {
     const s = get(signer);
     if (!s) throw new Error('Not authenticated');
     const senderPubkey = await s.getPublicKey();
     const recipientPubkey = nip19.decode(recipientNpub).data as string;
+
+    const isGroup = !!opts?.group;
+    const altText = isGroup ? 'WebRTC group call rejection' : 'WebRTC call rejection';
 
     const inner = await this.buildSignedNipAcInner({
       s,
@@ -2559,7 +2819,8 @@ export type AuthoredCallEventType =
       kind: NIP_AC_KIND_REJECT,
       content: reason ?? '',
       callId,
-      altText: 'WebRTC call rejection'
+      altText,
+      extraTags: buildGroupExtraTags(opts?.group)
     });
     await this.publishNipAcSignal({
       signedInner: inner,

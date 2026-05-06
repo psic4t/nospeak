@@ -53,7 +53,9 @@ import type {
     LocalCallEventCreator,
     RenegotiationState,
     VoiceCallEndReason,
-    AuthoredCallEventType
+    AuthoredCallEventType,
+    GroupCallEventCreator,
+    LocalGroupCallEventCreator
 } from './types';
 import {
     AndroidVoiceCall,
@@ -135,6 +137,8 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
 
     private createCallEventFn: CallEventCreator | null = null;
     private localCreateCallEventFn: LocalCallEventCreator | null = null;
+    private createGroupCallEventFn: GroupCallEventCreator | null = null;
+    private createLocalGroupCallEventFn: LocalGroupCallEventCreator | null = null;
 
     /**
      * The peerNpub for the current call. Native emits {@code peerHex};
@@ -299,6 +303,22 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
 
     public registerLocalCallEventCreator(fn: LocalCallEventCreator): void {
         this.localCreateCallEventFn = fn;
+    }
+
+    /**
+     * GROUP call-history authoring is registered by Messaging.ts but
+     * not yet wired into the native call manager — the native multi-PC
+     * stack lands in a follow-up task in the same change. Stash the
+     * callback so a future bridge can invoke it; safe no-op until then.
+     */
+    public registerGroupCallEventCreator(fn: GroupCallEventCreator): void {
+        this.createGroupCallEventFn = fn;
+    }
+
+    public registerLocalGroupCallEventCreator(
+        fn: LocalGroupCallEventCreator
+    ): void {
+        this.createLocalGroupCallEventFn = fn;
     }
 
     public generateCallId(): string {
@@ -496,6 +516,52 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         // receives null and is a no-op on Android (the overlay is
         // suppressed in Phase 2 anyway).
         return null;
+    }
+
+    // ------------------------------------------------------------------
+    //  VoiceCallBackend — group call stubs
+    //
+    //  The native multi-PC manager and its plugin entry points land in
+    //  Section 5/6/7 of the add-group-voice-calling change. Until then
+    //  the native backend MUST throw a clear error rather than silently
+    //  no-op, so UI bugs that try to start a group call on Android
+    //  surface immediately during development.
+    // ------------------------------------------------------------------
+
+    public async initiateGroupCall(_conversationId: string): Promise<void> {
+        throw new Error(
+            '[VoiceCallNative] Group calls on Android are not yet implemented'
+        );
+    }
+
+    public async acceptGroupCall(): Promise<void> {
+        throw new Error(
+            '[VoiceCallNative] Group calls on Android are not yet implemented'
+        );
+    }
+
+    public declineGroupCall(): void {
+        throw new Error(
+            '[VoiceCallNative] Group calls on Android are not yet implemented'
+        );
+    }
+
+    public hangupGroupCall(): void {
+        throw new Error(
+            '[VoiceCallNative] Group calls on Android are not yet implemented'
+        );
+    }
+
+    public toggleGroupMute(): void {
+        throw new Error(
+            '[VoiceCallNative] Group calls on Android are not yet implemented'
+        );
+    }
+
+    public getGroupRemoteStreams(): Map<string, MediaStream> {
+        // Native AudioDeviceModule renders remote audio directly; the
+        // JS layer never sees per-peer streams.
+        return new Map();
     }
 
     // ------------------------------------------------------------------

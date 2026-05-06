@@ -1378,6 +1378,53 @@
     await voiceCallService.initiateCall(partnerNpub, 'video');
   }
 
+  /**
+   * Start a NIP-AC group voice call anchored to the current group
+   * conversation. Voice-only in v1; the chat-header gates this button
+   * so it is visible only when the group has 2-4 participants
+   * inclusive of self. Reuses the same FSI-permission modal flow as
+   * the 1-on-1 call buttons.
+   */
+  async function startGroupVoiceCall() {
+    if (!isGroup || !groupConversation) return;
+    if (!voiceCallService.initiateGroupCall) return;
+    const decision = await evaluateFullScreenIntentPermission();
+    if (decision.shouldPrompt) {
+      fsiModalOpen = true;
+      return;
+    }
+    await voiceCallService.initiateGroupCall(groupConversation.id);
+  }
+
+  /**
+   * Whether the chat-header should render the group-call button.
+   * Visible iff:
+   *   - the chat is a group with at least 2 participants;
+   *   - the local backend exposes `initiateGroupCall` (defensively true
+   *     on both web/PWA and Android today, but the predicate keeps the
+   *     UI safe if the interface evolves);
+   *   - we are NOT running on the Android native shell. The native
+   *     multi-PC manager rewrite is deferred to a follow-up change
+   *     (see add-group-voice-calling tasks.md §5 "Deferred"); on
+   *     Android `VoiceCallServiceNative.initiateGroupCall` throws, so
+   *     hiding the button is the correct UX rather than letting users
+   *     tap a broken control.
+   *
+   * Disabled state for groups larger than the cap is handled inline
+   * on the button via {@code groupCallDisabled}.
+   */
+  const showGroupCallButton = $derived(
+    isGroup &&
+      !!groupConversation &&
+      groupConversation.participants.length >= 2 &&
+      voiceCallService.initiateGroupCall !== undefined &&
+      !isAndroidNative()
+  );
+
+  const groupCallDisabled = $derived(
+    !!groupConversation && groupConversation.participants.length > 4
+  );
+
   function handleFsiModalClose(action: 'opened-settings' | 'skipped') {
     fsiModalOpen = false;
     if (action === 'skipped') {
@@ -2177,6 +2224,34 @@
               aria-label="Voice call"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+            </button>
+          {/if}
+
+          {#if showGroupCallButton}
+            <!--
+              Group-call button. Visible only in group conversations
+              with 2-4 participants (including self). When the group is
+              larger than 4, the button is rendered in a disabled state
+              with a tooltip rather than hidden, so the user gets a
+              clear explanation of the cap.
+            -->
+            <button
+              onclick={startGroupVoiceCall}
+              disabled={groupCallDisabled}
+              class="flex h-11 w-11 items-center justify-center rounded-full text-ctp-subtext0 hover:text-ctp-text hover:bg-[rgb(var(--color-lavender-rgb)/0.12)] active:bg-[rgb(var(--color-lavender-rgb)/0.24)] focus-visible:bg-[rgb(var(--color-lavender-rgb)/0.18)] focus:outline-none transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label={groupCallDisabled
+                ? $t('voiceCall.groupCallTooLarge')
+                : $t('voiceCall.groupCall')}
+              title={groupCallDisabled
+                ? $t('voiceCall.groupCallTooLarge')
+                : $t('voiceCall.groupCall')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                <!-- Phone with two small heads stacked above to read as "group call". -->
+                <circle cx="9" cy="6" r="2"></circle>
+                <circle cx="15" cy="6" r="2"></circle>
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
               </svg>
             </button>

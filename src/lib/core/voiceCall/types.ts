@@ -16,23 +16,64 @@ import type {
 export type CallKind = 'voice' | 'video';
 
 /**
+ * Optional group-call context attached to any NIP-AC inner signaling
+ * event. When `groupCallId` is present, the event is part of a group
+ * call (full-mesh, anchored to a group {@code Conversation}); when
+ * absent, the event belongs to a 1-on-1 call. Receivers branch strictly
+ * on `groupCallId` presence — there is no other discriminator.
+ *
+ * The `participants` and `roleInvite` fields are meaningful only on
+ * kind-25050 (Call Offer); on other inner kinds they SHALL be
+ * undefined. See
+ * `openspec/changes/add-group-voice-calling/specs/voice-calling/spec.md`
+ * for the authoritative wire-format requirements.
+ */
+export interface GroupCallContext {
+    /** 32-byte hex identifier of the group call. */
+    groupCallId: string;
+    /** 16-character hex id of the local anchor group {@code Conversation}. */
+    conversationId: string;
+    /** Hex pubkey of the call initiator. Authoritative across the call. */
+    initiatorHex: string;
+    /**
+     * Full roster of participant hex pubkeys (including the initiator)
+     * in canonical sort order. Present only on kind-25050.
+     */
+    participants?: string[];
+    /**
+     * `true` when the kind-25050 offer is invite-only (empty SDP, the
+     * recipient is the designated SDP offerer for the pair). Present
+     * only on kind-25050.
+     */
+    roleInvite?: boolean;
+}
+
+/**
  * Parsed NIP-AC inner signaling event, discriminated by `kind`. Built by
  * the receive path from a verified inner event, or by the send path
  * before signing/wrapping.
+ *
+ * Every variant carries an optional `group` field. When present, the
+ * event is part of a group voice call; when absent, it is a 1-on-1
+ * call. Inner kind-25055 (Renegotiate) is voice-only and SHALL NOT
+ * carry a group context — see the closed-roster decision in the group
+ * design doc.
  */
 export type VoiceCallSignal =
     | {
           kind: typeof NIP_AC_KIND_OFFER;
           callId: string;
           callType: CallKind;
-          /** Raw SDP offer string. */
+          /** Raw SDP offer string. Empty when {@code group?.roleInvite === true}. */
           sdp: string;
+          group?: GroupCallContext;
       }
     | {
           kind: typeof NIP_AC_KIND_ANSWER;
           callId: string;
           /** Raw SDP answer string. */
           sdp: string;
+          group?: GroupCallContext;
       }
     | {
           kind: typeof NIP_AC_KIND_ICE;
@@ -40,18 +81,21 @@ export type VoiceCallSignal =
           candidate: string;
           sdpMid: string | null;
           sdpMLineIndex: number | null;
+          group?: GroupCallContext;
       }
     | {
           kind: typeof NIP_AC_KIND_HANGUP;
           callId: string;
           /** Optional human-readable reason. */
           reason?: string;
+          group?: GroupCallContext;
       }
     | {
           kind: typeof NIP_AC_KIND_REJECT;
           callId: string;
           /** `'busy'` for auto-reject from a non-idle state, otherwise optional reason. */
           reason?: string;
+          group?: GroupCallContext;
       }
     | {
           kind: typeof NIP_AC_KIND_RENEGOTIATE;
@@ -172,6 +216,49 @@ export type LocalCallEventCreator = (
 ) => Promise<void>;
 
 /**
+ * Authoring callback for GROUP call-history rumors that should appear
+ * in every participant's chat history (`ended`, `no-answer`,
+ * `declined`, `busy`, `failed`). Implemented by
+ * {@code Messaging.createGroupCallEventMessage}. Publishes one Kind
+ * 1405 rumor through the existing 3-layer NIP-17 group pipeline
+ * (multi-recipient + self-wrap), distinct from the NIP-AC kind-21059
+ * signaling pipeline.
+ *
+ * @param conversationId Local 16-character hex id of the anchor group
+ *     conversation.
+ * @param participantNpubs Other roster members (excluding self).
+ * @param type Authored call-event type.
+ * @param groupCallId 32-byte hex group-call id (correlation tag).
+ * @param initiatorNpub Initiator's npub.
+ * @param duration Optional duration in seconds for {@code 'ended'}.
+ * @param callMediaType Always {@code 'voice'} in v1.
+ */
+export type GroupCallEventCreator = (
+    conversationId: string,
+    participantNpubs: string[],
+    type: AuthoredCallEventType,
+    groupCallId: string,
+    initiatorNpub: string,
+    duration?: number,
+    callMediaType?: CallKind
+) => Promise<void>;
+
+/**
+ * LOCAL-ONLY group call-history authoring callback. Used for
+ * {@code 'missed'} (no answer locally) and {@code 'cancelled'}
+ * (initiator hung up before any peer connected). Persists a Kind 1405
+ * rumor directly to the local message database with no relay publish.
+ */
+export type LocalGroupCallEventCreator = (
+    conversationId: string,
+    participantNpubs: string[],
+    type: AuthoredCallEventType,
+    groupCallId: string,
+    initiatorNpub: string,
+    callMediaType?: CallKind
+) => Promise<void>;
+
+/**
  * Typed NIP-AC senders registered by {@code Messaging.ts}. One per
  * inner-event kind. Each helper signs the inner event with the user's
  * signer, wraps it in a kind-21059 ephemeral gift wrap, and publishes
@@ -179,28 +266,69 @@ export type LocalCallEventCreator = (
  * additionally publish a self-wrap for multi-device "answered/rejected
  * elsewhere".
  */
+/**
+ * Common group-call context option block that may be passed to any
+ * NIP-AC sender below. When present, the sender SHALL emit the four
+ * group tags (`group-call-id`, `conversation-id`, `initiator`,
+ * plus `participants` on kind-25050) on the inner event in the order
+ * fixed by the wire-parity fixture.
+ *
+ * The {@code roleInvite} flag is meaningful only on kind-25050. When
+ * `true`, the sender emits an additional `['role','invite']` tag and
+ * the SDP {@code content} SHALL be empty.
+ */
+export interface NipAcGroupSendContext {
+    groupCallId: string;
+    conversationId: string;
+    initiatorHex: string;
+    /** Required on kind-25050; ignored on other kinds. */
+    participants?: string[];
+    /** Meaningful only on kind-25050. */
+    roleInvite?: boolean;
+}
+
 export interface NipAcSenders {
     sendOffer: (
         recipientNpub: string,
         callId: string,
         sdp: string,
-        opts?: { callType?: CallKind }
+        opts?: { callType?: CallKind; group?: NipAcGroupSendContext }
     ) => Promise<void>;
-    sendAnswer: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
+    sendAnswer: (
+        recipientNpub: string,
+        callId: string,
+        sdp: string,
+        opts?: { group?: NipAcGroupSendContext }
+    ) => Promise<void>;
     sendIceCandidate: (
         recipientNpub: string,
         callId: string,
         candidate: string,
         sdpMid: string | null,
-        sdpMLineIndex: number | null
+        sdpMLineIndex: number | null,
+        opts?: { group?: NipAcGroupSendContext }
     ) => Promise<void>;
-    sendHangup: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
-    sendReject: (recipientNpub: string, callId: string, reason?: string) => Promise<void>;
+    sendHangup: (
+        recipientNpub: string,
+        callId: string,
+        reason?: string,
+        opts?: { group?: NipAcGroupSendContext }
+    ) => Promise<void>;
+    sendReject: (
+        recipientNpub: string,
+        callId: string,
+        reason?: string,
+        opts?: { group?: NipAcGroupSendContext }
+    ) => Promise<void>;
     /**
      * Publish a kind-25055 Call Renegotiate. Wire shape mirrors the
      * Call Offer (kind 25050) helper EXCEPT no `call-type` tag is
      * attached and no self-wrap is published. The peer responds with
      * an ordinary kind-25051 Call Answer.
+     *
+     * Group calls do NOT renegotiate in v1 (mid-call media-kind change
+     * is only defined for 1-on-1 voice→video upgrade); this sender
+     * therefore does NOT accept a group context.
      */
     sendRenegotiate: (recipientNpub: string, callId: string, sdp: string) => Promise<void>;
 }
@@ -232,8 +360,49 @@ export interface VoiceCallBackend {
     /** Register the local-only call-history rumor author (web only). */
     registerLocalCallEventCreator(fn: LocalCallEventCreator): void;
 
+    /**
+     * Register the gift-wrapped GROUP call-history rumor author. May be
+     * registered as a no-op if the platform does not support group
+     * calls in this build.
+     */
+    registerGroupCallEventCreator?(fn: GroupCallEventCreator): void;
+
+    /** Register the local-only GROUP call-history rumor author. */
+    registerLocalGroupCallEventCreator?(fn: LocalGroupCallEventCreator): void;
+
     /** Generate a fresh callId. Used by Messaging when authoring local rumors. */
     generateCallId(): string;
+
+    /**
+     * Initiate an outgoing GROUP voice call anchored to an existing
+     * group conversation (16-character hex `conversationId`).
+     * Voice-only in v1. Resolves once initial offers have been sent.
+     */
+    initiateGroupCall?(conversationId: string): Promise<void>;
+
+    /** Accept the in-progress incoming group call. */
+    acceptGroupCall?(): Promise<void>;
+
+    /** Decline the in-progress incoming group call. */
+    declineGroupCall?(): void;
+
+    /**
+     * Hang up / leave the active group call. Remaining participants
+     * stay connected to each other.
+     */
+    hangupGroupCall?(): void;
+
+    /** Toggle local microphone mute across all peers in the group mesh. */
+    toggleGroupMute?(): void;
+
+    /**
+     * Snapshot of remote {@code MediaStream}s for the active group
+     * call, keyed by peer hex pubkey. UI components bind one hidden
+     * {@code <audio>} per entry so the browser mixes audio across all
+     * peers automatically. Native backends return an empty map (the
+     * native AudioDeviceModule routes audio out-of-band).
+     */
+    getGroupRemoteStreams?(): Map<string, MediaStream>;
 
     /**
      * Initiate an outgoing call to {@code recipientNpub}. The optional
@@ -349,4 +518,112 @@ export interface VoiceCallBackend {
      * call.
      */
     getRenegotiationState(): RenegotiationState;
+}
+
+/* ------------------------------------------------------------------ *
+ * Group voice-call state types                                       *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Per-pair PeerConnection lifecycle status inside a group call. Each
+ * other roster member has exactly one {@link ParticipantState} entry
+ * with a {@code pcStatus} value drawn from this union; the per-call
+ * aggregate {@link VoiceCallStatus} is *derived* from the participants
+ * map (see the spec's "Group Voice Call Lifecycle" requirement) and
+ * SHALL NOT be stored independently.
+ *
+ * <ul>
+ *   <li>{@code 'pending'} — no signaling yet exchanged with this peer
+ *       (e.g., we are an accepter and have not yet sent our
+ *       mesh-formation offer to a lex-higher peer).</li>
+ *   <li>{@code 'ringing'} — an offer has been sent or received but the
+ *       peer's answer has not arrived.</li>
+ *   <li>{@code 'connecting'} — answer exchanged, ICE establishment in
+ *       progress.</li>
+ *   <li>{@code 'active'} — peer connection is up; remote audio is
+ *       flowing.</li>
+ *   <li>{@code 'ended'} — peer connection closed (hangup, timeout,
+ *       ice-failed, rejected, etc.).</li>
+ * </ul>
+ */
+export type ParticipantPcStatus =
+    | 'pending'
+    | 'ringing'
+    | 'connecting'
+    | 'active'
+    | 'ended';
+
+/**
+ * Role of the local user with respect to one edge in a group call's
+ * full mesh, computed from the deterministic-pair offerer rule (the
+ * participant with the lex-lower lowercase-hex pubkey is the offerer
+ * for the pair). Stored per-participant so the state machine can pick
+ * the right send/receive branch without re-running the lex compare.
+ */
+export type ParticipantRole = 'offerer' | 'answerer';
+
+/**
+ * State of a single edge in a group call's full mesh. One entry per
+ * other roster member, keyed by their hex pubkey in the
+ * {@link GroupVoiceCallState.participants} map.
+ */
+export interface ParticipantState {
+    /** Other participant's hex pubkey. */
+    pubkeyHex: string;
+    /** Per-pair UUID `call-id` for this edge (distinct from `groupCallId`). */
+    callId: string;
+    /** Local user's role on this edge (see {@link ParticipantRole}). */
+    role: ParticipantRole;
+    /** Per-pair PeerConnection lifecycle status. */
+    pcStatus: ParticipantPcStatus;
+    /** End reason once {@code pcStatus === 'ended'}; null otherwise. */
+    endReason: VoiceCallEndReason | null;
+}
+
+/**
+ * State of a group voice call, parallel to the existing flat
+ * {@link VoiceCallState} for 1-on-1. UI components branch on
+ * {@code groupCallId !== null} to choose between the two stores. The
+ * "one call total" invariant guarantees that at most one of
+ * {@code voiceCallState} or {@code groupVoiceCallState} is non-idle at
+ * any moment.
+ *
+ * The aggregate {@code status} is derived from the participants map
+ * and is recomputed by the state-machine reducer on every change; it
+ * is held in the store only so subscribers can read it without
+ * duplicating the derivation logic.
+ */
+export interface GroupVoiceCallState {
+    /** 32-byte hex group-call id; null while idle. */
+    groupCallId: string | null;
+    /** 16-character hex anchor conversation id; null while idle. */
+    conversationId: string | null;
+    /** Initiator's hex pubkey; null while idle. */
+    initiatorHex: string | null;
+    /**
+     * Full roster of participant hex pubkeys (including the local
+     * user) in canonical sort order. Authoritative; cached from the
+     * first kind-25050 received for this {@code groupCallId}.
+     */
+    roster: string[];
+    /**
+     * Per-other-roster-member edge state, keyed by peer hex pubkey.
+     * Does NOT contain an entry for the local user.
+     */
+    participants: Record<string, ParticipantState>;
+    /** Aggregate per-call status, derived from {@code participants}. */
+    status: VoiceCallStatus;
+    /** Aggregate end reason once {@code status === 'ended'}; null otherwise. */
+    endReason: VoiceCallEndReason | null;
+    /** Seconds since the first per-participant {@code pcStatus} reached {@code 'active'}. */
+    duration: number;
+    /** Local microphone mute state (shared across all peer connections). */
+    isMuted: boolean;
+    /** Local speakerphone state (Android-meaningful, web no-op). */
+    isSpeakerOn: boolean;
+    /**
+     * Media kind of the call. Fixed to {@code 'voice'} in v1 — group
+     * video calls are deferred to a follow-up change.
+     */
+    callKind: CallKind;
 }

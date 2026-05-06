@@ -3927,6 +3927,262 @@ public class NativeBackgroundMessagingService extends Service {
             "WebRTC call renegotiation", null, /* selfWrap= */ false, "renegotiate");
     }
 
+    // ==================================================================
+    //  Group-call NIP-AC senders (add-group-voice-calling).
+    //
+    //  Each sender mirrors the corresponding 1-on-1 sender above but
+    //  emits the additional group tags required by the spec, in the
+    //  order fixed by the wire-parity fixture
+    //  (`tests/fixtures/nip-ac-wire/inner-events.json`):
+    //
+    //    25050 (offer): [call-type, group-call-id, conversation-id,
+    //                    initiator, participants, role?]
+    //    25051/25052/25053/25054: [group-call-id, conversation-id,
+    //                              initiator]
+    //
+    //  The `participants` tag is emitted only on kind 25050 (and re-
+    //  included on accepter-to-accepter mesh-formation offers so the
+    //  receiver can validate against its cached authoritative roster).
+    //  The `role=invite` tag is emitted only on invite-only offers
+    //  where the recipient is the designated SDP offerer for the pair.
+    //
+    //  alt-text is the group variant ("WebRTC group voice call offer"
+    //  etc.) for offers/answers/etc., matching the JS sender output.
+    // ==================================================================
+
+    /**
+     * Group-call context block forwarded to every native NIP-AC
+     * sender. Mirrors the JS {@code NipAcGroupSendContext}.
+     */
+    public static final class GroupSendContext {
+        public final String groupCallId;
+        public final String conversationId;
+        public final String initiatorHex;
+        /** Required on kind 25050; ignored on other kinds. */
+        public final List<String> participants;
+        /** Meaningful only on kind 25050. */
+        public final boolean roleInvite;
+
+        public GroupSendContext(
+                String groupCallId,
+                String conversationId,
+                String initiatorHex,
+                List<String> participants,
+                boolean roleInvite) {
+            this.groupCallId = groupCallId;
+            this.conversationId = conversationId;
+            this.initiatorHex = initiatorHex;
+            this.participants = participants;
+            this.roleInvite = roleInvite;
+        }
+    }
+
+    /**
+     * Build the group-call tag suffix for an inner event. Emits
+     * {@code group-call-id, conversation-id, initiator} in that fixed
+     * order, optionally followed by {@code participants} (kind 25050
+     * only) and {@code role=invite} (invite-only offers). MUST stay
+     * byte-equivalent to {@code buildGroupExtraTags} in the JS
+     * {@code nipAcGiftWrap.ts}; verified by
+     * {@link NativeNipAcSenderTest}.
+     */
+    private static JSONArray buildGroupExtraTags(
+            JSONArray prefix,
+            GroupSendContext g,
+            boolean includeParticipants,
+            boolean includeRoleInvite) throws JSONException {
+        JSONArray out = new JSONArray();
+        if (prefix != null) {
+            for (int i = 0; i < prefix.length(); i++) {
+                out.put(prefix.get(i));
+            }
+        }
+        if (g == null) return out;
+
+        JSONArray gci = new JSONArray();
+        gci.put("group-call-id");
+        gci.put(g.groupCallId);
+        out.put(gci);
+
+        JSONArray cid = new JSONArray();
+        cid.put("conversation-id");
+        cid.put(g.conversationId);
+        out.put(cid);
+
+        JSONArray init = new JSONArray();
+        init.put("initiator");
+        init.put(g.initiatorHex);
+        out.put(init);
+
+        if (includeParticipants && g.participants != null
+                && !g.participants.isEmpty()) {
+            JSONArray pTag = new JSONArray();
+            pTag.put("participants");
+            for (String hex : g.participants) {
+                pTag.put(hex);
+            }
+            out.put(pTag);
+        }
+
+        if (includeRoleInvite && g.roleInvite) {
+            JSONArray roleTag = new JSONArray();
+            roleTag.put("role");
+            roleTag.put("invite");
+            out.put(roleTag);
+        }
+
+        return out;
+    }
+
+    /**
+     * Group-call kind 25050 Call Offer. Wire-equivalent to JavaScript
+     * {@code Messaging.sendCallOffer} when called with an
+     * {@code opts.group} field. Emits the full group tag set,
+     * including {@code participants} on every kind 25050 (initiator's
+     * first round AND accepter-to-accepter mesh-formation offers).
+     *
+     * <p>Pass {@code group.roleInvite = true} for invite-only offers
+     * (empty {@code sdp} content; the recipient is the designated SDP
+     * offerer for the pair under the deterministic-pair rule).
+     */
+    public void sendVoiceCallOffer(
+            String recipientPubkeyHex,
+            String callId,
+            String sdp,
+            String callKind,
+            GroupSendContext group) {
+        if (group == null) {
+            sendVoiceCallOffer(recipientPubkeyHex, callId, sdp, callKind);
+            return;
+        }
+        if (sdp == null) sdp = "";
+        if (callKind == null || callKind.isEmpty()) callKind = "voice";
+        String altText = "video".equals(callKind)
+            ? "WebRTC group video call offer"
+            : "WebRTC group voice call offer";
+
+        JSONArray extra = new JSONArray();
+        try {
+            JSONArray callTypeTag = new JSONArray();
+            callTypeTag.put("call-type");
+            callTypeTag.put(callKind);
+            extra.put(callTypeTag);
+            extra = buildGroupExtraTags(
+                extra, group, /* includeParticipants= */ true,
+                /* includeRoleInvite= */ true);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] group offer: tag build failed", e);
+            return;
+        }
+        publishNipAcInner(recipientPubkeyHex, callId, 25050, sdp,
+            altText, extra, /* selfWrap= */ false, "group-offer");
+    }
+
+    /** Group-call kind 25051 Call Answer. SELF-WRAPPED (mirrors 1-on-1). */
+    public void sendVoiceCallAnswer(
+            String recipientPubkeyHex,
+            String callId,
+            String sdp,
+            GroupSendContext group) {
+        if (group == null) {
+            sendVoiceCallAnswer(recipientPubkeyHex, callId, sdp);
+            return;
+        }
+        if (sdp == null) sdp = "";
+        JSONArray extra;
+        try {
+            extra = buildGroupExtraTags(null, group, false, false);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] group answer: tag build failed", e);
+            return;
+        }
+        publishNipAcInner(recipientPubkeyHex, callId, 25051, sdp,
+            "WebRTC group call answer", extra,
+            /* selfWrap= */ true, "group-answer");
+    }
+
+    /** Group-call kind 25052 ICE Candidate. NO self-wrap. */
+    public void sendVoiceCallIce(
+            String recipientPubkeyHex,
+            String callId,
+            String candidate,
+            String sdpMid,
+            Integer sdpMLineIndex,
+            GroupSendContext group) {
+        if (group == null) {
+            sendVoiceCallIce(
+                recipientPubkeyHex, callId, candidate, sdpMid, sdpMLineIndex);
+            return;
+        }
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("candidate", candidate == null ? "" : candidate);
+            if (sdpMid == null) {
+                payload.put("sdpMid", JSONObject.NULL);
+            } else {
+                payload.put("sdpMid", sdpMid);
+            }
+            if (sdpMLineIndex == null) {
+                payload.put("sdpMLineIndex", JSONObject.NULL);
+            } else {
+                payload.put("sdpMLineIndex", sdpMLineIndex.intValue());
+            }
+            String content = payload.toString();
+            JSONArray extra = buildGroupExtraTags(null, group, false, false);
+            publishNipAcInner(recipientPubkeyHex, callId, 25052, content,
+                "WebRTC group ICE candidate", extra,
+                /* selfWrap= */ false, "group-ice");
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] sendVoiceCallIce(group) failed", e);
+        }
+    }
+
+    /** Group-call kind 25053 Call Hangup. NO self-wrap. */
+    public void sendVoiceCallHangup(
+            String recipientPubkeyHex,
+            String callId,
+            String reason,
+            GroupSendContext group) {
+        if (group == null) {
+            sendVoiceCallHangup(recipientPubkeyHex, callId, reason);
+            return;
+        }
+        JSONArray extra;
+        try {
+            extra = buildGroupExtraTags(null, group, false, false);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] group hangup: tag build failed", e);
+            return;
+        }
+        publishNipAcInner(recipientPubkeyHex, callId, 25053,
+            reason == null ? "" : reason,
+            "WebRTC group call hangup", extra,
+            /* selfWrap= */ false, "group-hangup");
+    }
+
+    /** Group-call kind 25054 Call Reject. SELF-WRAPPED (mirrors 1-on-1). */
+    public void sendVoiceCallReject(
+            String recipientPubkeyHex,
+            String callId,
+            String reason,
+            GroupSendContext group) {
+        if (group == null) {
+            sendVoiceCallReject(recipientPubkeyHex, callId, reason);
+            return;
+        }
+        JSONArray extra;
+        try {
+            extra = buildGroupExtraTags(null, group, false, false);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "[NIP-AC] group reject: tag build failed", e);
+            return;
+        }
+        publishNipAcInner(recipientPubkeyHex, callId, 25054,
+            reason == null ? "" : reason,
+            "WebRTC group call rejection", extra,
+            /* selfWrap= */ true, "group-reject");
+    }
+
     /**
      * Shared helper for the new NIP-AC senders. Builds the inner event,
      * signs it, wraps as kind 21059, and publishes to the recipient (and

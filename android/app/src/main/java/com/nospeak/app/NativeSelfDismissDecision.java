@@ -69,19 +69,8 @@ public final class NativeSelfDismissDecision {
     private NativeSelfDismissDecision() {}
 
     /**
-     * Decide what to do with a self-authored NIP-AC inner event.
-     *
-     * @param innerKind            the inner event kind (25050–25055)
-     * @param innerCallId          the {@code call-id} tag value, may be null
-     * @param pendingPrefsCallId   the call-id stored in
-     *                             {@code nospeak_pending_incoming_call}
-     *                             SharedPreferences, or null
-     * @param managerCallId        {@link NativeVoiceCallManager#getCallId()},
-     *                             or null when no manager exists
-     * @param managerStatusName    {@link NativeVoiceCallManager.CallStatus#name()}
-     *                             for the current manager status, or null
-     *                             when no manager exists. Compared as
-     *                             {@code "INCOMING_RINGING"}.
+     * Legacy 1-on-1 entry point. Preserved for callers that have not
+     * yet been generalized to pass group context.
      */
     public static Action decide(
             int innerKind,
@@ -89,39 +78,103 @@ public final class NativeSelfDismissDecision {
             String pendingPrefsCallId,
             String managerCallId,
             String managerStatusName) {
+        return decide(
+            innerKind,
+            innerCallId,
+            null,
+            pendingPrefsCallId,
+            null,
+            managerCallId,
+            null,
+            managerStatusName);
+    }
+
+    /**
+     * Group-aware decision. Generalizes the matrix so kind-25051 and
+     * kind-25054 self-events with a {@code group-call-id} are
+     * dismissed against the active group call's
+     * {@code group-call-id} (per the spec's modified self-event filter)
+     * rather than the per-pair {@code call-id}. Per-pair {@code call-id}
+     * dedup is preserved for 1-on-1 self-events (no
+     * {@code group-call-id} on the inner event).
+     *
+     * @param innerKind                inner event kind (25050–25055)
+     * @param innerCallId              the {@code call-id} tag value, may be null
+     * @param innerGroupCallId         the {@code group-call-id} tag value,
+     *                                 may be null for 1-on-1
+     * @param pendingPrefsCallId       call-id stored in the FSI pending
+     *                                 SharedPreferences slot, or null
+     * @param pendingPrefsGroupCallId  group-call-id stored in the FSI
+     *                                 pending SharedPreferences slot, or
+     *                                 null when the pending entry is 1-on-1
+     * @param managerCallId            active manager's per-pair call-id
+     * @param managerGroupCallId       active manager's group-call-id, or
+     *                                 null when the active call is 1-on-1
+     * @param managerStatusName        active manager's
+     *                                 {@code CallStatus#name()}; compared
+     *                                 as {@code "INCOMING_RINGING"}
+     */
+    public static Action decide(
+            int innerKind,
+            String innerCallId,
+            String innerGroupCallId,
+            String pendingPrefsCallId,
+            String pendingPrefsGroupCallId,
+            String managerCallId,
+            String managerGroupCallId,
+            String managerStatusName) {
 
         // Kinds that are unconditionally dropped from self per the
-        // NIP-AC self-event filter (matches Messaging.ts:447-453 plus
-        // 25050 self-call degenerate case at :469-470).
+        // NIP-AC self-event filter (matches the JS Messaging.ts
+        // implementation; 25050 self-call degenerate case is also
+        // dropped here).
         if (innerKind != 25051 && innerKind != 25054) {
             return Action.DROP;
         }
 
-        // No call-id → can't match anything → drop.
-        if (innerCallId == null || innerCallId.isEmpty()) {
+        boolean isGroup = innerGroupCallId != null && !innerGroupCallId.isEmpty();
+
+        // For 1-on-1 self-events, dedup by per-pair call-id (existing
+        // behavior). For group self-events, dedup by group-call-id —
+        // call-id may differ between sender's per-pair edge and our
+        // own inbound edge inside the same group call.
+        if (!isGroup) {
+            if (innerCallId == null || innerCallId.isEmpty()) {
+                return Action.DROP;
+            }
+            boolean managerRingingForCall =
+                managerCallId != null
+                    && managerCallId.equals(innerCallId)
+                    && managerGroupCallId == null
+                    && "INCOMING_RINGING".equals(managerStatusName);
+            if (managerRingingForCall) {
+                return innerKind == 25051
+                    ? Action.END_MANAGER_ANSWERED
+                    : Action.END_MANAGER_REJECTED;
+            }
+            if (pendingPrefsCallId != null
+                    && pendingPrefsCallId.equals(innerCallId)
+                    && (pendingPrefsGroupCallId == null
+                        || pendingPrefsGroupCallId.isEmpty())) {
+                return Action.DISMISS_FSI;
+            }
             return Action.DROP;
         }
 
-        // Check the active-manager case first; an in-flight
-        // INCOMING_RINGING manager owns the dismissal authoritatively.
-        boolean managerRingingForCall =
-            managerCallId != null
-                && managerCallId.equals(innerCallId)
+        // Group self-event branch.
+        boolean managerRingingForGroup =
+            managerGroupCallId != null
+                && managerGroupCallId.equals(innerGroupCallId)
                 && "INCOMING_RINGING".equals(managerStatusName);
-
-        if (managerRingingForCall) {
+        if (managerRingingForGroup) {
             return innerKind == 25051
                 ? Action.END_MANAGER_ANSWERED
                 : Action.END_MANAGER_REJECTED;
         }
-
-        // Fall back to the lockscreen FSI dismissal when the pending
-        // SharedPreferences slot matches.
-        if (pendingPrefsCallId != null && pendingPrefsCallId.equals(innerCallId)) {
+        if (pendingPrefsGroupCallId != null
+                && pendingPrefsGroupCallId.equals(innerGroupCallId)) {
             return Action.DISMISS_FSI;
         }
-
-        // No matching pending state — stale or out-of-band echo, drop.
         return Action.DROP;
     }
 }

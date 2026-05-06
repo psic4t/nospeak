@@ -16,7 +16,19 @@ import {
     setCameraFlipping,
     setFacingMode,
     setSpeakerOn,
-    setRenegotiationState
+    setRenegotiationState,
+    groupVoiceCallState,
+    setGroupOutgoingRinging,
+    setGroupIncomingRinging,
+    upsertGroupParticipant,
+    setGroupParticipantStatus,
+    setGroupConnecting,
+    endGroupCall,
+    setGroupEndedAnsweredElsewhere,
+    setGroupEndedRejectedElsewhere,
+    toggleGroupMute as storeGroupMute,
+    incrementGroupDuration,
+    resetGroupCall
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
 import {
@@ -30,8 +42,18 @@ import {
     NIP_AC_KIND_ICE,
     NIP_AC_KIND_HANGUP,
     NIP_AC_KIND_REJECT,
-    NIP_AC_KIND_RENEGOTIATE
+    NIP_AC_KIND_RENEGOTIATE,
+    GROUP_CALL_ID_TAG,
+    CONVERSATION_ID_TAG,
+    INITIATOR_TAG,
+    PARTICIPANTS_TAG,
+    ROLE_TAG,
+    ROLE_INVITE,
+    GROUP_CALL_MAX_PARTICIPANTS
 } from './constants';
+import { conversationRepo } from '$lib/db/ConversationRepository';
+import { currentUser } from '$lib/stores/auth';
+import type { NipAcGroupSendContext } from './types';
 
 // Backend-facing public types (NipAcSenders, CallEventCreator,
 // LocalCallEventCreator, AuthoredCallEventType, VoiceCallBackend) live
@@ -45,7 +67,10 @@ import type {
     LocalCallEventCreator,
     NipAcSenders,
     RenegotiationState,
-    VoiceCallBackend
+    VoiceCallBackend,
+    GroupCallEventCreator,
+    LocalGroupCallEventCreator,
+    VoiceCallEndReason
 } from './types';
 export type {
     AuthoredCallEventType,
@@ -54,7 +79,9 @@ export type {
     LocalCallEventCreator,
     NipAcSenders,
     RenegotiationState,
-    VoiceCallBackend
+    VoiceCallBackend,
+    GroupCallEventCreator,
+    LocalGroupCallEventCreator
 };
 
 /**
@@ -79,6 +106,13 @@ export class VoiceCallService implements VoiceCallBackend {
     private senders: NipAcSenders | null = null;
     private createCallEventFn: CallEventCreator | null = null;
     private localCreateCallEventFn: LocalCallEventCreator | null = null;
+    /**
+     * Authoring callbacks for GROUP-call history (Kind 1405 with
+     * multiple `p` tags + `group-call-id` + `conversation-id`).
+     * Registered by `Messaging.ts` alongside the 1-on-1 callbacks.
+     */
+    private createGroupCallEventFn: GroupCallEventCreator | null = null;
+    private createLocalGroupCallEventFn: LocalGroupCallEventCreator | null = null;
     /**
      * Gates outgoing ice-candidate signaling. Armed in createPeerConnection,
      * cleared once the connection reaches connected/completed (further
@@ -171,6 +205,92 @@ export class VoiceCallService implements VoiceCallBackend {
      */
     private renegotiationPendingVideoTrack: MediaStreamTrack | null = null;
 
+    // ------------------------------------------------------------------
+    //  Group voice-call state (full-mesh, anchored to a group
+    //  conversation). Activated by `initiateGroupCall` /
+    //  `acceptGroupCall` / mesh-formation inbound offers; cleared by
+    //  `cleanupGroup`. Coexists with the 1-on-1 fields above; the "one
+    //  call total" invariant guarantees only one is active at a time.
+    //
+    //  See the design doc and spec deltas under
+    //  openspec/changes/add-group-voice-calling/.
+    // ------------------------------------------------------------------
+
+    /** Active group call's id, or null while no group call is in progress. */
+    private currentGroupCallId: string | null = null;
+
+    /**
+     * Per-peer WebRTC sessions in the group's mesh, keyed by peer hex
+     * pubkey. Cleared on group call cleanup.
+     */
+    private groupPeerConnections: Map<
+        string,
+        {
+            pc: RTCPeerConnection;
+            callId: string;
+            peerNpub: string;
+            iceTrickleEnabled: boolean;
+            sessionRemoteDescriptionSet: boolean;
+            sessionPendingIce: RTCIceCandidateInit[];
+            offerTimeoutId: ReturnType<typeof setTimeout> | null;
+            iceTimeoutId: ReturnType<typeof setTimeout> | null;
+            remoteStream: MediaStream | null;
+        }
+    > = new Map();
+
+    /**
+     * Pending inbound offers for the active group call, indexed by peer
+     * hex pubkey. Buffered while {@code incoming-ringing} so that
+     * `acceptGroupCall` can drain them in one pass. Each entry is the
+     * inbound kind-25050 inner event (real-SDP or invite-only).
+     */
+    private groupPendingOffers: Map<string, NostrEvent> = new Map();
+
+    /**
+     * NIP-AC ICE candidate buffering for groups — global layer keyed
+     * by `(senderHex, groupCallId)`. Holds candidates received before a
+     * matching `RTCPeerConnection` exists. The map's values are arrays
+     * keyed first by group-call-id then by sender hex; cleared on group
+     * cleanup.
+     */
+    private groupGlobalIceBuffer: Map<string, Map<string, RTCIceCandidateInit[]>>
+        = new Map();
+
+    /**
+     * Authoritative {@code (groupCallId → {initiatorHex, conversationId,
+     * roster})} cache. Populated from the FIRST kind-25050 received
+     * locally for a given {@code group-call-id}. Subsequent inner events
+     * whose tags disagree with the cached values SHALL be dropped.
+     * Cleared on group cleanup.
+     */
+    private groupAuthoritativeQuad: {
+        groupCallId: string;
+        initiatorHex: string;
+        conversationId: string;
+        roster: string[];
+    } | null = null;
+
+    /**
+     * Whether the local user is the initiator of the active group call.
+     * Drives the "outgoing-ringing" branch of seeding and the
+     * call-history authoring decision (initiator authors `cancelled`
+     * locally; everyone else authors `missed`).
+     */
+    private groupIsInitiator = false;
+
+    /** Local user's hex pubkey for the active group call. */
+    private groupSelfHex: string | null = null;
+
+    /** Anchored conversation id of the active group call. */
+    private groupConversationId: string | null = null;
+
+    /** Duration timer for the active group call. Started on first peer active. */
+    private groupDurationIntervalId: ReturnType<typeof setInterval> | null = null;
+    private groupDurationStarted = false;
+
+    /** Local capture stream shared across all peers in the mesh. */
+    private groupLocalStream: MediaStream | null = null;
+
     public registerNipAcSenders(senders: NipAcSenders): void {
         this.senders = senders;
     }
@@ -181,6 +301,16 @@ export class VoiceCallService implements VoiceCallBackend {
 
     public registerLocalCallEventCreator(fn: LocalCallEventCreator): void {
         this.localCreateCallEventFn = fn;
+    }
+
+    public registerGroupCallEventCreator(fn: GroupCallEventCreator): void {
+        this.createGroupCallEventFn = fn;
+    }
+
+    public registerLocalGroupCallEventCreator(
+        fn: LocalGroupCallEventCreator
+    ): void {
+        this.createLocalGroupCallEventFn = fn;
     }
 
     public generateCallId(): string {
@@ -194,8 +324,13 @@ export class VoiceCallService implements VoiceCallBackend {
         kind: CallKind = 'voice'
     ): Promise<void> {
         const state = get(voiceCallState);
-        if (state.status !== 'idle') {
-            console.warn('[VoiceCall] Cannot initiate call — already in a call');
+        const groupState = get(groupVoiceCallState);
+        const inGroupCall =
+            groupState.status !== 'idle' && groupState.status !== 'ended';
+        if (state.status !== 'idle' || inGroupCall) {
+            console.warn(
+                '[VoiceCall] Cannot initiate call — already in a call'
+            );
             return;
         }
 
@@ -257,8 +392,18 @@ export class VoiceCallService implements VoiceCallBackend {
      * Self-events and follow-gating have already been applied; this method
      * only sees events from the remote peer that have passed all upstream
      * checks.
+     *
+     * <p>Branches on presence of `['group-call-id', ...]`: when present
+     * the event is part of a group call and is routed to the group
+     * dispatch path; when absent the existing 1-on-1 path runs
+     * unchanged.
      */
     public async handleNipAcEvent(inner: NostrEvent): Promise<void> {
+        const groupCallId = this.getTagValue(inner, GROUP_CALL_ID_TAG);
+        if (groupCallId) {
+            await this.handleGroupNipAcEvent(inner, groupCallId);
+            return;
+        }
         const callId = this.getTagValue(inner, 'call-id');
         if (!callId) {
             console.warn('[VoiceCall][Recv] inner event missing call-id', { kind: inner.kind });
@@ -293,9 +438,28 @@ export class VoiceCallService implements VoiceCallBackend {
     /**
      * NIP-AC self-event handler invoked when a self-addressed kind-25051
      * Call Answer arrives in `incoming-ringing` state. Transitions to
-     * `ended` with reason `answered-elsewhere` if the call-id matches.
+     * `ended` with reason `answered-elsewhere`.
+     *
+     * <p>Group calls dedup on `group-call-id` rather than per-pair
+     * `call-id` (per the spec's modified self-event filter): when the
+     * self-event carries `['group-call-id', G]` and the local group
+     * status is `incoming-ringing` for the same G, we transition the
+     * GROUP store to `ended` and stop ringing.
      */
     public async handleSelfAnswer(inner: NostrEvent): Promise<void> {
+        const groupCallId = this.getTagValue(inner, GROUP_CALL_ID_TAG);
+        if (groupCallId) {
+            const groupState = get(groupVoiceCallState);
+            if (
+                groupState.status !== 'incoming-ringing' ||
+                groupState.groupCallId !== groupCallId
+            ) {
+                return;
+            }
+            this.cleanupGroup();
+            setGroupEndedAnsweredElsewhere();
+            return;
+        }
         const callId = this.getTagValue(inner, 'call-id');
         const state = get(voiceCallState);
         if (
@@ -311,9 +475,24 @@ export class VoiceCallService implements VoiceCallBackend {
 
     /**
      * NIP-AC self-event handler invoked when a self-addressed kind-25054
-     * Call Reject arrives in `incoming-ringing` state.
+     * Call Reject arrives in `incoming-ringing` state. Generalized to
+     * dedup on `group-call-id` when present (per the spec's modified
+     * self-event filter).
      */
     public async handleSelfReject(inner: NostrEvent): Promise<void> {
+        const groupCallId = this.getTagValue(inner, GROUP_CALL_ID_TAG);
+        if (groupCallId) {
+            const groupState = get(groupVoiceCallState);
+            if (
+                groupState.status !== 'incoming-ringing' ||
+                groupState.groupCallId !== groupCallId
+            ) {
+                return;
+            }
+            this.cleanupGroup();
+            setGroupEndedRejectedElsewhere();
+            return;
+        }
         const callId = this.getTagValue(inner, 'call-id');
         const state = get(voiceCallState);
         if (
@@ -667,6 +846,7 @@ export class VoiceCallService implements VoiceCallBackend {
         callId: string
     ): Promise<void> {
         const state = get(voiceCallState);
+        const groupState = get(groupVoiceCallState);
 
         // Dedup: same callId from same peer while we're already ringing for it.
         // This happens when the offer arrives both via the live JS subscription
@@ -680,7 +860,13 @@ export class VoiceCallService implements VoiceCallBackend {
             return;
         }
 
-        if (state.status !== 'idle') {
+        // Concurrency: a 1-on-1 offer arriving while we are in ANY
+        // call (1-on-1 or group, in any non-idle/non-ended state) is
+        // auto-rejected with busy. Per the modified
+        // "Call Initiation Restrictions" spec.
+        const inGroupCall =
+            groupState.status !== 'idle' && groupState.status !== 'ended';
+        if (state.status !== 'idle' || inGroupCall) {
             // NIP-AC: busy is a Call Reject (kind 25054) with content "busy".
             if (this.senders) {
                 await this.tryCall(() =>
@@ -1302,6 +1488,1404 @@ export class VoiceCallService implements VoiceCallBackend {
                 peerNpubOverride, type, callId, initiatorNpub, kind);
         } catch (err) {
             console.error('[VoiceCall] Failed to create local call event:', err);
+        }
+    }
+
+    // ==================================================================
+    //  Group voice-call methods (full-mesh, anchored to a group
+    //  conversation). All implementations live in this contiguous block
+    //  so the 1-on-1 surface above is unmodified except for the small
+    //  dispatch branch in `handleNipAcEvent` and the `cleanup()` call
+    //  to `cleanupGroup` below.
+    // ==================================================================
+
+    /**
+     * Initiate an outgoing GROUP voice call anchored to an existing
+     * group conversation. Validates roster size and conversation
+     * membership, allocates a fresh group-call id, and seeds an
+     * offer to every other roster member according to the
+     * deterministic-pair offerer rule (lex-lower → real-SDP offer;
+     * lex-higher → invite-only offer with empty SDP).
+     *
+     * <p>Voice-only in v1; group video is not supported.
+     */
+    public async initiateGroupCall(conversationId: string): Promise<void> {
+        if (this.isAnyCallActive()) {
+            console.warn(
+                '[VoiceCall] Cannot initiate group call — already in a call'
+            );
+            return;
+        }
+
+        const conv = await conversationRepo.getConversation(conversationId);
+        if (!conv || !conv.isGroup) {
+            console.warn(
+                '[VoiceCall] initiateGroupCall: no group conversation with id',
+                conversationId
+            );
+            return;
+        }
+
+        const participantNpubs = conv.participants;
+        const selfNpub = get(currentUser)?.npub;
+        if (!selfNpub) {
+            console.warn('[VoiceCall] initiateGroupCall: no current user');
+            return;
+        }
+        const selfHex = (nip19.decode(selfNpub).data as string).toLowerCase();
+        if (!participantNpubs.includes(selfNpub)) {
+            console.warn(
+                '[VoiceCall] initiateGroupCall: local user not in conversation participants'
+            );
+            return;
+        }
+
+        // Build the canonical roster: hex pubkeys of all participants
+        // (including self), lowercased and lexicographically sorted.
+        const otherNpubs = participantNpubs.filter((np) => np !== selfNpub);
+        const otherHexes = otherNpubs.map(
+            (np) => (nip19.decode(np).data as string).toLowerCase()
+        );
+        const roster = [selfHex, ...otherHexes].sort();
+
+        if (roster.length > GROUP_CALL_MAX_PARTICIPANTS) {
+            console.warn(
+                `[VoiceCall] initiateGroupCall: roster size ${roster.length} exceeds cap ${GROUP_CALL_MAX_PARTICIPANTS}`
+            );
+            return;
+        }
+        if (roster.length < 2) {
+            console.warn(
+                '[VoiceCall] initiateGroupCall: need at least 2 participants'
+            );
+            return;
+        }
+
+        const groupCallId = this.generateGroupCallId();
+        const initiatorHex = selfHex;
+
+        // Acquire microphone once; the same audio track is added to every
+        // peer connection in the mesh.
+        let localStream: MediaStream;
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia(
+                AUDIO_CONSTRAINTS
+            );
+        } catch (err) {
+            console.error(
+                '[VoiceCall] initiateGroupCall: getUserMedia failed',
+                err
+            );
+            return;
+        }
+        this.groupLocalStream = localStream;
+
+        // Seed authoritative quadruple from our own kick-off so any
+        // mesh-formation offers we receive later validate against the
+        // same values we publish.
+        this.groupAuthoritativeQuad = {
+            groupCallId,
+            initiatorHex,
+            conversationId,
+            roster
+        };
+        this.groupIsInitiator = true;
+        this.groupSelfHex = selfHex;
+        this.groupConversationId = conversationId;
+        this.currentGroupCallId = groupCallId;
+
+        // Build per-peer seeds using the deterministic-pair offerer
+        // rule, then send offers in parallel. Offers SHALL NOT be
+        // self-wrapped (per spec, matching 1-on-1 offer rules).
+        const seeds: Array<{
+            pubkeyHex: string;
+            callId: string;
+            role: 'offerer' | 'answerer';
+            pcStatus: 'pending' | 'ringing';
+        }> = [];
+
+        for (const peerHex of otherHexes) {
+            const peerNpub = nip19.npubEncode(peerHex);
+            const callId = this.generateCallId();
+            const localIsOfferer = selfHex < peerHex;
+            seeds.push({
+                pubkeyHex: peerHex,
+                callId,
+                role: localIsOfferer ? 'offerer' : 'answerer',
+                pcStatus: 'ringing'
+            });
+
+            const groupCtx: NipAcGroupSendContext = {
+                groupCallId,
+                conversationId,
+                initiatorHex,
+                participants: roster,
+                roleInvite: !localIsOfferer
+            };
+
+            if (localIsOfferer) {
+                // Build PC, attach audio, create real-SDP offer.
+                this.createGroupPeerConnection(peerHex, peerNpub, callId);
+                const session = this.groupPeerConnections.get(peerHex)!;
+                this.groupLocalStream.getAudioTracks().forEach((t) => {
+                    session.pc.addTrack(t, this.groupLocalStream!);
+                });
+                try {
+                    const offer = await session.pc.createOffer();
+                    await session.pc.setLocalDescription(offer);
+                    if (this.senders && offer.sdp) {
+                        await this.tryCall(() =>
+                            this.senders!.sendOffer(
+                                peerNpub,
+                                callId,
+                                offer.sdp!,
+                                {
+                                    callType: 'voice',
+                                    group: { ...groupCtx, roleInvite: false }
+                                }
+                            )
+                        );
+                    }
+                    this.armGroupOfferTimeout(peerHex);
+                } catch (err) {
+                    console.error(
+                        '[VoiceCall] initiateGroupCall: offer build failed for peer',
+                        peerHex,
+                        err
+                    );
+                    setGroupParticipantStatus(peerHex, 'ended', 'error');
+                }
+            } else {
+                // Invite-only kind-25050 with empty content.
+                if (this.senders) {
+                    await this.tryCall(() =>
+                        this.senders!.sendOffer(peerNpub, callId, '', {
+                            callType: 'voice',
+                            group: groupCtx
+                        })
+                    );
+                }
+                this.armGroupOfferTimeout(peerHex);
+            }
+        }
+
+        setGroupOutgoingRinging(
+            groupCallId,
+            conversationId,
+            initiatorHex,
+            roster,
+            seeds
+        );
+    }
+
+    /**
+     * Accept the in-progress incoming GROUP voice call. Drains the
+     * pending-offers buffer: real-SDP offers get answered (kind 25051);
+     * invite-only offers prompt this device to send a real-SDP offer
+     * (kind 25050) back; for any roster member with no edge yet, the
+     * lex rule decides whether we offer or wait.
+     */
+    public async acceptGroupCall(): Promise<void> {
+        const groupState = get(groupVoiceCallState);
+        if (
+            groupState.status !== 'incoming-ringing' ||
+            !this.groupAuthoritativeQuad ||
+            !this.groupSelfHex
+        ) {
+            console.warn(
+                '[VoiceCall] acceptGroupCall: not in group incoming-ringing'
+            );
+            return;
+        }
+
+        const { groupCallId, initiatorHex, conversationId, roster } =
+            this.groupAuthoritativeQuad;
+        const selfHex = this.groupSelfHex;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia(
+                AUDIO_CONSTRAINTS
+            );
+            this.groupLocalStream = stream;
+        } catch (err) {
+            console.error(
+                '[VoiceCall] acceptGroupCall: getUserMedia failed',
+                err
+            );
+            this.cleanupGroup();
+            endGroupCall('error');
+            return;
+        }
+
+        setGroupConnecting();
+
+        // Drain pending offers. Real-SDP → answer back; invite-only →
+        // we are the offerer, send a real-SDP kind-25050 back.
+        const pending = Array.from(this.groupPendingOffers.entries());
+        this.groupPendingOffers.clear();
+
+        for (const [peerHex, offerEvent] of pending) {
+            const peerNpub = nip19.npubEncode(peerHex);
+            const callId = this.getTagValue(offerEvent, 'call-id');
+            if (!callId) continue;
+            const isInvite =
+                offerEvent.tags.some(
+                    (t) => t[0] === ROLE_TAG && t[1] === ROLE_INVITE
+                ) || offerEvent.content === '';
+
+            const groupCtx: NipAcGroupSendContext = {
+                groupCallId,
+                conversationId,
+                initiatorHex
+            };
+
+            if (!isInvite) {
+                // Real-SDP offer → we are the answerer for this edge.
+                this.createGroupPeerConnection(peerHex, peerNpub, callId);
+                const session = this.groupPeerConnections.get(peerHex)!;
+                this.groupLocalStream.getAudioTracks().forEach((t) => {
+                    session.pc.addTrack(t, this.groupLocalStream!);
+                });
+                try {
+                    await session.pc.setRemoteDescription(
+                        new RTCSessionDescription({
+                            type: 'offer',
+                            sdp: offerEvent.content
+                        })
+                    );
+                    await this.flushGroupPerSessionIce(peerHex);
+                    const answer = await session.pc.createAnswer();
+                    await session.pc.setLocalDescription(answer);
+                    if (this.senders && answer.sdp) {
+                        await this.tryCall(() =>
+                            this.senders!.sendAnswer(
+                                peerNpub,
+                                callId,
+                                answer.sdp!,
+                                { group: groupCtx }
+                            )
+                        );
+                    }
+                    setGroupParticipantStatus(peerHex, 'connecting');
+                } catch (err) {
+                    console.error(
+                        '[VoiceCall] acceptGroupCall: answer build failed for',
+                        peerHex,
+                        err
+                    );
+                    setGroupParticipantStatus(peerHex, 'ended', 'error');
+                }
+            } else {
+                // Invite-only → we are the offerer. Allocate our own
+                // per-pair callId for this edge (the inviter does not
+                // own the call-id on an invite-only offer).
+                const ourCallId = this.generateCallId();
+                this.createGroupPeerConnection(peerHex, peerNpub, ourCallId);
+                const session = this.groupPeerConnections.get(peerHex)!;
+                this.groupLocalStream.getAudioTracks().forEach((t) => {
+                    session.pc.addTrack(t, this.groupLocalStream!);
+                });
+                try {
+                    const offer = await session.pc.createOffer();
+                    await session.pc.setLocalDescription(offer);
+                    if (this.senders && offer.sdp) {
+                        await this.tryCall(() =>
+                            this.senders!.sendOffer(
+                                peerNpub,
+                                ourCallId,
+                                offer.sdp!,
+                                {
+                                    callType: 'voice',
+                                    group: {
+                                        ...groupCtx,
+                                        participants: roster,
+                                        roleInvite: false
+                                    }
+                                }
+                            )
+                        );
+                    }
+                    setGroupParticipantStatus(peerHex, 'ringing');
+                    this.armGroupOfferTimeout(peerHex);
+                } catch (err) {
+                    console.error(
+                        '[VoiceCall] acceptGroupCall: invite-back offer failed',
+                        err
+                    );
+                    setGroupParticipantStatus(peerHex, 'ended', 'error');
+                }
+            }
+        }
+
+        // For roster members without ANY edge yet, apply the
+        // deterministic-pair rule: if we are lex-lower, offer
+        // proactively; otherwise wait for them to offer to us.
+        for (const peerHex of roster) {
+            if (peerHex === selfHex) continue;
+            if (this.groupPeerConnections.has(peerHex)) continue;
+            if (selfHex < peerHex) {
+                const peerNpub = nip19.npubEncode(peerHex);
+                const ourCallId = this.generateCallId();
+                this.createGroupPeerConnection(peerHex, peerNpub, ourCallId);
+                const session = this.groupPeerConnections.get(peerHex)!;
+                this.groupLocalStream.getAudioTracks().forEach((t) => {
+                    session.pc.addTrack(t, this.groupLocalStream!);
+                });
+                try {
+                    const offer = await session.pc.createOffer();
+                    await session.pc.setLocalDescription(offer);
+                    if (this.senders && offer.sdp) {
+                        await this.tryCall(() =>
+                            this.senders!.sendOffer(
+                                peerNpub,
+                                ourCallId,
+                                offer.sdp!,
+                                {
+                                    callType: 'voice',
+                                    group: {
+                                        groupCallId,
+                                        conversationId,
+                                        initiatorHex,
+                                        participants: roster,
+                                        roleInvite: false
+                                    }
+                                }
+                            )
+                        );
+                    }
+                    upsertGroupParticipant(peerHex, {
+                        callId: ourCallId,
+                        role: 'offerer',
+                        pcStatus: 'ringing'
+                    });
+                    this.armGroupOfferTimeout(peerHex);
+                } catch (err) {
+                    console.error(
+                        '[VoiceCall] acceptGroupCall: backstop offer failed',
+                        err
+                    );
+                }
+            } else {
+                // Lex-higher peer: we wait for them to offer to us.
+                upsertGroupParticipant(peerHex, {
+                    callId: '',
+                    role: 'answerer',
+                    pcStatus: 'pending'
+                });
+            }
+        }
+    }
+
+    /**
+     * Decline the in-progress incoming GROUP voice call. Sends kind
+     * 25054 to every pending offerer (self-wrapped per the existing
+     * 1-on-1 reject rule, which mirrors group rules). Authors a
+     * local-only Kind 1405 `'declined'` entry in the group chat.
+     */
+    public declineGroupCall(): void {
+        const groupState = get(groupVoiceCallState);
+        if (
+            groupState.status !== 'incoming-ringing' ||
+            !this.groupAuthoritativeQuad
+        )
+            return;
+
+        const { groupCallId, initiatorHex, conversationId } =
+            this.groupAuthoritativeQuad;
+
+        const pending = Array.from(this.groupPendingOffers.entries());
+        this.cleanupGroup();
+        endGroupCall('rejected');
+
+        for (const [peerHex, offerEvent] of pending) {
+            const peerNpub = nip19.npubEncode(peerHex);
+            const callId = this.getTagValue(offerEvent, 'call-id');
+            if (!callId) continue;
+            if (this.senders) {
+                void this.tryCall(() =>
+                    this.senders!.sendReject(peerNpub, callId, undefined, {
+                        group: { groupCallId, conversationId, initiatorHex }
+                    })
+                );
+            }
+        }
+
+        // Local-only `'declined'` entry — the local user is the
+        // "decline-author"; the initiator authored the offer chain so
+        // is recorded as `call-initiator`.
+        void this.createLocalGroupCallEvent(
+            'declined',
+            conversationId,
+            groupCallId,
+            initiatorHex
+        );
+    }
+
+    /**
+     * Hang up / leave the active GROUP voice call. Sends kind 25053 to
+     * every still-active or still-connecting peer; tears down all
+     * local PCs. Aggregate per-call status transitions to `ended`
+     * locally; remaining participants stay connected to each other.
+     */
+    public hangupGroupCall(): void {
+        const groupState = get(groupVoiceCallState);
+        if (
+            groupState.groupCallId === null ||
+            !this.groupAuthoritativeQuad
+        )
+            return;
+
+        const { groupCallId, initiatorHex, conversationId, roster } =
+            this.groupAuthoritativeQuad;
+        const wasInitiator = this.groupIsInitiator;
+        const wasActive = groupState.status === 'active';
+        const wasOutgoingRinging = groupState.status === 'outgoing-ringing';
+        const duration = groupState.duration;
+        const otherRosterHex = roster.filter(
+            (h) => h !== this.groupSelfHex
+        );
+
+        // Snapshot the still-live peers BEFORE cleanup tears them down.
+        const livePeers: Array<{ peerHex: string; callId: string }> = [];
+        for (const [peerHex, session] of this.groupPeerConnections) {
+            const ps = groupState.participants[peerHex];
+            if (ps && ps.pcStatus !== 'ended') {
+                livePeers.push({ peerHex, callId: session.callId });
+            }
+        }
+
+        this.cleanupGroup();
+        endGroupCall('hangup');
+
+        for (const { peerHex, callId } of livePeers) {
+            const peerNpub = nip19.npubEncode(peerHex);
+            if (this.senders) {
+                void this.tryCall(() =>
+                    this.senders!.sendHangup(peerNpub, callId, undefined, {
+                        group: { groupCallId, conversationId, initiatorHex }
+                    })
+                );
+            }
+        }
+
+        const otherNpubs = otherRosterHex.map((h) => nip19.npubEncode(h));
+        const initiatorNpub = nip19.npubEncode(initiatorHex);
+        if (wasActive) {
+            void this.createGroupCallEvent(
+                'ended',
+                duration,
+                conversationId,
+                otherNpubs,
+                groupCallId,
+                initiatorNpub
+            );
+        } else if (wasOutgoingRinging && wasInitiator) {
+            void this.createLocalGroupCallEvent(
+                'cancelled',
+                conversationId,
+                groupCallId,
+                initiatorHex
+            );
+        }
+    }
+
+    /**
+     * Toggle local microphone mute across every peer connection in the
+     * group's mesh. The same audio track is shared, so flipping its
+     * `enabled` flag mutes us to all peers simultaneously.
+     */
+    public toggleGroupMute(): void {
+        if (this.groupLocalStream) {
+            this.groupLocalStream.getAudioTracks().forEach((t) => {
+                t.enabled = !t.enabled;
+            });
+        }
+        storeGroupMute();
+    }
+
+    /**
+     * Snapshot of the active group call's remote streams keyed by peer
+     * hex pubkey. UI components bind one hidden {@code <audio>} element
+     * per entry so the browser mixes audio across all peers without
+     * any extra Web-Audio plumbing on our side. Returns an empty map
+     * when no group call is in progress.
+     */
+    public getGroupRemoteStreams(): Map<string, MediaStream> {
+        const out = new Map<string, MediaStream>();
+        for (const [peerHex, session] of this.groupPeerConnections) {
+            if (session.remoteStream) out.set(peerHex, session.remoteStream);
+        }
+        return out;
+    }
+
+    /**
+     * Generate a fresh 32-byte hex group-call id. Distinct from the
+     * UUID-shaped per-pair {@link generateCallId}.
+     */
+    public generateGroupCallId(): string {
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    /**
+     * Returns true iff any call (1-on-1 or group) is in progress —
+     * i.e. either store is in a non-`idle`/non-`ended` state. Used by
+     * the busy-rejection branch to enforce the "one call total"
+     * invariant.
+     */
+    private isAnyCallActive(): boolean {
+        const oneToOne = get(voiceCallState).status;
+        const group = get(groupVoiceCallState).status;
+        return (
+            (oneToOne !== 'idle' && oneToOne !== 'ended') ||
+            (group !== 'idle' && group !== 'ended')
+        );
+    }
+
+    /**
+     * Build a per-peer {@code RTCPeerConnection} for the active group
+     * call, install the standard event handlers, and register it in
+     * the {@link groupPeerConnections} map. Drains any globally
+     * buffered ICE for this peer into the per-session buffer.
+     */
+    private createGroupPeerConnection(
+        peerHex: string,
+        peerNpub: string,
+        callId: string
+    ): void {
+        const iceServers = getIceServers();
+        const pc = new RTCPeerConnection({ iceServers });
+        const session = {
+            pc,
+            callId,
+            peerNpub,
+            iceTrickleEnabled: true,
+            sessionRemoteDescriptionSet: false,
+            sessionPendingIce: [] as RTCIceCandidateInit[],
+            offerTimeoutId: null as ReturnType<typeof setTimeout> | null,
+            iceTimeoutId: null as ReturnType<typeof setTimeout> | null,
+            remoteStream: null as MediaStream | null
+        };
+        this.groupPeerConnections.set(peerHex, session);
+
+        // Drain global ICE buffer into per-session buffer.
+        const groupCallId = this.currentGroupCallId;
+        if (groupCallId) {
+            const byGroup = this.groupGlobalIceBuffer.get(groupCallId);
+            const buffered = byGroup?.get(peerHex);
+            if (buffered && buffered.length > 0) {
+                session.sessionPendingIce.push(...buffered);
+                byGroup!.delete(peerHex);
+            }
+        }
+
+        pc.onicecandidate = (event) => {
+            if (!session.iceTrickleEnabled) return;
+            if (!event.candidate || !this.senders) return;
+            const c = event.candidate;
+            const quad = this.groupAuthoritativeQuad;
+            if (!quad) return;
+            void this.tryCall(() =>
+                this.senders!.sendIceCandidate(
+                    peerNpub,
+                    callId,
+                    c.candidate,
+                    c.sdpMid,
+                    c.sdpMLineIndex,
+                    {
+                        group: {
+                            groupCallId: quad.groupCallId,
+                            conversationId: quad.conversationId,
+                            initiatorHex: quad.initiatorHex
+                        }
+                    }
+                )
+            );
+        };
+
+        pc.ontrack = (event) => {
+            session.remoteStream =
+                event.streams[0] ?? new MediaStream([event.track]);
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            const iceState = pc.iceConnectionState;
+            if (iceState === 'connected' || iceState === 'completed') {
+                session.iceTrickleEnabled = false;
+                if (session.iceTimeoutId) {
+                    clearTimeout(session.iceTimeoutId);
+                    session.iceTimeoutId = null;
+                }
+                if (session.offerTimeoutId) {
+                    clearTimeout(session.offerTimeoutId);
+                    session.offerTimeoutId = null;
+                }
+                setGroupParticipantStatus(peerHex, 'active');
+                this.maybeStartGroupDurationTimer();
+            } else if (iceState === 'failed' || iceState === 'disconnected') {
+                this.handleGroupIceFailure(peerHex);
+            }
+        };
+
+        session.iceTimeoutId = setTimeout(() => {
+            const iceState = session.pc.iceConnectionState;
+            if (iceState !== 'connected' && iceState !== 'completed') {
+                this.handleGroupIceFailure(peerHex);
+            }
+        }, ICE_CONNECTION_TIMEOUT_MS);
+    }
+
+    /** Arm the per-pair offer-without-answer timeout for a group edge. */
+    private armGroupOfferTimeout(peerHex: string): void {
+        const session = this.groupPeerConnections.get(peerHex);
+        if (!session) {
+            // No PC yet (invite-only outgoing edge); arm a synthetic
+            // timeout that just marks the participant ended on expiry.
+            const t = setTimeout(() => {
+                const groupState = get(groupVoiceCallState);
+                const ps = groupState.participants[peerHex];
+                if (ps && ps.pcStatus === 'ringing') {
+                    setGroupParticipantStatus(peerHex, 'ended', 'timeout');
+                }
+                this.maybeFinalizeGroupCallEnd();
+            }, CALL_OFFER_TIMEOUT_MS);
+            // Stash on a temporary holder under the peer; if a session
+            // gets created later (unlikely for invite-only), the new
+            // offer-timeout there supersedes this one.
+            this.groupInviteOnlyTimeouts.set(peerHex, t);
+            return;
+        }
+        if (session.offerTimeoutId) clearTimeout(session.offerTimeoutId);
+        session.offerTimeoutId = setTimeout(() => {
+            const groupState = get(groupVoiceCallState);
+            const ps = groupState.participants[peerHex];
+            if (ps && (ps.pcStatus === 'ringing' || ps.pcStatus === 'pending')) {
+                setGroupParticipantStatus(peerHex, 'ended', 'timeout');
+                this.tearDownGroupPeer(peerHex);
+            }
+            this.maybeFinalizeGroupCallEnd();
+        }, CALL_OFFER_TIMEOUT_MS);
+    }
+
+    /**
+     * Synthetic timeouts for invite-only outgoing edges (no
+     * RTCPeerConnection exists locally — the recipient is the offerer
+     * for that pair, so we wait for THEIR kind-25050).
+     */
+    private groupInviteOnlyTimeouts: Map<
+        string,
+        ReturnType<typeof setTimeout>
+    > = new Map();
+
+    /**
+     * Per-pair ICE failure on a group edge. Tears down only that one
+     * PC; the rest of the mesh continues.
+     */
+    private handleGroupIceFailure(peerHex: string): void {
+        const groupState = get(groupVoiceCallState);
+        const ps = groupState.participants[peerHex];
+        if (!ps || ps.pcStatus === 'ended') return;
+        setGroupParticipantStatus(peerHex, 'ended', 'ice-failed');
+        this.tearDownGroupPeer(peerHex);
+        this.maybeFinalizeGroupCallEnd();
+    }
+
+    /**
+     * Close and remove a single peer connection from the mesh, clearing
+     * its timeouts. Does NOT touch the local stream or other peers.
+     */
+    private tearDownGroupPeer(peerHex: string): void {
+        const session = this.groupPeerConnections.get(peerHex);
+        if (!session) return;
+        if (session.offerTimeoutId) {
+            clearTimeout(session.offerTimeoutId);
+            session.offerTimeoutId = null;
+        }
+        if (session.iceTimeoutId) {
+            clearTimeout(session.iceTimeoutId);
+            session.iceTimeoutId = null;
+        }
+        try {
+            session.pc.close();
+        } catch (_) {
+            /* ignore */
+        }
+        session.remoteStream = null;
+        this.groupPeerConnections.delete(peerHex);
+
+        const inviteT = this.groupInviteOnlyTimeouts.get(peerHex);
+        if (inviteT) {
+            clearTimeout(inviteT);
+            this.groupInviteOnlyTimeouts.delete(peerHex);
+        }
+    }
+
+    /**
+     * Last-one-standing finalizer. If every other roster member's
+     * pcStatus is `ended` and the local aggregate has not already been
+     * forced to `ended`, transition to `ended` with the appropriate
+     * reason and author the right call-history rumor.
+     */
+    private maybeFinalizeGroupCallEnd(): void {
+        const groupState = get(groupVoiceCallState);
+        if (
+            groupState.groupCallId === null ||
+            groupState.status === 'ended' ||
+            !this.groupAuthoritativeQuad
+        )
+            return;
+
+        const entries = Object.values(groupState.participants);
+        if (entries.length === 0) return;
+        const allEnded = entries.every((p) => p.pcStatus === 'ended');
+        if (!allEnded) return;
+
+        const quad = this.groupAuthoritativeQuad;
+        const wasActive = groupState.status === 'active';
+        const wasOutgoingRinging = groupState.status === 'outgoing-ringing';
+        const wasIncomingRinging = groupState.status === 'incoming-ringing';
+        const duration = groupState.duration;
+        const wasInitiator = this.groupIsInitiator;
+        const otherRosterHex = quad.roster.filter(
+            (h) => h !== this.groupSelfHex
+        );
+        const otherNpubs = otherRosterHex.map((h) => nip19.npubEncode(h));
+        const initiatorNpub = nip19.npubEncode(quad.initiatorHex);
+
+        this.cleanupGroup();
+        endGroupCall('hangup');
+
+        if (wasActive) {
+            void this.createGroupCallEvent(
+                'ended',
+                duration,
+                quad.conversationId,
+                otherNpubs,
+                quad.groupCallId,
+                initiatorNpub
+            );
+        } else if (wasOutgoingRinging && wasInitiator) {
+            // Caller saw nobody answer.
+            void this.createGroupCallEvent(
+                'no-answer',
+                undefined,
+                quad.conversationId,
+                otherNpubs,
+                quad.groupCallId,
+                initiatorNpub
+            );
+        } else if (wasIncomingRinging) {
+            // Callee never accepted before all offers ended.
+            void this.createLocalGroupCallEvent(
+                'missed',
+                quad.conversationId,
+                quad.groupCallId,
+                quad.initiatorHex
+            );
+        }
+    }
+
+    private maybeStartGroupDurationTimer(): void {
+        if (this.groupDurationStarted) return;
+        this.groupDurationStarted = true;
+        this.groupDurationIntervalId = setInterval(() => {
+            incrementGroupDuration();
+        }, 1000);
+    }
+
+    /**
+     * Flush per-session ICE buffer for one group peer after
+     * setRemoteDescription resolves.
+     */
+    private async flushGroupPerSessionIce(peerHex: string): Promise<void> {
+        const session = this.groupPeerConnections.get(peerHex);
+        if (!session) return;
+        session.sessionRemoteDescriptionSet = true;
+        const pending = session.sessionPendingIce;
+        session.sessionPendingIce = [];
+        for (const init of pending) {
+            try {
+                await session.pc.addIceCandidate(new RTCIceCandidate(init));
+            } catch (err) {
+                console.warn(
+                    '[VoiceCall] flushGroupPerSessionIce failed',
+                    err
+                );
+            }
+        }
+    }
+
+    /**
+     * Group dispatch for a verified NIP-AC inner event whose
+     * `group-call-id` tag is present. Self-event filtering and stale /
+     * dedup checks have already run upstream; signature has been
+     * verified.
+     */
+    private async handleGroupNipAcEvent(
+        inner: NostrEvent,
+        groupCallId: string
+    ): Promise<void> {
+        switch (inner.kind) {
+            case NIP_AC_KIND_OFFER:
+                await this.handleGroupOffer(inner, groupCallId);
+                break;
+            case NIP_AC_KIND_ANSWER:
+                await this.handleGroupAnswer(inner, groupCallId);
+                break;
+            case NIP_AC_KIND_ICE:
+                await this.handleGroupIceCandidate(inner, groupCallId);
+                break;
+            case NIP_AC_KIND_HANGUP:
+                await this.handleGroupHangup(inner, groupCallId);
+                break;
+            case NIP_AC_KIND_REJECT:
+                this.handleGroupReject(inner, groupCallId);
+                break;
+            case NIP_AC_KIND_RENEGOTIATE:
+                console.warn(
+                    '[VoiceCall][Recv] kind-25055 with group-call-id is not supported in v1; dropping'
+                );
+                break;
+            default:
+                console.warn(
+                    '[VoiceCall][Recv] unsupported group inner kind',
+                    inner.kind
+                );
+        }
+    }
+
+    /**
+     * Inbound kind-25050 for a group call. Handles the spec's
+     * follow-gate, authoritative-quadruple validation, busy rejection
+     * for different-group concurrent calls, and either ringing-time
+     * buffering OR mesh-formation dispatch depending on the local
+     * group status.
+     */
+    private async handleGroupOffer(
+        inner: NostrEvent,
+        groupCallId: string
+    ): Promise<void> {
+        const senderHex = inner.pubkey.toLowerCase();
+        const senderNpub = nip19.npubEncode(senderHex);
+        const callId = this.getTagValue(inner, 'call-id');
+        const conversationId = this.getTagValue(inner, CONVERSATION_ID_TAG);
+        const initiatorHex = this.getTagValue(inner, INITIATOR_TAG)?.toLowerCase();
+        const callType = this.getTagValue(inner, 'call-type') ?? 'voice';
+        if (!callId || !conversationId || !initiatorHex) {
+            console.warn(
+                '[VoiceCall][Recv] group offer missing required tags; dropping'
+            );
+            return;
+        }
+        if (callType === 'video') {
+            console.warn(
+                '[VoiceCall][Recv] group video offer not supported in v1; dropping'
+            );
+            return;
+        }
+        const participantsTag = inner.tags.find(
+            (t) => t[0] === PARTICIPANTS_TAG
+        );
+        if (!participantsTag || participantsTag.length < 3) {
+            console.warn(
+                '[VoiceCall][Recv] group offer missing participants tag; dropping'
+            );
+            return;
+        }
+        const wireRoster = participantsTag
+            .slice(1)
+            .map((h) => h.toLowerCase());
+        if (wireRoster.length > GROUP_CALL_MAX_PARTICIPANTS) {
+            console.warn(
+                '[VoiceCall][Recv] group offer roster exceeds cap; dropping'
+            );
+            return;
+        }
+
+        // Group follow-gate: local DB must have this conversation,
+        // local user must be a member, sender must be a member, wire
+        // roster must equal local roster (set equality).
+        const conv = await conversationRepo.getConversation(conversationId);
+        if (!conv || !conv.isGroup) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: unknown conversation; dropping'
+            );
+            return;
+        }
+        const selfNpub = get(currentUser)?.npub;
+        if (!selfNpub) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: no current user; dropping'
+            );
+            return;
+        }
+        const selfHex = (
+            nip19.decode(selfNpub).data as string
+        ).toLowerCase();
+        if (!conv.participants.includes(selfNpub)) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: local user not in conversation; dropping'
+            );
+            return;
+        }
+        // Build local hex roster set.
+        const localRoster = conv.participants.map(
+            (np) => (nip19.decode(np).data as string).toLowerCase()
+        );
+        const localSet = new Set(localRoster);
+        if (!localSet.has(senderHex)) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: sender not in local roster; dropping'
+            );
+            return;
+        }
+        // Set-equality of wire roster vs local roster.
+        const wireSet = new Set(wireRoster);
+        if (
+            wireSet.size !== localSet.size ||
+            [...wireSet].some((h) => !localSet.has(h))
+        ) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: roster set mismatch; dropping'
+            );
+            return;
+        }
+        if (!wireSet.has(selfHex)) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: local user not in wire roster; dropping'
+            );
+            return;
+        }
+
+        // Concurrency: if we're in any other call, busy-reject.
+        const oneToOneStatus = get(voiceCallState).status;
+        const groupStatus = get(groupVoiceCallState).status;
+        const inOtherCall =
+            (oneToOneStatus !== 'idle' && oneToOneStatus !== 'ended') ||
+            (this.currentGroupCallId !== null &&
+                this.currentGroupCallId !== groupCallId);
+        if (inOtherCall) {
+            if (this.senders) {
+                await this.tryCall(() =>
+                    this.senders!.sendReject(senderNpub, callId, 'busy', {
+                        group: { groupCallId, conversationId, initiatorHex }
+                    })
+                );
+            }
+            return;
+        }
+
+        // Authoritative-quadruple validation. First-arrival wins; any
+        // later disagreement → drop.
+        if (this.groupAuthoritativeQuad === null) {
+            this.groupAuthoritativeQuad = {
+                groupCallId,
+                initiatorHex,
+                conversationId,
+                roster: [...wireRoster].sort()
+            };
+            this.groupSelfHex = selfHex;
+            this.groupConversationId = conversationId;
+            this.currentGroupCallId = groupCallId;
+            this.groupIsInitiator = senderHex === selfHex; // false in receive path
+        } else if (
+            this.groupAuthoritativeQuad.groupCallId === groupCallId &&
+            (this.groupAuthoritativeQuad.initiatorHex !== initiatorHex ||
+                this.groupAuthoritativeQuad.conversationId !== conversationId)
+        ) {
+            console.warn(
+                '[VoiceCall][Recv] group offer: tuple disagreement; dropping'
+            );
+            return;
+        }
+
+        // Branch on local group status.
+        if (groupStatus === 'idle' || groupStatus === 'ended') {
+            // First inbound offer for a new ringing session.
+            this.groupPendingOffers.set(senderHex, inner);
+            const seedRole: 'offerer' | 'answerer' =
+                inner.content === '' ? 'offerer' : 'answerer';
+            setGroupIncomingRinging(
+                groupCallId,
+                conversationId,
+                initiatorHex,
+                this.groupAuthoritativeQuad!.roster,
+                {
+                    pubkeyHex: senderHex,
+                    callId,
+                    role: seedRole,
+                    pcStatus: 'ringing'
+                }
+            );
+            return;
+        }
+
+        if (groupStatus === 'incoming-ringing') {
+            // Buffer additional offers for the same call.
+            if (this.groupPendingOffers.has(senderHex)) return; // dup
+            this.groupPendingOffers.set(senderHex, inner);
+            upsertGroupParticipant(senderHex, {
+                callId,
+                role: inner.content === '' ? 'offerer' : 'answerer',
+                pcStatus: 'ringing'
+            });
+            return;
+        }
+
+        // Mesh formation: we're already in connecting/active for this
+        // group. Apply the offer immediately.
+        const isInvite =
+            inner.tags.some(
+                (t) => t[0] === ROLE_TAG && t[1] === ROLE_INVITE
+            ) || inner.content === '';
+
+        if (isInvite) {
+            // We are the offerer for this edge. Build PC, send real-SDP
+            // offer back.
+            if (!this.groupLocalStream) return;
+            const ourCallId = this.generateCallId();
+            this.createGroupPeerConnection(senderHex, senderNpub, ourCallId);
+            const session = this.groupPeerConnections.get(senderHex)!;
+            this.groupLocalStream.getAudioTracks().forEach((t) => {
+                session.pc.addTrack(t, this.groupLocalStream!);
+            });
+            try {
+                const offer = await session.pc.createOffer();
+                await session.pc.setLocalDescription(offer);
+                if (this.senders && offer.sdp) {
+                    await this.tryCall(() =>
+                        this.senders!.sendOffer(
+                            senderNpub,
+                            ourCallId,
+                            offer.sdp!,
+                            {
+                                callType: 'voice',
+                                group: {
+                                    groupCallId,
+                                    conversationId,
+                                    initiatorHex,
+                                    participants: this.groupAuthoritativeQuad!.roster,
+                                    roleInvite: false
+                                }
+                            }
+                        )
+                    );
+                }
+                upsertGroupParticipant(senderHex, {
+                    callId: ourCallId,
+                    role: 'offerer',
+                    pcStatus: 'ringing'
+                });
+                this.armGroupOfferTimeout(senderHex);
+            } catch (err) {
+                console.error(
+                    '[VoiceCall] mesh-formation invite-back offer failed',
+                    err
+                );
+            }
+        } else {
+            // Real-SDP mesh-formation offer. We are the answerer.
+            if (!this.groupLocalStream) return;
+            this.createGroupPeerConnection(senderHex, senderNpub, callId);
+            const session = this.groupPeerConnections.get(senderHex)!;
+            this.groupLocalStream.getAudioTracks().forEach((t) => {
+                session.pc.addTrack(t, this.groupLocalStream!);
+            });
+            try {
+                await session.pc.setRemoteDescription(
+                    new RTCSessionDescription({
+                        type: 'offer',
+                        sdp: inner.content
+                    })
+                );
+                await this.flushGroupPerSessionIce(senderHex);
+                const answer = await session.pc.createAnswer();
+                await session.pc.setLocalDescription(answer);
+                if (this.senders && answer.sdp) {
+                    await this.tryCall(() =>
+                        this.senders!.sendAnswer(
+                            senderNpub,
+                            callId,
+                            answer.sdp!,
+                            {
+                                group: {
+                                    groupCallId,
+                                    conversationId,
+                                    initiatorHex
+                                }
+                            }
+                        )
+                    );
+                }
+                upsertGroupParticipant(senderHex, {
+                    callId,
+                    role: 'answerer',
+                    pcStatus: 'connecting'
+                });
+            } catch (err) {
+                console.error(
+                    '[VoiceCall] mesh-formation answer build failed',
+                    err
+                );
+            }
+        }
+    }
+
+    private async handleGroupAnswer(
+        inner: NostrEvent,
+        groupCallId: string
+    ): Promise<void> {
+        if (!this.groupValidateContext(inner, groupCallId)) return;
+        const senderHex = inner.pubkey.toLowerCase();
+        const session = this.groupPeerConnections.get(senderHex);
+        if (!session) {
+            console.warn(
+                '[VoiceCall][Recv] group answer: no PC for sender; dropping'
+            );
+            return;
+        }
+        const callId = this.getTagValue(inner, 'call-id');
+        if (!callId || callId !== session.callId) {
+            console.warn(
+                '[VoiceCall][Recv] group answer: call-id mismatch; dropping'
+            );
+            return;
+        }
+        try {
+            await session.pc.setRemoteDescription(
+                new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: inner.content
+                })
+            );
+            await this.flushGroupPerSessionIce(senderHex);
+            setGroupParticipantStatus(senderHex, 'connecting');
+            if (session.offerTimeoutId) {
+                clearTimeout(session.offerTimeoutId);
+                session.offerTimeoutId = null;
+            }
+        } catch (err) {
+            console.error('[VoiceCall][Recv] group answer apply failed', err);
+        }
+    }
+
+    private async handleGroupIceCandidate(
+        inner: NostrEvent,
+        groupCallId: string
+    ): Promise<void> {
+        if (!this.groupValidateContext(inner, groupCallId)) return;
+        let payload: {
+            candidate: string;
+            sdpMid: string | null;
+            sdpMLineIndex: number | null;
+        };
+        try {
+            payload = JSON.parse(inner.content);
+        } catch (err) {
+            console.warn(
+                '[VoiceCall][Recv] group ICE: malformed JSON content',
+                err
+            );
+            return;
+        }
+        const init: RTCIceCandidateInit = {
+            candidate: payload.candidate,
+            sdpMid: payload.sdpMid ?? undefined,
+            sdpMLineIndex: payload.sdpMLineIndex ?? undefined
+        };
+        const senderHex = inner.pubkey.toLowerCase();
+        const session = this.groupPeerConnections.get(senderHex);
+        if (!session) {
+            // Buffer globally keyed by (groupCallId, senderHex).
+            let byGroup = this.groupGlobalIceBuffer.get(groupCallId);
+            if (!byGroup) {
+                byGroup = new Map();
+                this.groupGlobalIceBuffer.set(groupCallId, byGroup);
+            }
+            const list = byGroup.get(senderHex) ?? [];
+            list.push(init);
+            byGroup.set(senderHex, list);
+            return;
+        }
+        if (!session.sessionRemoteDescriptionSet) {
+            session.sessionPendingIce.push(init);
+            return;
+        }
+        try {
+            await session.pc.addIceCandidate(new RTCIceCandidate(init));
+        } catch (err) {
+            console.warn('[VoiceCall][Recv] group addIceCandidate failed', err);
+        }
+    }
+
+    private async handleGroupHangup(
+        inner: NostrEvent,
+        groupCallId: string
+    ): Promise<void> {
+        if (!this.groupValidateContext(inner, groupCallId)) return;
+        const senderHex = inner.pubkey.toLowerCase();
+        const callId = this.getTagValue(inner, 'call-id');
+        const session = this.groupPeerConnections.get(senderHex);
+        if (!session || !callId || callId !== session.callId) {
+            // No matching live PC; just mark the participant ended in
+            // case the entry exists from the pending-offers buffer.
+            setGroupParticipantStatus(senderHex, 'ended', 'hangup');
+            this.groupPendingOffers.delete(senderHex);
+            this.maybeFinalizeGroupCallEnd();
+            return;
+        }
+        setGroupParticipantStatus(senderHex, 'ended', 'hangup');
+        this.tearDownGroupPeer(senderHex);
+        this.maybeFinalizeGroupCallEnd();
+    }
+
+    private handleGroupReject(inner: NostrEvent, groupCallId: string): void {
+        if (!this.groupValidateContext(inner, groupCallId)) return;
+        const senderHex = inner.pubkey.toLowerCase();
+        const reason = inner.content;
+        const endReason: VoiceCallEndReason =
+            reason === 'busy' ? 'busy' : 'rejected';
+        setGroupParticipantStatus(senderHex, 'ended', endReason);
+        this.tearDownGroupPeer(senderHex);
+        this.groupPendingOffers.delete(senderHex);
+        this.maybeFinalizeGroupCallEnd();
+    }
+
+    /**
+     * Verify that an inbound non-offer group inner event is consistent
+     * with the cached authoritative quadruple. Returns false (and logs
+     * a warning) on any mismatch — callers should drop on false.
+     */
+    private groupValidateContext(
+        inner: NostrEvent,
+        groupCallId: string
+    ): boolean {
+        const quad = this.groupAuthoritativeQuad;
+        if (!quad || quad.groupCallId !== groupCallId) {
+            console.warn(
+                '[VoiceCall][Recv] group event: no active session matching group-call-id; dropping'
+            );
+            return false;
+        }
+        const wireInitiator = this.getTagValue(inner, INITIATOR_TAG)?.toLowerCase();
+        const wireConversation = this.getTagValue(inner, CONVERSATION_ID_TAG);
+        if (
+            !wireInitiator ||
+            wireInitiator !== quad.initiatorHex ||
+            !wireConversation ||
+            wireConversation !== quad.conversationId
+        ) {
+            console.warn(
+                '[VoiceCall][Recv] group event: tuple disagreement; dropping'
+            );
+            return false;
+        }
+        const senderHex = inner.pubkey.toLowerCase();
+        if (!quad.roster.includes(senderHex)) {
+            console.warn(
+                '[VoiceCall][Recv] group event: sender not in cached roster; dropping'
+            );
+            return false;
+        }
+        return true;
+    }
+
+    /** Author a group Kind-1405 call-history event (relay-published). */
+    private async createGroupCallEvent(
+        type: AuthoredCallEventType,
+        duration: number | undefined,
+        conversationId: string,
+        participantNpubs: string[],
+        groupCallId: string,
+        initiatorNpub: string
+    ): Promise<void> {
+        if (!this.createGroupCallEventFn) return;
+        try {
+            await this.createGroupCallEventFn(
+                conversationId,
+                participantNpubs,
+                type,
+                groupCallId,
+                initiatorNpub,
+                duration,
+                'voice'
+            );
+        } catch (err) {
+            console.error(
+                '[VoiceCall] Failed to create group call event:',
+                err
+            );
+        }
+    }
+
+    /** Author a group Kind-1405 call-history event (local-only). */
+    private async createLocalGroupCallEvent(
+        type: AuthoredCallEventType,
+        conversationId: string,
+        groupCallId: string,
+        initiatorHex: string
+    ): Promise<void> {
+        if (!this.createLocalGroupCallEventFn) return;
+        const quad = this.groupAuthoritativeQuad;
+        const otherNpubs =
+            quad?.roster
+                .filter((h) => h !== this.groupSelfHex)
+                .map((h) => nip19.npubEncode(h)) ?? [];
+        const initiatorNpub = nip19.npubEncode(initiatorHex);
+        try {
+            await this.createLocalGroupCallEventFn(
+                conversationId,
+                otherNpubs,
+                type,
+                groupCallId,
+                initiatorNpub,
+                'voice'
+            );
+        } catch (err) {
+            console.error(
+                '[VoiceCall] Failed to create local group call event:',
+                err
+            );
+        }
+    }
+
+    /** Tear down all group-call resources. Mirrors the 1-on-1 `cleanup`. */
+    private cleanupGroup(): void {
+        for (const [peerHex, session] of this.groupPeerConnections) {
+            if (session.offerTimeoutId) clearTimeout(session.offerTimeoutId);
+            if (session.iceTimeoutId) clearTimeout(session.iceTimeoutId);
+            try {
+                session.pc.close();
+            } catch (_) {
+                /* ignore */
+            }
+            void peerHex;
+        }
+        this.groupPeerConnections.clear();
+
+        for (const [, t] of this.groupInviteOnlyTimeouts) {
+            clearTimeout(t);
+        }
+        this.groupInviteOnlyTimeouts.clear();
+
+        this.groupPendingOffers.clear();
+        this.groupGlobalIceBuffer.clear();
+        this.groupAuthoritativeQuad = null;
+        this.groupIsInitiator = false;
+        this.groupSelfHex = null;
+        this.groupConversationId = null;
+        this.currentGroupCallId = null;
+
+        if (this.groupDurationIntervalId) {
+            clearInterval(this.groupDurationIntervalId);
+            this.groupDurationIntervalId = null;
+        }
+        this.groupDurationStarted = false;
+
+        if (this.groupLocalStream) {
+            this.groupLocalStream.getTracks().forEach((t) => t.stop());
+            this.groupLocalStream = null;
         }
     }
 

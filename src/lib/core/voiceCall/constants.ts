@@ -70,6 +70,40 @@ export const NIP_AC_STALENESS_SECONDS = 60;
  */
 export const NIP_AC_PROCESSED_ID_CAPACITY = 256;
 
+/**
+ * NIP-AC group-call tag names. Group calls reuse inner kinds
+ * 25050-25054 unchanged; group semantics are conveyed via these
+ * additional tags on the inner event. Receivers branch strictly on the
+ * presence of {@link GROUP_CALL_ID_TAG}: present → group-call dispatch,
+ * absent → existing 1-on-1 dispatch.
+ *
+ * See `openspec/changes/add-group-voice-calling/specs/voice-calling/spec.md`
+ * for the authoritative wire-format requirements.
+ */
+export const GROUP_CALL_ID_TAG = 'group-call-id';
+export const CONVERSATION_ID_TAG = 'conversation-id';
+export const INITIATOR_TAG = 'initiator';
+export const PARTICIPANTS_TAG = 'participants';
+export const ROLE_TAG = 'role';
+
+/**
+ * Value of the {@link ROLE_TAG} tag on an invite-only kind-25050 group
+ * offer. Set on offers where the initiator's pubkey is lex-higher than
+ * the recipient's; the recipient (the designated SDP offerer for that
+ * pair under the deterministic-pair offerer rule) creates the actual
+ * `RTCPeerConnection` and sends a real-SDP kind-25050 back. Invite-only
+ * offers carry empty `content`.
+ */
+export const ROLE_INVITE = 'invite';
+
+/**
+ * Hard cap on the number of participants in a group voice call,
+ * including the initiator. Each device holds {@code N - 1} simultaneous
+ * `RTCPeerConnection`s in a full-mesh topology; 4 keeps the per-device
+ * load (3 PCs) within mid-range Android device limits.
+ */
+export const GROUP_CALL_MAX_PARTICIPANTS = 4;
+
 export const AUDIO_CONSTRAINTS: MediaStreamConstraints = {
     audio: {
         echoCancellation: true,

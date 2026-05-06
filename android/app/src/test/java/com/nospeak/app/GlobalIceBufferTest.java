@@ -249,4 +249,87 @@ public class GlobalIceBufferTest {
         assertEquals(1, drained.size());
         assertSame(c, drained.get(0));
     }
+
+    // ------------------------------------------------------------------
+    //  Group-aware buffering (add-group-voice-calling).
+    //  Buckets are keyed by `(senderHex, groupCallId | null)`. Two
+    //  group-call-ids from the same sender MUST NOT collide; 1-on-1
+    //  candidates (groupCallId=null) MUST be isolated from group
+    //  candidates from the same sender.
+    // ------------------------------------------------------------------
+
+    private static final String GROUP_G =
+        "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e";
+    private static final String GROUP_H =
+        "8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e";
+
+    @Test
+    public void groupBucketsForDifferentGroupCallIdsDoNotCollide() {
+        GlobalIceBuffer buf = new GlobalIceBuffer();
+        buf.add(ALICE, GROUP_G, p("g1c1", 1000), 1000);
+        buf.add(ALICE, GROUP_G, p("g1c2", 1001), 1001);
+        buf.add(ALICE, GROUP_H, p("g2c1", 1002), 1002);
+
+        assertEquals(2, buf.candidateCountForSenderForTest(ALICE, GROUP_G));
+        assertEquals(1, buf.candidateCountForSenderForTest(ALICE, GROUP_H));
+
+        List<GlobalIceBuffer.IceCandidatePayload> drainedG =
+            buf.drain(ALICE, GROUP_G, 1100);
+        assertEquals(2, drainedG.size());
+        assertEquals("g1c1", drainedG.get(0).candidate);
+        assertEquals("g1c2", drainedG.get(1).candidate);
+
+        // The G2 bucket is unaffected.
+        assertEquals(1, buf.candidateCountForSenderForTest(ALICE, GROUP_H));
+        List<GlobalIceBuffer.IceCandidatePayload> drainedH =
+            buf.drain(ALICE, GROUP_H, 1100);
+        assertEquals(1, drainedH.size());
+        assertEquals("g2c1", drainedH.get(0).candidate);
+    }
+
+    @Test
+    public void oneToOneAndGroupBucketsForSameSenderDoNotCollide() {
+        GlobalIceBuffer buf = new GlobalIceBuffer();
+        buf.add(ALICE, p("dm1", 1000), 1000); // 1-on-1 (legacy overload)
+        buf.add(ALICE, GROUP_G, p("grp1", 1001), 1001);
+
+        // Each is independently drainable.
+        assertEquals(1, buf.candidateCountForSenderForTest(ALICE)); // 1-on-1
+        assertEquals(1, buf.candidateCountForSenderForTest(ALICE, GROUP_G));
+
+        List<GlobalIceBuffer.IceCandidatePayload> oneOnOne =
+            buf.drain(ALICE, 1100);
+        assertEquals(1, oneOnOne.size());
+        assertEquals("dm1", oneOnOne.get(0).candidate);
+
+        // 1-on-1 drain did not consume the group bucket.
+        assertEquals(1, buf.candidateCountForSenderForTest(ALICE, GROUP_G));
+        List<GlobalIceBuffer.IceCandidatePayload> grp =
+            buf.drain(ALICE, GROUP_G, 1100);
+        assertEquals(1, grp.size());
+        assertEquals("grp1", grp.get(0).candidate);
+    }
+
+    @Test
+    public void drainWithMismatchedGroupCallIdReturnsEmpty() {
+        GlobalIceBuffer buf = new GlobalIceBuffer();
+        buf.add(ALICE, GROUP_G, p("c1", 1000), 1000);
+        assertTrue(buf.drain(ALICE, GROUP_H, 1100).isEmpty());
+        // Original bucket is untouched.
+        assertEquals(1, buf.candidateCountForSenderForTest(ALICE, GROUP_G));
+    }
+
+    @Test
+    public void groupTtlEvictionIndependentPerBucket() {
+        GlobalIceBuffer buf = new GlobalIceBuffer();
+        buf.add(ALICE, GROUP_G, p("old", 1000), 1000);
+        // Add a fresh candidate well past the TTL window for the older
+        // entry; the eviction-on-add scan should drop the stale entry.
+        long now = 1000 + GlobalIceBuffer.TTL_MS + 100;
+        buf.add(ALICE, GROUP_G, p("fresh", now), now);
+        List<GlobalIceBuffer.IceCandidatePayload> drained =
+            buf.drain(ALICE, GROUP_G, now);
+        assertEquals(1, drained.size());
+        assertEquals("fresh", drained.get(0).candidate);
+    }
 }

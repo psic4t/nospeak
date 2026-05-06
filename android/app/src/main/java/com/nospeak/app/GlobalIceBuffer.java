@@ -72,33 +72,64 @@ public final class GlobalIceBuffer {
     }
 
     /**
-     * Per-sender FIFO buckets. {@link LinkedHashMap} with access-order
-     * iteration so the LRU bucket is at the head when total-sender cap
-     * is exceeded. Keys are lowercase hex pubkeys.
+     * Per-(sender, groupCallId) FIFO buckets. {@link LinkedHashMap}
+     * with access-order iteration so the LRU bucket is at the head
+     * when total-sender cap is exceeded. Keys are
+     * {@code senderHex + ':' + (groupCallId | "")} so 1-on-1 buffers
+     * (groupCallId=null) and group buffers for the same sender are
+     * tracked independently.
      */
     private final LinkedHashMap<String, Deque<IceCandidatePayload>> bySender =
         new LinkedHashMap<>(16, 0.75f, /* accessOrder= */ true);
 
     /**
-     * Append an ICE candidate to the per-sender FIFO. Evicts stale
-     * entries (older than {@link #TTL_MS}) before insertion. If the
-     * per-sender FIFO would exceed {@link #PER_SENDER_CAP}, drops the
-     * oldest entry. If insertion would push the total sender count
-     * over {@link #TOTAL_SENDER_CAP}, drops the least-recently-used
-     * sender bucket entirely.
-     *
-     * @param senderHex  lowercase hex pubkey of the inner-event author
-     * @param payload    decoded candidate
-     * @param nowMs      current wall-clock time in ms (caller-supplied
-     *                   for testability; production passes
-     *                   {@code System.currentTimeMillis()})
+     * Build the composite cache key {@code senderHex + ':' + groupCallId}
+     * (with empty string substituted for null/empty {@code groupCallId}).
+     * Ensures 1-on-1 and group buffers for the same sender don't
+     * collide, and that two different group-call-ids for the same
+     * sender are stored in separate buckets — both required by the
+     * {@code add-group-voice-calling} spec.
+     */
+    private static String compositeKey(String senderHex, String groupCallId) {
+        String s = senderHex == null ? "" : senderHex.toLowerCase();
+        String g = groupCallId == null ? "" : groupCallId;
+        return s + ":" + g;
+    }
+
+    /**
+     * Append a 1-on-1 ICE candidate to the per-sender FIFO. Equivalent
+     * to {@link #add(String, String, IceCandidatePayload, long)} with
+     * a null group-call-id.
      */
     public synchronized void add(String senderHex, IceCandidatePayload payload, long nowMs) {
-        if (senderHex == null || senderHex.isEmpty() || payload == null) return;
-        String key = senderHex.toLowerCase();
+        add(senderHex, null, payload, nowMs);
+    }
 
-        // Opportunistic stale eviction across all buckets. Cheap when
-        // buffers are small; bounded by TOTAL_SENDER_CAP × PER_SENDER_CAP.
+    /**
+     * Append an ICE candidate to the per-(sender, groupCallId) FIFO.
+     * Pass {@code groupCallId = null} for 1-on-1 calls. Evicts stale
+     * entries (older than {@link #TTL_MS}) before insertion. If the
+     * per-key FIFO would exceed {@link #PER_SENDER_CAP}, drops the
+     * oldest entry. If insertion would push the total bucket count
+     * over {@link #TOTAL_SENDER_CAP}, drops the least-recently-used
+     * bucket entirely.
+     *
+     * @param senderHex     lowercase hex pubkey of the inner-event author
+     * @param groupCallId   group-call-id from the inbound kind-25052,
+     *                      or {@code null} for 1-on-1
+     * @param payload       decoded candidate
+     * @param nowMs         current wall-clock time in ms (caller-supplied
+     *                      for testability)
+     */
+    public synchronized void add(
+            String senderHex,
+            String groupCallId,
+            IceCandidatePayload payload,
+            long nowMs) {
+        if (senderHex == null || senderHex.isEmpty() || payload == null) return;
+        String key = compositeKey(senderHex, groupCallId);
+
+        // Opportunistic stale eviction across all buckets.
         evictStale(nowMs);
 
         Deque<IceCandidatePayload> bucket = bySender.get(key);
@@ -125,14 +156,28 @@ public final class GlobalIceBuffer {
     }
 
     /**
-     * Drain and remove the per-sender bucket for {@code senderHex}.
-     * Stale entries (older than {@link #TTL_MS}) are silently dropped
-     * during the drain. Returned list preserves insertion (FIFO)
-     * order. Returns an empty list when no bucket exists.
+     * Drain and remove the 1-on-1 bucket for {@code senderHex}.
+     * Equivalent to {@link #drain(String, String, long)} with a null
+     * group-call-id.
      */
     public synchronized List<IceCandidatePayload> drain(String senderHex, long nowMs) {
+        return drain(senderHex, null, nowMs);
+    }
+
+    /**
+     * Drain and remove the bucket for {@code (senderHex, groupCallId)}.
+     * Pass {@code groupCallId = null} for 1-on-1. Stale entries are
+     * silently dropped during the drain. Returned list preserves
+     * insertion (FIFO) order. Returns an empty list when no bucket
+     * exists.
+     */
+    public synchronized List<IceCandidatePayload> drain(
+            String senderHex,
+            String groupCallId,
+            long nowMs) {
         if (senderHex == null || senderHex.isEmpty()) return new ArrayList<>();
-        Deque<IceCandidatePayload> bucket = bySender.remove(senderHex.toLowerCase());
+        Deque<IceCandidatePayload> bucket = bySender.remove(
+            compositeKey(senderHex, groupCallId));
         if (bucket == null) return new ArrayList<>();
         List<IceCandidatePayload> out = new ArrayList<>(bucket.size());
         for (IceCandidatePayload p : bucket) {
@@ -153,20 +198,33 @@ public final class GlobalIceBuffer {
     }
 
     /**
-     * Test-only accessor: number of distinct sender buckets currently
-     * held. Not part of the production API.
+     * Test-only accessor: number of distinct {@code (sender, group)}
+     * buckets currently held. Not part of the production API.
      */
     public synchronized int senderCountForTest() {
         return bySender.size();
     }
 
     /**
-     * Test-only accessor: number of candidates buffered for a given
-     * sender (or 0 if no bucket exists).
+     * Test-only accessor: number of candidates buffered for a 1-on-1
+     * sender. Equivalent to
+     * {@link #candidateCountForSenderForTest(String, String)} with a
+     * null group-call-id.
      */
     public synchronized int candidateCountForSenderForTest(String senderHex) {
+        return candidateCountForSenderForTest(senderHex, null);
+    }
+
+    /**
+     * Test-only accessor: number of candidates buffered for a given
+     * {@code (sender, groupCallId)} pair (or 0 if no bucket exists).
+     */
+    public synchronized int candidateCountForSenderForTest(
+            String senderHex,
+            String groupCallId) {
         if (senderHex == null) return 0;
-        Deque<IceCandidatePayload> bucket = bySender.get(senderHex.toLowerCase());
+        Deque<IceCandidatePayload> bucket = bySender.get(
+            compositeKey(senderHex, groupCallId));
         return bucket == null ? 0 : bucket.size();
     }
 

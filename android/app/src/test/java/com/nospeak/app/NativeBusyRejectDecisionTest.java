@@ -82,4 +82,77 @@ public class NativeBusyRejectDecisionTest {
             NativeBusyRejectDecision.decide(CALL_X, true, "");
         assertEquals(NativeBusyRejectDecision.Action.NORMAL_FLOW, action);
     }
+
+    // ------------------------------------------------------------------
+    //  Group-aware decision tests (add-group-voice-calling)
+    // ------------------------------------------------------------------
+
+    private static final String GROUP_G =
+        "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e";
+    private static final String GROUP_H =
+        "8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e";
+
+    @Test
+    public void groupSameGroupCallIdIsMeshFormation() {
+        // Active group call with group-call-id G. Inbound offer for the
+        // SAME group-call-id is mesh formation (an accepter offering to
+        // another roster member), NOT a concurrent call.
+        NativeBusyRejectDecision.Action action =
+            NativeBusyRejectDecision.decide(
+                CALL_X, GROUP_G, true, CALL_Y, GROUP_G);
+        assertEquals(NativeBusyRejectDecision.Action.MESH_FORMATION, action);
+    }
+
+    @Test
+    public void groupDifferentGroupCallIdIsBusy() {
+        // Active group call with group-call-id G; inbound offer for a
+        // different group-call-id H → busy.
+        NativeBusyRejectDecision.Action action =
+            NativeBusyRejectDecision.decide(
+                CALL_X, GROUP_G, true, CALL_Y, GROUP_H);
+        assertEquals(NativeBusyRejectDecision.Action.AUTO_REJECT_BUSY, action);
+    }
+
+    @Test
+    public void oneToOneInboundDuringGroupCallIsBusy() {
+        // Active group call with group-call-id G; inbound 1-on-1 offer
+        // (no group-call-id) → busy.
+        NativeBusyRejectDecision.Action action =
+            NativeBusyRejectDecision.decide(
+                CALL_X, GROUP_G, true, CALL_Y, null);
+        assertEquals(NativeBusyRejectDecision.Action.AUTO_REJECT_BUSY, action);
+    }
+
+    @Test
+    public void groupInboundDuring1on1CallIsBusy() {
+        // Active 1-on-1 call (managerGroupCallId=null); inbound offer
+        // carries group-call-id → busy.
+        NativeBusyRejectDecision.Action action =
+            NativeBusyRejectDecision.decide(
+                CALL_X, null, true, CALL_Y, GROUP_G);
+        assertEquals(NativeBusyRejectDecision.Action.AUTO_REJECT_BUSY, action);
+    }
+
+    @Test
+    public void noActiveCallProducesNormalFlowEvenForGroupOffer() {
+        // Manager idle (busy=false). Inbound group offer should
+        // proceed to the normal group-dispatch path.
+        NativeBusyRejectDecision.Action action =
+            NativeBusyRejectDecision.decide(
+                null, null, false, CALL_X, GROUP_G);
+        assertEquals(NativeBusyRejectDecision.Action.NORMAL_FLOW, action);
+    }
+
+    @Test
+    public void sameGroupSameCallIdAlsoMeshFormation() {
+        // Edge case: same group-call-id AND same per-pair call-id
+        // (e.g., true duplicate-redelivery of an accepter's offer
+        // during mesh formation). The decision is MESH_FORMATION, not
+        // IGNORE_DUPLICATE — the group dispatch path runs its own
+        // dedup against the inner-event-id set upstream.
+        NativeBusyRejectDecision.Action action =
+            NativeBusyRejectDecision.decide(
+                CALL_X, GROUP_G, true, CALL_X, GROUP_G);
+        assertEquals(NativeBusyRejectDecision.Action.MESH_FORMATION, action);
+    }
 }

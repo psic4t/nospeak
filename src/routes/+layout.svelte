@@ -41,8 +41,9 @@
    import { processQueuedNativeEvents } from "$lib/core/BackgroundMessaging";
      import ImageViewerOverlay from "$lib/components/ImageViewerOverlay.svelte";
      import Toast from "$lib/components/Toast.svelte";
-     import IncomingCallOverlay from "$lib/components/IncomingCallOverlay.svelte";
-     import ActiveCallOverlay from "$lib/components/ActiveCallOverlay.svelte";
+    import IncomingCallOverlay from "$lib/components/IncomingCallOverlay.svelte";
+    import ActiveCallOverlay from "$lib/components/ActiveCallOverlay.svelte";
+    import GroupActiveCallOverlay from "$lib/components/GroupActiveCallOverlay.svelte";
      import PinLockScreen from "$lib/components/PinLockScreen.svelte";
      import PinSetupModal from "$lib/components/PinSetupModal.svelte";
      import { isPinLocked, initPinState, lockApp, clearPinData } from "$lib/stores/pin";
@@ -668,6 +669,16 @@
            path keep the Svelte overlay. Phase 2 of add-native-voice-calls. -->
       {#if !nativeCallsActive}
           <ActiveCallOverlay />
+      {/if}
+      <!-- Group-call overlay. Mutually exclusive with the 1-on-1
+           overlay above by the "one call total" invariant; both can
+           safely be mounted simultaneously because each gates on its
+           own store. The native multi-PC stack on Android lands in a
+           later section of the add-group-voice-calling change; until
+           then the group overlay is suppressed on Android and group
+           calls are entirely a web/PWA feature. -->
+      {#if !nativeCallsActive}
+          <GroupActiveCallOverlay />
       {/if}
 
       <!-- PIN Setup Modal - above all other modals -->

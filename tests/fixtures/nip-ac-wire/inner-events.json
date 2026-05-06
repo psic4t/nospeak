@@ -4,6 +4,16 @@
     "recipient": "2222222222222222222222222222222222222222222222222222222222222222",
     "callId": "aabbccddeeff00112233445566778899",
     "createdAt": 1700000000,
+    "_groupDoc": "Group-call cases reuse the same sender/recipient/callId/createdAt as the 1-on-1 cases. The group-call-id and roster pubkeys below are stable hand-picked values so the expected ids are reproducible. The roster is canonically sorted (lex) and includes the sender (which doubles as the initiator).",
+    "groupCallId": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+    "conversationId": "1234567890abcdef",
+    "initiatorHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "participantsValues": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "3333333333333333333333333333333333333333333333333333333333333333",
+        "4444444444444444444444444444444444444444444444444444444444444444",
+        "5555555555555555555555555555555555555555555555555555555555555555"
+    ],
     "cases": [
         {
             "name": "offer",
@@ -92,6 +102,83 @@
             "altText": "WebRTC call renegotiation",
             "extraTags": [],
             "expectedId": "48e33d9eb9f5323e91c5cbedfe35087cfbbb9e6ef404c5fd0e47cc3be55e6d2a"
+        },
+        {
+            "name": "group offer (real SDP)",
+            "kind": 25050,
+            "content": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n",
+            "altText": "WebRTC group voice call offer",
+            "extraTags": [
+                ["call-type", "voice"],
+                ["group-call-id", "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"],
+                ["conversation-id", "1234567890abcdef"],
+                ["initiator", "1111111111111111111111111111111111111111111111111111111111111111"],
+                ["participants", "1111111111111111111111111111111111111111111111111111111111111111", "3333333333333333333333333333333333333333333333333333333333333333", "4444444444444444444444444444444444444444444444444444444444444444", "5555555555555555555555555555555555555555555555555555555555555555"]
+            ],
+            "expectedId": "3fcf96a7e8d6a522961bb27af32bf3d75e633e96fa441b8b5ff23500e4c04fea"
+        },
+        {
+            "name": "group offer (invite-only, empty content)",
+            "kind": 25050,
+            "content": "",
+            "altText": "WebRTC group voice call offer",
+            "extraTags": [
+                ["call-type", "voice"],
+                ["group-call-id", "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"],
+                ["conversation-id", "1234567890abcdef"],
+                ["initiator", "1111111111111111111111111111111111111111111111111111111111111111"],
+                ["participants", "1111111111111111111111111111111111111111111111111111111111111111", "3333333333333333333333333333333333333333333333333333333333333333", "4444444444444444444444444444444444444444444444444444444444444444", "5555555555555555555555555555555555555555555555555555555555555555"],
+                ["role", "invite"]
+            ],
+            "expectedId": "24479c32c72551053de1bd6b689765406dbeed1e21decaef5cdcef2837a57634"
+        },
+        {
+            "name": "group answer",
+            "kind": 25051,
+            "content": "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n",
+            "altText": "WebRTC group call answer",
+            "extraTags": [
+                ["group-call-id", "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"],
+                ["conversation-id", "1234567890abcdef"],
+                ["initiator", "1111111111111111111111111111111111111111111111111111111111111111"]
+            ],
+            "expectedId": "669b8e9df304f7e094d689a8320ffa4ffff0dd2052b29e2f2eb57e0a3f7c4ea0"
+        },
+        {
+            "name": "group ice (string mid + numeric index)",
+            "kind": 25052,
+            "content": "{\"candidate\":\"candidate:1 1 UDP 1 192.0.2.1 1234 typ host\",\"sdpMid\":\"0\",\"sdpMLineIndex\":0}",
+            "altText": "WebRTC group ICE candidate",
+            "extraTags": [
+                ["group-call-id", "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"],
+                ["conversation-id", "1234567890abcdef"],
+                ["initiator", "1111111111111111111111111111111111111111111111111111111111111111"]
+            ],
+            "expectedId": "ba3aee68355453785b4309bd1446c4fa956ed1473cf4aac27054d23a54e5fed9"
+        },
+        {
+            "name": "group hangup (no reason)",
+            "kind": 25053,
+            "content": "",
+            "altText": "WebRTC group call hangup",
+            "extraTags": [
+                ["group-call-id", "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"],
+                ["conversation-id", "1234567890abcdef"],
+                ["initiator", "1111111111111111111111111111111111111111111111111111111111111111"]
+            ],
+            "expectedId": "cff81fa5bcfb7520372d13b3874b17683d609a5291d78fc4310b12172b12c123"
+        },
+        {
+            "name": "group reject (busy)",
+            "kind": 25054,
+            "content": "busy",
+            "altText": "WebRTC group call rejection",
+            "extraTags": [
+                ["group-call-id", "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"],
+                ["conversation-id", "1234567890abcdef"],
+                ["initiator", "1111111111111111111111111111111111111111111111111111111111111111"]
+            ],
+            "expectedId": "001f582178ace4208bc1da9157965534d25526facc57d487a2365b91ef3dac8b"
         }
     ]
 }

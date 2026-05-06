@@ -60,6 +60,27 @@ When changing voice-call behavior:
 - **Native `sendVoiceCallReject`** has both a 2-arg `(recipientHex, callId)` form (legacy callers, content `""`) and a 3-arg `(recipientHex, callId, reason)` form (`reason="busy"` for the busy auto-reject; reason becomes the inner event's `content` field byte-equivalently with the JS `sendCallReject`).
 - **OpenSpec**: voice-calling capability lives at `openspec/specs/voice-calling/spec.md`. Material changes to the call lifecycle, NIP-AC wire format, or call-history kinds need a new OpenSpec change proposal.
 
+### Group Voice Calls (NIP-AC, full-mesh, ≤4 participants)
+
+Group calls reuse the existing NIP-AC kind-21059 wrap and inner kinds 25050-25054 (kind 25055 is voice-only and not used for groups). Group semantics are conveyed via additional tags on the inner event: `['group-call-id', <hex32>]`, `['conversation-id', <hex16>]`, `['initiator', <hex>]`, plus `['participants', <hex>, ...]` on kind 25050, plus `['role', 'invite']` on invite-only kind-25050 offers. Receivers branch strictly on the presence of `['group-call-id', ...]`.
+
+- **Topology**: full-mesh peer-to-peer (each device holds N-1 simultaneous PCs). Hard cap of 4 total participants.
+- **Anchor**: an existing group `Conversation` (16-char hex `id`, `isGroup=true`). The anchor conversation's local membership replaces the 1-on-1 NIP-02 follow-gate for inbound group offers (the user has already opted in by being a group member).
+- **Edge ownership**: deterministic-pair offerer rule — the participant whose lowercase-hex pubkey is lex-lower is the SDP offerer for that pair. Same rule already used for kind-25055 renegotiation glare resolution. Initiator-as-answerer edges are seeded with invite-only kind-25050 (empty SDP, `role=invite` tag); the recipient — the designated offerer — sends a real-SDP kind-25050 back on accept.
+- **Concurrency**: "one call total" invariant preserved. Inbound kind-25050 with the SAME `group-call-id` as the active call is mesh formation (not concurrent); different `group-call-id` or any cross-mode (group↔1-on-1) is busy-rejected.
+- **Multi-device dismissal**: kind-25051/25054 self-events keyed on `group-call-id` (group calls) or `call-id` (1-on-1 calls) per the modified self-event filter.
+- **Call history**: one Kind-1405 rumor with multiple `p` tags + `['group-call-id', ...]` + `['conversation-id', ...]` per participant, through the existing 3-layer NIP-17 group rumor pipeline (distinct from the kind-21059 signaling pipeline).
+
+**Web/PWA implementation**: `VoiceCallServiceWeb` holds a per-peer `Map<peerHex, RTCPeerConnection>` for the group call (alongside its existing single-PC 1-on-1 fields). Group-call entry points: `initiateGroupCall(conversationId)` / `acceptGroupCall()` / `declineGroupCall()` / `hangupGroupCall()` / `toggleGroupMute()`. Store: `groupVoiceCallState` (parallel to `voiceCallState`). UI: `GroupActiveCallOverlay.svelte` (mounted alongside the 1-on-1 overlay), generalized `IncomingCallOverlay.svelte`, chat-header group-call button gated on `isAndroidNative()` and roster size.
+
+**Android implementation status**: the pure-Java helpers (`NativeBusyRejectDecision`, `GlobalIceBuffer`, `NativeSelfDismissDecision`) are group-aware and the Java NIP-AC senders accept a `GroupSendContext` for byte-equivalent group inner events. The full multi-PC `NativeVoiceCallManager` rewrite plus the lockscreen `IncomingCallActivity` / `ActiveCallActivity` group variants are **deferred to a follow-up change** (`add-group-voice-calling-android-manager`). Until that follow-up lands the chat-header group-call button is hidden on Android and `VoiceCallServiceNative.initiateGroupCall` etc. throw.
+
+When changing group-call behavior:
+- **Wire format**: every inner-event change must extend both the JS `buildGroupExtraTags` helper in `nipAcGiftWrap.ts` AND the Java `NativeBackgroundMessagingService.buildGroupExtraTags` helper, then add a fixture entry to `tests/fixtures/nip-ac-wire/inner-events.json` so `wireParity.test.ts` (JS) and `NativeNipAcSenderTest` (Java) both verify byte-equivalence.
+- **Authoritative quadruple**: receivers cache `(group-call-id, initiator, conversation-id, roster)` from the first kind-25050 with that `group-call-id`; subsequent inner events whose `initiator` or `conversation-id` tag disagrees are dropped. The roster is also re-validated against the local DB membership for kind-25050 (group follow-gate).
+- **State machine**: aggregate per-call status is *derived* from the `participants` map via `deriveGroupStatus` (exported from `voiceCall.ts` for unit testing). Never store the aggregate independently.
+- **OpenSpec**: group-call requirements are captured under the same `voice-calling` capability. Changes that affect lifecycle, wire format, or follow-gate need a new change proposal.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git commit` succeeds.

@@ -6,7 +6,16 @@ import {
     verifyEvent,
     type NostrEvent
 } from 'nostr-tools';
-import { NIP_AC_GIFT_WRAP_KIND } from './constants';
+import {
+    NIP_AC_GIFT_WRAP_KIND,
+    GROUP_CALL_ID_TAG,
+    CONVERSATION_ID_TAG,
+    INITIATOR_TAG,
+    PARTICIPANTS_TAG,
+    ROLE_TAG,
+    ROLE_INVITE
+} from './constants';
+import type { NipAcGroupSendContext } from './types';
 
 /**
  * NIP-AC ephemeral gift wrap (kind 21059).
@@ -116,6 +125,44 @@ export async function unwrapNipAcGiftWrap(
     }
 
     return inner;
+}
+
+/**
+ * Build the group-call tag suffix shared across NIP-AC senders. The
+ * tag order ({@link GROUP_CALL_ID_TAG}, {@link CONVERSATION_ID_TAG},
+ * {@link INITIATOR_TAG}, optionally {@link PARTICIPANTS_TAG},
+ * optionally {@code ['role', ROLE_INVITE]}) is fixed by the wire-parity
+ * fixture in {@code tests/fixtures/nip-ac-wire/inner-events.json}; both
+ * this helper and the Java senders SHALL produce byte-equivalent inner
+ * JSON.
+ *
+ * <p>Returns an empty array when {@code group} is undefined, so callers
+ * can spread the result unconditionally.
+ *
+ * <p>{@code includeParticipants} controls whether the
+ * `['participants', ...]` tag is emitted. Only kind-25050 (Call Offer)
+ * carries the roster on the wire. {@code includeRoleInvite} controls
+ * emission of the `['role', 'invite']` tag (also kind-25050 only,
+ * present on invite-only offers where the recipient is the designated
+ * SDP offerer for the pair).
+ */
+export function buildGroupExtraTags(
+    group: NipAcGroupSendContext | undefined,
+    opts?: { includeParticipants?: boolean; includeRoleInvite?: boolean }
+): string[][] {
+    if (!group) return [];
+    const tags: string[][] = [
+        [GROUP_CALL_ID_TAG, group.groupCallId],
+        [CONVERSATION_ID_TAG, group.conversationId],
+        [INITIATOR_TAG, group.initiatorHex]
+    ];
+    if (opts?.includeParticipants && group.participants && group.participants.length > 0) {
+        tags.push([PARTICIPANTS_TAG, ...group.participants]);
+    }
+    if (opts?.includeRoleInvite && group.roleInvite) {
+        tags.push([ROLE_TAG, ROLE_INVITE]);
+    }
+    return tags;
 }
 
 function isPlainEventShape(value: unknown): boolean {

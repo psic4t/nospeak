@@ -146,4 +146,112 @@ public class NativeSelfDismissDecisionTest {
         assertEquals(NativeSelfDismissDecision.Action.DROP,
             NativeSelfDismissDecision.decide(1, CALL_X, CALL_X, CALL_X, RINGING));
     }
+
+    // ------------------------------------------------------------------
+    //  Group-aware self-dismiss tests (add-group-voice-calling).
+    //  When the inner event carries a group-call-id, dedup is by
+    //  group-call-id rather than per-pair call-id. Per-pair call-id
+    //  may differ between sender's outbound edge and our incoming edge.
+    // ------------------------------------------------------------------
+
+    private static final String GROUP_G =
+        "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e";
+    private static final String GROUP_H =
+        "8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e";
+
+    @Test
+    public void groupSelfAnswerWhileRingingEndsManager() {
+        // Manager ringing for group-call-id G; self-25051 for the same
+        // G arrives → END_MANAGER_ANSWERED. Per-pair call-ids differ,
+        // which is fine because group dedup keys on group-call-id.
+        assertEquals(NativeSelfDismissDecision.Action.END_MANAGER_ANSWERED,
+            NativeSelfDismissDecision.decide(
+                25051,
+                "any-pair-cid",
+                GROUP_G,
+                /* pendingPrefsCallId= */ null,
+                /* pendingPrefsGroupCallId= */ null,
+                /* managerCallId= */ "any-other-pair-cid",
+                /* managerGroupCallId= */ GROUP_G,
+                RINGING));
+    }
+
+    @Test
+    public void groupSelfRejectWhileRingingEndsManager() {
+        assertEquals(NativeSelfDismissDecision.Action.END_MANAGER_REJECTED,
+            NativeSelfDismissDecision.decide(
+                25054, "any-pair-cid", GROUP_G,
+                null, null,
+                "any-other-pair-cid", GROUP_G, RINGING));
+    }
+
+    @Test
+    public void groupSelfAnswerWithMismatchedGroupCallIdDropped() {
+        // Manager ringing for G; self-25051 carries H → DROP.
+        assertEquals(NativeSelfDismissDecision.Action.DROP,
+            NativeSelfDismissDecision.decide(
+                25051, "pair-cid", GROUP_H,
+                null, null,
+                "pair-cid", GROUP_G, RINGING));
+    }
+
+    @Test
+    public void groupSelfAnswerWhileFsiPendingDismissesFsi() {
+        // No manager; FSI pending slot has matching groupCallId →
+        // DISMISS_FSI.
+        assertEquals(NativeSelfDismissDecision.Action.DISMISS_FSI,
+            NativeSelfDismissDecision.decide(
+                25051, "pair-cid", GROUP_G,
+                /* pendingPrefsCallId= */ null,
+                /* pendingPrefsGroupCallId= */ GROUP_G,
+                /* managerCallId= */ null,
+                /* managerGroupCallId= */ null,
+                /* managerStatusName= */ null));
+    }
+
+    @Test
+    public void groupSelfAnswerWhileFsiPendingMismatchedGroupDropped() {
+        assertEquals(NativeSelfDismissDecision.Action.DROP,
+            NativeSelfDismissDecision.decide(
+                25051, "pair-cid", GROUP_G,
+                null, GROUP_H,
+                null, null, null));
+    }
+
+    @Test
+    public void oneToOneSelfAnswerDoesNotMatchGroupManager() {
+        // Manager is in a GROUP call (managerGroupCallId=G) but the
+        // inbound self-25051 is a 1-on-1 event (no group-call-id).
+        // The 1-on-1 dedup branch requires managerGroupCallId == null,
+        // so the call-id match alone MUST NOT trigger
+        // END_MANAGER_ANSWERED here.
+        assertEquals(NativeSelfDismissDecision.Action.DROP,
+            NativeSelfDismissDecision.decide(
+                25051,
+                CALL_X,
+                /* innerGroupCallId= */ null,
+                null, null,
+                CALL_X,
+                /* managerGroupCallId= */ GROUP_G,
+                RINGING));
+    }
+
+    @Test
+    public void groupSelfHangupAlwaysDropped() {
+        // Self-25053 is always dropped — group calls don't change this.
+        assertEquals(NativeSelfDismissDecision.Action.DROP,
+            NativeSelfDismissDecision.decide(
+                25053, "pair-cid", GROUP_G,
+                null, null,
+                "pair-cid", GROUP_G, ACTIVE));
+    }
+
+    @Test
+    public void groupSelfIceAlwaysDropped() {
+        assertEquals(NativeSelfDismissDecision.Action.DROP,
+            NativeSelfDismissDecision.decide(
+                25052, "pair-cid", GROUP_G,
+                null, null,
+                "pair-cid", GROUP_G, ACTIVE));
+    }
 }
