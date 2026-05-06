@@ -1136,7 +1136,13 @@ public class NativeVoiceCallManager {
      *
      * <p>The actual audio-route change requires
      * {@link AudioManager#MODE_IN_COMMUNICATION}, which the FGS sets
-     * on start ({@code VoiceCallForegroundService.configureAudioMode}).
+     * on the transition to {@link CallStatus#CONNECTING} (NOT on FGS
+     * start — see {@code VoiceCallForegroundService.configureAudioMode}
+     * for the rationale). A {@code setSpeakerOn} call made earlier
+     * (e.g. while the call is in {@link CallStatus#OUTGOING_RINGING})
+     * still updates {@link #isSpeakerOn} but the underlying
+     * {@code setSpeakerphoneOn} won't take effect until the FGS
+     * re-applies the routing on the mode transition.
      */
     public void setSpeakerOn(boolean on) {
         ensureMain();
@@ -1351,7 +1357,13 @@ public class NativeVoiceCallManager {
         // (the Android platform class, not the org.webrtc one). It
         // honours the system AudioManager mode set by
         // VoiceCallForegroundService (MODE_IN_COMMUNICATION), which
-        // engages OS-level acoustic-echo-cancellation.
+        // engages OS-level acoustic-echo-cancellation. The FGS sets
+        // that mode on the transition to CONNECTING — i.e. by the
+        // time the ADM begins exchanging real audio with the peer
+        // post-answer, MODE_IN_COMMUNICATION is in effect. During
+        // OUTGOING_RINGING the ADM's capture goes nowhere (no remote
+        // peer yet) so running it briefly under MODE_NORMAL is
+        // harmless and keeps STREAM_RING ringback un-ducked.
         JavaAudioDeviceModule adm = JavaAudioDeviceModule.builder(appContext)
             .setUseHardwareAcousticEchoCanceler(true)
             .setUseHardwareNoiseSuppressor(true)

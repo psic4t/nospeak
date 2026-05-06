@@ -38,9 +38,12 @@ import java.util.List;
  *
  * Lifecycle: started by {@link AndroidVoiceCallPlugin#startCallSession} when a call
  * enters ringing, stopped by {@link AndroidVoiceCallPlugin#endCallSession} when it
- * ends. While running, the service holds a partial wake lock and puts the system
- * audio session in {@link AudioManager#MODE_IN_COMMUNICATION} to engage OS-level
- * voice acoustic-echo-cancellation.
+ * ends. While running, the service holds a partial wake lock and — once the call
+ * commits to a media session ({@code CONNECTING} or {@code ACTIVE}) — puts the
+ * system audio session in {@link AudioManager#MODE_IN_COMMUNICATION} to engage
+ * OS-level voice acoustic-echo-cancellation. The mode is intentionally NOT set
+ * during {@code OUTGOING_RINGING} so the OS does not duck the {@code STREAM_RING}
+ * ringback tone played by {@link VoiceCallRingback}.
  *
  * Restart policy: {@code START_NOT_STICKY}. A system-killed call is unrecoverable —
  * the JS state machine and the WebRTC peer connection are gone with the process.
@@ -337,7 +340,12 @@ public class VoiceCallForegroundService extends Service {
         } catch (Exception ignored) {}
 
         if (wakeLock == null) acquireWakeLock();
-        if (!audioModeApplied) configureAudioMode();
+        // configureAudioMode is intentionally NOT called here. We defer
+        // entering MODE_IN_COMMUNICATION until the call reaches
+        // CONNECTING / ACTIVE so the OS does not duck STREAM_RING (used
+        // by VoiceCallRingback) during OUTGOING_RINGING. The service
+        // listener wired in ensureNativeManager() applies the mode on
+        // the appropriate state transition.
         return true;
     }
 
@@ -792,6 +800,25 @@ public class VoiceCallForegroundService extends Service {
                     // the tone. Idempotent.
                     ringback.stop();
                 }
+                // Engage MODE_IN_COMMUNICATION the moment the call
+                // commits to a media session (CONNECTING / ACTIVE).
+                // Deferring the mode change from FGS startup means the
+                // STREAM_RING ringback isn't ducked while we are still
+                // ringing the far end. Idempotent via audioModeApplied.
+                if ((status == NativeVoiceCallManager.CallStatus.CONNECTING
+                        || status == NativeVoiceCallManager.CallStatus.ACTIVE)
+                    && !audioModeApplied) {
+                    configureAudioMode();
+                    // Re-commit the speakerphone routing under the new
+                    // audio mode so any pre-CONNECTING toggle by the
+                    // user (e.g. tapping speaker on the outgoing-ringing
+                    // ActiveCallActivity) actually takes effect now
+                    // that setSpeakerphoneOn is honoured.
+                    if (nativeManager != null) {
+                        try { nativeManager.setSpeakerOn(nativeManager.isSpeakerOn()); }
+                        catch (Throwable t) { Log.w(TAG, "speaker re-apply failed", t); }
+                    }
+                }
                 // Re-evaluate the proximity-lock policy on every
                 // status change. Acquires when entering an active
                 // voice-call state, releases on ENDED. The policy is
@@ -954,6 +981,24 @@ public class VoiceCallForegroundService extends Service {
         }
     }
 
+    /**
+     * Switch the system audio session into {@link AudioManager#MODE_IN_COMMUNICATION}
+     * so the WebRTC ADM engages OS-level acoustic-echo-cancellation /
+     * noise-suppression and the {@link AudioManager#setSpeakerphoneOn}
+     * routing actually sticks.
+     *
+     * <p>Invoked from the service-internal status listener on the
+     * transition into {@code CONNECTING} or {@code ACTIVE} — NOT from
+     * {@code promoteToForeground}. Setting the mode this late is
+     * deliberate: while we are in {@code OUTGOING_RINGING} the FGS
+     * stays in {@code MODE_NORMAL} so the OS does not duck the
+     * {@code STREAM_RING} ringback played by {@link VoiceCallRingback}.
+     *
+     * <p>Idempotent via {@link #audioModeApplied}; the corresponding
+     * restore in {@link #restoreAudioMode} no-ops cleanly when the
+     * call ends without ever reaching CONNECTING (e.g. caller hangup
+     * during outgoing ringing).
+     */
     private void configureAudioMode() {
         try {
             audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
