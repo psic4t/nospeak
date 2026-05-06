@@ -1157,9 +1157,12 @@ public class VoiceCallForegroundService extends Service {
         // brand-coloured panel when the system honours colorization
         // (FGS notifications are eligible). The colour resource is
         // theme-aware via values-night/colors.xml.
+        // No setContentText: CallStyle uses the Person's name as the
+        // caller-name line in the call chip, so passing displayName
+        // here too renders it twice in the expanded notification.
+        // IncomingCallNotification mirrors this pattern.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(displayName)
             .setSmallIcon(R.drawable.ic_stat_nospeak)
             .setContentIntent(contentPi)
             .setOngoing(true)
