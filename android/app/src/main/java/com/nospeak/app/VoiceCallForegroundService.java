@@ -213,7 +213,19 @@ public class VoiceCallForegroundService extends Service {
         if (ACTION_AWAIT_UNLOCK.equals(action)) {
             String callId = intent.getStringExtra(EXTRA_CALL_ID);
             String peerName = intent.getStringExtra(EXTRA_PEER_NAME);
-            promoteToForeground(callId, peerName, "incoming");
+            // The unlock-pending notification can be visible for many
+            // seconds while the user types their PIN. Pre-read peerHex
+            // from the persisted offer slot so the CallStyle Person
+            // gets a real avatar + cached username, not the "U" /
+            // "Unknown" fallback.
+            String unlockPeerHex = null;
+            try {
+                SharedPreferences unlockPrefs = getSharedPreferences(
+                    "nospeak_pending_incoming_call", MODE_PRIVATE);
+                unlockPeerHex = unlockPrefs.getString("peerHex", null);
+            } catch (Throwable ignored) {}
+            promoteToForeground(callId, peerName, unlockPeerHex, "incoming",
+                /* isVideoCall= */ false);
             scheduleUnlockTimeoutIfNeeded();
             return START_NOT_STICKY;
         }
@@ -227,6 +239,8 @@ public class VoiceCallForegroundService extends Service {
         String peerName = intent.getStringExtra(EXTRA_PEER_NAME);
         String role = intent.getStringExtra(EXTRA_ROLE);
 
+        // Legacy ACTION_START (web FGS routing) — peerHex isn't on this
+        // intent; rely on the manager fallback inside buildOngoingNotification.
         promoteToForeground(callId, peerName, role);
         return START_NOT_STICKY;
     }
@@ -247,13 +261,27 @@ public class VoiceCallForegroundService extends Service {
      *         {@code stopSelf()} and is on its way to {@code onDestroy}.
      */
     private boolean promoteToForeground(String callId, String peerName, String role) {
-        return promoteToForeground(callId, peerName, role, /* isVideoCall= */ false);
+        return promoteToForeground(callId, peerName, /* peerHex= */ null, role,
+            /* isVideoCall= */ false);
     }
 
     /**
-     * Same as the 3-arg overload but with an explicit {@code isVideoCall}
-     * flag. When {@code true}, the FGS type bitmask is widened to include
-     * {@code FOREGROUND_SERVICE_TYPE_CAMERA} and
+     * Same as the 3-arg overload but with explicit {@code peerHex} and
+     * {@code isVideoCall} parameters.
+     *
+     * <p>{@code peerHex} is forwarded to {@link #buildOngoingNotification}
+     * so the cached profile (username + avatar) can be resolved at
+     * notification-build time. The native call manager hasn't yet been
+     * fed the peerHex at this point — it lives only on the intent extra
+     * (initiate path) or in the {@code nospeak_pending_incoming_call}
+     * SharedPreferences slot (accept path) — so callers that have it
+     * should pass it through. Callers that don't (legacy JS-driven
+     * {@code ACTION_START} on web) pass {@code null}; the builder falls
+     * back to {@code nativeManager.getPeerHex()} which works for code
+     * paths where the manager is set up before promotion.
+     *
+     * <p>When {@code isVideoCall} is {@code true}, the FGS type bitmask
+     * is widened to include {@code FOREGROUND_SERVICE_TYPE_CAMERA} and
      * {@code FOREGROUND_SERVICE_TYPE_MICROPHONE} on Android 14+; without
      * those bits the system silently refuses to deliver camera frames
      * through the FGS-hosted {@code Camera2Enumerator} pipeline.
@@ -261,10 +289,11 @@ public class VoiceCallForegroundService extends Service {
     private boolean promoteToForeground(
             String callId,
             String peerName,
+            String peerHex,
             String role,
             boolean isVideoCall) {
         createChannelIfNeeded();
-        Notification notif = buildOngoingNotification(callId, peerName, role);
+        Notification notif = buildOngoingNotification(callId, peerName, peerHex, role);
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -322,6 +351,14 @@ public class VoiceCallForegroundService extends Service {
         //     (written by NativeBackgroundMessagingService when the
         //     kind-25050 offer arrived).
         boolean isVideoCall = false;
+        // peerHex used for the ongoing-call notification's CallStyle
+        // Person (avatar + cached username lookup). For INITIATE this
+        // is on the intent extra (already in `peerHex` local). For
+        // ACCEPT it lives in the persisted offer slot — pre-read it
+        // here, BEFORE promoteToForeground, because the slot read
+        // inside the mainHandler.post block below runs after the
+        // notification has already been built.
+        String peerHexForNotif = peerHex;
         if (ACTION_INITIATE_NATIVE.equals(action)) {
             isVideoCall = "video".equals(intent.getStringExtra(EXTRA_CALL_KIND));
         } else if (ACTION_ACCEPT_NATIVE.equals(action)) {
@@ -329,6 +366,9 @@ public class VoiceCallForegroundService extends Service {
                 SharedPreferences offerPrefs = getSharedPreferences(
                     "nospeak_pending_incoming_call", MODE_PRIVATE);
                 isVideoCall = "video".equals(offerPrefs.getString("callType", "voice"));
+                if (peerHexForNotif == null || peerHexForNotif.isEmpty()) {
+                    peerHexForNotif = offerPrefs.getString("peerHex", null);
+                }
             } catch (Throwable ignored) {
                 // Default to voice on any read error — no harm; worst
                 // case is the kind-mismatch fallback into ACCEPT_NATIVE
@@ -342,7 +382,7 @@ public class VoiceCallForegroundService extends Service {
         // 14+ — phoneCall requires MANAGE_OWN_CALLS or ROLE_DIALER),
         // surface a clean callError to the JS layer instead of silently
         // proceeding with a doomed call setup.
-        if (!promoteToForeground(callId, peerName, role, isVideoCall)) {
+        if (!promoteToForeground(callId, peerName, peerHexForNotif, role, isVideoCall)) {
             AndroidVoiceCallPlugin.emitCallError(callId, "fgs-failed",
                 "Foreground service could not start (Android 14+ requires "
                 + "MANAGE_OWN_CALLS for phoneCall foreground services)");
@@ -994,7 +1034,8 @@ public class VoiceCallForegroundService extends Service {
         }
     }
 
-    private Notification buildOngoingNotification(String callId, String peerName, String role) {
+    private Notification buildOngoingNotification(
+            String callId, String peerName, String peerHex, String role) {
         // Tap target: bring the existing ActiveCallActivity instance back
         // to the front. The activity is declared singleTask with an empty
         // taskAffinity (see AndroidManifest.xml around the
@@ -1026,15 +1067,30 @@ public class VoiceCallForegroundService extends Service {
         // Reads from the live manager (the FGS owns it for the call's
         // lifetime). Falls back to "On call" when no manager is
         // available (rare race during teardown).
+        //
+        // peerHex resolution: prefer the explicit parameter (threaded
+        // from the intent extra on INITIATE / from the SharedPrefs slot
+        // on ACCEPT) because at notification-build time the manager
+        // hasn't yet been told peerHex — initiateCall / acceptIncomingCall
+        // are dispatched on the next mainHandler tick AFTER promotion.
+        // Fall back to nativeManager.getPeerHex() for code paths that
+        // didn't thread the value through (legacy ACTION_START path).
         boolean isVideo = false;
-        String peerHexFromMgr = null;
+        String peerHexResolved = (peerHex != null && !peerHex.isEmpty())
+            ? peerHex.toLowerCase()
+            : null;
         try {
             NativeVoiceCallManager mgr = nativeManager;
             if (mgr != null) {
                 if (mgr.getCallKind() == NativeVoiceCallManager.CallKind.VIDEO) {
                     isVideo = true;
                 }
-                peerHexFromMgr = mgr.getPeerHex();
+                if (peerHexResolved == null) {
+                    String fromMgr = mgr.getPeerHex();
+                    if (fromMgr != null && !fromMgr.isEmpty()) {
+                        peerHexResolved = fromMgr;
+                    }
+                }
             }
         } catch (Throwable ignored) {}
         String title = isVideo ? "Video call" : "Voice call";
@@ -1047,9 +1103,9 @@ public class VoiceCallForegroundService extends Service {
         String displayName = peerName != null ? peerName : "";
         android.graphics.Bitmap avatar = null;
         try {
-            if (peerHexFromMgr != null && !peerHexFromMgr.isEmpty()) {
+            if (peerHexResolved != null) {
                 AndroidProfileCachePrefs.Identity ident =
-                    AndroidProfileCachePrefs.get(this, peerHexFromMgr);
+                    AndroidProfileCachePrefs.get(this, peerHexResolved);
                 if (ident != null) {
                     if (ident.username != null && !ident.username.isEmpty()) {
                         displayName = ident.username;
@@ -1057,12 +1113,12 @@ public class VoiceCallForegroundService extends Service {
                     String avatarPath = NativeBackgroundMessagingService
                         .resolveCachedAvatarFilePath(this, ident.pictureUrl);
                     avatar = CallAvatarLoader.loadCircularBitmap(
-                        this, avatarPath, peerHexFromMgr, 192);
+                        this, avatarPath, peerHexResolved, 192);
                 } else {
                     // No cached profile record — fall back to identicon
                     // alone via the loader helper.
                     avatar = CallAvatarLoader.loadCircularBitmap(
-                        this, null, peerHexFromMgr, 192);
+                        this, null, peerHexResolved, 192);
                 }
             }
         } catch (Throwable t) {
@@ -1076,7 +1132,7 @@ public class VoiceCallForegroundService extends Service {
         // dedup / grouping if Android ever introspects it.
         Person.Builder callerBuilder = new Person.Builder()
             .setName(displayName != null && !displayName.isEmpty() ? displayName : "Unknown")
-            .setKey(peerHexFromMgr != null ? peerHexFromMgr : "");
+            .setKey(peerHexResolved != null ? peerHexResolved : "");
         if (avatar != null) {
             try {
                 callerBuilder.setIcon(IconCompat.createWithBitmap(avatar));
