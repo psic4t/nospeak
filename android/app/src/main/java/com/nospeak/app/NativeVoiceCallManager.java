@@ -1,6 +1,7 @@
 package com.nospeak.app;
 
 import android.content.Context;
+import android.content.Intent;
 import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -416,6 +417,15 @@ public class NativeVoiceCallManager {
     private Runnable idleResetRunnable;
 
     private final AtomicBoolean disposed = new AtomicBoolean(false);
+
+    /**
+     * Delay before stopping the hosting FGS after a call ends.
+     * Matches ActiveCallActivity's ENDED-display window (the activity
+     * shows "Call ended" for 1500 ms before finishing) so the in-call
+     * surface and the CallStyle ongoing-call notification disappear
+     * together rather than the notification vanishing first.
+     */
+    private static final long FGS_STOP_DELAY_MS = 1500L;
 
     public NativeVoiceCallManager(
             Context appContext,
@@ -2012,6 +2022,40 @@ public class NativeVoiceCallManager {
         // starts before this fires (unusual but possible), the reset
         // observes status != ENDED and skips.
         scheduleIdleReset();
+
+        // Tell the hosting FGS to stop itself so the ongoing-call
+        // CallStyle notification (and its system-managed chronometer)
+        // is dismissed. Delayed by FGS_STOP_DELAY_MS so the user
+        // briefly sees "Call ended" in both the activity and the
+        // notification before they disappear together.
+        //
+        // All termination paths route through finishCall (in-app
+        // hangup, remote hangup/reject, ICE failure, offer/ICE
+        // timeout, programmatic JS hangup, multi-device self-events),
+        // so this is the single point that guarantees the FGS stops.
+        // The VoiceCallActionReceiver path also fires ACTION_STOP
+        // directly (belt-and-braces); the second stopSelf() is a
+        // no-op on an already-stopped service.
+        //
+        // Back-to-back call guard: if a new call begins inside the
+        // window (status moves out of ENDED via a fresh
+        // notifyIncomingRinging / initiateCall), skip the stop so
+        // the new session's FGS isn't torn down.
+        mainHandler.postDelayed(() -> {
+            CallStatus s = status;
+            if (s != CallStatus.ENDED && s != CallStatus.IDLE) {
+                Log.d(TAG, "finishCall: skipping FGS stop —"
+                    + " new call in progress (status=" + s + ")");
+                return;
+            }
+            try {
+                Intent stop = new Intent(appContext, VoiceCallForegroundService.class)
+                    .setAction(VoiceCallForegroundService.ACTION_STOP);
+                appContext.startService(stop);
+            } catch (Throwable t) {
+                Log.w(TAG, "finishCall: stopping FGS failed", t);
+            }
+        }, FGS_STOP_DELAY_MS);
     }
 
     /**
