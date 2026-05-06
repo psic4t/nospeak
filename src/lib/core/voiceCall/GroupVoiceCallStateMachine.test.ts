@@ -160,7 +160,7 @@ function buildGroupInner(opts: {
 }
 
 function installWebRtcStubs(): void {
-    function MockRTCPeerConnection(this: any) {
+    function MockRTCPeerConnection(this: any, config?: any) {
         this.onicecandidate = null;
         this.ontrack = null;
         this.oniceconnectionstatechange = null;
@@ -176,6 +176,12 @@ function installWebRtcStubs(): void {
         this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
         this.close = vi.fn();
         this.iceConnectionState = 'new';
+        // Capture the config arg so tests can assert defensive
+        // sdpSemantics: 'unified-plan' is set on per-peer group PCs.
+        this.__config = config;
+        const arr = (globalThis as any).__groupPeerConnectionConfigs ?? [];
+        arr.push(config);
+        (globalThis as any).__groupPeerConnectionConfigs = arr;
     }
     (globalThis as any).RTCPeerConnection = MockRTCPeerConnection;
     (globalThis as any).RTCSessionDescription = function (init: any) {
@@ -204,6 +210,7 @@ describe('Group voice-call state machine', () => {
         resetCall();
         resetGroupCall();
         installWebRtcStubs();
+        (globalThis as any).__groupPeerConnectionConfigs = [];
         service = new VoiceCallService();
     });
 
@@ -213,6 +220,30 @@ describe('Group voice-call state machine', () => {
     });
 
     describe('initiateGroupCall', () => {
+        it('constructs every per-peer RTCPeerConnection with sdpSemantics: "unified-plan"', async () => {
+            conversationRepoMock.getConversation.mockResolvedValue({
+                id: CONV_ID,
+                isGroup: true,
+                participants: [SELF_NPUB, A_NPUB, B_NPUB, C_NPUB]
+            });
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+            (globalThis as any).__groupPeerConnectionConfigs = [];
+
+            await service.initiateGroupCall(CONV_ID);
+
+            const configs =
+                (globalThis as any).__groupPeerConnectionConfigs ?? [];
+            // SELF_HEX (0x11…) is lex-lower than every peer (0x33,0x44,0x55),
+            // so SELF is the offerer for all three edges — 3 PCs created.
+            expect(configs.length).toBeGreaterThan(0);
+            for (const cfg of configs) {
+                expect(cfg).toBeDefined();
+                expect(cfg.sdpSemantics).toBe('unified-plan');
+                expect(Array.isArray(cfg.iceServers)).toBe(true);
+            }
+        });
+
         it('emits exactly one offer per other roster member with full group context', async () => {
             conversationRepoMock.getConversation.mockResolvedValue({
                 id: CONV_ID,

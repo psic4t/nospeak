@@ -85,6 +85,20 @@ export type {
 };
 
 /**
+ * Local extension of {@link RTCConfiguration}. The {@code sdpSemantics}
+ * field is a Chrome-origin extension that browsers default to
+ * {@code 'unified-plan'} on every supported runtime, but is not part
+ * of the standard {@code RTCConfiguration} typings. We set it
+ * explicitly as a defensive measure so that a future browser
+ * regression or oddball runtime cannot silently fall back to plan-b
+ * (which would break our addTrack/replaceTrack-based renegotiation
+ * flow). Functionally a no-op on every browser today.
+ */
+type RTCConfigurationWithSemantics = RTCConfiguration & {
+    sdpSemantics?: 'unified-plan' | 'plan-b';
+};
+
+/**
  * JavaScript / web implementation of {@link VoiceCallBackend}. Owns an
  * {@code RTCPeerConnection} in the JavaScript runtime and routes NIP-AC
  * signaling through {@code Messaging.ts}'s registered senders. Used on
@@ -755,7 +769,14 @@ export class VoiceCallService implements VoiceCallBackend {
 
     private createPeerConnection(peerNpub: string, peerHex: string, callId: string): void {
         const iceServers = getIceServers();
-        this.peerConnection = new RTCPeerConnection({ iceServers });
+        // Pin sdpSemantics defensively. Every supported browser defaults
+        // to 'unified-plan' since 2019, but pinning prevents a future
+        // regression or oddball runtime from falling back to plan-b.
+        const config: RTCConfigurationWithSemantics = {
+            iceServers,
+            sdpSemantics: 'unified-plan'
+        };
+        this.peerConnection = new RTCPeerConnection(config);
         this.iceTrickleEnabled = true;
         this.sessionRemoteDescriptionSet = false;
         this.sessionPendingIce = [];
@@ -2055,7 +2076,14 @@ export class VoiceCallService implements VoiceCallBackend {
         callId: string
     ): void {
         const iceServers = getIceServers();
-        const pc = new RTCPeerConnection({ iceServers });
+        // Pin sdpSemantics defensively (see createPeerConnection for
+        // rationale). Group calls use the same renegotiation-friendly
+        // unified-plan API surface as 1-on-1 calls.
+        const config: RTCConfigurationWithSemantics = {
+            iceServers,
+            sdpSemantics: 'unified-plan'
+        };
+        const pc = new RTCPeerConnection(config);
         const session = {
             pc,
             callId,

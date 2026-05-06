@@ -1828,6 +1828,20 @@ public class NativeVoiceCallManager {
         if (uiListener != null) {
             try { uiListener.onLocalVideoTrack(localVideoTrack); } catch (Throwable ignored) {}
         }
+        // Notify the FGS so it can re-evaluate the proximity wake-lock
+        // policy. Voice→video must release the proximity lock — the
+        // user is now looking at the screen and we cannot turn it off
+        // when they hold the device near their face. The FGS reads
+        // the current callKind from the manager, so we don't pass it
+        // through — the post-update read returns VIDEO.
+        try {
+            VoiceCallForegroundService fgs =
+                VoiceCallForegroundService.getInstance();
+            if (fgs != null) fgs.notifyCallKindChanged();
+        } catch (Throwable t) {
+            // Never let an FGS lifecycle race break the upgrade.
+            Log.w(TAG, "FGS proximity lock notify failed", t);
+        }
     }
 
     /**

@@ -79,7 +79,7 @@ function buildInner(opts: {
 }
 
 function installWebRtcStubs(): void {
-    function MockRTCPeerConnection(this: any) {
+    function MockRTCPeerConnection(this: any, config?: any) {
         this.onicecandidate = null;
         this.ontrack = null;
         this.oniceconnectionstatechange = null;
@@ -91,7 +91,11 @@ function installWebRtcStubs(): void {
         this.addIceCandidate = vi.fn().mockResolvedValue(undefined);
         this.close = vi.fn();
         this.iceConnectionState = 'new';
+        // Capture the config arg so tests can assert RTCConfiguration
+        // shape (e.g. defensive sdpSemantics: 'unified-plan').
+        this.__config = config;
         (globalThis as any).__lastPeerConnection = this;
+        (globalThis as any).__lastPeerConnectionConfig = config;
     }
     (globalThis as any).RTCPeerConnection = MockRTCPeerConnection;
     (globalThis as any).RTCSessionDescription = function (init: any) {
@@ -134,6 +138,20 @@ describe('VoiceCallService', () => {
 
         it('returns unique values', () => {
             expect(service.generateCallId()).not.toBe(service.generateCallId());
+        });
+    });
+
+    describe('RTCPeerConnection configuration', () => {
+        it('constructs the 1-on-1 peer connection with sdpSemantics: "unified-plan"', async () => {
+            const senders = noopSenders();
+            service.registerNipAcSenders(senders);
+            await service.initiateCall(PEER_NPUB);
+
+            const config = (globalThis as any).__lastPeerConnectionConfig;
+            expect(config).toBeDefined();
+            expect(config.sdpSemantics).toBe('unified-plan');
+            // iceServers should still be passed through.
+            expect(Array.isArray(config.iceServers)).toBe(true);
         });
     });
 

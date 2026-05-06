@@ -88,6 +88,22 @@ public class VoiceCallForegroundService extends Service {
     public static final String EXTRA_CALL_KIND = "callKind";
 
     private PowerManager.WakeLock wakeLock;
+    /**
+     * Proximity wake lock. Held while the active call is a voice call;
+     * released as soon as the call ends or transitions to video. Causes
+     * the system to turn the screen off when the user holds the phone
+     * to their ear (saves battery, prevents accidental cheek-presses
+     * on the in-call controls). Decision policy lives in
+     * {@link ProximityLockPolicy}; transition triggers are
+     * {@link #applyProximityLockState} (called from status changes via
+     * the service listener and from {@link #notifyCallKindChanged} when
+     * the kind-25055 voice→video upgrade promotes the call).
+     *
+     * <p>Independent of {@link #wakeLock}, which is a partial wake lock
+     * keeping the CPU running for the whole call regardless of media
+     * kind. Both share the {@code WAKE_LOCK} manifest permission.
+     */
+    private PowerManager.WakeLock proximityWakeLock;
     private AudioManager audioManager;
     private int previousAudioMode = AudioManager.MODE_NORMAL;
     private boolean audioModeApplied = false;
@@ -776,6 +792,13 @@ public class VoiceCallForegroundService extends Service {
                     // the tone. Idempotent.
                     ringback.stop();
                 }
+                // Re-evaluate the proximity-lock policy on every
+                // status change. Acquires when entering an active
+                // voice-call state, releases on ENDED. The policy is
+                // a pure function so doing this work on every
+                // transition (even no-op ones) is cheap and removes
+                // any possibility of state drift.
+                applyProximityLockState();
             }
 
             @Override
@@ -832,6 +855,105 @@ public class VoiceCallForegroundService extends Service {
         wakeLock = null;
     }
 
+    /**
+     * Acquire the proximity wake lock. Idempotent — re-entry while the
+     * lock is already held is a no-op. On devices without a proximity
+     * sensor (some tablets / foldables in unfolded mode) the
+     * {@code PROXIMITY_SCREEN_OFF_WAKE_LOCK} level is unsupported;
+     * we silently skip acquisition rather than failing the call.
+     */
+    private void acquireProximityLock() {
+        if (proximityWakeLock != null) return;
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null) return;
+            // Devices without a proximity sensor return false here.
+            // Skip acquisition rather than crashing — proximity
+            // behavior is a UX nicety, not a correctness requirement.
+            if (!pm.isWakeLockLevelSupported(
+                    PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+                Log.d(TAG, "proximity wake lock unsupported on this device");
+                return;
+            }
+            PowerManager.WakeLock lock = pm.newWakeLock(
+                PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK,
+                "nospeak:voice-proximity");
+            lock.setReferenceCounted(false);
+            // No timeout — we release explicitly via
+            // releaseProximityLock() on call end / video upgrade /
+            // onDestroy. The partial wake lock has its own 1h safety
+            // timeout; the proximity lock doesn't need one because the
+            // upper bound is "until the call ends" which is enforced
+            // by FGS lifecycle.
+            lock.acquire();
+            proximityWakeLock = lock;
+            Log.d(TAG, "proximity wake lock acquired");
+        } catch (Throwable t) {
+            // Never let a wake-lock failure tear down the call.
+            Log.w(TAG, "proximity wake lock acquire failed", t);
+        }
+    }
+
+    /**
+     * Release the proximity wake lock. Idempotent.
+     */
+    private void releaseProximityLock() {
+        if (proximityWakeLock == null) return;
+        try {
+            if (proximityWakeLock.isHeld()) {
+                proximityWakeLock.release();
+            }
+        } catch (Throwable ignored) {
+            // Stale-lock release exceptions are non-fatal.
+        }
+        proximityWakeLock = null;
+        Log.d(TAG, "proximity wake lock released");
+    }
+
+    /**
+     * Re-evaluate the proximity-lock policy and acquire / release the
+     * lock to match. Safe to call from any code path that observes a
+     * status or kind change (call started, status transition,
+     * voice→video upgrade, call ended).
+     *
+     * <p>Reads the current {@link NativeVoiceCallManager.CallStatus}
+     * and {@link NativeVoiceCallManager.CallKind} from the manager
+     * (or treats them as IDLE/null when no manager exists). The pure
+     * policy in {@link ProximityLockPolicy} decides desired state;
+     * this method only handles the side effect.
+     */
+    private void applyProximityLockState() {
+        NativeVoiceCallManager.CallStatus status = null;
+        NativeVoiceCallManager.CallKind kind = null;
+        if (nativeManager != null) {
+            try { status = nativeManager.getStatus(); } catch (Throwable ignored) {}
+            try { kind = nativeManager.getCallKind(); } catch (Throwable ignored) {}
+        }
+        if (ProximityLockPolicy.shouldHold(status, kind)) {
+            acquireProximityLock();
+        } else {
+            releaseProximityLock();
+        }
+    }
+
+    /**
+     * Public hook invoked by {@link NativeVoiceCallManager} after a
+     * mid-call kind change (the kind-25055 voice→video upgrade).
+     * Re-applies the proximity-lock policy so the lock is released
+     * the moment the call becomes video.
+     *
+     * <p>Marshals onto the main thread defensively — the manager runs
+     * on the main thread per its contract, but this entry point is
+     * public and callers have historically come from both threads.
+     */
+    public void notifyCallKindChanged() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            applyProximityLockState();
+        } else {
+            mainHandler.post(this::applyProximityLockState);
+        }
+    }
+
     private void configureAudioMode() {
         try {
             audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
@@ -879,6 +1001,11 @@ public class VoiceCallForegroundService extends Service {
         }
         restoreAudioMode();
         releaseWakeLock();
+        // Belt-and-suspenders: the proximity lock should already be
+        // released by the ENDED status callback, but if the FGS is
+        // killed mid-call (system pressure, force-stop) the listener
+        // won't fire. Releasing here guarantees we never leak the lock.
+        releaseProximityLock();
         if (sInstance == this) sInstance = null;
         super.onDestroy();
     }
