@@ -326,7 +326,17 @@
     const target = e.currentTarget as HTMLElement | null;
     if (!target) return;
     const rect = target.getBoundingClientRect();
-    chatMenu = { isOpen: true, x: rect.right, y: rect.bottom + 4 };
+    // Right-align the menu to the button: ChatContextMenu's reposition action
+    // treats (x, y) as the menu's top-left, so subtract the menu's min-width
+    // (160px, see ChatContextMenu.svelte) from rect.right to anchor the menu's
+    // right edge to the button's right edge. Viewport clamping in the menu
+    // still handles overflow if the constant ever drifts.
+    const ESTIMATED_MENU_WIDTH = 160;
+    chatMenu = {
+      isOpen: true,
+      x: rect.right - ESTIMATED_MENU_WIDTH,
+      y: rect.bottom + 4,
+    };
   }
 
   function closeChatMenu() {
