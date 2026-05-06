@@ -63,6 +63,8 @@ import {
     type CallHistoryRumorRequest,
     type NativeCallStatus
 } from './androidVoiceCallPlugin';
+import { profileRepo } from '$lib/db/ProfileRepository';
+import { resolveDisplayName } from '$lib/core/nameUtils';
 
 /**
  * Map a native call status string to the corresponding Svelte store
@@ -373,10 +375,19 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         this.currentCallId = callId;
         setOutgoingRinging(recipientNpub, callId, kind);
 
+        let peerName: string | undefined;
+        try {
+            const profile = await profileRepo.getProfileIgnoreTTL(recipientNpub);
+            peerName = profile?.metadata
+                ? resolveDisplayName(profile.metadata, recipientNpub)
+                : recipientNpub.slice(0, 12) + '...';
+        } catch (_) { /* best-effort; native will use empty fallback */ }
+
         try {
             await AndroidVoiceCall.initiateCall({
                 callId,
                 peerHex,
+                peerName,
                 callKind: kind
             });
         } catch (err) {

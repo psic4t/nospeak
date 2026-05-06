@@ -59,6 +59,40 @@
         android:layout_marginEnd="20dp"
         android:visibility="gone" />
 
+    <!-- Centered avatar overlay for video calls. Visible only while
+         the remote renderer is still black (before first frame). Shows
+         the peer's profile picture and name centered on the black
+         background so the user knows who they're calling. Once remote
+         video starts, ActiveCallActivity fades this out. -->
+    <LinearLayout
+        android:id="@+id/active_call_video_avatar_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/active_call_video_avatar"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:contentDescription="Peer avatar"
+            android:src="@drawable/ic_call_avatar_placeholder"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:id="@+id/active_call_video_name_centered"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="@color/incoming_call_text"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="" />
+    </LinearLayout>
+
     <!-- ===== VIDEO-CALL CHROME ===== -->
 
     <!-- Top header for video calls: status (small), name (large),

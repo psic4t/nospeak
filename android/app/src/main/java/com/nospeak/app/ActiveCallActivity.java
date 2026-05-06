@@ -116,6 +116,9 @@ public class ActiveCallActivity extends Activity {
     private View videoHeader;
     private View videoControls;
     private View overlayLayout;
+    private View videoAvatarOverlay;
+    private ImageView videoAvatarView;
+    private TextView videoNameCentered;
     /**
      * Default top margin for the local self-view PiP (matches the
      * fallback in activity_active_call.xml). The actual margin is
@@ -330,6 +333,9 @@ public class ActiveCallActivity extends Activity {
         videoHeader = findViewById(R.id.active_call_video_header);
         videoControls = findViewById(R.id.active_call_video_controls);
         overlayLayout = findViewById(R.id.active_call_overlay);
+        videoAvatarOverlay = findViewById(R.id.active_call_video_avatar_overlay);
+        videoAvatarView = findViewById(R.id.active_call_video_avatar);
+        videoNameCentered = findViewById(R.id.active_call_video_name_centered);
 
         installWindowInsetsListener();
         readExtras(intent);
@@ -352,6 +358,13 @@ public class ActiveCallActivity extends Activity {
         // chrome visible in case the previous call had hidden it.
         firstRemoteFrameRendered = false;
         forceShowChrome();
+        // Reset the video avatar overlay so the new peer's identity
+        // is shown while waiting for remote video.
+        if (videoAvatarOverlay != null) {
+            videoAvatarOverlay.setAlpha(1f);
+            videoAvatarOverlay.setVisibility(
+                isVideoCall ? View.VISIBLE : View.GONE);
+        }
     }
 
     @Override
@@ -487,6 +500,7 @@ public class ActiveCallActivity extends Activity {
             // active video chrome shows the same identity as the
             // voice-mode centered layout.
             if (nameViewVideo != null) nameViewVideo.setText(peerName);
+            if (videoNameCentered != null) videoNameCentered.setText(peerName);
         }
         avatarPath = intent.getStringExtra(EXTRA_AVATAR_PATH);
         peerHex = intent.getStringExtra(EXTRA_PEER_HEX);
@@ -542,6 +556,14 @@ public class ActiveCallActivity extends Activity {
         // controls it) but kept for clarity.
         if (avatarView != null) {
             avatarView.setVisibility(isVideoCall ? View.GONE : View.VISIBLE);
+        }
+        // Show the centered video-avatar overlay when this is a video
+        // call and we haven't seen the first remote frame yet. Once
+        // remote video is flowing, the overlay is faded out in
+        // onFirstFrameRendered().
+        if (videoAvatarOverlay != null) {
+            videoAvatarOverlay.setVisibility(
+                isVideoCall && !firstRemoteFrameRendered ? View.VISIBLE : View.GONE);
         }
         // Clear / restore the activity background. SurfaceView lives in
         // the underlay window; an opaque foreground (root) background
@@ -687,15 +709,31 @@ public class ActiveCallActivity extends Activity {
      * behavior of the heads-up CallStyle notification's caller icon.
      */
     private void bindAvatar() {
-        if (avatarView == null) return;
+        if (avatarView == null && videoAvatarView == null) return;
         Drawable d = CallAvatarLoader.loadCircular(
             this, avatarPath, peerHex, /*targetPx*/ 192);
         if (d != null) {
-            avatarView.setImageDrawable(d);
+            if (avatarView != null) avatarView.setImageDrawable(d);
+            if (videoAvatarView != null) videoAvatarView.setImageDrawable(d);
         }
         // else: leave the layout's @drawable/ic_call_avatar_placeholder
         // in place. Only happens when peerHex is absent and no cached
         // file path was passed (e.g. legacy launch path without extras).
+    }
+
+    private void fadeOutVideoAvatarOverlay() {
+        if (videoAvatarOverlay == null) return;
+        if (videoAvatarOverlay.getVisibility() != View.VISIBLE) return;
+        videoAvatarOverlay.animate()
+            .alpha(0f)
+            .setDuration(CHROME_FADE_MS)
+            .withEndAction(() -> {
+                if (videoAvatarOverlay != null) {
+                    videoAvatarOverlay.setVisibility(View.GONE);
+                    videoAvatarOverlay.setAlpha(1f);
+                }
+            })
+            .start();
     }
 
     private void wireButtons() {
@@ -793,6 +831,7 @@ public class ActiveCallActivity extends Activity {
                         // we never hide controls over a black pre-roll.
                         mainHandler.post(() -> {
                             firstRemoteFrameRendered = true;
+                            fadeOutVideoAvatarOverlay();
                             scheduleHideIfEligible();
                         });
                     }

@@ -14,6 +14,7 @@
     let remoteVideoEl = $state<HTMLVideoElement>();
     let localVideoEl = $state<HTMLVideoElement>();
     let endResetTimeout: ReturnType<typeof setTimeout> | null = null;
+    let remoteVideoStarted = $state(false);
 
     const isVisible = $derived(
         $voiceCallState.status === 'outgoing-ringing' ||
@@ -115,6 +116,9 @@
             endResetTimeout = setTimeout(() => {
                 resetCall();
             }, CALL_END_DISPLAY_MS);
+        }
+        if ($voiceCallState.status === 'idle') {
+            remoteVideoStarted = false;
         }
     });
 
@@ -230,8 +234,26 @@
                         bind:this={remoteVideoEl}
                         autoplay
                         playsinline
+                        onplay={() => { remoteVideoStarted = true; }}
                         class="absolute inset-0 w-full h-full object-cover bg-black"
                     ></video>
+
+                    <!-- Centered avatar overlay shown before remote video
+                         arrives. Displays the callee's profile picture and
+                         name on the black background so the user knows who
+                         they're calling. Fades out once remote video starts. -->
+                    {#if !remoteVideoStarted}
+                        <div class="absolute inset-0 flex flex-col items-center justify-center z-[5] transition-opacity duration-200">
+                            {#if profilePicture}
+                                <img src={profilePicture} alt="" class="w-28 h-28 rounded-full object-cover mb-4" />
+                            {:else}
+                                <div class="w-28 h-28 rounded-full bg-gray-700 flex items-center justify-center text-4xl text-white mb-4">
+                                    {profileName.charAt(0).toUpperCase()}
+                                </div>
+                            {/if}
+                            <span class="text-white text-2xl font-medium">{profileName}</span>
+                        </div>
+                    {/if}
 
                     <!-- Self-view PiP.
                          Mobile: top-right of viewport, portrait sized
