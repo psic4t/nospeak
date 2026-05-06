@@ -4,4 +4,8 @@
     <color name="incoming_call_text">#FFFFFFFF</color>
     <color name="incoming_call_accept">#FF1FA855</color>
     <color name="incoming_call_decline">#FFD93636</color>
+    <!-- Panel background tint for the ongoing-call FGS notification when
+         setColorized(true) is applied. Light-mode variant; values-night/
+         supplies a deeper shade for dark mode. -->
+    <color name="ongoing_call_panel">#FF1FA855</color>
 </resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode variant of the ongoing-call notification panel tint.
+         A deeper green so the colorized panel stays readable against the
+         dark notification surface (the brighter #1FA855 from the light
+         variant blows out under dark mode). -->
+    <color name="ongoing_call_panel">#FF158045</color>
+</resources>

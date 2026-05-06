@@ -23,7 +23,9 @@ import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.IconCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.webrtc.PeerConnection;
@@ -1067,6 +1069,38 @@ public class VoiceCallForegroundService extends Service {
             Log.d(TAG, "buildOngoingNotification: avatar/profile resolution failed", t);
         }
 
+        // Build a Person for CallStyle. Same shape as
+        // IncomingCallNotification.post: name + (optional) circular
+        // avatar attached as an IconCompat. The Person key is the
+        // peer's pubkey hex, opaque to the system but useful for
+        // dedup / grouping if Android ever introspects it.
+        Person.Builder callerBuilder = new Person.Builder()
+            .setName(displayName != null && !displayName.isEmpty() ? displayName : "Unknown")
+            .setKey(peerHexFromMgr != null ? peerHexFromMgr : "");
+        if (avatar != null) {
+            try {
+                callerBuilder.setIcon(IconCompat.createWithBitmap(avatar));
+            } catch (Throwable t) {
+                Log.d(TAG, "buildOngoingNotification: setIcon threw", t);
+            }
+        }
+        Person caller = callerBuilder.build();
+
+        // CallStyle.forOngoingCall is the system-recognised "phone call
+        // in progress" surface. On Android 12+ it: (a) floats the
+        // notification above all non-call entries in the shade
+        // regardless of channel importance, (b) renders expanded by
+        // default rather than collapsed under the app's notification
+        // group, (c) shows a persistent status-bar call chip whose tap
+        // routes to setContentIntent (i.e. ActiveCallActivity here).
+        // Solves the "second notification gets collapsed under
+        // background-messaging" problem.
+        //
+        // PRIORITY_HIGH is a pre-O hint; on API 26+ channel importance
+        // rules and this is ignored. setColorized + setColor paint a
+        // brand-coloured panel when the system honours colorization
+        // (FGS notifications are eligible). The colour resource is
+        // theme-aware via values-night/colors.xml.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(displayName)
@@ -1074,11 +1108,26 @@ public class VoiceCallForegroundService extends Service {
             .setContentIntent(contentPi)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(R.drawable.ic_call_end, "Hang up", hangupPi);
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColorized(true)
+            .setColor(ContextCompat.getColor(this, R.color.ongoing_call_panel))
+            .setStyle(NotificationCompat.CallStyle.forOngoingCall(caller, hangupPi));
+
         if (avatar != null) {
+            // Pre-12 fallback: legacy renderer reads setLargeIcon as
+            // the primary avatar surface. Harmless on S+ where
+            // CallStyle prefers the Person icon.
             builder.setLargeIcon(avatar);
         }
+
+        // Defensive pre-Android-12 hangup fallback. The androidx
+        // CallStyle shim is documented to auto-attach a hangup action
+        // on pre-S, but some OEM ROMs strip it. Guarding by SDK_INT
+        // keeps S+ devices from rendering two Hang-up buttons.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            builder.addAction(R.drawable.ic_call_end, "Hang up", hangupPi);
+        }
+
         return builder.build();
     }
 
