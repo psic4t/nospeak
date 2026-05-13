@@ -1121,6 +1121,21 @@ public class ActiveCallActivity extends Activity {
     }
 
     private void applyFacing(boolean isFront) {
+        // Inverted-active visual: back camera = active (bright bg
+        // + dark icon), front camera = inactive (translucent bg +
+        // white icon). Same convention as mute / speaker / camera-
+        // off toggles.
+        applyToggleVisual(
+            cameraFlipButton,
+            !isFront,
+            R.drawable.ic_camera_flip,
+            R.drawable.ic_camera_flip);
+        applyToggleVisual(
+            cameraFlipButtonVideo,
+            !isFront,
+            R.drawable.ic_camera_flip,
+            R.drawable.ic_camera_flip);
+
         if (localVideoRenderer == null) return;
         // Brief fade across the camera swap so the user gets a clear
         // visual cue that the cameras switched. Without this, the
