@@ -200,20 +200,33 @@ public class IceServersJsonParserTest {
     @Test
     public void defaultsTsShapeParsesAsExpected() {
         // Mirror the exact shape we ship in
-        // android/app/src/main/res/raw/default_ice_servers.json.
+        // android/app/src/main/res/raw/default_ice_servers.json after
+        // add-plain-turn-to-default-ice-servers landed. The TURN entry
+        // uses the 2-element `urls` array (UDP + TCP transport
+        // variants), which fans out into TWO PeerConnection.IceServer
+        // instances sharing the credentials — so the total count is
+        // 2 STUN + 2 TURN = 4 entries.
         String json = "[{\"urls\":\"stun:turn.data.haus:3478\"},"
             + "{\"urls\":\"stun:stun.cloudflare.com:3478\"},"
-            + "{\"urls\":\"turn:turn.data.haus:3478\","
-            + "\"username\":\"free\",\"credential\":\"free\"}]";
+            + "{\"urls\":["
+            + "\"turn:turn.data.haus:3478?transport=udp\","
+            + "\"turn:turn.data.haus:3478?transport=tcp\""
+            + "],\"username\":\"free\",\"credential\":\"free\"}]";
         IceServersJsonParser.Result r =
             IceServersJsonParser.parse(json, emptyFallback());
         assertFalse(r.usedFallback);
-        // 2 STUN + 1 TURN string-urls entry = 3 IceServer instances.
-        assertEquals(3, r.servers.size());
+        assertEquals(4, r.servers.size());
         assertEquals("stun:turn.data.haus:3478", r.servers.get(0).urls.get(0));
         assertEquals("stun:stun.cloudflare.com:3478", r.servers.get(1).urls.get(0));
-        assertEquals("turn:turn.data.haus:3478", r.servers.get(2).urls.get(0));
+        assertEquals(
+            "turn:turn.data.haus:3478?transport=udp",
+            r.servers.get(2).urls.get(0));
         assertEquals("free", r.servers.get(2).username);
         assertEquals("free", r.servers.get(2).password);
+        assertEquals(
+            "turn:turn.data.haus:3478?transport=tcp",
+            r.servers.get(3).urls.get(0));
+        assertEquals("free", r.servers.get(3).username);
+        assertEquals("free", r.servers.get(3).password);
     }
 }

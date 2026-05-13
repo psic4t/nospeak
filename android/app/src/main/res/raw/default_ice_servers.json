@@ -1,1 +1,1 @@
-[{"urls":"stun:turn.data.haus:3478"},{"urls":"stun:stun.cloudflare.com:3478"},{"urls":"turn:turn.data.haus:3478","username":"free","credential":"free"}]
+[{"urls":"stun:turn.data.haus:3478"},{"urls":"stun:stun.cloudflare.com:3478"},{"urls":["turn:turn.data.haus:3478?transport=udp","turn:turn.data.haus:3478?transport=tcp"],"username":"free","credential":"free"}]

@@ -68,9 +68,28 @@ vi.mock('$lib/stores/auth', () => {
 });
 
 vi.mock('$lib/core/runtimeConfig/store', () => ({
+    // Match the runtime-config defaults shape — STUN entries plus a
+    // plain-TURN entry whose `urls` is the UDP+TCP array form. The
+    // group state-machine tests don't care about TURN credentials
+    // per se but they DO assert `Array.isArray(cfg.iceServers)` and
+    // the array form must survive the createPeerConnection round-trip.
     getIceServers: vi.fn().mockReturnValue([
-        { urls: 'stun:turn.data.haus:3478' }
-    ])
+        { urls: 'stun:turn.data.haus:3478' },
+        {
+            urls: [
+                'turn:turn.data.haus:3478?transport=udp',
+                'turn:turn.data.haus:3478?transport=tcp'
+            ],
+            username: 'free',
+            credential: 'free'
+        }
+    ]),
+    getIceServersJson: vi.fn().mockReturnValue(
+        '[{"urls":"stun:turn.data.haus:3478"},' +
+        '{"urls":["turn:turn.data.haus:3478?transport=udp",' +
+        '"turn:turn.data.haus:3478?transport=tcp"],' +
+        '"username":"free","credential":"free"}]'
+    )
 }));
 
 const { conversationRepoMock } = vi.hoisted(() => ({

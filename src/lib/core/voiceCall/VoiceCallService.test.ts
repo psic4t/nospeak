@@ -9,9 +9,27 @@ vi.mock('$lib/stores/auth', () => ({
 }));
 
 vi.mock('$lib/core/runtimeConfig/store', () => ({
+    // Mirror the runtime-config defaults shape (STUN + plain TURN over
+    // UDP+TCP via array-`urls`). Exercising the array form here
+    // ensures the createPeerConnection path keeps tolerating it
+    // — RTCIceServer.urls is `string | string[]` per the WebRTC spec.
     getIceServers: vi.fn().mockReturnValue([
-        { urls: 'stun:turn.data.haus:3478' }
-    ])
+        { urls: 'stun:turn.data.haus:3478' },
+        {
+            urls: [
+                'turn:turn.data.haus:3478?transport=udp',
+                'turn:turn.data.haus:3478?transport=tcp'
+            ],
+            username: 'free',
+            credential: 'free'
+        }
+    ]),
+    getIceServersJson: vi.fn().mockReturnValue(
+        '[{"urls":"stun:turn.data.haus:3478"},' +
+        '{"urls":["turn:turn.data.haus:3478?transport=udp",' +
+        '"turn:turn.data.haus:3478?transport=tcp"],' +
+        '"username":"free","credential":"free"}]'
+    )
 }));
 
 // AndroidVoiceCall is no longer imported by VoiceCallService (the
