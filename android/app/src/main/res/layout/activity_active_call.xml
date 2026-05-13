@@ -55,8 +55,13 @@
            - chrome visible: navInset + controlsHeight + 16dp gap
                              (slid up so the controls scrim doesn't
                              overlap the PiP). Transitions are
-                             animated to match the chrome fade. -->
-    <org.webrtc.SurfaceViewRenderer
+                             animated to match the chrome fade.
+         Uses TextureViewRenderer (not SurfaceViewRenderer) so the
+         View's outline / clipToOutline path actually rounds the
+         pixels — SurfaceView pixels sit on a separate hardware
+         overlay plane that ignores outline clipping. See
+         TextureViewRenderer.java for details. -->
+    <com.nospeak.app.TextureViewRenderer
         android:id="@+id/active_call_local_video"
         android:layout_width="120dp"
         android:layout_height="160dp"

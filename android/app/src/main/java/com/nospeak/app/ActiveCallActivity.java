@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.animation.ValueAnimator;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -15,8 +16,10 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.view.accessibility.AccessibilityManager;
@@ -113,7 +116,18 @@ public class ActiveCallActivity extends Activity {
     private TextView nameViewVideo;
     private TextView durationViewVideo;
     private SurfaceViewRenderer remoteVideoRenderer;
-    private SurfaceViewRenderer localVideoRenderer;
+    /**
+     * Local self-view PiP. Uses {@link TextureViewRenderer} rather
+     * than {@link SurfaceViewRenderer} so that
+     * {@link View#setClipToOutline} + a rounded
+     * {@link ViewOutlineProvider} actually round the rendered
+     * pixels — SurfaceView pixels are composited on a separate
+     * hardware overlay plane that ignores outline clipping. See
+     * {@link TextureViewRenderer} for the renderer implementation
+     * and {@link #initRenderersIfNeeded} for the corner-radius
+     * setup.
+     */
+    private TextureViewRenderer localVideoRenderer;
     private View rootLayout;
     private View videoHeader;
     private View videoControls;
@@ -991,18 +1005,37 @@ public class ActiveCallActivity extends Activity {
                     RendererCommon.ScalingType.SCALE_ASPECT_FILL);
                 localVideoRenderer.setEnableHardwareScaler(true);
                 // Local self-view is overlaid on top of the remote
-                // renderer — ensure it actually sits on top.
+                // renderer — declared after it in the layout, so
+                // it naturally sits on top. The
+                // setZOrderMediaOverlay call is a no-op on
+                // TextureViewRenderer (kept for API parity).
                 localVideoRenderer.setZOrderMediaOverlay(true);
-                // Mirror initially since we default to the front camera.
+                // Mirror initially since we default to the front
+                // camera. Mirroring is applied in GL space by the
+                // underlying EglRenderer so the View's outline /
+                // bounds stay in canonical orientation (the rounded
+                // clip below sees the unmirrored rect).
                 localVideoRenderer.setMirror(true);
-                // Note: rounded corners are intentionally not applied
-                // here. SurfaceView's pixel surface is composited on a
-                // separate hardware layer; setClipToOutline does not
-                // clip those pixels, so any rounded mask we set would
-                // be invisible. Reverting to square corners on Android
-                // is a deliberate choice (the PWA self-view stays
-                // rounded; see ActiveCallOverlay.svelte).
-                Log.d(TAG, "localVideoRenderer: init done");
+                // 16dp corner radius matches the PWA self-view —
+                // see ActiveCallOverlay.svelte. TextureView pixels
+                // participate in the normal View hierarchy, so
+                // setClipToOutline now actually rounds the
+                // rendered frames (this was impossible with
+                // SurfaceView, see commit c826e77 for context).
+                final float radiusPx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    16f,
+                    getResources().getDisplayMetrics());
+                localVideoRenderer.setOutlineProvider(new ViewOutlineProvider() {
+                    @Override
+                    public void getOutline(View view, Outline outline) {
+                        outline.setRoundRect(
+                            0, 0, view.getWidth(), view.getHeight(), radiusPx);
+                    }
+                });
+                localVideoRenderer.setClipToOutline(true);
+                Log.d(TAG, "localVideoRenderer: init done (rounded "
+                    + radiusPx + "px)");
             }
             renderersInitialized = true;
         } catch (Throwable t) {
