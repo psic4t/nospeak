@@ -31,6 +31,7 @@ import {
     resetGroupCall
 } from '$lib/stores/voiceCall';
 import { getIceServers } from '$lib/core/runtimeConfig/store';
+import { dumpIceFailedStats } from './iceFailedDiagnostic';
 import {
     CALL_OFFER_TIMEOUT_MS,
     ICE_CONNECTION_TIMEOUT_MS,
@@ -854,6 +855,12 @@ export class VoiceCallService implements VoiceCallBackend {
         const wasInitiator = this.isInitiator;
         const peerNpub = state.peerNpub;
         const callId = state.callId;
+        // Capture the peer connection reference BEFORE cleanup() nulls
+        // it out. Fire-and-forget the stats dump — it's best-effort
+        // diagnostic logging and must not delay teardown. Errors are
+        // swallowed inside dumpIceFailedStats.
+        const pcForDump = this.peerConnection;
+        void dumpIceFailedStats(pcForDump);
         this.cleanup();
         endCall('ice-failed');
         if (wasInitiator && peerNpub && callId) {

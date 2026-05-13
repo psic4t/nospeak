@@ -351,6 +351,15 @@ public class IncomingCallActivity extends Activity {
                 // during keyguard dismissal caused MainActivity's task
                 // to be promoted instead of ActiveCallActivity, leaving
                 // the user on the chat screen with no in-call surface.
+                //
+                // We intentionally do NOT attach EXTRA_ICE_SERVERS_JSON
+                // here: this activity has no JS context to call
+                // getIceServersJson(). The FGS resolves the iceServers
+                // list via a 3-tier chain (intent extra → SharedPrefs
+                // snapshot from prior JS-initiated calls →
+                // BuildConfig.DEFAULT_ICE_SERVERS_JSON), so this path
+                // gets the right list automatically. See
+                // fix-android-ice-servers-from-runtime-config.
                 Intent svc = new Intent(IncomingCallActivity.this, VoiceCallForegroundService.class)
                     .setAction(VoiceCallForegroundService.ACTION_ACCEPT_NATIVE)
                     .putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, acceptedCallId)

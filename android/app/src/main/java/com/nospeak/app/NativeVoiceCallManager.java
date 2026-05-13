@@ -1986,6 +1986,23 @@ public class NativeVoiceCallManager {
             catch (Throwable t) { Log.w(TAG, "sendHangup failed", t); }
         }
 
+        // ICE-failed diagnostic dump. Fire-and-forget — getStats is
+        // async and we cannot block teardown waiting for it. The
+        // callback runs on the WebRTC signaling thread; it just emits
+        // log lines under the `VoiceCallIceFailed` tag and never
+        // touches manager state, so racing with the rest of finishCall
+        // is safe. Snapshot the peer connection reference now because
+        // the dispose loop below sets `peerConnection = null`.
+        // See fix-android-ice-servers-from-runtime-config OpenSpec change.
+        if ("ice-failed".equals(reason) && peerConnection != null) {
+            final org.webrtc.PeerConnection pcForDump = peerConnection;
+            try {
+                pcForDump.getStats(report -> IceFailedDiagnostic.dump(report));
+            } catch (Throwable t) {
+                Log.w(IceFailedDiagnostic.ERR_TAG, "getStats invoke threw", t);
+            }
+        }
+
         // History rumor authoring. Mirrors VoiceCallService:
         //   active   → 'ended' with duration (BOTH peers — sendCallHistoryRumor)
         //   outgoing-ringing + caller hangup → 'cancelled' (LOCAL ONLY)

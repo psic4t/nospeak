@@ -90,6 +90,53 @@ public class VoiceCallForegroundService extends Service {
      */
     public static final String EXTRA_CALL_KIND = "callKind";
 
+    /**
+     * Optional. Deterministic-JSON serialization of the runtime-config
+     * iceServers list ({@code RTCIceServer[]}). Set by
+     * {@link AndroidVoiceCallPlugin#initiateCall} and
+     * {@link AndroidVoiceCallPlugin#acceptCall} from the JS
+     * {@code getIceServersJson()} helper, and by
+     * {@code NativeBackgroundMessagingService} when starting the FGS
+     * for an incoming offer (cold-start path) — that path reads the
+     * value from {@link #PREFS_RUNTIME_CONFIG} where prior JS-initiated
+     * calls persisted it.
+     *
+     * <p>Consumed by {@link #ensureNativeManager()} via
+     * {@link IceServersJsonParser}. Resolution precedence:
+     * <ol>
+     *   <li>this extra (JS-initiated paths)</li>
+     *   <li>{@link #PREFS_RUNTIME_CONFIG} ({@code iceServersJson} key,
+     *       cold-start path)</li>
+     *   <li>{@code BuildConfig.DEFAULT_ICE_SERVERS_JSON} (compile-time
+     *       mirror of {@code src/lib/core/runtimeConfig/defaults.ts})</li>
+     * </ol>
+     *
+     * <p>Part of the
+     * {@code fix-android-ice-servers-from-runtime-config} OpenSpec
+     * change.
+     */
+    public static final String EXTRA_ICE_SERVERS_JSON = "iceServersJson";
+
+    /**
+     * SharedPreferences slot holding a snapshot of the most-recent JS
+     * runtime config relevant to native voice calls. Currently used
+     * only for the iceServers list; reserved for similar config the
+     * cold-start path may need in the future.
+     */
+    public static final String PREFS_RUNTIME_CONFIG = "nospeak_voice_call_runtime_config";
+    public static final String KEY_ICE_SERVERS_JSON = "iceServersJson";
+
+    /**
+     * Latest {@link #EXTRA_ICE_SERVERS_JSON} value observed on an
+     * incoming intent (set in {@code onStartCommand} before any path
+     * may reach {@link #ensureNativeManager()}). Null when the most
+     * recent intent did not carry the extra; the manager-build path
+     * then falls through to the SharedPreferences snapshot and finally
+     * to {@code BuildConfig.DEFAULT_ICE_SERVERS_JSON}. Reset on
+     * {@code onDestroy} indirectly via service teardown.
+     */
+    private String latestIceServersJson;
+
     private PowerManager.WakeLock wakeLock;
     /**
      * Proximity wake lock. Held while the active call is a voice call;
@@ -216,6 +263,31 @@ public class VoiceCallForegroundService extends Service {
         if (ACTION_STOP.equals(action)) {
             stopSelf();
             return START_NOT_STICKY;
+        }
+
+        // Capture the latest iceServers config from the intent extra
+        // BEFORE any dispatch that may reach ensureNativeManager(). We
+        // also opportunistically persist it on JS-initiated entries so
+        // the cold-start path (NativeBackgroundMessagingService ->
+        // notifyIncomingRinging) can read it from SharedPreferences.
+        // Background-initiated entries that already read the persisted
+        // value attach it as the extra too, so this same capture path
+        // handles both. Absent extra leaves latestIceServersJson at
+        // null and ensureNativeManager() falls through to prefs / default.
+        String iceServersExtra = intent.getStringExtra(EXTRA_ICE_SERVERS_JSON);
+        if (iceServersExtra != null && !iceServersExtra.isEmpty()) {
+            latestIceServersJson = iceServersExtra;
+            // Persist for the cold-start path. Best-effort; failures
+            // are non-fatal because the BuildConfig default catches
+            // the worst case.
+            try {
+                getSharedPreferences(PREFS_RUNTIME_CONFIG, MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_ICE_SERVERS_JSON, iceServersExtra)
+                    .apply();
+            } catch (Throwable t) {
+                Log.w(TAG, "persist iceServersJson failed", t);
+            }
         }
 
         // Native-call actions: start the manager and route the action.
@@ -715,14 +787,52 @@ public class VoiceCallForegroundService extends Service {
      */
     private void ensureNativeManager() {
         if (nativeManager != null) return;
-        // ICE servers come from the runtime config injected by the JS
-        // layer when starting native calls. Phase 1 reads a default
-        // STUN server so peer connections still complete on most
-        // networks; Phase 2/3 may pass the configured list through
-        // the start intent for parity with the JS getIceServers().
-        List<PeerConnection.IceServer> iceServers = new ArrayList<>();
-        iceServers.add(PeerConnection.IceServer
+        // Resolve iceServers from the runtime config supplied by the JS
+        // layer. Precedence:
+        //   1. latestIceServersJson — set in onStartCommand from
+        //      EXTRA_ICE_SERVERS_JSON on a JS-initiated intent (or on
+        //      a background-initiated intent that pre-read the prefs
+        //      snapshot and re-attached it).
+        //   2. PREFS_RUNTIME_CONFIG SharedPreferences snapshot —
+        //      written by every prior JS-initiated call. Lets the
+        //      cold-start notifyIncomingRinging path use the user's
+        //      most-recent config without a JS round-trip.
+        //   3. BuildConfig.DEFAULT_ICE_SERVERS_JSON — compile-time
+        //      mirror of src/lib/core/runtimeConfig/defaults.ts.
+        //      Drift-detected by a JS test so this stays in sync.
+        // See fix-android-ice-servers-from-runtime-config OpenSpec change.
+        String json = latestIceServersJson;
+        String source = "from extra";
+        if (json == null || json.isEmpty()) {
+            try {
+                json = getSharedPreferences(PREFS_RUNTIME_CONFIG, MODE_PRIVATE)
+                    .getString(KEY_ICE_SERVERS_JSON, null);
+            } catch (Throwable t) {
+                json = null;
+            }
+            if (json != null && !json.isEmpty()) {
+                source = "from prefs";
+            } else {
+                json = BuildConfig.DEFAULT_ICE_SERVERS_JSON;
+                source = "fallback default";
+            }
+        }
+        // The parser's own fallback is the empty list — by the time we
+        // get here, even the BuildConfig default has been substituted,
+        // so a parse failure is genuinely unrecoverable and we degrade
+        // to the historical single-STUN entry rather than build a peer
+        // connection with no iceServers at all.
+        List<PeerConnection.IceServer> hardFallback = new ArrayList<>(1);
+        hardFallback.add(PeerConnection.IceServer
             .builder("stun:turn.data.haus:3478").createIceServer());
+        IceServersJsonParser.Result parsed =
+            IceServersJsonParser.parse(json, hardFallback);
+        List<PeerConnection.IceServer> iceServers = parsed.servers;
+        if (parsed.usedFallback) {
+            source = "fallback default";
+        }
+        Log.d(TAG, "ensureNativeManager: iceServers count=" + iceServers.size()
+            + " (" + source + ")");
 
         // Production sender: dispatches each call onto the messaging
         // service's background executor. The two-step indirection

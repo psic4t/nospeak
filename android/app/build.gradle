@@ -27,9 +27,40 @@ def semverParts = sanitizedSemver.tokenize('.')
 def nospeakVersionCode = packageJson?.versionCode ?: 1
 def nospeakVersionName = "v${packageVersion}"
 
+// Compile-time mirror of `src/lib/core/runtimeConfig/defaults.ts`
+// iceServers array, exposed as BuildConfig.DEFAULT_ICE_SERVERS_JSON.
+// The FGS uses this as the final fallback when neither the JS-supplied
+// intent extra nor the SharedPreferences snapshot is available
+// (typical cold-start path before the user has ever made a call from
+// the JS layer).
+//
+// Drift between this resource and defaults.ts is detected by the JS
+// test `src/lib/core/runtimeConfig/defaultsAndroidDrift.test.ts`.
+//
+// Part of fix-android-ice-servers-from-runtime-config.
+def defaultIceServersFile = file('src/main/res/raw/default_ice_servers.json')
+if (!defaultIceServersFile.exists()) {
+    throw new GradleException(
+        "[nospeak-android] required resource missing: ${defaultIceServersFile}. " +
+        "This file is the compile-time mirror of src/lib/core/runtimeConfig/defaults.ts " +
+        "iceServers and must be present for BuildConfig.DEFAULT_ICE_SERVERS_JSON.")
+}
+def defaultIceServersJson = defaultIceServersFile.getText('UTF-8').trim()
+if (defaultIceServersJson.isEmpty()) {
+    throw new GradleException(
+        "[nospeak-android] ${defaultIceServersFile} is empty. " +
+        "It must contain a JSON array of RTCIceServer entries.")
+}
+
 android {
     namespace = "com.nospeak.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        // Required for BuildConfig.DEFAULT_ICE_SERVERS_JSON (used by
+        // VoiceCallForegroundService.ensureNativeManager as the final
+        // fallback iceServers list).
+        buildConfig = true
+    }
     defaultConfig {
         applicationId = "com.nospeak.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -37,6 +68,13 @@ android {
         versionCode = nospeakVersionCode
         versionName = nospeakVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Inject the JSON as a String. Groovy double-quoted string
+        // would interpolate; we deliberately do not interpolate any
+        // user-controlled values, so this is safe. Escape embedded
+        // double-quotes by replacing with \".
+        def escapedIceServersJson = defaultIceServersJson.replace('\\', '\\\\').replace('"', '\\"')
+        buildConfigField "String", "DEFAULT_ICE_SERVERS_JSON",
+            "\"${escapedIceServersJson}\""
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -71,6 +109,18 @@ android {
             if (releaseSigningConfig != null && releaseSigningConfig.storeFile != null) {
                 signingConfig = releaseSigningConfig
             }
+        }
+    }
+
+    testOptions {
+        unitTests {
+            // Return Android framework defaults (e.g. android.util.Log
+            // methods return 0 instead of throwing RuntimeException)
+            // for unit tests. Required by IceServersJsonParserTest
+            // because the parser uses Log.w on every malformed-input
+            // branch and we want the malformed-input branches to be
+            // covered, not skipped.
+            returnDefaultValues = true
         }
     }
 }

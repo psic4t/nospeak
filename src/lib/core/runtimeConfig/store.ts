@@ -120,4 +120,50 @@ export function getIceServers(): RTCIceServer[] {
     return getRuntimeConfigSnapshot().iceServers;
 }
 
+/**
+ * Deterministic JSON serialization of the current {@link RTCIceServer}
+ * list. Used by {@code VoiceCallServiceNative} to forward the runtime
+ * config to the Android Capacitor plugin (and from there into the
+ * native foreground service intent extra) so the native peer
+ * connection can be configured with the same ICE servers as the web
+ * build.
+ *
+ * The output is byte-stable for a given input: each entry's keys are
+ * emitted in canonical order ({@code urls}, then {@code username},
+ * then {@code credential}; absent keys are omitted), and array
+ * {@code urls} values preserve their original order. This stability
+ * lets tests assert on exact strings without quoting / key-order
+ * surprises and lets the Android side parse with the same expectations
+ * regardless of which JS engine produced the JSON.
+ *
+ * Returns the literal string {@code "[]"} when the iceServers list is
+ * empty; callers MUST tolerate this and fall back to their own
+ * compile-time default.
+ */
+export function getIceServersJson(): string {
+    return serializeIceServers(getRuntimeConfigSnapshot().iceServers);
+}
+
+/**
+ * Pure helper exposed for unit testing. Serializes a list of
+ * {@link RTCIceServer} entries with canonical key order
+ * ({@code urls} / {@code username} / {@code credential}) and stable
+ * URL ordering.
+ */
+export function serializeIceServers(servers: RTCIceServer[]): string {
+    const normalized = servers.map((server) => {
+        const entry: { urls: string | string[]; username?: string; credential?: string } = {
+            urls: server.urls
+        };
+        if (typeof server.username === 'string' && server.username.length > 0) {
+            entry.username = server.username;
+        }
+        if (typeof server.credential === 'string' && server.credential.length > 0) {
+            entry.credential = server.credential;
+        }
+        return entry;
+    });
+    return JSON.stringify(normalized);
+}
+
 export { runtimeConfig };

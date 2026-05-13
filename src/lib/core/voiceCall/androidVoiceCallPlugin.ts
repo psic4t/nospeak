@@ -132,10 +132,31 @@ export interface AndroidVoiceCallPluginShape {
         peerHex: string;
         peerName?: string;
         callKind?: 'voice' | 'video';
+        /**
+         * Deterministic-JSON serialization of the current runtime-config
+         * iceServers list, produced by {@code getIceServersJson()}.
+         * Forwarded by the plugin to the native FGS via the
+         * {@code EXTRA_ICE_SERVERS_JSON} intent extra; the FGS parses it
+         * into a {@code List<PeerConnection.IceServer>} for the native
+         * peer connection. When omitted, the FGS falls back to a
+         * persisted snapshot (from a prior call) and, failing that, to
+         * a compile-time default mirroring {@code defaults.ts}.
+         */
+        iceServersJson?: string;
     }): Promise<void>;
 
-    /** Accept the pending incoming call (reads SDP from SharedPreferences). */
-    acceptCall(opts?: { callId?: string }): Promise<void>;
+    /**
+     * Accept the pending incoming call (reads SDP from SharedPreferences).
+     *
+     * @param opts.iceServersJson Same shape as {@code initiateCall}.
+     *     Forwarded to the FGS so the native peer connection built
+     *     for the accept path uses the current runtime-config
+     *     iceServers list. Optional with the same fallback chain.
+     */
+    acceptCall(opts?: {
+        callId?: string;
+        iceServersJson?: string;
+    }): Promise<void>;
 
     /** Decline the in-progress incoming call. */
     declineCall(): Promise<void>;

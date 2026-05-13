@@ -255,6 +255,13 @@ public class AndroidVoiceCallPlugin extends Plugin {
         String peerName = call.getString("peerName");
         String callKind = call.getString("callKind");
         if (callKind == null || callKind.isEmpty()) callKind = "voice";
+        // Deterministic-JSON serialization of the JS runtime-config
+        // iceServers list. Forwarded to the FGS so the native peer
+        // connection is configured identically to the web build.
+        // Absent / empty values cause the FGS to fall back to its
+        // SharedPreferences snapshot and then to its compile-time
+        // default (see fix-android-ice-servers-from-runtime-config).
+        String iceServersJson = call.getString("iceServersJson");
         if (callId == null || peerHex == null) {
             call.reject("missing required arguments: callId, peerHex");
             return;
@@ -266,6 +273,9 @@ public class AndroidVoiceCallPlugin extends Plugin {
             .putExtra(VoiceCallForegroundService.EXTRA_PEER_NAME,
                 peerName != null ? peerName : "")
             .putExtra(VoiceCallForegroundService.EXTRA_CALL_KIND, callKind);
+        if (iceServersJson != null && !iceServersJson.isEmpty()) {
+            svc.putExtra(VoiceCallForegroundService.EXTRA_ICE_SERVERS_JSON, iceServersJson);
+        }
         try {
             ContextCompat.startForegroundService(getContext(), svc);
         } catch (Exception e) {
@@ -285,10 +295,16 @@ public class AndroidVoiceCallPlugin extends Plugin {
     @PluginMethod
     public void acceptCall(PluginCall call) {
         String callId = call.getString("callId");
+        // Same iceServers wire-through as initiateCall — see that
+        // method's comment for the fallback chain.
+        String iceServersJson = call.getString("iceServersJson");
         Intent svc = new Intent(getContext(), VoiceCallForegroundService.class)
             .setAction(VoiceCallForegroundService.ACTION_ACCEPT_NATIVE);
         if (callId != null) {
             svc.putExtra(VoiceCallForegroundService.EXTRA_CALL_ID, callId);
+        }
+        if (iceServersJson != null && !iceServersJson.isEmpty()) {
+            svc.putExtra(VoiceCallForegroundService.EXTRA_ICE_SERVERS_JSON, iceServersJson);
         }
         try {
             ContextCompat.startForegroundService(getContext(), svc);

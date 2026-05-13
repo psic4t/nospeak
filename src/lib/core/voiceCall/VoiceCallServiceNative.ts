@@ -65,6 +65,7 @@ import {
 } from './androidVoiceCallPlugin';
 import { profileRepo } from '$lib/db/ProfileRepository';
 import { resolveDisplayName } from '$lib/core/nameUtils';
+import { getIceServersJson } from '$lib/core/runtimeConfig/store';
 
 /**
  * Map a native call status string to the corresponding Svelte store
@@ -388,7 +389,11 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
                 callId,
                 peerHex,
                 peerName,
-                callKind: kind
+                callKind: kind,
+                // Forward the runtime-config iceServers so the native FGS
+                // configures the peer connection identically to the web
+                // build. See `fix-android-ice-servers-from-runtime-config`.
+                iceServersJson: getIceServersJson()
             });
         } catch (err) {
             console.error('[VoiceCallNative] initiateCall failed', err);
@@ -432,7 +437,9 @@ export class VoiceCallServiceNative implements VoiceCallBackend {
         // own; we just trigger the FGS action.
         try {
             await AndroidVoiceCall.acceptCall({
-                callId: state.callId ?? this.currentCallId ?? undefined
+                callId: state.callId ?? this.currentCallId ?? undefined,
+                // Same runtime-config wire-through as initiateCall.
+                iceServersJson: getIceServersJson()
             });
         } catch (err) {
             console.error('[VoiceCallNative] acceptCall failed', err);
