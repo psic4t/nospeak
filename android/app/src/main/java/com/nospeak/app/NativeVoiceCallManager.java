@@ -1380,10 +1380,17 @@ public class NativeVoiceCallManager {
             if (rootEglBase == null) {
                 rootEglBase = EglBase.create();
             }
+            // H264 high profile is intentionally disabled. Some browsers
+            // (notably older Chromium on Linux) and a number of Android
+            // SoC decoders cannot decode H264 high profile, which results
+            // in silent black-frame video when our encoder advertises
+            // and selects it. Restricting to baseline keeps us aligned
+            // with what every WebRTC stack must support and avoids the
+            // need for any SDP munging on the wire.
             builder.setVideoEncoderFactory(new DefaultVideoEncoderFactory(
                 rootEglBase.getEglBaseContext(),
                 /* enableIntelVp8Encoder= */ true,
-                /* enableH264HighProfile= */ true));
+                /* enableH264HighProfile= */ false));
             builder.setVideoDecoderFactory(new DefaultVideoDecoderFactory(
                 rootEglBase.getEglBaseContext()));
         }
