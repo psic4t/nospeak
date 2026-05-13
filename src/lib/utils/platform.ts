@@ -28,3 +28,13 @@ export function blur(level: 'sm' | 'md' | 'xl' = 'sm'): string {
     }
     return `backdrop-blur-${level}`;
 }
+
+/**
+ * Checks if the current platform supports CSS View Transitions API.
+ * Only returns true on Android Capacitor with WebView 114+ (Android 14+ or updated WebView).
+ */
+export function supportsViewTransitions(): boolean {
+    return isAndroidCapacitorShell() &&
+           typeof document !== 'undefined' &&
+           'startViewTransition' in document;
+}
