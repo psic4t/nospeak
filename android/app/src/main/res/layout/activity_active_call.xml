@@ -161,116 +161,135 @@
             android:text="" />
     </LinearLayout>
 
-    <!-- Bottom controls for video calls: the 5-button control row
-         carrying the bottom gradient scrim as its background. The
-         activity applies the navigation-bar inset as paddingBottom so
-         buttons aren't clipped behind the gesture pill.
+<!-- Bottom controls for video calls: the 5-button control row
+          inside a bottom-sheet-style bar with rounded top corners
+          and flat bottom edge flush with the screen. Matches the
+          app's bottom-sheet / modal visual language (rounded-t-3xl,
+          near-opaque dark fill, subtle top border, elevated shadow).
+          The activity applies the navigation-bar inset as
+          paddingBottom so buttons aren't clipped behind the gesture
+          pill.
 
-         Visible only on video calls; gone for voice (which uses the
-         button row inside active_call_overlay). -->
+          Visible only on video calls; gone for voice (which uses the
+          button row inside active_call_overlay). -->
     <LinearLayout
         android:id="@+id/active_call_video_controls"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="48dp"
-        android:paddingBottom="24dp"
-        android:background="@drawable/bg_active_call_scrim_bottom"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:background="@drawable/bg_active_call_video_controls_sheet"
+        android:elevation="8dp"
         android:visibility="gone">
 
-        <FrameLayout
-            android:layout_width="0dp"
+        <!-- Drag-handle pill matching BottomSheetHandle.svelte -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="6dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_active_call_sheet_handle" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="24dp">
 
-            <ImageButton
-                android:id="@+id/active_call_mute_video"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_active_call_button_secondary"
-                android:src="@drawable/ic_mic"
-                android:scaleType="center"
-                android:contentDescription="Toggle microphone mute"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
 
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+                <ImageButton
+                    android:id="@+id/active_call_mute_video"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_mic"
+                    android:scaleType="center"
+                    android:contentDescription="Toggle microphone mute"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
 
-            <ImageButton
-                android:id="@+id/active_call_camera_off_video"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_active_call_button_secondary"
-                android:src="@drawable/ic_video"
-                android:scaleType="center"
-                android:contentDescription="Toggle camera"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
 
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+                <ImageButton
+                    android:id="@+id/active_call_camera_off_video"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_video"
+                    android:scaleType="center"
+                    android:contentDescription="Toggle camera"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
 
-            <ImageButton
-                android:id="@+id/active_call_hangup_video"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_call_button_decline"
-                android:src="@drawable/ic_call_end"
-                android:scaleType="center"
-                android:contentDescription="Hang up"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
 
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+                <ImageButton
+                    android:id="@+id/active_call_hangup_video"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_call_button_decline"
+                    android:src="@drawable/ic_call_end"
+                    android:scaleType="center"
+                    android:contentDescription="Hang up"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
 
-            <ImageButton
-                android:id="@+id/active_call_camera_flip_video"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_active_call_button_secondary"
-                android:src="@drawable/ic_camera_flip"
-                android:scaleType="center"
-                android:contentDescription="Flip camera"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
 
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
+                <ImageButton
+                    android:id="@+id/active_call_camera_flip_video"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_camera_flip"
+                    android:scaleType="center"
+                    android:contentDescription="Flip camera"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
 
-            <ImageButton
-                android:id="@+id/active_call_speaker_video"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_active_call_button_secondary"
-                android:src="@drawable/ic_speaker"
-                android:scaleType="center"
-                android:contentDescription="Toggle speakerphone"
-                android:tint="@color/incoming_call_text" />
-        </FrameLayout>
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/active_call_speaker_video"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_active_call_button_secondary"
+                    android:src="@drawable/ic_speaker"
+                    android:scaleType="center"
+                    android:contentDescription="Toggle speakerphone"
+                    android:tint="@color/incoming_call_text" />
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- ===== VOICE-CALL CHROME =====

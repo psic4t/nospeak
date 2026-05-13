@@ -149,7 +149,7 @@ public class ActiveCallActivity extends Activity {
      * controls row including its scrim padding. Only consulted when
      * chrome is visible (slid-up position).
      */
-    private static final int LOCAL_PIP_CONTROLS_FALLBACK_DP = 120;
+    private static final int LOCAL_PIP_CONTROLS_FALLBACK_DP = 114;
     /**
      * Gap between the PiP and either the navigation bar (corner mode)
      * or the controls scrim (slid-up mode).
@@ -718,11 +718,12 @@ public class ActiveCallActivity extends Activity {
                     basePadX, basePadTop + bars.top, basePadX, basePadBottom);
             }
             if (videoControls != null) {
-                int basePadTop = dpToPx(48);
-                int basePadBottom = dpToPx(24);
-                int basePadX = dpToPx(16);
+                // The outer sheet container is full-width; the inner
+                // button row provides its own horizontal padding in
+                // XML. We only need to add the nav-bar inset at the
+                // bottom so buttons clear the gesture bar.
                 videoControls.setPadding(
-                    basePadX, basePadTop, basePadX, basePadBottom + bars.bottom);
+                    0, 0, 0, bars.bottom);
             }
             if (overlayLayout != null) {
                 int basePadX = dpToPx(24);
