@@ -204,3 +204,16 @@
 [data-theme="cypher"] .dark\:hover\:bg-slate-800:hover {
     background-color: rgba(0, 255, 255, 0.1) !important;
 }
+
+/* View Transitions API - Android Chat Navigation */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 280ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::view-transition-group(chat-avatar-),
+::view-transition-group(chat-name-) {
+    animation-duration: 280ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
