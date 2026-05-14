@@ -1,11 +1,12 @@
 <script lang="ts">
     import { getIdenticonDataUri } from '$lib/core/identicon';
 
-    let { src, npub, size = 'md', class: className = '' } = $props<{ 
+    let { src, npub, size = 'md', class: className = '', style = '' } = $props<{ 
         src?: string, 
         npub: string, 
         size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl',
-        class?: string 
+        class?: string,
+        style?: string
     }>();
 
     const identiconSrc = $derived(getIdenticonDataUri(npub));
@@ -31,7 +32,7 @@
     };
 </script>
 
-<div class={`${sizeClasses[size as keyof typeof sizeClasses]} ${className} rounded-full ring-2 ring-white/50 dark:ring-white/10 overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-slate-700 shadow-sm`}>
+<div class={`${sizeClasses[size as keyof typeof sizeClasses]} ${className} rounded-full ring-2 ring-white/50 dark:ring-white/10 overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-slate-700 shadow-sm`} style={style}>
     <img 
         src={finalSrc} 
         alt="Avatar" 

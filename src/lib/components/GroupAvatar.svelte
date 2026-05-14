@@ -6,11 +6,13 @@
     let { 
         participants = [],
         size = 'md',
-        class: className = ''
+        class: className = '',
+        style = ''
     } = $props<{ 
         participants: string[];
         size?: 'sm' | 'md' | 'lg';
         class?: string;
+        style?: string;
     }>();
 
     // Size configurations for the container and individual avatars
@@ -64,7 +66,7 @@
     const config = $derived(sizeConfig[size as keyof typeof sizeConfig]);
 </script>
 
-<div class={`${config.container} ${className} relative flex items-center justify-center`}>
+<div class={`${config.container} ${className} relative flex items-center justify-center`} style={style}>
     {#if displayParticipants.length === 0}
         <!-- Empty group placeholder -->
         <div class="w-full h-full rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center">

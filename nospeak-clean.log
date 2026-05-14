@@ -1,0 +1,125 @@
+--------- beginning of main
+05-07 21:18:20.072 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Tab became visible, verifying relay connections...
+05-07 21:18:20.080 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:20.282 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Ping success for wss://dm.nospeak.chat
+05-07 21:18:20.777 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Ping success for wss://nostr.data.haus/
+05-07 21:18:20.864 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: {"events":"[\"{\\\"content\\\":\\\"AgCRq7J4SCEnKXgRMLtq8LdiW1W\\\\\\/BoXTz2dfharQvVJtip9OuDGl+k6ggv4YpIHmxeHNPHy8x5whd5ZaD3\\\\\\/Cy4P\\\\\\/+fDZ0mPC9w9ujJE7ZYUFpY8D8s8DtFHI2AxnGj7y68BdBu2iK3fY2RBSQisBA4LsqfjqW\\\\\\/pvFEBqu0Yh69EcR0NjHuAIwBXVywKKFOz3\\\\\\/\\\\\\/E2giLNSC+kWy3MLeE33e+30gcR55MOdxoJD9kGDzStGIc8pEwLDquQraIE4sPC5sWIBWQxuS1dM2GgHiMw4FeTKyN7AoAQmMYanGkNaigwl5zYkD8Td\\\\\\/ynNxfAqYmV2xiyS\\\\\\/2Q1Tqp+EgfFqmnLG+R9u7+DnVKgey7nymJZZa1UG4t2yZrLIqZWvgXZGtuD4w8kA5ugVwZ32AqA+4pXYPoySVyZ+g7zth6G6ggF7S7fYhzG0qz7KkPsjb39aeYqiR5fWOuemyc0IMWuQiX1opza\\\\\\/v1RvovuhkOSpt9ZFE1efsmYSi7CdKqM68aGNHrwphAiYs75Gap6wMnAQdNJnNdlf6t\\\\\\/AY6bn6KpY7QiJrknBXDedcp1OxdrDM1rAB45ddAd528QJTcSIGk+bMNtMMJe3PkucN4LTrNjRsbGI6RR6pOJ1C5dd\\\\\\/X8d6OPhP\\\\\\/nQTNOaE\\\\\\/qgOPXYPJD0n\\\\\\/lPT+9iomtmO0rT7AqUi9aH2nTbMmn2WtggmUfLPvv2kNGkAyCalYBh4Eb+tqByd2X08cBQBXV7mnAHD4sI2ZJfyksq+UzD4hz9ifJVu2xnQI74ZJGi3YlDhtu82IxBw6SNnz0jsHHVw2HbhhncvUa2eONbNk\\\\\\/v9ETa0SCRU+4zn7Kdo7tFa+4GoufTz2o8ZwncFb2R4aughBgIh\\\\\\/5oHV16E5RGofSNFKC45mHMDtoCTBuZth8zNhfXYiblQuIl5h5iIwPh00ETXGkT8mxmA0EG+4xoxour83XpWXLB6jbRodkLCTW9czENhYKDLUjoG\\\\\\/tJzVefEauoLj7gvSIE658TrogYq0lWjdJeSW5YwiIrdyWYS+Etw17hf\\\\\\/9dFWREnfRSkkX8OyxlZsyM6ZFmCxEioxqKMMTFvfa3ZiZKbvZ56GR1\\\\\\/dbfQ6k6e0mRuHBjbRT71UwEdMSJ4urYEs7mK1RIvsIZ7F3FfwSwx32WzXhhiN0hv7s03O0Ncnnd9meJo+I96Q6+DeupwCYWPrARSDYWqTOeoAURy0owpNfG5bC5g7t4jzbOI9WXqldX2v5UsgaiIe8Gce\\\\\\/2xZmMmka7BvCep6XNOXLE0knC0UPh4Krerje3+ZUFDb7N5N6PMY0Zd+bkroG8KCBQW4jzPxZo477CdhwFLbxz2z5Vztom\\\\\\/dYwz5c+99s8NpcJG7nZ5MPme9PCkce+W3tfMloXhqPMxz3lXZGmdrr3ODs\\\\\\/4Wndg3QdOTtchGDfqHSpxccl24n\\\\\\/mz4PqZ8ToT+YcPAl9Cjdrx4zcCV3ihrER6ow9TXBMScUDuj9MafTIzZhfQZh2rDCEa1yCXGPM\\\\\\/DfDl6PNhXfv3uk4Lo2EacNo7hOCan195XvPFTFP2g6uVaKtoXq48xUXxPbrB+MN0A\\\\\\/\\\\\\/D30h\\\\\\/wv4uiZgikOWfIfKkPK3nE39Db82ScLOzkIBrZapW8jsnHRdMvckQLO7k7ZGxfsZxMIZ03K0cM0MA3W9J2adgFm+PKjH6OadNRWCOh3Tga+b9jMkBIVy4KAfxJ\\\\\\/us+ihU3s61\\\\\\/UflZKyO2QSgp6qBQFH9gG0H4PBVvk6bChM6RKd9UyPgGtKa9pmYb+8JmSGv7z11yT1wfqm8mFT3\\\\\\/ODqfv+8KCSRrX7D+U\\\\\\/kEL1pOWBPASK2My7h1QLbw2bVYbb+csVlfwW7C2cQmRDmkTSkHD+OPMeCBzMz+HrONKBEkBzWGomc9oj6TwN13283ZFo+AGiqS0kAqvCFrE28IS5XFTJMLm0U5MZkrNSSGPj\\\\\\/J5RstUK6z7+pbO0u+WdVWX+kDQywcuoVRrsCO9ckp49rGHA4eriHjzaVeHKdottrSYUiPIyaQ3TOCy6+mWxAZq1sB\\\\\\/xx0SsDE6FCM84xRiUqxZlFNCmnAWkzm5sxDXI2eQomNVsb+KBFVPXjFt0c6P\\\\\\/4hPN0WSlg0KO4wnaFe8+8ESjtMKIPPAEDgS+CPDRDiRSppZ1rkGBDEQ==\\\",\\\"created_at\\\":1776933570,\\\"id\\\":\\\"e9ad8bd2569b0692f2fb7946fca34963fca3a9db3104bc608ee382ff89bb1b0a\\\",\\\"kind\\\":1059,\\\"pubkey\\\":\\\"f53c5e50afacac743c6ced3549f98258774a5d0d86de222c31ef52741cd52d7d\\\",\\\"sig\\\":\\\"3085234f6fd227270718289f83f64e5594dec42ac5eaf8eb362ad8ee959c823f9f2aee55ad145e35e7d0073634bc782dc5496b81321e39247924df28bd540e6c\\\",\\\"tags\\\":[[\\\"p\\\",\\\"f55678aa1f5d554536d456b13beab04f636d63fdedd586fe38a4cb9ce48c90bc\\\"]]}\",\"{\\\"content\\\":\\\"AgTpyaET8cO\\\\\\/1uboM4B720wjPKkNbvmse7bLLOn9Ba0+BjoxOUz7PNODhTW7IxM3eB24vzxSNIzGZxrDCV7WfU\\\\\\/6\\\\\\/MNUtrstV3Qsu9FwXHw7WZN7neTtxHIF0cVYXXai\\\\\\/gxTUpH7v+G4A6Y4cJhp8uwvkAojm62tBA7G+QESj+dFDmD3uSq1c+QZpW9W9uwo\\\\\\/j+GbSMx+OHvaEPMvE77lRuVAdPieWXafcPdM3\\\\\\/5w7jbRylyK3tGEE55nJdhB8\\\\\\/oHOQagSMHlCH5kQv+KMlkBdHGiUWeWN6i6wkQkvyhGWpNizHHHsiHR4AwSudRSg+6NFTFRXWUvZm24svv56Lh7t2J6\\\\\\/RdcxAyBjQSlsyF5rUvmbx7KshD4MeBpzDeUFZHQ3+uiyXc5ic9Mk7UfpKGdcuQL+ahqRgUIdT4IUjB\\\\\\/mqnGD6SX279EYoAdb8eXbRNEyV4m4\\\\\\/XZYr8c+uzNZu1uhD52DwtzxUF3qqU6qqIlSKC5rsQo3I6DZmNo2W5PcMDWHlb5HQP2jXs6SPj\\\\\\/CuSnVnMzQNrN+YtEjpD4OivwEkBnxlfSc+QrhkQ7817h1XlCOFEfhItu08qMitdL5tAenwVJ8jOz68x1uohKhie79VZNSzG2eoxuwJp7wbSC3z9Gc4E6I2i37g9gk7p4ewoThvjnPXBVYrCXgXDvTLBha\\\\\\/C83jmCY6DKdhwdEaNgwDj9+QXSxvQFoBF5v1TPfu\\\\\\/1WvnfO+EkI6Y1EKIaTYMsc00RW1OLoUYdXabx7L\\\\\\/\\\\\\/u34jln31aFSLFoq8rVGVG6KOAHdY0hTND\\\\\\/4ezBoVwigrTVZfKVhln9DnqPykEVWtfkJ69xmXZ0mgCkXrXLg41tVm\\\\\\/6DfVe\\\\\\/r1Qexl4yADtj0K5sXm2Z2cI+7HhpM\\\\\\/f8DVrQvseOO5r\\\\\\/JrLeyE+SwV8T64gLperrkQCgK0hNtNT\\\\\\/RseX3YF65\\\\\\/5ZykleUGFfexme1+SLrOHyl88RBVceXXUNv4h1GolCn0b7BHiTkf35Bl83hlL5ecVi
+05-07 21:18:26.295 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Tab became visible, verifying relay connections...
+05-07 21:18:26.296 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:26.306 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: {"events":"[]"}
+05-07 21:18:28.967 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Ping success for wss://dm.nospeak.chat
+05-07 21:18:28.969 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Ping success for wss://nostr.data.haus/
+05-07 21:18:35.849 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:35.849 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:35.861 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: undefined
+05-07 21:18:35.861 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: undefined
+05-07 21:18:35.982 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/D4HGHsbn.js - Line 2 - Msg: Starting relay discovery for npub1jw5g628lcnuea4h2tuwx4ypfu9yvl7r2454w4vhcdttva99yemkscm3nra (isCurrentUser: false)
+05-07 21:18:35.982 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://nostr.data.haus
+05-07 21:18:35.982 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://nostr.data.haus
+05-07 21:18:35.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://relay.damus.io
+05-07 21:18:35.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://relay.damus.io
+05-07 21:18:35.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://nos.lol
+05-07 21:18:35.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://nos.lol
+05-07 21:18:35.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://relay.primal.net
+05-07 21:18:35.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://relay.primal.net
+05-07 21:18:35.984 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://purplepag.es
+05-07 21:18:35.984 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://purplepag.es
+05-07 21:18:35.984 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://user.kindpag.es
+05-07 21:18:35.984 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://user.kindpag.es
+05-07 21:18:35.985 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://profiles.nostr1.com
+05-07 21:18:35.985 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://profiles.nostr1.com
+05-07 21:18:35.985 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Added temporary relay wss://directory.yabu.me
+05-07 21:18:35.985 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Attempting to connect to wss://directory.yabu.me
+05-07 21:18:35.985 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:35.986 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Fetching profile for npub1jw5g628lcnuea4h2tuwx4ypfu9yvl7r2454w4vhcdttva99yemkscm3nra...
+05-07 21:18:35.987 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Applied subscription to wss://dm.nospeak.chat/
+05-07 21:18:35.987 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Applied subscription to wss://nostr.data.haus/
+05-07 21:18:36.065 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: undefined
+05-07 21:18:36.066 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/nodes/5.CAoBgP39.js - Line 6 - Msg: [ReadReceipt] hydration for npub1jw5g628lcnuea4h2tuwx4ypfu9yvl7r2454w4vhcdttva99yemkscm3nra result: [object Object]
+05-07 21:18:36.066 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/nodes/5.CAoBgP39.js - Line 6 - Msg: [ReadReceipt] hydrated from DB [object Object]
+05-07 21:18:36.141 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:36.184 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: undefined
+05-07 21:18:36.186 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://nostr.data.haus
+05-07 21:18:36.188 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://relay.damus.io
+05-07 21:18:36.188 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://nos.lol
+05-07 21:18:36.188 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://relay.primal.net
+05-07 21:18:36.189 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://purplepag.es
+05-07 21:18:36.189 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://user.kindpag.es
+05-07 21:18:36.189 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://profiles.nostr1.com
+05-07 21:18:36.189 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Removed relay wss://directory.yabu.me
+05-07 21:18:36.189 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/rJOW_87N.js - Line 1 - Msg: Cleaned up 8 temporary connections
+05-07 21:18:36.228 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:37.694 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: undefined
+05-07 21:18:37.983 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/D4HGHsbn.js - Line 2 - Msg: [ReadReceipt] sendReadReceipt called [object Object]
+05-07 21:18:37.985 30450 30450 I Capacitor/Console: File: https://localhost/_app/immutable/chunks/D4HGHsbn.js - Line 2 - Msg: [ReadReceipt] setting disabled, skipping
+05-07 21:18:40.064 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:40.106 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: {"granted":true}
+05-07 21:18:40.106 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:40.124 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: {"granted":true}
+05-07 21:18:40.124 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:40.131 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: {"granted":true}
+05-07 21:18:40.138 30450 30450 I Capacitor/Console: File:  - Line 349 - Msg: [object Object]
+05-07 21:18:40.149 30450 30450 D VoiceCallFGS: handleNativeAction action=com.nospeak.app.voicecall.INITIATE_NATIVE callId=3c3aea0c4e353bdc74344b7f17622e07
+05-07 21:18:40.172 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: undefined
+05-07 21:18:40.174 30450 30450 D VoiceCallFGS: ensureNativeManager: iceServers count=3 (from extra)
+05-07 21:18:40.177 30450 30450 D NativeVoiceCallMgr: pushInitialState: status=IDLE
+05-07 21:18:40.178 30450 30450 D VoiceCallFGS: INITIATE_NATIVE: dispatching to manager callId=3c3aea0c4e353bdc74344b7f17622e07 kind=VIDEO
+05-07 21:18:40.178 30450 30450 D NativeVoiceCallMgr: initiateCall callId=3c3aea0c4e353bdc74344b7f17622e07 peerHex=93a88d28.. kind=VIDEO
+05-07 21:18:40.178 30450 30450 D NativeVoiceCallMgr: transitionTo: IDLE -> OUTGOING_RINGING reason=null callId=3c3aea0c4e353bdc74344b7f17622e07
+05-07 21:18:40.345 30450 30450 D NativeVoiceCallMgr: attachLocalVideoTrack: camera devices=2
+05-07 21:18:40.366 30450 30450 D NativeVoiceCallMgr: attachLocalVideoTrack: using camera=1 front=true
+05-07 21:18:40.393 30450 30450 D NativeVoiceCallMgr: attachLocalVideoTrack: startCapture ok (640x480 @ 30fps)
+05-07 21:18:40.399 30450 30450 D NativeVoiceCallMgr: attachLocalVideoTrack: addTrack ok (uiListener=false)
+05-07 21:18:40.402 30450 30450 D VoiceCallFGS: INITIATE_NATIVE: post-initiate status=OUTGOING_RINGING
+05-07 21:18:40.422 30450 30450 D VoiceCallFGS: INITIATE_NATIVE: ActiveCallActivity launch dispatched
+05-07 21:18:40.423 30450 30450 I Capacitor/Console: File:  - Line 333 - Msg: {"callId":"3c3aea0c4e353bdc74344b7f17622e07","status":"outgoing-ringing"}
+05-07 21:18:40.604 30450 30450 D NativeVoiceCallMgr: pushInitialState: status=OUTGOING_RINGING
+--------- beginning of crash
+05-07 21:18:41.104 30450 31090 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 31090 (signaling_threa), pid 30450 (com.nospeak.app)
+05-07 21:18:41.669 31229 31229 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+05-07 21:18:41.669 31229 31229 F DEBUG   : Build fingerprint: 'google/blazer/blazer:16/BP4A.260205.001/2026042101:user/release-keys'
+05-07 21:18:41.669 31229 31229 F DEBUG   : Kernel Release: '6.6.129-android15-8-g41ef158273df-4k'
+05-07 21:18:41.669 31229 31229 F DEBUG   : Revision: 'MP1.0'
+05-07 21:18:41.669 31229 31229 F DEBUG   : ABI: 'arm64'
+05-07 21:18:41.669 31229 31229 F DEBUG   : Timestamp: 2026-05-07 21:18:41.356329437+0200
+05-07 21:18:41.669 31229 31229 F DEBUG   : Process uptime: 255s
+05-07 21:18:41.669 31229 31229 F DEBUG   : Executable: /system/bin/app_process64
+05-07 21:18:41.669 31229 31229 F DEBUG   : Cmdline: com.nospeak.app
+05-07 21:18:41.669 31229 31229 F DEBUG   : pid: 30450, tid: 31090, name: signaling_threa  >>> com.nospeak.app <<<
+05-07 21:18:41.669 31229 31229 F DEBUG   : uid: 10292
+05-07 21:18:41.669 31229 31229 F DEBUG   : tagged_addr_ctrl: 000000000007fff1 (PR_TAGGED_ADDR_ENABLE, mask 0xfffe)
+05-07 21:18:41.669 31229 31229 F DEBUG   : pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+05-07 21:18:41.669 31229 31229 F DEBUG   : esr: 0000000092000007 (Data Abort Exception 0x24)
+05-07 21:18:41.669 31229 31229 F DEBUG   : signal 6 (SIGABRT), code -1 (SI_QUEUE), fault addr --------
+05-07 21:18:41.669 31229 31229 F DEBUG   : Abort message: 'JNI DETECTED ERROR IN APPLICATION: input is not valid Modified UTF-8: illegal continuation byte 0x7f
+05-07 21:18:41.669 31229 31229 F DEBUG   :     string: '\356\177'
+05-07 21:18:41.669 31229 31229 F DEBUG   :     input: '0xee <0x7f>'
+05-07 21:18:41.669 31229 31229 F DEBUG   :     in call to NewStringUTF'
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x0  0000000000000000  x1  0000000000007972  x2  0000000000000006  x3  0000c40deaf4c290
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x4  2e00000000000000  x5  2e00000000000000  x6  2e00000000000000  x7  000000000000002e
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x8  00000000000000f0  x9  a74a6f7bd8f59a00  x10 0000000000000001  x11 0000c74012120a50
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x12 0000000000000040  x13 0000000000002f2c  x14 ffffffffffffffff  x15 00002be731b2e030
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x16 0000c7401218d378  x17 0000c74012172340  x18 0000c40de8550000  x19 00000000000076f2
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x20 0000000000007972  x21 00000000ffffffff  x22 0000c41669475000  x23 0000000000000000
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x24 0000c40deb316040  x25 0000c40deb316040  x26 0000c40deaf4c490  x27 0000c73fffb834d0
+05-07 21:18:41.669 31229 31229 F DEBUG   :     x28 0000c73fffb83510  x29 0000c40deaf4c310
+05-07 21:18:41.669 31229 31229 F DEBUG   :     lr  0000c7401210761c  sp  0000c40deaf4c290  pc  0000c74012107640  pst 0000000000001000
+05-07 21:18:41.669 31229 31229 F DEBUG   :     esr 0000000092000007
+05-07 21:18:41.669 31229 31229 F DEBUG   : 16 total frames
+05-07 21:18:41.669 31229 31229 F DEBUG   : backtrace:
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #00 pc 000000000007d640  /apex/com.android.runtime/lib64/bionic/libc.so (abort+160) (BuildId: c9a789a577bb956d1f38132e675d4436)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #01 pc 0000000000933488  /apex/com.android.art/lib64/libart.so (art::Runtime::Abort(char const*)+1016) (BuildId: beb7fbd1d32b8638db451308cec29e5b)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #02 pc 0000000000016f04  /apex/com.android.art/lib64/libbase.so (android::base::SetAborter(std::__1::function<void (char const*)>&&)::$_0::__invoke(char const*)+84) (BuildId: eba44ef0784e7c9bd49d2eb775454587)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #03 pc 0000000000016374  /apex/com.android.art/lib64/libbase.so (android::base::LogMessage::~LogMessage()+548) (BuildId: eba44ef0784e7c9bd49d2eb775454587)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #04 pc 00000000003424b8  /apex/com.android.art/lib64/libart.so (art::JavaVMExt::JniAbort(char const*, char const*)+1560) (BuildId: beb7fbd1d32b8638db451308cec29e5b)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #05 pc 00000000005bc9dc  /apex/com.android.art/lib64/libart.so (art::JavaVMExt::JniAbortV(char const*, char const*, std::__va_list)+108) (BuildId: beb7fbd1d32b8638db451308cec29e5b)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #06 pc 000000000034fab4  /apex/com.android.art/lib64/libart.so (art::(anonymous namespace)::ScopedCheck::AbortF(char const*, ...) (.__uniq.99033978352804627313491551960229047428)+148) (BuildId: beb7fbd1d32b8638db451308cec29e5b)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #07 pc 0000000000350654  /apex/com.android.art/lib64/libart.so (art::(anonymous namespace)::ScopedCheck::Check(art::ScopedObjectAccess&, bool, char const*, art::(anonymous namespace)::JniValueType*) (.__uniq.99033978352804627313491551960229047428)+2932) (BuildId: beb7fbd1d32b8638db451308cec29e5b)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #08 pc 0000000000610e90  /apex/com.android.art/lib64/libart.so (art::(anonymous namespace)::CheckJNI::NewStringUTF(_JNIEnv*, char const*) (.__uniq.99033978352804627313491551960229047428.llvm.11255150843437844424)+160) (BuildId: beb7fbd1d32b8638db451308cec29e5b)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #09 pc 0000000000449e14  /data/app/~~ZtmHZ_E-Sj0LENkS26uJPw==/com.nospeak.app-yiaZ_NlOPUGfb0dZPuKF_Q==/base.apk!libjingle_peerconnection_so.so (offset 0x8a4000) (BuildId: 95dd82a22fc11dbb)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #10 pc 0000000000936cf8  /data/app/~~ZtmHZ_E-Sj0LENkS26uJPw==/com.nospeak.app-yiaZ_NlOPUGfb0dZPuKF_Q==/base.apk!libjingle_peerconnection_so.so (offset 0x8a4000) (BuildId: 95dd82a22fc11dbb)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #11 pc 000000000046ab4c  /data/app/~~ZtmHZ_E-Sj0LENkS26uJPw==/com.nospeak.app-yiaZ_NlOPUGfb0dZPuKF_Q==/base.apk!libjingle_peerconnection_so.so (offset 0x8a4000) (BuildId: 95dd82a22fc11dbb)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #12 pc 0000000000469b24  /data/app/~~ZtmHZ_E-Sj0LENkS26uJPw==/com.nospeak.app-yiaZ_NlOPUGfb0dZPuKF_Q==/base.apk!libjingle_peerconnection_so.so (offset 0x8a4000) (BuildId: 95dd82a22fc11dbb)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #13 pc 000000000046b040  /data/app/~~ZtmHZ_E-Sj0LENkS26uJPw==/com.nospeak.app-yiaZ_NlOPUGfb0dZPuKF_Q==/base.apk!libjingle_peerconnection_so.so (offset 0x8a4000) (BuildId: 95dd82a22fc11dbb)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #14 pc 0000000000091204  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*) (.__uniq.67847048707805468364044055584648682506)+180) (BuildId: c9a789a577bb956d1f38132e675d4436)
+05-07 21:18:41.669 31229 31229 F DEBUG   :       #15 pc 0000000000081054  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: c9a789a577bb956d1f38132e675d4436)

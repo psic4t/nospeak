@@ -10,6 +10,7 @@
   import type { ContactItem, Conversation, Message, Profile } from "$lib/db/db";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { navigateWithTransition } from "$lib/utils/viewTransition";
   import Avatar from "./Avatar.svelte";
   import GroupAvatar from "./GroupAvatar.svelte";
   import { hapticSelection } from "$lib/utils/haptics";
@@ -528,7 +529,7 @@
 
   function selectChat(id: string) {
     hapticSelection();
-    goto(`/chat/${id}`, { invalidateAll: true });
+    navigateWithTransition(`/chat/${id}`, { invalidateAll: true });
   }
 
   // Context menu state
@@ -729,6 +730,7 @@
             participants={item.participants || []}
             size="md"
             class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+            style="view-transition-name: chat-avatar-{item.id}"
           />
         {:else}
           <Avatar
@@ -736,6 +738,7 @@
             src={item.picture}
             size="md"
             class="!w-14 !h-14 md:!w-10 md:!h-10 transition-all duration-150 ease-out"
+            style="view-transition-name: chat-avatar-{item.id}"
           />
         {/if}
         {#if item.hasUnread}
@@ -747,6 +750,7 @@
         <div class="flex items-center gap-1 min-w-0">
           <span
             class="font-bold text-gray-800 dark:text-slate-100 truncate text-[15px]"
+            style="view-transition-name: chat-name-{item.id}"
             >{item.name}</span
           >
           {#if item.isGroup}
