@@ -71,7 +71,7 @@
     $effect(() => {
         if ($voiceCallState.status === 'active' && audioEl) {
             const stream = voiceCallService.getRemoteStream();
-            if (stream) {
+            if (stream && audioEl.srcObject !== stream) {
                 audioEl.srcObject = stream;
             }
         }
@@ -87,7 +87,7 @@
             remoteVideoEl
         ) {
             const stream = voiceCallService.getRemoteStream();
-            if (stream) {
+            if (stream && remoteVideoEl.srcObject !== stream) {
                 remoteVideoEl.srcObject = stream;
             }
         }
@@ -105,7 +105,7 @@
             localVideoEl
         ) {
             const stream = voiceCallService.getLocalStream();
-            if (stream) {
+            if (stream && localVideoEl.srcObject !== stream) {
                 localVideoEl.srcObject = stream;
             }
         }
