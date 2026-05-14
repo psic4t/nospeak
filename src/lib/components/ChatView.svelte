@@ -27,8 +27,9 @@
   import { hapticLightImpact, hapticSelection } from '$lib/utils/haptics';
   import { tapSoundClick } from '$lib/utils/tapSound';
   import { copyTextToClipboard } from '$lib/utils/clipboard';
-  import { isAndroidCapacitorShell, blur } from '$lib/utils/platform';
-  import { overscroll } from '$lib/utils/overscroll';
+import { isAndroidCapacitorShell, blur } from '$lib/utils/platform';
+import { overscroll } from '$lib/utils/overscroll';
+import { navigateWithTransition } from '$lib/utils/viewTransition';
   import { lastRelaySendStatus, clearRelayStatus } from '$lib/stores/sending';
   import { readReceiptsStore, updateReadReceipt } from '$lib/stores/readReceipts';
   import { reactionRepo } from '$lib/db/ReactionRepository';
@@ -2098,7 +2099,7 @@
         <button 
             onclick={() => {
                 tapSoundClick();
-                goto('/chat');
+                navigateWithTransition('/chat');
             }}
             class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-150 ease-out flex-shrink-0"
             aria-label="Back to contacts"
@@ -2114,13 +2115,17 @@
                   participants={groupConversation.participants.filter((p: string) => p !== $currentUser?.npub)} 
                   size="sm" 
                   class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
+                  style="view-transition-name: chat-avatar-{groupConversation.id}"
               />
           </div>
           <div class="flex flex-col group flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
-                   <span class="font-bold dark:text-white text-start truncate">
-                      {groupTitle || $t('chat.group.defaultTitle')}
-                  </span>
+                   <span 
+                       class="font-bold dark:text-white text-start truncate"
+                       style="view-transition-name: chat-name-{groupConversation.id}"
+                   >
+                       {groupTitle || $t('chat.group.defaultTitle')}
+                   </span>
                   <button
                       type="button"
                       class="p-1 rounded-full text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all cursor-pointer opacity-100 md:opacity-0 md:group-hover:opacity-100"
@@ -2161,11 +2166,13 @@
                   src={partnerPicture} 
                   size="sm" 
                   class="!w-8 !h-8 md:!w-9 md:!h-9 transition-all duration-150 ease-out"
+                  style="view-transition-name: chat-avatar-{partnerNpub}"
               />
           </button>
           <button
               onclick={() => partnerNpub && openProfile(partnerNpub)}
                class="font-bold hover:underline dark:text-white text-start truncate min-w-0"
+              style="view-transition-name: chat-name-{partnerNpub}"
           >
               {partnerName || partnerNpub.slice(0, 10) + "..."}
           </button>
