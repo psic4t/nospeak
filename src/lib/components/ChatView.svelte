@@ -2503,6 +2503,26 @@ import { navigateWithTransition } from '$lib/utils/viewTransition';
             {/if}
 
            <div class={`typ-meta mt-1 flex items-center justify-end gap-2 ${msg.direction === "sent" ? "text-blue-100" : "text-gray-400"}`}>
+             {#if msg.direction === "sent" && (partnerNpub || isGroup)}
+               {@const isLastSent = i === getLastSentIndex(displayMessages)}
+               {@const receipt = !isGroup && partnerNpub ? $readReceiptsStore[partnerNpub] : undefined}
+               {@const isRead = receipt && msg.sentAt <= receipt.targetSentAt}
+               {@const showRelayStatus = isLastSent && $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id)}
+               {#if msg.eventId?.startsWith('optimistic:')}
+                 <span>{$t('chat.relayStatus.sending')}</span>
+               {:else}
+                 <span class="flex items-center gap-1">
+                   {#if showRelayStatus}
+                     <span>{$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays</span>
+                   {/if}
+                   {#if isRead}
+                     <span class="text-green-400">✓✓</span>
+                   {:else if !showRelayStatus || $lastRelaySendStatus.successfulRelays > 0}
+                     <span>✓</span>
+                   {/if}
+                 </span>
+               {/if}
+             {/if}
              <span class="cursor-help" title={new Date(msg.sentAt).toLocaleString()}>
                {getRelativeTime(msg.sentAt)}
              </span>
@@ -2519,28 +2539,6 @@ import { navigateWithTransition } from '$lib/utils/viewTransition';
                </svg>
              </button>
            </div>
-          {#if msg.direction === "sent" && (partnerNpub || isGroup)}
-            {@const isLastSent = i === getLastSentIndex(displayMessages)}
-            {@const receipt = !isGroup && partnerNpub ? $readReceiptsStore[partnerNpub] : undefined}
-            {@const isRead = receipt && msg.sentAt <= receipt.targetSentAt}
-            {@const showRelayStatus = isLastSent && $lastRelaySendStatus && ($lastRelaySendStatus.recipientNpub === partnerNpub || $lastRelaySendStatus.conversationId === groupConversation?.id)}
-            {#if msg.eventId?.startsWith('optimistic:')}
-              <div class="typ-meta mt-0.5 text-end text-blue-100">
-                {$t('chat.relayStatus.sending')}
-              </div>
-            {:else}
-              <div class="typ-meta mt-0.5 text-end text-blue-100 flex items-center justify-end gap-1">
-                {#if showRelayStatus}
-                  <span>{$lastRelaySendStatus.successfulRelays}/{$lastRelaySendStatus.desiredRelays} relays</span>
-                {/if}
-                {#if isRead}
-                  <span class="text-green-400">✓✓</span>
-                {:else if !showRelayStatus || $lastRelaySendStatus.successfulRelays > 0}
-                  <span>✓</span>
-                {/if}
-              </div>
-            {/if}
-          {/if}
          </div>
         </div>
         <MessageReactions
