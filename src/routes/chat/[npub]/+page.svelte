@@ -103,11 +103,15 @@
     let cacheExhausted = $state(false);
     let networkHistoryStatus = $state<'idle' | 'loading' | 'no-more' | 'error'>('idle');
     let networkHistorySummary = $state<{ eventsFetched: number; messagesSaved: number; messagesForChat: number } | null>(null);
+    // Relay backfill cursor (wire seconds), decoupled from the visible list so
+    // repeated "fetch older from relays" taps keep walking back even when a batch
+    // contains no messages for this conversation (common for sparse group chats).
+    let networkCursorUntil = $state<number | null>(null);
     let lastPartner: string | null = null;
     let initialLoadDone = false;
 
     const canRequestNetworkHistory = $derived(
-        cacheExhausted && networkHistoryStatus !== 'no-more' && networkHistoryStatus !== 'loading' && !isGroup
+        cacheExhausted && networkHistoryStatus !== 'no-more' && networkHistoryStatus !== 'loading'
     );
 
     async function handleLoadMore() {
@@ -147,13 +151,12 @@
     }
 
     async function handleRequestNetworkHistory() {
-        // Network history fetch is not available for group chats (yet)
-        if (isGroup) return;
-        
-        const partner = currentPartner;
-        if (!partner || messages.length === 0 || !canRequestNetworkHistory) {
+        const convId = conversationId;
+        if (!convId || messages.length === 0 || !canRequestNetworkHistory) {
             return;
         }
+        // 1-on-1 needs a known partner; groups are keyed by conversationId.
+        if (!isGroup && !currentPartner) return;
 
         const oldest = messages[0];
         if (!oldest) return;
@@ -162,32 +165,67 @@
         networkHistoryStatus = 'loading';
 
         try {
-            const result = await messagingService.fetchOlderMessages(
-                Math.floor(oldest.sentAt / 1000),
-                { targetChatNpub: partner }
-            );
+            // The cursor walks the global gift-wrap timeline backward, independent
+            // of the visible list. First tap starts from the oldest loaded message.
+            const until = networkCursorUntil ?? Math.floor(oldest.sentAt / 1000);
 
-            networkHistorySummary = {
-                eventsFetched: result.totalFetched,
-                messagesSaved: result.messagesSaved ?? 0,
-                messagesForChat: result.messagesSavedForChat ?? 0,
-            };
+            // Groups have no wire identifier, so the global timeline is pulled and
+            // filtered locally; allow a bounded multi-batch walk so one tap makes
+            // meaningful progress. 1-on-1 keeps the single-batch behavior.
+            const result = isGroup
+                ? await messagingService.fetchOlderMessages(until, {
+                      targetConversationId: convId,
+                      maxBatches: 5,
+                  })
+                : await messagingService.fetchOlderMessages(until, {
+                      targetChatNpub: currentPartner!,
+                  });
 
             if ('reason' in result && result.reason === 'no-connected-relays') {
                 networkHistoryStatus = 'error';
                 return;
             }
 
-            if (result.totalFetched === 0) {
-                // No more messages available from relays (global)
+            const savedForThis = isGroup
+                ? (result.messagesSavedForConversationId ?? 0)
+                : (result.messagesSavedForChat ?? 0);
+
+            networkHistorySummary = {
+                eventsFetched: result.totalFetched,
+                messagesSaved: result.messagesSaved ?? 0,
+                messagesForChat: savedForThis,
+            };
+
+            // Advance the cursor so the next tap continues further back.
+            networkCursorUntil = result.oldestUntilReached ?? until;
+
+            if (result.reachedEnd) {
+                // Relays returned an empty batch: global history is exhausted.
                 networkHistoryStatus = 'no-more';
                 return;
             }
 
-            // We fetched something from relays; only re-enable cache paging if we actually got
-            // new messages for this chat.
             networkHistoryStatus = 'idle';
-            cacheExhausted = (result.messagesSavedForChat ?? 0) === 0;
+
+            if (savedForThis > 0) {
+                // Pull the newly-saved older messages into view immediately, without
+                // requiring a scroll (important for short, just-resynced histories).
+                const localOlder = isGroup
+                    ? await messageRepo.getMessagesByConversationId(convId, PAGE_SIZE, oldest.sentAt)
+                    : await messageRepo.getConversationPage(convId, PAGE_SIZE, oldest.sentAt);
+
+                if (localOlder.length > 0) {
+                    messages = [...localOlder, ...messages];
+                    oldestLoadedTimestamp = messages[0].sentAt;
+                    cacheExhausted = localOlder.length < PAGE_SIZE;
+                } else {
+                    cacheExhausted = true;
+                }
+            } else {
+                // Nothing for this conversation in this window; keep the control
+                // available so another (cursor-advanced) tap can walk further back.
+                cacheExhausted = true;
+            }
 
         } catch (e) {
             console.error('Failed to fetch older messages from relays:', e);
@@ -208,6 +246,7 @@
             cacheExhausted = false;
             networkHistoryStatus = 'idle';
             networkHistorySummary = null;
+            networkCursorUntil = null;
             lastPartner = convId;
         }
 
@@ -245,6 +284,13 @@
                 }
                 messages = msgs.slice(startIndex);
                 oldestLoadedTimestamp = messages[0].sentAt;
+                // When the visible window already includes the oldest cached
+                // message there is nothing more to page from the local DB, so
+                // expose the "fetch older from relays" control even for short
+                // histories that are too small to scroll (e.g. just-resynced groups).
+                if (startIndex === 0) {
+                    cacheExhausted = true;
+                }
             } else {
                 const startIndex = msgs.findIndex((m) => m.sentAt === oldestLoadedTimestamp);
                 const fromIndex = startIndex >= 0 ? startIndex : Math.max(0, msgs.length - PAGE_SIZE);

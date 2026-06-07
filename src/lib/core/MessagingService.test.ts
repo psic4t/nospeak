@@ -271,6 +271,147 @@ describe('MessagingService - Auto-add Contacts', () => {
         });
     });
 
+    describe('Group network history backfill', () => {
+        function useUserAndSigner() {
+            vi.mocked(get).mockImplementation((store: any) => {
+                if (store === signer) return mockSigner;
+                if (store === (currentUser as any)) return { npub: 'npub1me' };
+                return null;
+            });
+        }
+
+        function makeEvents(ids: string[], startCreatedAt: number) {
+            return ids.map((id, index) => ({
+                id,
+                pubkey: 'sender',
+                content: 'cipher',
+                created_at: startCreatedAt - index,
+                tags: [],
+            })) as any[];
+        }
+
+        // Map each gift-wrap event to a saved message; conversationId is derived
+        // from the event id prefix ('g' = target group, else 'other').
+        function stubProcessing() {
+            vi.spyOn(messagingService as any, 'processGiftWrapToMessage').mockImplementation(
+                async (event: any) => ({
+                    recipientNpub: 'npub1sender',
+                    conversationId: event.id.startsWith('g') ? 'group123' : 'other-convo',
+                    direction: 'received',
+                    sentAt: event.created_at * 1000,
+                    eventId: event.id,
+                    rumorId: event.id,
+                    message: 'hi',
+                })
+            );
+        }
+
+        it('counts messagesSavedForConversationId by conversationId', async () => {
+            useUserAndSigner();
+            vi.mocked(messageRepo.hasMessages).mockResolvedValue(new Set());
+            stubProcessing();
+            vi.mocked(connectionManager.fetchEvents).mockResolvedValue(
+                makeEvents(['g1', 'g2', 'o1', 'o2'], 1000)
+            );
+
+            const result = await (messagingService as any).fetchMessages({
+                until: 2000,
+                limit: 100,
+                abortOnDuplicates: false,
+                maxBatches: 1,
+                targetConversationId: 'group123',
+            });
+
+            expect(result.messagesSaved).toBe(4);
+            expect(result.messagesSavedForConversationId).toBe(2);
+        });
+
+        it('returns an advancing oldestUntilReached cursor', async () => {
+            useUserAndSigner();
+            vi.mocked(messageRepo.hasMessages).mockResolvedValue(new Set());
+            stubProcessing();
+            // created_at: 100, 90, 80 -> oldest is 80
+            vi.mocked(connectionManager.fetchEvents).mockResolvedValue([
+                { id: 'g1', pubkey: 'p', content: 'c', created_at: 100, tags: [] },
+                { id: 'g2', pubkey: 'p', content: 'c', created_at: 90, tags: [] },
+                { id: 'g3', pubkey: 'p', content: 'c', created_at: 80, tags: [] },
+            ] as any[]);
+
+            const result = await (messagingService as any).fetchMessages({
+                until: 2000,
+                limit: 100,
+                abortOnDuplicates: false,
+                maxBatches: 1,
+                targetConversationId: 'group123',
+            });
+
+            expect(result.oldestUntilReached).toBe(79);
+        });
+
+        it('sets reachedEnd only when a batch returns zero events', async () => {
+            useUserAndSigner();
+            vi.mocked(messageRepo.hasMessages).mockResolvedValue(new Set());
+            stubProcessing();
+
+            let call = 0;
+            vi.mocked(connectionManager.fetchEvents).mockImplementation(async () => {
+                call += 1;
+                return call === 1 ? makeEvents(['g1', 'g2'], 1000) : [];
+            });
+
+            const ended = await (messagingService as any).fetchMessages({
+                until: 2000,
+                limit: 100,
+                abortOnDuplicates: false,
+                maxBatches: 3,
+                targetConversationId: 'group123',
+            });
+            expect(ended.reachedEnd).toBe(true);
+
+            // A full batch stopped by maxBatches is NOT the end of relay history.
+            vi.mocked(connectionManager.fetchEvents).mockResolvedValue(makeEvents(['g1', 'g2'], 1000));
+            const capped = await (messagingService as any).fetchMessages({
+                until: 2000,
+                limit: 100,
+                abortOnDuplicates: false,
+                maxBatches: 1,
+                targetConversationId: 'group123',
+            });
+            expect(capped.reachedEnd).toBe(false);
+        });
+
+        it('fetchOlderMessages forwards targetConversationId and maxBatches to fetchMessages', async () => {
+            useUserAndSigner();
+            vi.mocked(connectionManager.getConnectedRelays).mockReturnValue(['wss://relay.example.com'] as any);
+
+            const fetchMessagesSpy = vi
+                .spyOn(messagingService as any, 'fetchMessages')
+                .mockResolvedValue({
+                    totalFetched: 5,
+                    processed: 5,
+                    messagesSaved: 5,
+                    messagesSavedForConversationId: 2,
+                    oldestUntilReached: 1234,
+                    reachedEnd: false,
+                });
+
+            const result = await messagingService.fetchOlderMessages(2000, {
+                targetConversationId: 'group123',
+                maxBatches: 5,
+            });
+
+            expect(fetchMessagesSpy).toHaveBeenCalledTimes(1);
+            expect(fetchMessagesSpy.mock.calls[0][0]).toMatchObject({
+                until: 2000,
+                maxBatches: 5,
+                targetConversationId: 'group123',
+            });
+            expect(result.messagesSavedForConversationId).toBe(2);
+            expect(result.oldestUntilReached).toBe(1234);
+            expect(result.reachedEnd).toBe(false);
+        });
+    });
+
     describe('listenForMessages', () => {
         it('subscribes without a since filter', () => {
             const unsubscribeMock = vi.fn();

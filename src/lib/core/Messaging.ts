@@ -1140,14 +1140,25 @@ export type AuthoredCallEventType =
   // Fetch older messages for infinite scroll
   public async fetchOlderMessages(
     until: number,
-    options?: { limit?: number; targetChatNpub?: string; timeoutMs?: number }
+    options?: { limit?: number; targetChatNpub?: string; targetConversationId?: string; maxBatches?: number; timeoutMs?: number }
   ) {
+    // Consistent no-op shape so callers can read cursor fields without narrowing.
+    const emptyResult = {
+      totalFetched: 0,
+      processed: 0,
+      messagesSaved: 0,
+      messagesSavedForChat: 0,
+      messagesSavedForConversationId: 0,
+      oldestUntilReached: until,
+      reachedEnd: false,
+    };
+
     const s = get(signer);
-    if (!s) return { totalFetched: 0, processed: 0, messagesSaved: 0, messagesSavedForChat: 0 };
+    if (!s) return emptyResult;
 
     if (this.isFetchingHistory) {
       if (this.debug) console.log('Already fetching history, skipping fetchOlderMessages');
-      return { totalFetched: 0, processed: 0, messagesSaved: 0, messagesSavedForChat: 0 };
+      return emptyResult;
     }
 
     this.isFetchingHistory = true;
@@ -1160,27 +1171,27 @@ export type AuthoredCallEventType =
       await this.waitForRelayConnection(relays, 2000); // Shorter timeout for pagination
 
       if (connectionManager.getConnectedRelays().length === 0) {
-        return {
-          totalFetched: 0,
-          processed: 0,
-          messagesSaved: 0,
-          messagesSavedForChat: 0,
-          reason: 'no-connected-relays'
-        };
+        return { ...emptyResult, reason: 'no-connected-relays' };
       }
 
       const limit = options?.limit ?? 100;
       const timeoutMs = options?.timeoutMs ?? 5000;
       const targetChatNpub = options?.targetChatNpub;
+      const targetConversationId = options?.targetConversationId;
+      // Groups are sparse in the global gift-wrap timeline, so a single batch
+      // often contains no messages for the target group. Allow a bounded
+      // multi-batch walk (caller passes maxBatches) so one tap makes progress.
+      const maxBatches = options?.maxBatches ?? 1;
 
-      // Fetch a single batch of older messages
+      // Fetch older messages (single batch for 1-on-1, bounded walk for groups)
       const result = await this.fetchMessages({
         until,
         limit,
-        maxBatches: 1,
+        maxBatches,
         abortOnDuplicates: false,
         timeoutMs,
-        targetChatNpub
+        targetChatNpub,
+        targetConversationId
       });
 
       if (this.debug) console.log(`Older messages fetch completed. Total fetched: ${result.totalFetched}`);
@@ -1191,10 +1202,18 @@ export type AuthoredCallEventType =
     }
   }
 
-  private async fetchMessages(options: { until: number, limit: number, abortOnDuplicates: boolean, maxBatches?: number, markUnread?: boolean, minUntil?: number, timeoutMs?: number, targetChatNpub?: string }) {
+  private async fetchMessages(options: { until: number, limit: number, abortOnDuplicates: boolean, maxBatches?: number, markUnread?: boolean, minUntil?: number, timeoutMs?: number, targetChatNpub?: string, targetConversationId?: string }) {
     const s = get(signer);
     const user = get(currentUser);
-    if (!s || !user) return { totalFetched: 0, processed: 0, messagesSaved: 0 };
+    if (!s || !user) return {
+      totalFetched: 0,
+      processed: 0,
+      messagesSaved: 0,
+      messagesSavedForChat: typeof options.targetChatNpub === 'string' ? 0 : undefined,
+      messagesSavedForConversationId: typeof options.targetConversationId === 'string' ? 0 : undefined,
+      oldestUntilReached: options.until,
+      reachedEnd: false
+    };
 
     const myPubkey = await s.getPublicKey();
     let until = options.until;
@@ -1202,6 +1221,15 @@ export type AuthoredCallEventType =
     let totalFetched = 0;
     let messagesSaved = 0;
     let messagesSavedForChat = typeof options.targetChatNpub === 'string' ? 0 : undefined;
+    // Group backfill: groups have no wire identifier, so the global timeline is
+    // pulled and decrypted, then filtered to the target conversation by id.
+    let messagesSavedForConversationId = typeof options.targetConversationId === 'string' ? 0 : undefined;
+    // Cursor reached so far (oldest wire created_at - 1). Lets the caller resume
+    // the backward walk on the next tap, decoupled from the visible message list.
+    let oldestUntilReached = options.until;
+    // True only when relays returned an empty batch (global history exhausted),
+    // as opposed to stopping because maxBatches was hit.
+    let reachedEnd = false;
     let batchCount = 0;
     const maxBatches = options.maxBatches ?? 1; // Default to 1 batch
 
@@ -1220,6 +1248,7 @@ export type AuthoredCallEventType =
 
       if (events.length === 0) {
         hasMore = false;
+        reachedEnd = true;
       } else {
         totalFetched += events.length;
 
@@ -1261,6 +1290,9 @@ export type AuthoredCallEventType =
             if (typeof messagesSavedForChat === 'number') {
               messagesSavedForChat += messagesToSave.filter(message => message.recipientNpub === options.targetChatNpub).length;
             }
+            if (typeof messagesSavedForConversationId === 'number') {
+              messagesSavedForConversationId += messagesToSave.filter(message => message.conversationId === options.targetConversationId).length;
+            }
 
             // Auto-add contacts from fetched messages (both sent and received)
             // For received: recipientNpub is the sender
@@ -1295,6 +1327,7 @@ export type AuthoredCallEventType =
           event.created_at < oldest.created_at ? event : oldest
         );
         until = oldestEvent.created_at - 1;
+        oldestUntilReached = until;
 
         if (typeof options.minUntil === 'number' && until < options.minUntil) {
           if (this.debug) console.log(`Cutoff reached (minUntil: ${options.minUntil}). Stopping history fetch.`);
@@ -1312,7 +1345,10 @@ export type AuthoredCallEventType =
       totalFetched,
       processed: totalFetched,
       messagesSaved,
-      messagesSavedForChat
+      messagesSavedForChat,
+      messagesSavedForConversationId,
+      oldestUntilReached,
+      reachedEnd
     };
   }
 

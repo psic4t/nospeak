@@ -166,6 +166,28 @@ The chat interface SHALL implement infinite scrolling to handle large message hi
 - **THEN** the system SHALL display a non-intrusive status near the top of the message list indicating that no more messages are available from relays for this conversation
 - **AND** the UI SHALL avoid offering further relay history fetch actions for that conversation unless the user explicitly refreshes or reconnects.
 
+### Requirement: Group Conversation Network History Backfill
+The system SHALL allow the user to fetch older history from relays for group conversations, not only one-to-one conversations. Because NIP-17 gift wraps carry no group identifier on the wire (group membership is encrypted inside the seal/rumor), the system SHALL backfill group history by pulling the user's global gift-wrap timeline backward, decrypting each wrap, and filtering the decrypted messages to the target group by its derived `conversationId`. Each user-initiated fetch SHALL perform a bounded multi-batch backward walk (rather than a single batch) so that one action makes meaningful progress despite group messages being sparse in the global timeline.
+
+#### Scenario: Group conversation offers the relay history control
+- **GIVEN** the user is viewing a group conversation
+- **AND** the local cache for that group is exhausted (the oldest locally stored message for the group is already displayed)
+- **THEN** the "Fetch older messages from relays" control SHALL be shown for the group, the same as for one-to-one conversations
+- **AND** the control SHALL be reachable even when the group's local history is too short to scroll.
+
+#### Scenario: Bounded backward walk with a persistent cursor
+- **GIVEN** the user requests older relay history for a group conversation
+- **WHEN** the system performs the targeted backfill
+- **THEN** it SHALL fetch gift-wrap events backward across a bounded number of batches, advancing an `until` cursor by the oldest fetched event's `created_at` after each batch
+- **AND** it SHALL save all newly decrypted messages (for any conversation) into the local database, then insert into the visible group history only those messages whose `conversationId` matches the active group
+- **AND** the system SHALL retain the reached cursor so that a subsequent request continues walking further back, independent of the currently visible messages, even when a batch contained no messages for the active group.
+
+#### Scenario: No additional relay history for a group
+- **GIVEN** the user has requested older relay history for a group conversation
+- **WHEN** a fetched batch returns zero events from all connected relays
+- **THEN** the system SHALL treat the global timeline as exhausted and display the non-intrusive "no more messages from relays" status for the group
+- **AND** the system SHALL stop offering further relay history fetch actions for that group unless the user refreshes or reconnects.
+
 ### Requirement: Scroll Positioning and Media Loading
 The chat interface SHALL ensure correct scroll positioning at the bottom of the conversation when opened, even when recent messages contain media.
 
